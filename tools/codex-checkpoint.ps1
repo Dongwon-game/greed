@@ -31,17 +31,23 @@ function Invoke-Git {
         [switch]$IgnoreErrors
     )
 
+    $stderrPath = [System.IO.Path]::GetTempFileName()
     $oldErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
+
     try {
-        $output = & git -C $script:ProjectFull @GitArgs 2>&1
+        $ErrorActionPreference = 'SilentlyContinue'
+        $stdout = & git -C $script:ProjectFull @GitArgs 2>$stderrPath
         $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = $oldErrorActionPreference
+        $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+        $stdoutText = ($stdout | Out-String).Trim()
+        $outputParts = @($stdoutText, $stderr) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $text = ($outputParts -join "`n").Trim()
     }
     finally {
         $ErrorActionPreference = $oldErrorActionPreference
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
     }
-
-    $text = ($output | Out-String).Trim()
 
     if ($exitCode -ne 0 -and -not $IgnoreErrors) {
         throw "git $($GitArgs -join ' ') failed: $text"
@@ -54,19 +60,38 @@ function Invoke-Git {
     return $text
 }
 
-function Get-CurrentHead {
+function Invoke-GitStdout {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$GitArgs
+    )
+
+    $stderrPath = [System.IO.Path]::GetTempFileName()
     $oldErrorActionPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
+
     try {
-        $output = & git -C $script:ProjectFull rev-parse --verify --short HEAD 2>$null
+        $ErrorActionPreference = 'SilentlyContinue'
+        $stdout = & git -C $script:ProjectFull @GitArgs 2>$stderrPath
         $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = $oldErrorActionPreference
+        $text = ($stdout | Out-String).Trim()
     }
     finally {
         $ErrorActionPreference = $oldErrorActionPreference
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
     }
 
-    if ($exitCode -eq 0) {
-        return (($output | Out-String).Trim())
+    if ($exitCode -ne 0) {
+        return ''
+    }
+
+    return $text
+}
+
+function Get-CurrentHead {
+    $head = Invoke-GitStdout -GitArgs @('rev-parse', '--verify', '--short', 'HEAD')
+    if (-not [string]::IsNullOrWhiteSpace($head)) {
+        return $head
     }
 
     return '(no commits yet)'
