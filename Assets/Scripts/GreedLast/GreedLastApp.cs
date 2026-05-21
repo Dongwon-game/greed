@@ -209,7 +209,7 @@ namespace GreedLast
         private const int NormalRankingCount = 5;
         private const int NormalAttemptHistoryCount = 5;
         private const int InfiniteRankingCount = 5;
-        private const int RecordBoardPageCount = 3;
+        private const int RecordBoardPageCount = 4;
         private const int MaxSaveLoadoutUses = 2;
         private const int SaveDataVersion = 1;
         private const string PlayerPrefsKey = "GreedLast.MockBackend.SaveData.v1";
@@ -677,20 +677,24 @@ namespace GreedLast
             switch (page)
             {
                 case 1:
-                    return "기록 보드 2/3 - 일반 런\n"
+                    return "기록 보드 2/4 - 일반 런\n"
                         + "\n상위 기록\n" + BuildNormalRankingText()
                         + "\n\n최근 실패/중단\n" + lastAttemptText
                         + "\n\n실패/중단 히스토리\n" + BuildNormalAttemptHistoryText()
-                        + "\n\n다음 기록으로 무한모드 기록을 봅니다.";
+                        + "\n\n다음 기록으로 무한모드 요약을 봅니다.";
                 case 2:
-                    return "기록 보드 3/3 - 무한모드\n"
+                    return "기록 보드 3/4 - 무한 요약\n"
                         + "\n최근 기록\n" + latestText
                         + "\n\n최근 비교\n" + BuildLatestInfiniteComparisonText()
                         + "\n\n최고 기록\n" + bestText
-                        + "\n\n상위 기록\n" + BuildInfiniteRankingText()
-                        + "\n\n무한모드는 저장 조합 사용 횟수를 소모해 진입합니다.";
+                        + "\n\n다음 기록으로 무한 랭킹을 봅니다.";
+                case 3:
+                    return "기록 보드 4/4 - 무한 랭킹\n"
+                        + "\n상위 기록\n" + BuildInfiniteRankingText()
+                        + "\n\n무한모드는 저장 조합 사용 횟수를 소모해 진입합니다."
+                        + "\n이전 기록으로 무한 요약을 다시 봅니다.";
                 default:
-                    return "기록 보드 1/3 - 요약\n"
+                    return "기록 보드 1/4 - 요약\n"
                         + "\n진행 요약\n" + BuildRunProgressSummaryText()
                         + "\n\n일반 런 최근\n" + latestNormalText
                         + "\n\n일반 런 최고\n" + bestNormalText
@@ -908,7 +912,7 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += (i + 1) + ". " + FormatInfiniteRecordListLine(infiniteRunRankings[i]);
+                text += (i + 1) + ". " + FormatInfiniteRankingLine(infiniteRunRankings[i]);
             }
 
             return hasRecord ? text : "기록 없음";
@@ -992,6 +996,17 @@ namespace GreedLast
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}";
+        }
+
+        private static string FormatInfiniteRankingLine(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 콤보 {record.MaxCombo}";
         }
 
         private static string FormatRunRecordDetail(GreedLastRunRecord record)
