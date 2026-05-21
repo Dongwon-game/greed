@@ -72,6 +72,7 @@ namespace GreedLast
             bool saveSlotChoiceRequired,
             bool saveSlotOverwriteConfirmationPending,
             bool saveSlotDeleteConfirmationPending,
+            bool saveSlotDetailViewActive,
             bool retryVisible,
             GreedLastConnectBlockReason blockReason)
         {
@@ -90,6 +91,7 @@ namespace GreedLast
             SaveSlotChoiceRequired = saveSlotChoiceRequired;
             SaveSlotOverwriteConfirmationPending = saveSlotOverwriteConfirmationPending;
             SaveSlotDeleteConfirmationPending = saveSlotDeleteConfirmationPending;
+            SaveSlotDetailViewActive = saveSlotDetailViewActive;
             RetryVisible = retryVisible;
             BlockReason = blockReason;
         }
@@ -109,6 +111,7 @@ namespace GreedLast
         public bool SaveSlotChoiceRequired { get; }
         public bool SaveSlotOverwriteConfirmationPending { get; }
         public bool SaveSlotDeleteConfirmationPending { get; }
+        public bool SaveSlotDetailViewActive { get; }
         public bool RetryVisible { get; }
         public GreedLastConnectBlockReason BlockReason { get; }
     }
@@ -1905,7 +1908,8 @@ namespace GreedLast
         public void SetInfiniteLoadoutSelect(
             GreedLastLobbySnapshot snapshot,
             string detail,
-            bool saveSlotDeleteConfirmationPending = false)
+            bool saveSlotDeleteConfirmationPending = false,
+            bool saveSlotDetailViewActive = false)
         {
             lobbySnapshot = snapshot;
             CurrentState = GreedLastScreenState.InfiniteLoadoutSelect;
@@ -1915,7 +1919,8 @@ namespace GreedLast
                 detail,
                 coreActionsEnabled: true,
                 retryVisible: false,
-                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending);
+                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending,
+                saveSlotDetailViewActive: saveSlotDetailViewActive);
         }
 
         public void SetSaveLoadoutDraft(
@@ -1923,7 +1928,8 @@ namespace GreedLast
             string detail,
             bool saveSlotChoiceRequired = false,
             bool saveSlotOverwriteConfirmationPending = false,
-            bool saveSlotDeleteConfirmationPending = false)
+            bool saveSlotDeleteConfirmationPending = false,
+            bool saveSlotDetailViewActive = false)
         {
             lobbySnapshot = snapshot;
             CurrentState = GreedLastScreenState.SaveLoadoutDraft;
@@ -1935,7 +1941,8 @@ namespace GreedLast
                 retryVisible: false,
                 saveSlotChoiceRequired: saveSlotChoiceRequired,
                 saveSlotOverwriteConfirmationPending: saveSlotOverwriteConfirmationPending,
-                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending);
+                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending,
+                saveSlotDetailViewActive: saveSlotDetailViewActive);
         }
 
         public void SetInfiniteRecordBoard(GreedLastLobbySnapshot snapshot, string detail)
@@ -1953,7 +1960,8 @@ namespace GreedLast
             bool retryVisible,
             bool saveSlotChoiceRequired = false,
             bool saveSlotOverwriteConfirmationPending = false,
-            bool saveSlotDeleteConfirmationPending = false)
+            bool saveSlotDeleteConfirmationPending = false,
+            bool saveSlotDetailViewActive = false)
         {
             StateChanged?.Invoke(new GreedLastStateSnapshot(
                 CurrentState,
@@ -1971,6 +1979,7 @@ namespace GreedLast
                 saveSlotChoiceRequired,
                 saveSlotOverwriteConfirmationPending,
                 saveSlotDeleteConfirmationPending,
+                saveSlotDetailViewActive,
                 retryVisible && !requestGate.Busy,
                 BlockReason));
         }
@@ -1988,6 +1997,7 @@ namespace GreedLast
         private bool saveDraftRequiresExplicitSlotChoice;
         private bool saveDraftOverwriteConfirmPending;
         private bool saveSlotDeleteConfirmPending;
+        private bool saveSlotDetailViewActive;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -2262,6 +2272,7 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
                 saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
                 stateMachine.SetInfiniteLoadoutSelect(backend.LoadLobby(), backend.BuildInfiniteLoadoutSelectText());
                 return;
             }
@@ -2382,6 +2393,7 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
                 stateMachine.SetInfiniteStartReady(backend.LoadLobby(), backend.BuildInfiniteStartReadyText());
                 return;
             }
@@ -2455,6 +2467,7 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
                 stateMachine.SetInfiniteLoadoutSelect(snapshot, backend.BuildInfiniteLoadoutSelectText());
                 return;
             }
@@ -2470,6 +2483,7 @@ namespace GreedLast
             saveDraftRequiresExplicitSlotChoice = requireExplicitSlotChoice;
             saveDraftOverwriteConfirmPending = false;
             saveSlotDeleteConfirmPending = false;
+            saveSlotDetailViewActive = false;
             string detail = backend.BuildSaveLoadoutDraftText(!requireExplicitSlotChoice);
             if (requireExplicitSlotChoice)
             {
@@ -2490,6 +2504,7 @@ namespace GreedLast
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = true;
             saveSlotDeleteConfirmPending = false;
+            saveSlotDetailViewActive = false;
             string detail = backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
             if (!string.IsNullOrEmpty(notice))
             {
@@ -2508,6 +2523,7 @@ namespace GreedLast
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveSlotDeleteConfirmPending = true;
+            saveSlotDetailViewActive = false;
             string detail = backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
             if (!string.IsNullOrEmpty(notice))
             {
@@ -2524,6 +2540,7 @@ namespace GreedLast
         private void OpenInfiniteLoadoutDeleteConfirmation(string notice)
         {
             saveSlotDeleteConfirmPending = true;
+            saveSlotDetailViewActive = false;
             string detail = backend.BuildInfiniteLoadoutSelectText();
             if (!string.IsNullOrEmpty(notice))
             {
@@ -2583,7 +2600,18 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
-                stateMachine.SetInfiniteLoadoutSelect(backend.LoadLobby(), backend.BuildSelectedInfiniteLoadoutDetailText());
+                if (saveSlotDetailViewActive)
+                {
+                    saveSlotDetailViewActive = false;
+                    stateMachine.SetInfiniteLoadoutSelect(backend.LoadLobby(), backend.BuildInfiniteLoadoutSelectText());
+                    return;
+                }
+
+                saveSlotDetailViewActive = true;
+                stateMachine.SetInfiniteLoadoutSelect(
+                    backend.LoadLobby(),
+                    backend.BuildSelectedInfiniteLoadoutDetailText(),
+                    saveSlotDetailViewActive: true);
                 return;
             }
 
@@ -2598,15 +2626,25 @@ namespace GreedLast
                 return;
             }
 
+            if (saveSlotDetailViewActive)
+            {
+                saveSlotDetailViewActive = false;
+                RefreshSaveLoadoutDraft(null);
+                return;
+            }
+
+            saveSlotDetailViewActive = true;
             stateMachine.SetSaveLoadoutDraft(
                 backend.LoadLobby(),
                 backend.BuildSelectedSaveLoadoutComparisonText(),
-                saveSlotOverwriteConfirmationPending: saveDraftOverwriteConfirmPending);
+                saveSlotOverwriteConfirmationPending: saveDraftOverwriteConfirmPending,
+                saveSlotDetailViewActive: true);
         }
 
         private void RequestRenameSaveLoadoutSlot()
         {
             saveSlotDeleteConfirmPending = false;
+            saveSlotDetailViewActive = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 string infiniteNotice = backend.RenameSelectedSaveLoadoutSlot();
@@ -2631,6 +2669,7 @@ namespace GreedLast
 
         private void RequestDeleteSaveLoadoutSlot()
         {
+            saveSlotDetailViewActive = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 if (!backend.SelectedSaveSlotHasRecord())
@@ -2783,6 +2822,7 @@ namespace GreedLast
                 saveDraftRequiresExplicitSlotChoice = false;
                 saveDraftOverwriteConfirmPending = false;
                 saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 if (skippedClearSave)
                 {
@@ -2795,6 +2835,7 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 return;
             }
@@ -2911,6 +2952,7 @@ namespace GreedLast
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveSlotDeleteConfirmPending = false;
+            saveSlotDetailViewActive = false;
             stateMachine.SetLobbyReady(snapshot);
             stateMachine.ShowLocalNotice(backend.BuildSaveConfirmMessage());
         }
@@ -3340,7 +3382,9 @@ namespace GreedLast
                     : snapshot.SaveSlotChoiceRequired
                         ? "저장 안 함"
                         : "선택만 하고 로비로");
-                SetButtonLabel(saveSlotDetailButton, infiniteLoadoutSelectLike ? "상세 보기" : "상세 비교");
+                SetButtonLabel(saveSlotDetailButton, snapshot.SaveSlotDetailViewActive
+                    ? "목록 보기"
+                    : infiniteLoadoutSelectLike ? "상세 보기" : "상세 비교");
                 SetButtonLabel(saveSlotRenameButton, "이름 변경");
                 SetButtonLabel(saveSlotDeleteButton, snapshot.SaveSlotDeleteConfirmationPending ? "삭제 확정" : "슬롯 삭제");
                 for (int i = 0; i < laneButtons.Length; i += 1)
