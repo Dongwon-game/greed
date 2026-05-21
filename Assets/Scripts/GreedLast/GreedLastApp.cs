@@ -709,33 +709,64 @@ namespace GreedLast
             string bestText = bestInfiniteRunRecord.IsValid
                 ? FormatInfiniteRecord(bestInfiniteRunRecord)
                 : "기록 없음";
+            string navigationHint = BuildRecordBoardNavigationHint(page);
 
             switch (page)
             {
                 case 1:
                     return "기록 보드 2/4 - 일반 런\n"
+                        + navigationHint
                         + "\n상위 기록\n" + BuildNormalRankingText()
                         + "\n\n최근 실패/중단\n" + lastAttemptText
                         + "\n\n실패/중단 히스토리\n" + BuildNormalAttemptHistoryText()
                         + "\n\n다음 기록으로 무한모드 요약을 봅니다.";
                 case 2:
                     return "기록 보드 3/4 - 무한 요약\n"
+                        + navigationHint
                         + "\n최근 기록\n" + latestText
                         + "\n\n최근 비교\n" + BuildLatestInfiniteComparisonText()
                         + "\n\n최고 기록\n" + bestText
                         + "\n\n다음 기록으로 무한 랭킹을 봅니다.";
                 case 3:
                     return "기록 보드 4/4 - 무한 랭킹\n"
+                        + navigationHint
                         + "\n상위 기록\n" + BuildInfiniteRankingText()
                         + "\n\n무한모드는 저장 조합 사용 횟수를 소모해 진입합니다."
                         + "\n이전 기록으로 무한 요약을 다시 봅니다.";
                 default:
                     return "기록 보드 1/4 - 요약\n"
+                        + navigationHint
                         + "\n진행 요약\n" + BuildRunProgressSummaryText()
                         + "\n\n일반 런 최근\n" + latestNormalText
                         + "\n\n일반 런 비교\n" + BuildLatestNormalComparisonText()
                         + "\n\n일반 런 최고\n" + bestNormalText
                         + "\n\n다음 기록으로 상세 기록을 봅니다.";
+            }
+        }
+
+        private static string BuildRecordBoardNavigationHint(int page)
+        {
+            int normalizedPage = ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
+            int previousPage = (normalizedPage + RecordBoardPageCount - 1) % RecordBoardPageCount;
+            int nextPage = (normalizedPage + 1) % RecordBoardPageCount;
+            return "조작: 좌 " + GetRecordBoardPageName(previousPage)
+                + " / 중 요약"
+                + " / 우 " + GetRecordBoardPageName(nextPage)
+                + "\n";
+        }
+
+        private static string GetRecordBoardPageName(int page)
+        {
+            switch (((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount)
+            {
+                case 1:
+                    return "일반 런";
+                case 2:
+                    return "무한 요약";
+                case 3:
+                    return "무한 랭킹";
+                default:
+                    return "요약";
             }
         }
 
