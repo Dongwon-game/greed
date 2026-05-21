@@ -3518,6 +3518,7 @@ namespace GreedLast
                     snapshot.SaveSlotChoiceRequired ? -1 : snapshot.SelectedSaveSlotIndex,
                     snapshot.SaveSlotLabels,
                     snapshot.SaveSlotUsable,
+                    snapshot.SaveSlotOccupied,
                     infiniteLoadoutSelectLike);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
                     ? "준비로 돌아가기"
@@ -5546,6 +5547,7 @@ namespace GreedLast
             int selectedSlotIndex,
             string[] slotLabels,
             bool[] slotUsable,
+            bool[] slotOccupied,
             bool showUsability)
         {
             if (laneLabelTexts == null || laneLabelTexts.Length < 3)
@@ -5558,15 +5560,19 @@ namespace GreedLast
             {
                 bool selected = i == selectedSlotIndex;
                 bool usable = slotUsable != null && i < slotUsable.Length && slotUsable[i];
+                bool occupied = slotOccupied != null && i < slotOccupied.Length && slotOccupied[i];
                 string slotState = slotLabels != null
                     && i < slotLabels.Length
                     && !string.IsNullOrEmpty(slotLabels[i])
                     ? slotLabels[i]
                     : "슬롯 " + (i + 1);
+                string actionHint = showUsability
+                    ? usable ? "시작 가능" : occupied ? "사용 완료" : "사용 불가"
+                    : occupied ? "교체 대상" : "바로 저장";
 
                 laneLabelTexts[i].text = selected
-                    ? "선택\nS" + (i + 1) + "\n" + slotState
-                    : "S" + (i + 1) + "\n" + slotState;
+                    ? "선택\nS" + (i + 1) + "\n" + slotState + "\n" + actionHint
+                    : "S" + (i + 1) + "\n" + slotState + "\n" + actionHint;
 
                 if (laneImages != null && i < laneImages.Length && laneImages[i] != null)
                 {
@@ -5579,8 +5585,8 @@ namespace GreedLast
                     else
                     {
                         laneImages[i].color = selected
-                            ? new Color32(154, 112, 48, 255)
-                            : new Color32(32, 42, 49, 225);
+                            ? occupied ? new Color32(154, 112, 48, 255) : new Color32(74, 123, 118, 255)
+                            : occupied ? new Color32(32, 42, 49, 225) : new Color32(24, 50, 49, 215);
                     }
                 }
             }
