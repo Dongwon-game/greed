@@ -75,6 +75,7 @@ namespace GreedLast
             bool saveSlotDeleteConfirmationPending,
             bool saveSlotDetailViewActive,
             bool saveSlotRenameConfirmationPending,
+            int recordBoardPageIndex,
             bool retryVisible,
             GreedLastConnectBlockReason blockReason)
         {
@@ -96,6 +97,7 @@ namespace GreedLast
             SaveSlotDeleteConfirmationPending = saveSlotDeleteConfirmationPending;
             SaveSlotDetailViewActive = saveSlotDetailViewActive;
             SaveSlotRenameConfirmationPending = saveSlotRenameConfirmationPending;
+            RecordBoardPageIndex = recordBoardPageIndex;
             RetryVisible = retryVisible;
             BlockReason = blockReason;
         }
@@ -118,6 +120,7 @@ namespace GreedLast
         public bool SaveSlotDeleteConfirmationPending { get; }
         public bool SaveSlotDetailViewActive { get; }
         public bool SaveSlotRenameConfirmationPending { get; }
+        public int RecordBoardPageIndex { get; }
         public bool RetryVisible { get; }
         public GreedLastConnectBlockReason BlockReason { get; }
     }
@@ -693,7 +696,7 @@ namespace GreedLast
 
         public string BuildRecordBoardText(int pageIndex)
         {
-            int page = Mathf.Abs(pageIndex) % RecordBoardPageCount;
+            int page = NormalizeRecordBoardPage(pageIndex);
             string latestNormalText = lastRunRecord.IsValid
                 ? FormatRunRecordCompact(lastRunRecord)
                 : "기록 없음";
@@ -746,7 +749,7 @@ namespace GreedLast
 
         private static string BuildRecordBoardNavigationHint(int page)
         {
-            int normalizedPage = ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
+            int normalizedPage = NormalizeRecordBoardPage(page);
             int previousPage = (normalizedPage + RecordBoardPageCount - 1) % RecordBoardPageCount;
             int nextPage = (normalizedPage + 1) % RecordBoardPageCount;
             return "조작: 좌 " + GetRecordBoardPageName(previousPage)
@@ -757,7 +760,7 @@ namespace GreedLast
 
         private static string GetRecordBoardPageName(int page)
         {
-            switch (((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount)
+            switch (NormalizeRecordBoardPage(page))
             {
                 case 1:
                     return "일반 런";
@@ -768,6 +771,11 @@ namespace GreedLast
                 default:
                     return "요약";
             }
+        }
+
+        private static int NormalizeRecordBoardPage(int page)
+        {
+            return ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
         }
 
         public bool ToggleOfflineForEditorCheck()
@@ -1973,6 +1981,7 @@ namespace GreedLast
     {
         private readonly GreedLastRequestGate requestGate;
         private GreedLastLobbySnapshot lobbySnapshot;
+        private int recordBoardPageIndex = -1;
 
         public GreedLastStateMachine(GreedLastRequestGate requestGate)
         {
@@ -2099,9 +2108,10 @@ namespace GreedLast
                 saveSlotRenameConfirmationPending: saveSlotRenameConfirmationPending);
         }
 
-        public void SetInfiniteRecordBoard(GreedLastLobbySnapshot snapshot, string detail)
+        public void SetInfiniteRecordBoard(GreedLastLobbySnapshot snapshot, string detail, int pageIndex)
         {
             lobbySnapshot = snapshot;
+            recordBoardPageIndex = pageIndex;
             CurrentState = GreedLastScreenState.InfiniteRecordBoard;
             BlockReason = GreedLastConnectBlockReason.None;
             Publish("기록 보드", detail, coreActionsEnabled: true, retryVisible: false);
@@ -2137,6 +2147,7 @@ namespace GreedLast
                 saveSlotDeleteConfirmationPending,
                 saveSlotDetailViewActive,
                 saveSlotRenameConfirmationPending,
+                CurrentState == GreedLastScreenState.InfiniteRecordBoard ? recordBoardPageIndex : -1,
                 retryVisible && !requestGate.Busy,
                 BlockReason));
         }
@@ -2784,7 +2795,10 @@ namespace GreedLast
                 recordBoardPageIndex += pageCount;
             }
 
-            stateMachine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(recordBoardPageIndex));
+            stateMachine.SetInfiniteRecordBoard(
+                backend.LoadLobby(),
+                backend.BuildRecordBoardText(recordBoardPageIndex),
+                recordBoardPageIndex);
         }
 
         private void OpenRecordBoard(int pageIndex)
@@ -2796,7 +2810,10 @@ namespace GreedLast
                 recordBoardPageIndex += pageCount;
             }
 
-            stateMachine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(recordBoardPageIndex));
+            stateMachine.SetInfiniteRecordBoard(
+                backend.LoadLobby(),
+                backend.BuildRecordBoardText(recordBoardPageIndex),
+                recordBoardPageIndex);
         }
 
         private void RequestShowSaveLoadoutDetail()
@@ -3223,6 +3240,7 @@ namespace GreedLast
     {
         private const float DesignWidth = 1080f;
         private const float DesignHeight = 1920f;
+        private const int RecordBoardPageCount = 4;
         private const float TargetCueLeadSeconds = 0.14f;
         private const float ActiveBeatVolume = 0.075f;
         private const float IdleBeatVolume = 0.14f;
@@ -3651,7 +3669,7 @@ namespace GreedLast
             }
             else if (recordBoardLike)
             {
-                UpdateRecordBoardLaneLabels();
+                UpdateRecordBoardLaneLabels(snapshot.RecordBoardPageIndex);
             }
             else if (!runLike)
             {
@@ -5692,17 +5710,20 @@ namespace GreedLast
             }
         }
 
-        private void UpdateRecordBoardLaneLabels()
+        private void UpdateRecordBoardLaneLabels(int pageIndex)
         {
             if (laneLabelTexts == null || laneLabelTexts.Length < 3)
             {
                 return;
             }
 
+            int page = NormalizeRecordBoardPage(pageIndex);
+            int previousPage = (page + RecordBoardPageCount - 1) % RecordBoardPageCount;
+            int nextPage = (page + 1) % RecordBoardPageCount;
             SetLaneLabelMode(34, true);
-            laneLabelTexts[0].text = "이전\n기록";
-            laneLabelTexts[1].text = "요약\n보기";
-            laneLabelTexts[2].text = "다음\n기록";
+            laneLabelTexts[0].text = "좌\n" + GetRecordBoardPageLabel(previousPage);
+            laneLabelTexts[1].text = "중\n요약";
+            laneLabelTexts[2].text = "우\n" + GetRecordBoardPageLabel(nextPage);
             if (laneButtons != null)
             {
                 for (int i = 0; i < laneButtons.Length; i += 1)
@@ -5710,6 +5731,26 @@ namespace GreedLast
                     laneButtons[i].interactable = true;
                 }
             }
+        }
+
+        private static string GetRecordBoardPageLabel(int page)
+        {
+            switch (NormalizeRecordBoardPage(page))
+            {
+                case 1:
+                    return "일반\n런";
+                case 2:
+                    return "무한\n요약";
+                case 3:
+                    return "무한\n랭킹";
+                default:
+                    return "요약";
+            }
+        }
+
+        private static int NormalizeRecordBoardPage(int page)
+        {
+            return ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
         }
 
         private void UpdateDefaultLaneLabels()
