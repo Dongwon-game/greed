@@ -413,6 +413,7 @@ namespace GreedLast
                 + $"등급 {BuildRunGrade(record)}  점수 {record.Score}  거리 {record.Distance:0.0}m  체력 {record.Health}  집중 {record.Focus}\n"
                 + "성향: " + BuildLoadoutProfile(record) + "\n"
                 + "저장 후보: " + record.LoadoutName
+                + "\n최근 비교: " + BuildLatestNormalComparisonText()
                 + "\n" + nextAction;
         }
 
@@ -732,6 +733,7 @@ namespace GreedLast
                     return "기록 보드 1/4 - 요약\n"
                         + "\n진행 요약\n" + BuildRunProgressSummaryText()
                         + "\n\n일반 런 최근\n" + latestNormalText
+                        + "\n\n일반 런 비교\n" + BuildLatestNormalComparisonText()
                         + "\n\n일반 런 최고\n" + bestNormalText
                         + "\n\n다음 기록으로 상세 기록을 봅니다.";
             }
@@ -874,6 +876,50 @@ namespace GreedLast
             }
 
             return "비교할 최고 기록이 아직 없습니다.";
+        }
+
+        private string BuildLatestNormalComparisonText()
+        {
+            if (!lastRunRecord.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            if (IsSameRunRecord(lastRunRecord, bestRunRecord))
+            {
+                return "최근 기록이 현재 최고 기록입니다.";
+            }
+
+            if (bestRunRecord.IsValid)
+            {
+                return "현재 최고 대비 "
+                    + FormatRunRecordDelta(lastRunRecord, bestRunRecord);
+            }
+
+            return "비교할 최고 기록이 아직 없습니다.";
+        }
+
+        private static string FormatRunRecordDelta(GreedLastRunRecord candidate, GreedLastRunRecord baseline)
+        {
+            if (!candidate.IsValid || !baseline.IsValid)
+            {
+                return "비교 기준 없음";
+            }
+
+            return $"점수 {FormatSigned(candidate.Score - baseline.Score)}"
+                + $" / 거리 {FormatSigned(candidate.Distance - baseline.Distance)}m"
+                + $" / 체력 {FormatSigned(candidate.Health - baseline.Health)}"
+                + $" / 집중 {FormatSigned(candidate.Focus - baseline.Focus)}";
+        }
+
+        private static bool IsSameRunRecord(GreedLastRunRecord left, GreedLastRunRecord right)
+        {
+            return left.IsValid
+                && right.IsValid
+                && left.Score == right.Score
+                && Mathf.Approximately(left.Distance, right.Distance)
+                && left.Health == right.Health
+                && left.Focus == right.Focus;
         }
 
         private static string FormatInfiniteRecordDelta(GreedLastInfiniteRunRecord candidate, GreedLastInfiniteRunRecord baseline)
