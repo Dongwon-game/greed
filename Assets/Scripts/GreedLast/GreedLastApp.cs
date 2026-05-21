@@ -2539,7 +2539,19 @@ namespace GreedLast
         private void SelectRecordBoardPage(GreedLastRunChannel channel)
         {
             runtimeUi.RecordLaneInput(channel);
-            MoveRecordBoardPage(channel == GreedLastRunChannel.Left ? -1 : 1);
+            if (channel == GreedLastRunChannel.Left)
+            {
+                MoveRecordBoardPage(-1);
+                return;
+            }
+
+            if (channel == GreedLastRunChannel.Center)
+            {
+                OpenRecordBoard(0);
+                return;
+            }
+
+            MoveRecordBoardPage(1);
         }
 
         private void MoveRecordBoardPage(int delta)
@@ -5289,7 +5301,7 @@ namespace GreedLast
 
             SetLaneLabelMode(34, true);
             laneLabelTexts[0].text = "이전\n기록";
-            laneLabelTexts[1].text = "다음\n기록";
+            laneLabelTexts[1].text = "요약\n보기";
             laneLabelTexts[2].text = "다음\n기록";
             if (laneButtons != null)
             {
