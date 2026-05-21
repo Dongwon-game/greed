@@ -280,13 +280,13 @@ namespace GreedLast
             string message = auxiliaryWarning
                 ? "보조 데이터 일부가 늦습니다. 핵심 진입은 유지합니다."
                 : "피라미드 입구 동기화 완료";
-            bool selectedSlotReady = IsSaveSlotUsable(selectedSaveSlotIndex);
+            bool hasUsableSaveSlot = HasAnyUsableSaveLoadoutSlot();
 
             return new GreedLastLobbySnapshot(
                 CurrentPeriodId,
                 firstSaveCompleted,
                 saveLoadoutUnlocked,
-                selectedSlotReady,
+                hasUsableSaveSlot,
                 selectedSaveSlotIndex,
                 BuildSaveSlotLabelSummaries(),
                 BuildSaveSlotUsableFlags(),
@@ -349,12 +349,20 @@ namespace GreedLast
             return true;
         }
 
-        public string BuildSaveLoadoutDraftText()
+        public string BuildSaveLoadoutDraftText(bool showSelectedSlot = true)
         {
             if (!lastRunRecord.IsValid)
             {
                 return "저장 가능한 조합 후보가 아직 없습니다.";
             }
+
+            string selectedSlotText = showSelectedSlot
+                ? "슬롯 " + (selectedSaveSlotIndex + 1)
+                : "아직 선택 안 함";
+            string selectedSlotDetail = showSelectedSlot
+                ? "\n\n선택 슬롯 기록: " + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                    + BuildOverwriteWarningText(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                : "\n\n선택 슬롯 기록: 좌 / 중 / 우 중 하나를 고르면 표시됩니다.";
 
             return "저장 후보: " + lastRunRecord.LoadoutName
                 + "\n시작: " + lastRunRecord.StartGift
@@ -362,9 +370,9 @@ namespace GreedLast
                 + "\n유물: " + lastRunRecord.Relic
                 + $"\n점수 {lastRunRecord.Score}  거리 {lastRunRecord.Distance:0.0}m  체력 {lastRunRecord.Health}  집중 {lastRunRecord.Focus}"
                 + "\n선택 흐름: " + lastRunRecord.ChoiceSummary
-                + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                + "\n" + BuildSaveSlotListText()
-                + "\n\n선택 슬롯 기록: " + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n\n선택 슬롯: " + selectedSlotText
+                + "\n" + BuildSaveSlotListText(showSelectedSlot)
+                + selectedSlotDetail
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
                 + "\n저장 확정은 후보를 현재 슬롯에 덮어씁니다."
                 + "\n상세 비교 / 이름 변경 / 삭제는 오른쪽 버튼에서 처리합니다.";
@@ -1116,7 +1124,7 @@ namespace GreedLast
                 record.TimingProfile);
         }
 
-        private string BuildSaveSlotListText()
+        private string BuildSaveSlotListText(bool showSelectedSlot = true)
         {
             string text = string.Empty;
             for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
@@ -1126,7 +1134,7 @@ namespace GreedLast
                     text += "\n";
                 }
 
-                string marker = i == selectedSaveSlotIndex ? "> " : "  ";
+                string marker = showSelectedSlot && i == selectedSaveSlotIndex ? "> " : "  ";
                 text += marker + "슬롯 " + (i + 1) + ": " + FormatSaveSlot(saveLoadoutSlots[i], saveLoadoutUsesRemaining[i]);
             }
 
@@ -1179,6 +1187,19 @@ namespace GreedLast
             return false;
         }
 
+        private bool HasAnyUsableSaveLoadoutSlot()
+        {
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (IsSaveSlotUsable(i))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static string FormatSaveSlot(GreedLastRunRecord record, int usesRemaining)
         {
             if (!record.IsValid)
@@ -1190,6 +1211,21 @@ namespace GreedLast
                 ? usesRemaining + "회 남음"
                 : "사용 완료";
             return record.LoadoutName + $" / [{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / {usesText}";
+        }
+
+        private static string BuildOverwriteWarningText(GreedLastRunRecord record, int usesRemaining)
+        {
+            if (!record.IsValid)
+            {
+                return "\n이 슬롯은 비어 있어 새 조합으로 저장됩니다.";
+            }
+
+            if (usesRemaining <= 0)
+            {
+                return "\n주의: 사용 완료된 조합을 새 후보로 교체합니다.";
+            }
+
+            return "\n주의: 기존 저장 조합과 남은 사용 횟수를 새 후보로 덮어씁니다.";
         }
 
         private static string FormatSaveSlotLabel(GreedLastRunRecord record, int usesRemaining)
@@ -2097,7 +2133,9 @@ namespace GreedLast
 
             if (!snapshot.InfiniteUnlocked)
             {
-                stateMachine.ShowLocalNotice("무한모드는 저장 조합 확정 뒤 열립니다.");
+                stateMachine.ShowLocalNotice(snapshot.SaveLoadoutUnlocked
+                    ? "사용 가능한 저장 조합이 없습니다. 일반 런 클리어 뒤 저장 조합을 다시 확정하세요."
+                    : "무한모드는 저장 조합 확정 뒤 열립니다.");
                 return;
             }
 
@@ -2256,7 +2294,7 @@ namespace GreedLast
             string notice = null)
         {
             saveDraftRequiresExplicitSlotChoice = requireExplicitSlotChoice;
-            string detail = backend.BuildSaveLoadoutDraftText();
+            string detail = backend.BuildSaveLoadoutDraftText(!requireExplicitSlotChoice);
             if (requireExplicitSlotChoice)
             {
                 detail += "\n\n저장할 슬롯을 좌 / 중 / 우 중에서 먼저 고르세요.";
