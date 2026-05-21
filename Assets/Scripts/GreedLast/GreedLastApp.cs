@@ -579,12 +579,16 @@ namespace GreedLast
 
         public string BuildInfiniteLoadoutSelectText()
         {
+            bool usable = IsSaveSlotUsable(selectedSaveSlotIndex);
             return "무한모드에 사용할 저장 조합을 선택합니다."
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n" + BuildSaveSlotListText()
                 + "\n\n선택 슬롯 기록: " + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n선택 상태: " + BuildSelectedInfiniteLoadoutStatusText()
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
-                + "\n준비로 돌아가면 선택한 슬롯으로 무한모드를 시작할 수 있습니다.";
+                + (usable
+                    ? "\n준비로 돌아가면 선택한 슬롯으로 무한모드를 시작할 수 있습니다."
+                    : "\n사용 가능한 슬롯을 고르거나 로비로 돌아가세요.");
         }
 
         public string BuildSelectedInfiniteLoadoutDetailText()
@@ -602,7 +606,9 @@ namespace GreedLast
                 + "\n\n" + FormatRunRecordDetail(record)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
                 + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회"
-                + "\n\n준비로 돌아가면 이 슬롯으로 무한모드를 시작합니다.";
+                + (IsSaveSlotUsable(selectedSaveSlotIndex)
+                    ? "\n\n준비로 돌아가면 이 슬롯으로 무한모드를 시작합니다."
+                    : "\n\n사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
         }
 
         public bool TryConsumeSelectedSaveLoadout(
@@ -1420,6 +1426,23 @@ namespace GreedLast
             return usesRemaining > 0
                 ? usesRemaining + "회"
                 : "사용 완료";
+        }
+
+        private string BuildSelectedInfiniteLoadoutStatusText()
+        {
+            GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
+            int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
+            if (!record.IsValid)
+            {
+                return "비어 있음 - 무한모드 시작 불가";
+            }
+
+            if (usesRemaining <= 0)
+            {
+                return "사용 완료 - 새 저장 조합으로 교체 필요";
+            }
+
+            return "시작 가능 - 남은 사용 " + usesRemaining + "회";
         }
 
         private static string BuildSaveLoadoutNameForStep(int slotIndex, int step)
