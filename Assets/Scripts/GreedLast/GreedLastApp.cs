@@ -3528,6 +3528,12 @@ namespace GreedLast
                     : infiniteLoadoutSelectLike ? "상세 보기" : "상세 비교");
                 SetButtonLabel(saveSlotRenameButton, snapshot.SaveSlotRenameConfirmationPending ? "이름 확정" : "이름 변경");
                 SetButtonLabel(saveSlotDeleteButton, snapshot.SaveSlotDeleteConfirmationPending ? "삭제 확정" : "슬롯 삭제");
+                if (!selectedSaveSlotOccupied)
+                {
+                    SetButtonLabel(saveSlotRenameButton, "이름 없음");
+                    SetButtonLabel(saveSlotDeleteButton, "삭제 없음");
+                }
+
                 for (int i = 0; i < laneButtons.Length; i += 1)
                 {
                     laneButtons[i].interactable = true;
