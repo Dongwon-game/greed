@@ -69,6 +69,7 @@ namespace GreedLast
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
+            bool[] saveSlotOccupied,
             bool saveSlotChoiceRequired,
             bool saveSlotOverwriteConfirmationPending,
             bool saveSlotDeleteConfirmationPending,
@@ -89,6 +90,7 @@ namespace GreedLast
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
+            SaveSlotOccupied = saveSlotOccupied ?? Array.Empty<bool>();
             SaveSlotChoiceRequired = saveSlotChoiceRequired;
             SaveSlotOverwriteConfirmationPending = saveSlotOverwriteConfirmationPending;
             SaveSlotDeleteConfirmationPending = saveSlotDeleteConfirmationPending;
@@ -110,6 +112,7 @@ namespace GreedLast
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
+        public bool[] SaveSlotOccupied { get; }
         public bool SaveSlotChoiceRequired { get; }
         public bool SaveSlotOverwriteConfirmationPending { get; }
         public bool SaveSlotDeleteConfirmationPending { get; }
@@ -143,6 +146,7 @@ namespace GreedLast
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
+            bool[] saveSlotOccupied,
             bool auxiliaryWarning,
             string message)
         {
@@ -153,6 +157,7 @@ namespace GreedLast
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
+            SaveSlotOccupied = saveSlotOccupied ?? Array.Empty<bool>();
             AuxiliaryWarning = auxiliaryWarning;
             Message = message ?? string.Empty;
         }
@@ -164,6 +169,7 @@ namespace GreedLast
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
+        public bool[] SaveSlotOccupied { get; }
         public bool AuxiliaryWarning { get; }
         public string Message { get; }
         public bool CanShowInfiniteMode => InfiniteUnlocked;
@@ -304,6 +310,7 @@ namespace GreedLast
                 selectedSaveSlotIndex,
                 BuildSaveSlotLabelSummaries(),
                 BuildSaveSlotUsableFlags(),
+                BuildSaveSlotOccupiedFlags(),
                 auxiliaryWarning,
                 message);
         }
@@ -1302,6 +1309,17 @@ namespace GreedLast
             return flags;
         }
 
+        private bool[] BuildSaveSlotOccupiedFlags()
+        {
+            bool[] flags = new bool[SaveSlotCount];
+            for (int i = 0; i < flags.Length; i += 1)
+            {
+                flags[i] = saveLoadoutSlots[i].IsValid;
+            }
+
+            return flags;
+        }
+
         private bool IsSaveSlotUsable(int slotIndex)
         {
             if (slotIndex < 0 || slotIndex >= saveLoadoutSlots.Length)
@@ -2013,6 +2031,7 @@ namespace GreedLast
                 lobbySnapshot.SelectedSaveSlotIndex,
                 lobbySnapshot.SaveSlotLabels,
                 lobbySnapshot.SaveSlotUsable,
+                lobbySnapshot.SaveSlotOccupied,
                 saveSlotChoiceRequired,
                 saveSlotOverwriteConfirmationPending,
                 saveSlotDeleteConfirmationPending,
@@ -3456,11 +3475,12 @@ namespace GreedLast
             infiniteRecordButton.interactable = snapshot.CoreActionsEnabled;
             retryButton.interactable = !snapshot.Busy;
             debugConnectionButton.interactable = showDevTools && !snapshot.Busy;
+            bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
             nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
             returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
             saveSlotDetailButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired;
-            saveSlotRenameButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired;
-            saveSlotDeleteButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired;
+            saveSlotRenameButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
+            saveSlotDeleteButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             pauseButton.interactable = runLike;
             devInvincibleButton.interactable = showDevTools && runLike;
             infiniteTestStopButton.interactable = showDevTools && infiniteRunLike;
@@ -4029,6 +4049,14 @@ namespace GreedLast
                 && snapshot.SelectedSaveSlotIndex >= 0
                 && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotUsable.Length
                 && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
+        }
+
+        private static bool IsSelectedSaveSlotOccupied(GreedLastStateSnapshot snapshot)
+        {
+            return snapshot.SaveSlotOccupied != null
+                && snapshot.SelectedSaveSlotIndex >= 0
+                && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotOccupied.Length
+                && snapshot.SaveSlotOccupied[snapshot.SelectedSaveSlotIndex];
         }
 
         private void EnsureUi()
