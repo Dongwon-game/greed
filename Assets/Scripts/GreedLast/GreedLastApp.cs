@@ -241,6 +241,8 @@ namespace GreedLast
         private readonly int[] saveLoadoutRenameSteps = new int[SaveSlotCount];
         private GreedLastInfiniteRunRecord lastInfiniteRunRecord = GreedLastInfiniteRunRecord.Empty;
         private GreedLastInfiniteRunRecord bestInfiniteRunRecord = GreedLastInfiniteRunRecord.Empty;
+        private GreedLastInfiniteRunRecord previousBestBeforeLastInfiniteRun = GreedLastInfiniteRunRecord.Empty;
+        private bool lastInfiniteRunWasNewBest;
         private readonly GreedLastInfiniteRunRecord[] infiniteRunRankings = new GreedLastInfiniteRunRecord[InfiniteRankingCount];
         private int normalClearCount;
         private int normalFailCount;
@@ -619,7 +621,9 @@ namespace GreedLast
             }
 
             lastInfiniteRunRecord = record;
-            if (!bestInfiniteRunRecord.IsValid || IsBetterInfiniteRecord(record, bestInfiniteRunRecord))
+            previousBestBeforeLastInfiniteRun = bestInfiniteRunRecord;
+            lastInfiniteRunWasNewBest = !bestInfiniteRunRecord.IsValid || IsBetterInfiniteRecord(record, bestInfiniteRunRecord);
+            if (lastInfiniteRunWasNewBest)
             {
                 bestInfiniteRunRecord = record;
             }
@@ -642,7 +646,8 @@ namespace GreedLast
                 : FormatInfiniteRecordCompact(record);
             return "무한모드 기록 저장"
                 + "\n이번 " + FormatInfiniteRecordCompact(record)
-                + "\n최고 " + bestText;
+                + "\n최고 " + bestText
+                + "\n" + BuildInfiniteRunResultComparisonText(record);
         }
 
         public string BuildInfiniteRecordBoardText()
@@ -680,6 +685,7 @@ namespace GreedLast
                 case 2:
                     return "기록 보드 3/3 - 무한모드\n"
                         + "\n최근 기록\n" + latestText
+                        + "\n\n최근 비교\n" + BuildLatestInfiniteComparisonText()
                         + "\n\n최고 기록\n" + bestText
                         + "\n\n상위 기록\n" + BuildInfiniteRankingText()
                         + "\n\n무한모드는 저장 조합 사용 횟수를 소모해 진입합니다.";
@@ -776,6 +782,88 @@ namespace GreedLast
             }
 
             return candidate.SectionsCleared > currentBest.SectionsCleared;
+        }
+
+        private string BuildInfiniteRunResultComparisonText(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "비교 기록 없음";
+            }
+
+            if (lastInfiniteRunWasNewBest)
+            {
+                if (previousBestBeforeLastInfiniteRun.IsValid)
+                {
+                    return "신기록 / 이전 최고 대비 "
+                        + FormatInfiniteRecordDelta(record, previousBestBeforeLastInfiniteRun);
+                }
+
+                return "첫 무한모드 최고 기록입니다.";
+            }
+
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                return "최고 대비 " + FormatInfiniteRecordDelta(record, bestInfiniteRunRecord);
+            }
+
+            return "비교할 최고 기록이 아직 없습니다.";
+        }
+
+        private string BuildLatestInfiniteComparisonText()
+        {
+            if (!lastInfiniteRunRecord.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            if (lastInfiniteRunWasNewBest && previousBestBeforeLastInfiniteRun.IsValid)
+            {
+                return "최근 기록이 신기록입니다.\n이전 최고 대비 "
+                    + FormatInfiniteRecordDelta(lastInfiniteRunRecord, previousBestBeforeLastInfiniteRun);
+            }
+
+            if (IsSameInfiniteRecord(lastInfiniteRunRecord, bestInfiniteRunRecord))
+            {
+                return "최근 기록이 현재 최고 기록입니다.";
+            }
+
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                return "현재 최고 대비 "
+                    + FormatInfiniteRecordDelta(lastInfiniteRunRecord, bestInfiniteRunRecord);
+            }
+
+            return "비교할 최고 기록이 아직 없습니다.";
+        }
+
+        private static string FormatInfiniteRecordDelta(GreedLastInfiniteRunRecord candidate, GreedLastInfiniteRunRecord baseline)
+        {
+            if (!candidate.IsValid || !baseline.IsValid)
+            {
+                return "비교 기준 없음";
+            }
+
+            int candidateThreat = Mathf.Max(1, candidate.MaxThreatLevel);
+            int baselineThreat = Mathf.Max(1, baseline.MaxThreatLevel);
+            return $"점수 {FormatSigned(candidate.Score - baseline.Score)}"
+                + $" / 거리 {FormatSigned(candidate.Distance - baseline.Distance)}m"
+                + $" / 구간 {FormatSigned(candidate.SectionsCleared - baseline.SectionsCleared)}"
+                + $" / 위협 {FormatSigned(candidateThreat - baselineThreat)}"
+                + $" / 콤보 {FormatSigned(candidate.MaxCombo - baseline.MaxCombo)}"
+                + $" / Miss {FormatSigned(candidate.MissCount - baseline.MissCount)}";
+        }
+
+        private static bool IsSameInfiniteRecord(GreedLastInfiniteRunRecord left, GreedLastInfiniteRunRecord right)
+        {
+            return left.IsValid
+                && right.IsValid
+                && left.Score == right.Score
+                && Mathf.Approximately(left.Distance, right.Distance)
+                && left.SectionsCleared == right.SectionsCleared
+                && left.MaxThreatLevel == right.MaxThreatLevel
+                && left.MaxCombo == right.MaxCombo
+                && left.MissCount == right.MissCount;
         }
 
         private void InsertInfiniteRanking(GreedLastInfiniteRunRecord record)
