@@ -2203,6 +2203,14 @@ namespace GreedLast
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
+                if (!IsSelectedSaveSlotUsable(stateMachine.LobbySnapshot))
+                {
+                    stateMachine.SetInfiniteStartReady(
+                        backend.LoadLobby(),
+                        "무한모드에 사용할 슬롯을 먼저 선택하세요.\n\n" + backend.BuildInfiniteStartReadyText());
+                    return;
+                }
+
                 StartInfiniteRunFromSelectedLoadout();
                 return;
             }
@@ -2501,8 +2509,14 @@ namespace GreedLast
         {
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
+                bool skippedClearSave = saveDraftRequiresExplicitSlotChoice;
                 saveDraftRequiresExplicitSlotChoice = false;
                 stateMachine.SetLobbyReady(backend.LoadLobby());
+                if (skippedClearSave)
+                {
+                    stateMachine.ShowLocalNotice("저장 조합 저장은 건너뛰었습니다.\n일반 런 클리어 기록은 기록 보드에 남아 있습니다.");
+                }
+
                 return;
             }
 
@@ -2624,6 +2638,14 @@ namespace GreedLast
             runCore.Exit();
             stateMachine.SetLobbyReady(backend.LoadLobby());
             stateMachine.ShowLocalNotice(message);
+        }
+
+        private static bool IsSelectedSaveSlotUsable(GreedLastLobbySnapshot snapshot)
+        {
+            return snapshot.SaveSlotUsable != null
+                && snapshot.SelectedSaveSlotIndex >= 0
+                && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotUsable.Length
+                && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
         }
 
         private bool IsRunState()
@@ -3070,10 +3092,11 @@ namespace GreedLast
             }
             else if (infinitePrepLike)
             {
+                bool selectedSlotUsable = IsSelectedSaveSlotUsable(snapshot);
                 SetButtonLabel(saveLoadoutButton, "저장 조합 변경");
-                SetButtonLabel(nextPatternButton, snapshot.InfiniteUnlocked ? "무한 시작" : "선택 필요");
+                SetButtonLabel(nextPatternButton, selectedSlotUsable ? "무한 시작" : "슬롯 선택 필요");
                 SetButtonLabel(returnLobbyButton, "로비로");
-                nextPatternButton.interactable = snapshot.InfiniteUnlocked;
+                nextPatternButton.interactable = selectedSlotUsable;
             }
         }
 
@@ -3541,6 +3564,22 @@ namespace GreedLast
             }
 
             return "S" + slotNumber + " " + label;
+        }
+
+        private static bool IsSelectedSaveSlotUsable(GreedLastLobbySnapshot snapshot)
+        {
+            return snapshot.SaveSlotUsable != null
+                && snapshot.SelectedSaveSlotIndex >= 0
+                && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotUsable.Length
+                && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
+        }
+
+        private static bool IsSelectedSaveSlotUsable(GreedLastStateSnapshot snapshot)
+        {
+            return snapshot.SaveSlotUsable != null
+                && snapshot.SelectedSaveSlotIndex >= 0
+                && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotUsable.Length
+                && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
         }
 
         private void EnsureUi()
