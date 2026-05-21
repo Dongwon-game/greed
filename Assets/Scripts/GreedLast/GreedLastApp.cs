@@ -3133,6 +3133,15 @@ namespace GreedLast
         private const float DefaultSfxVolume = 1f;
         private const string SfxVolumePrefsKey = "GreedLast.RuntimeUi.SfxVolume";
         private const string HapticsEnabledPrefsKey = "GreedLast.RuntimeUi.HapticsEnabled";
+        private static readonly Color32 ButtonNormalColor = new Color32(205, 166, 70, 255);
+        private static readonly Color32 ButtonHighlightedColor = new Color32(238, 204, 114, 255);
+        private static readonly Color32 ButtonPressedColor = new Color32(165, 124, 48, 255);
+        private static readonly Color32 ButtonDisabledColor = new Color32(66, 71, 72, 180);
+        private static readonly Color32 ButtonConfirmColor = new Color32(238, 204, 114, 255);
+        private static readonly Color32 ButtonConfirmPressedColor = new Color32(185, 132, 42, 255);
+        private static readonly Color32 ButtonDangerColor = new Color32(207, 87, 65, 255);
+        private static readonly Color32 ButtonDangerHighlightedColor = new Color32(240, 126, 91, 255);
+        private static readonly Color32 ButtonDangerPressedColor = new Color32(148, 54, 44, 255);
 
         private static bool DevToolsEnabled => Application.isEditor || Debug.isDebugBuild;
 
@@ -3573,6 +3582,8 @@ namespace GreedLast
                 SetButtonLabel(returnLobbyButton, "로비로");
                 nextPatternButton.interactable = selectedSlotUsable;
             }
+
+            ApplyButtonTones(snapshot, saveDraftLike);
         }
 
         public void RenderRun(GreedLastRunSnapshot snapshot)
@@ -4065,6 +4076,89 @@ namespace GreedLast
                 && snapshot.SaveSlotOccupied[snapshot.SelectedSaveSlotIndex];
         }
 
+        private void ApplyButtonTones(GreedLastStateSnapshot snapshot, bool saveDraftLike)
+        {
+            ResetButtonTones();
+            if (!saveDraftLike)
+            {
+                return;
+            }
+
+            if (snapshot.SaveSlotOverwriteConfirmationPending)
+            {
+                SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+
+            if (snapshot.SaveSlotRenameConfirmationPending)
+            {
+                SetButtonTone(saveSlotRenameButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+
+            if (snapshot.SaveSlotDeleteConfirmationPending)
+            {
+                SetButtonTone(saveSlotDeleteButton, ButtonDangerColor, ButtonDangerHighlightedColor, ButtonDangerPressedColor);
+            }
+        }
+
+        private void ResetButtonTones()
+        {
+            SetButtonTone(normalRunButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(saveLoadoutButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(infiniteButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(infiniteRecordButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(retryButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(debugConnectionButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(nextPatternButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(returnLobbyButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(saveSlotDetailButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(saveSlotRenameButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(saveSlotDeleteButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(pauseButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(devInvincibleButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(infiniteTestStopButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(focusMaxButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(threatUpButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(threatDownButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(hapticsButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonToneArray(devShortcutButtons);
+            SetButtonToneArray(timingOffsetButtons);
+            SetButtonToneArray(sfxVolumeButtons);
+        }
+
+        private static void SetButtonToneArray(Button[] buttons)
+        {
+            if (buttons == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < buttons.Length; i += 1)
+            {
+                SetButtonTone(buttons[i], ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            }
+        }
+
+        private static void SetButtonTone(Button button, Color32 normal, Color32 highlighted, Color32 pressed)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            ColorBlock colors = button.colors;
+            colors.normalColor = normal;
+            colors.highlightedColor = highlighted;
+            colors.pressedColor = pressed;
+            colors.selectedColor = highlighted;
+            colors.disabledColor = ButtonDisabledColor;
+            button.colors = colors;
+
+            if (button.targetGraphic != null)
+            {
+                button.targetGraphic.color = button.interactable ? normal : ButtonDisabledColor;
+            }
+        }
+
         private void EnsureUi()
         {
             if (rootPanel != null)
@@ -4498,14 +4592,15 @@ namespace GreedLast
         {
             GameObject buttonObject = CreateRect(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(620f, 90f));
             Image image = buttonObject.AddComponent<Image>();
-            image.color = new Color32(205, 166, 70, 255);
+            image.color = ButtonNormalColor;
 
             Button button = buttonObject.AddComponent<Button>();
             ColorBlock colors = button.colors;
-            colors.normalColor = new Color32(205, 166, 70, 255);
-            colors.highlightedColor = new Color32(238, 204, 114, 255);
-            colors.pressedColor = new Color32(165, 124, 48, 255);
-            colors.disabledColor = new Color32(66, 71, 72, 180);
+            colors.normalColor = ButtonNormalColor;
+            colors.highlightedColor = ButtonHighlightedColor;
+            colors.pressedColor = ButtonPressedColor;
+            colors.selectedColor = ButtonHighlightedColor;
+            colors.disabledColor = ButtonDisabledColor;
             button.colors = colors;
 
             Text text = CreateText(buttonObject.transform, "Label", label, 33, TextAnchor.MiddleCenter, FontStyle.Bold);
