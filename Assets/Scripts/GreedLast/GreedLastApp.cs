@@ -384,9 +384,9 @@ namespace GreedLast
         {
             bool hasCandidate = HasSaveLoadoutCandidate;
             string text = (hasCandidate
-                    ? "저장 후보\n" + FormatSaveCandidateSummary(lastRunRecord)
-                    : "저장 후보 없음\n일반 런을 클리어하면 새 저장 후보가 생깁니다.")
-                + "\n\n슬롯 상태\n"
+                    ? "저장 모드\n후보: " + FormatSaveCandidateSummary(lastRunRecord)
+                    : "관리 모드\n새 저장 후보 없음\n기존 슬롯만 확인 / 이름 변경 / 삭제할 수 있습니다.")
+                + "\n\n슬롯\n"
                 + BuildSaveSlotListText(showSelectedSlot, compact: true);
 
             if (!showSelectedSlot)
@@ -410,7 +410,7 @@ namespace GreedLast
                     + BuildOverwriteWarningText(selectedRecord, selectedUses)
                     + "\n\n상세 비교에서 후보와 기존 슬롯 차이를 볼 수 있습니다."
                 : selectedText
-                    + "\n\n상세 보기에서 기존 저장 조합을 확인할 수 있습니다.";
+                    + "\n\n상세 보기에서 기존 저장 조합 기록을 확인할 수 있습니다.";
         }
 
         public string BuildRunClearResultMessage(GreedLastRunRecord record)
@@ -499,8 +499,10 @@ namespace GreedLast
         public string BuildSelectedSaveLoadoutComparisonText()
         {
             GreedLastRunRecord slotRecord = saveLoadoutSlots[selectedSaveSlotIndex];
-            string slotHeader = "슬롯 " + (selectedSaveSlotIndex + 1) + " 상세 비교";
-            if (!HasSaveLoadoutCandidate)
+            bool hasCandidate = HasSaveLoadoutCandidate;
+            string slotHeader = "슬롯 " + (selectedSaveSlotIndex + 1)
+                + (hasCandidate ? " 상세 비교" : " 상세 보기");
+            if (!hasCandidate)
             {
                 if (!slotRecord.IsValid)
                 {
