@@ -2099,7 +2099,10 @@ namespace GreedLast
             CurrentState = GreedLastScreenState.InfiniteLoadoutSelect;
             BlockReason = GreedLastConnectBlockReason.None;
             Publish(
-                "저장 조합 선택",
+                BuildInfiniteLoadoutHeadline(
+                    saveSlotDeleteConfirmationPending,
+                    saveSlotDetailViewActive,
+                    saveSlotRenameConfirmationPending),
                 detail,
                 coreActionsEnabled: true,
                 retryVisible: false,
@@ -2122,7 +2125,12 @@ namespace GreedLast
             CurrentState = GreedLastScreenState.SaveLoadoutDraft;
             BlockReason = GreedLastConnectBlockReason.None;
             Publish(
-                "저장 조합 후보",
+                BuildSaveLoadoutHeadline(
+                    saveLoadoutCandidateAvailable,
+                    saveSlotOverwriteConfirmationPending,
+                    saveSlotDeleteConfirmationPending,
+                    saveSlotDetailViewActive,
+                    saveSlotRenameConfirmationPending),
                 detail,
                 coreActionsEnabled: true,
                 retryVisible: false,
@@ -2140,7 +2148,71 @@ namespace GreedLast
             recordBoardPageIndex = pageIndex;
             CurrentState = GreedLastScreenState.InfiniteRecordBoard;
             BlockReason = GreedLastConnectBlockReason.None;
-            Publish("기록 보드", detail, coreActionsEnabled: true, retryVisible: false);
+            Publish(BuildRecordBoardHeadline(pageIndex), detail, coreActionsEnabled: true, retryVisible: false);
+        }
+
+        private static string BuildSaveLoadoutHeadline(
+            bool saveLoadoutCandidateAvailable,
+            bool saveSlotOverwriteConfirmationPending,
+            bool saveSlotDeleteConfirmationPending,
+            bool saveSlotDetailViewActive,
+            bool saveSlotRenameConfirmationPending)
+        {
+            if (saveSlotDeleteConfirmationPending)
+            {
+                return "저장 조합 삭제";
+            }
+
+            if (saveSlotRenameConfirmationPending)
+            {
+                return "저장 조합 이름 변경";
+            }
+
+            if (saveSlotOverwriteConfirmationPending)
+            {
+                return "저장 조합 덮어쓰기";
+            }
+
+            if (saveSlotDetailViewActive)
+            {
+                return saveLoadoutCandidateAvailable ? "저장 조합 비교" : "저장 조합 상세";
+            }
+
+            return saveLoadoutCandidateAvailable ? "저장 조합 후보" : "저장 조합 관리";
+        }
+
+        private static string BuildInfiniteLoadoutHeadline(
+            bool saveSlotDeleteConfirmationPending,
+            bool saveSlotDetailViewActive,
+            bool saveSlotRenameConfirmationPending)
+        {
+            if (saveSlotDeleteConfirmationPending)
+            {
+                return "무한 조합 삭제";
+            }
+
+            if (saveSlotRenameConfirmationPending)
+            {
+                return "무한 조합 이름 변경";
+            }
+
+            return saveSlotDetailViewActive ? "무한 조합 상세" : "무한 조합 선택";
+        }
+
+        private static string BuildRecordBoardHeadline(int pageIndex)
+        {
+            int page = ((pageIndex % 4) + 4) % 4;
+            switch (page)
+            {
+                case 1:
+                    return "일반 런 기록";
+                case 2:
+                    return "무한 기록";
+                case 3:
+                    return "무한 랭킹";
+                default:
+                    return "기록 요약";
+            }
         }
 
         private void Publish(
