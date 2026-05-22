@@ -2635,6 +2635,11 @@ namespace GreedLast
                 return "클리어 기록";
             }
 
+            if (detail.StartsWith("저장 조합 저장은 건너뛰었습니다.", StringComparison.Ordinal))
+            {
+                return "클리어 기록";
+            }
+
             if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
                 || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
             {
@@ -4312,6 +4317,11 @@ namespace GreedLast
             }
 
             if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
+            {
+                return "클리어 기록";
+            }
+
+            if (detail.StartsWith("저장 조합 저장은 건너뛰었습니다.", StringComparison.Ordinal))
             {
                 return "클리어 기록";
             }
