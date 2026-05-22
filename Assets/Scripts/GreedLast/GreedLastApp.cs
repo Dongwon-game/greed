@@ -424,11 +424,10 @@ namespace GreedLast
                 ? "다음: 저장 조합에서 후보 비교 / 슬롯 갱신"
                 : "다음: 저장 조합에서 첫 슬롯 확정";
 
-            return "일반 런 클리어\n"
-                + $"등급 {BuildRunGrade(record)}  점수 {record.Score}  거리 {record.Distance:0.0}m  체력 {record.Health}  집중 {record.Focus}\n"
-                + "성향: " + BuildLoadoutProfile(record) + "\n"
-                + "저장 후보: " + record.LoadoutName
-                + "\n최근 비교: " + BuildLatestNormalComparisonText()
+            return "탈출 성공 / 기록 저장\n"
+                + FormatRunRecordBoardLine(record)
+                + "\n저장 후보: " + record.LoadoutName
+                + "\n비교: " + BuildLatestNormalComparisonText()
                 + "\n" + nextAction;
         }
 
@@ -440,8 +439,8 @@ namespace GreedLast
             }
 
             return FormatRunAttemptOutcome(record.Outcome) + " 기록 저장\n"
-                + FormatRunAttemptRecord(record)
-                + "\n기록 보기에서 최근 실패/중단을 다시 확인할 수 있습니다.";
+                + FormatRunAttemptListLine(record)
+                + "\n다음: 기록 보기에서 실패/중단 확인";
         }
 
         public GreedLastLobbySnapshot SelectSaveLoadoutSlot(int slotIndex)
@@ -718,10 +717,11 @@ namespace GreedLast
             string bestText = bestInfiniteRunRecord.IsValid
                 ? FormatInfiniteRecordCompact(bestInfiniteRunRecord)
                 : FormatInfiniteRecordCompact(record);
-            return "무한모드 기록 저장"
-                + "\n이번 " + FormatInfiniteRecordCompact(record)
-                + "\n최고 " + bestText
-                + "\n" + BuildInfiniteRunResultComparisonText(record);
+            return "무한모드 종료 / 기록 저장"
+                + "\n이번: " + FormatInfiniteRecordCompact(record)
+                + "\n최고: " + bestText
+                + "\n비교: " + BuildInfiniteRunResultComparisonText(record)
+                + "\n다음: 기록 보기에서 무한 기록 확인";
         }
 
         public string BuildInfiniteRecordBoardText()
@@ -3816,7 +3816,7 @@ namespace GreedLast
                 SetButtonLabel(infiniteButton, snapshot.InfiniteUnlocked
                     ? "무한 " + selectedSlotSummary
                     : "무한모드");
-                SetButtonLabel(infiniteRecordButton, IsRecordRelevantLobbyNotice(detail) ? "방금 기록" : "기록 보기");
+                SetButtonLabel(infiniteRecordButton, BuildLobbyRecordButtonLabel(detail));
             }
             else if (recordBoardLike)
             {
@@ -4272,13 +4272,30 @@ namespace GreedLast
                 || detail == "피라미드 입구 동기화 완료";
         }
 
-        private static bool IsRecordRelevantLobbyNotice(string detail)
+        private static string BuildLobbyRecordButtonLabel(string detail)
         {
-            return !string.IsNullOrEmpty(detail)
-                && (detail.StartsWith("일반 런 클리어", StringComparison.Ordinal)
-                    || detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
-                    || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal)
-                    || detail.StartsWith("무한모드 기록 저장", StringComparison.Ordinal));
+            if (string.IsNullOrEmpty(detail))
+            {
+                return "기록 보기";
+            }
+
+            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
+            {
+                return "클리어 기록";
+            }
+
+            if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
+            {
+                return "실패 기록";
+            }
+
+            if (detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal))
+            {
+                return "무한 기록";
+            }
+
+            return "기록 보기";
         }
 
         private static string BuildSelectedSaveSlotButtonSummary(GreedLastStateSnapshot snapshot)
