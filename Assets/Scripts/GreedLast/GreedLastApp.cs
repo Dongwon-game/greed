@@ -404,6 +404,7 @@ namespace GreedLast
             string selectedText = text
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n" + BuildSaveSlotStatusLine(selectedRecord, selectedUses)
+                + "\n" + BuildSaveSlotActionLine(hasCandidate, selectedRecord)
                 + "\n" + FormatSaveSlotCompact(selectedRecord, selectedUses);
 
             return hasCandidate
@@ -1498,6 +1499,20 @@ namespace GreedLast
             return usesRemaining > 0
                 ? "상태: 사용 가능 " + usesRemaining + "회"
                 : "상태: 사용 완료";
+        }
+
+        private static string BuildSaveSlotActionLine(bool hasCandidate, GreedLastRunRecord record)
+        {
+            if (hasCandidate)
+            {
+                return record.IsValid
+                    ? "작업: 후보 비교 / 덮어쓰기 / 이름 변경 / 삭제"
+                    : "작업: 바로 저장";
+            }
+
+            return record.IsValid
+                ? "작업: 상세 보기 / 이름 변경 / 삭제"
+                : "작업: 새 저장 후보 필요";
         }
 
         private static string FormatSaveCandidateSummary(GreedLastRunRecord record)
