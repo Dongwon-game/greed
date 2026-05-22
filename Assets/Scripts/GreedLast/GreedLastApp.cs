@@ -75,6 +75,7 @@ namespace GreedLast
             bool saveSlotDeleteConfirmationPending,
             bool saveSlotDetailViewActive,
             bool saveSlotRenameConfirmationPending,
+            bool saveLoadoutCandidateAvailable,
             int recordBoardPageIndex,
             bool retryVisible,
             GreedLastConnectBlockReason blockReason)
@@ -97,6 +98,7 @@ namespace GreedLast
             SaveSlotDeleteConfirmationPending = saveSlotDeleteConfirmationPending;
             SaveSlotDetailViewActive = saveSlotDetailViewActive;
             SaveSlotRenameConfirmationPending = saveSlotRenameConfirmationPending;
+            SaveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable;
             RecordBoardPageIndex = recordBoardPageIndex;
             RetryVisible = retryVisible;
             BlockReason = blockReason;
@@ -120,6 +122,7 @@ namespace GreedLast
         public bool SaveSlotDeleteConfirmationPending { get; }
         public bool SaveSlotDetailViewActive { get; }
         public bool SaveSlotRenameConfirmationPending { get; }
+        public bool SaveLoadoutCandidateAvailable { get; }
         public int RecordBoardPageIndex { get; }
         public bool RetryVisible { get; }
         public GreedLastConnectBlockReason BlockReason { get; }
@@ -271,6 +274,7 @@ namespace GreedLast
         }
 
         public int RecordBoardPages => RecordBoardPageCount;
+        public bool HasSaveLoadoutCandidate => saveLoadoutCandidateAvailable && lastRunRecord.IsValid;
 
         public GreedLastConnectResult CheckConnect()
         {
@@ -378,30 +382,35 @@ namespace GreedLast
 
         public string BuildSaveLoadoutDraftText(bool showSelectedSlot = true)
         {
-            if (!saveLoadoutCandidateAvailable || !lastRunRecord.IsValid)
-            {
-                return "저장 가능한 조합 후보가 아직 없습니다.";
-            }
-
-            string text = "저장 후보\n"
-                + FormatSaveCandidateSummary(lastRunRecord)
+            bool hasCandidate = HasSaveLoadoutCandidate;
+            string text = (hasCandidate
+                    ? "저장 후보\n" + FormatSaveCandidateSummary(lastRunRecord)
+                    : "저장 후보 없음\n일반 런을 클리어하면 새 저장 후보가 생깁니다.")
                 + "\n\n슬롯 상태\n"
                 + BuildSaveSlotListText(showSelectedSlot, compact: true);
 
             if (!showSelectedSlot)
             {
-                return text
-                    + "\n\n좌 / 중 / 우로 저장할 슬롯을 고르세요."
-                    + "\n고른 뒤 저장 여부를 확정합니다.";
+                return hasCandidate
+                    ? text
+                        + "\n\n좌 / 중 / 우로 저장할 슬롯을 고르세요."
+                        + "\n고른 뒤 저장 여부를 확정합니다."
+                    : text
+                        + "\n\n좌 / 중 / 우로 확인할 슬롯을 고르세요.";
             }
 
             GreedLastRunRecord selectedRecord = saveLoadoutSlots[selectedSaveSlotIndex];
             int selectedUses = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
-            return text
+            string selectedText = text
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                + "\n" + FormatSaveSlotCompact(selectedRecord, selectedUses)
-                + BuildOverwriteWarningText(selectedRecord, selectedUses)
-                + "\n\n상세 비교에서 후보와 기존 슬롯 차이를 볼 수 있습니다.";
+                + "\n" + FormatSaveSlotCompact(selectedRecord, selectedUses);
+
+            return hasCandidate
+                ? selectedText
+                    + BuildOverwriteWarningText(selectedRecord, selectedUses)
+                    + "\n\n상세 비교에서 후보와 기존 슬롯 차이를 볼 수 있습니다."
+                : selectedText
+                    + "\n\n상세 보기에서 기존 저장 조합을 확인할 수 있습니다.";
         }
 
         public string BuildRunClearResultMessage(GreedLastRunRecord record)
@@ -491,9 +500,18 @@ namespace GreedLast
         {
             GreedLastRunRecord slotRecord = saveLoadoutSlots[selectedSaveSlotIndex];
             string slotHeader = "슬롯 " + (selectedSaveSlotIndex + 1) + " 상세 비교";
-            if (!lastRunRecord.IsValid)
+            if (!HasSaveLoadoutCandidate)
             {
-                return slotHeader + "\n저장 후보가 아직 없습니다.";
+                if (!slotRecord.IsValid)
+                {
+                    return slotHeader
+                        + "\n비어 있음"
+                        + "\n\n일반 런을 클리어하면 새 저장 후보를 만들 수 있습니다.";
+                }
+
+                return slotHeader
+                    + "\n\n현재 슬롯\n" + FormatRunRecordDetail(slotRecord)
+                    + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회";
             }
 
             string text = slotHeader
@@ -2072,7 +2090,8 @@ namespace GreedLast
             bool saveSlotOverwriteConfirmationPending = false,
             bool saveSlotDeleteConfirmationPending = false,
             bool saveSlotDetailViewActive = false,
-            bool saveSlotRenameConfirmationPending = false)
+            bool saveSlotRenameConfirmationPending = false,
+            bool saveLoadoutCandidateAvailable = false)
         {
             lobbySnapshot = snapshot;
             CurrentState = GreedLastScreenState.SaveLoadoutDraft;
@@ -2086,7 +2105,8 @@ namespace GreedLast
                 saveSlotOverwriteConfirmationPending: saveSlotOverwriteConfirmationPending,
                 saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending,
                 saveSlotDetailViewActive: saveSlotDetailViewActive,
-                saveSlotRenameConfirmationPending: saveSlotRenameConfirmationPending);
+                saveSlotRenameConfirmationPending: saveSlotRenameConfirmationPending,
+                saveLoadoutCandidateAvailable: saveLoadoutCandidateAvailable);
         }
 
         public void SetInfiniteRecordBoard(GreedLastLobbySnapshot snapshot, string detail, int pageIndex)
@@ -2107,7 +2127,8 @@ namespace GreedLast
             bool saveSlotOverwriteConfirmationPending = false,
             bool saveSlotDeleteConfirmationPending = false,
             bool saveSlotDetailViewActive = false,
-            bool saveSlotRenameConfirmationPending = false)
+            bool saveSlotRenameConfirmationPending = false,
+            bool saveLoadoutCandidateAvailable = false)
         {
             StateChanged?.Invoke(new GreedLastStateSnapshot(
                 CurrentState,
@@ -2128,6 +2149,7 @@ namespace GreedLast
                 saveSlotDeleteConfirmationPending,
                 saveSlotDetailViewActive,
                 saveSlotRenameConfirmationPending,
+                saveLoadoutCandidateAvailable,
                 CurrentState == GreedLastScreenState.InfiniteRecordBoard ? recordBoardPageIndex : -1,
                 retryVisible && !requestGate.Busy,
                 BlockReason));
@@ -2434,12 +2456,16 @@ namespace GreedLast
             }
 
             GreedLastLobbySnapshot snapshot = stateMachine.LobbySnapshot;
-            bool valid = backend.ValidateSaveLoadoutEntry(snapshot.PeriodId, snapshot);
             requestGate.Complete(token);
 
-            if (valid)
+            if (snapshot.SaveLoadoutUnlocked)
             {
-                OpenSaveLoadoutDraft(snapshot, requireExplicitSlotChoice: false);
+                OpenSaveLoadoutDraft(
+                    snapshot,
+                    requireExplicitSlotChoice: false,
+                    backend.HasSaveLoadoutCandidate
+                        ? null
+                        : "저장할 새 클리어 후보는 없습니다.\n기존 저장 슬롯은 여기서 관리할 수 있습니다.");
             }
             else
             {
@@ -2650,7 +2676,11 @@ namespace GreedLast
                 detail = notice + "\n\n" + detail;
             }
 
-            stateMachine.SetSaveLoadoutDraft(snapshot, detail, requireExplicitSlotChoice);
+            stateMachine.SetSaveLoadoutDraft(
+                snapshot,
+                detail,
+                requireExplicitSlotChoice,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
         private void OpenSaveLoadoutOverwriteConfirmation(string notice)
@@ -2670,7 +2700,8 @@ namespace GreedLast
                 backend.LoadLobby(),
                 detail,
                 saveSlotChoiceRequired: false,
-                saveSlotOverwriteConfirmationPending: true);
+                saveSlotOverwriteConfirmationPending: true,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
         private void OpenSaveLoadoutDeleteConfirmation(string notice)
@@ -2690,7 +2721,8 @@ namespace GreedLast
                 backend.LoadLobby(),
                 detail,
                 saveSlotChoiceRequired: false,
-                saveSlotDeleteConfirmationPending: true);
+                saveSlotDeleteConfirmationPending: true,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
         private void OpenInfiniteLoadoutDeleteConfirmation(string notice)
@@ -2728,7 +2760,8 @@ namespace GreedLast
                 backend.LoadLobby(),
                 detail,
                 saveSlotChoiceRequired: false,
-                saveSlotRenameConfirmationPending: true);
+                saveSlotRenameConfirmationPending: true,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
         private void OpenInfiniteLoadoutRenameConfirmation(string notice)
@@ -2841,7 +2874,8 @@ namespace GreedLast
                 backend.LoadLobby(),
                 backend.BuildSelectedSaveLoadoutComparisonText(),
                 saveSlotOverwriteConfirmationPending: saveDraftOverwriteConfirmPending,
-                saveSlotDetailViewActive: true);
+                saveSlotDetailViewActive: true,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
         private void RequestRenameSaveLoadoutSlot()
@@ -3177,6 +3211,12 @@ namespace GreedLast
         private void ConfirmSaveLoadoutAndReturn()
         {
             saveSlotRenameConfirmPending = false;
+            if (!backend.HasSaveLoadoutCandidate)
+            {
+                RefreshSaveLoadoutDraft("저장할 새 클리어 후보가 없습니다.\n기존 저장 슬롯만 관리할 수 있습니다.");
+                return;
+            }
+
             if (saveDraftRequiresExplicitSlotChoice)
             {
                 RefreshSaveLoadoutDraft("저장할 슬롯을 먼저 선택하세요.");
@@ -3618,6 +3658,7 @@ namespace GreedLast
 
             if (saveDraftLike)
             {
+                bool canSaveCandidate = !infiniteLoadoutSelectLike && snapshot.SaveLoadoutCandidateAvailable;
                 UpdateSaveSlotLabels(
                     snapshot.SaveSlotChoiceRequired ? -1 : snapshot.SelectedSaveSlotIndex,
                     snapshot.SaveSlotLabels,
@@ -3628,18 +3669,21 @@ namespace GreedLast
                     ? "준비로 돌아가기"
                     : snapshot.SaveSlotChoiceRequired
                         ? "슬롯 선택 필요"
-                        : snapshot.SaveSlotOverwriteConfirmationPending
-                            ? "덮어쓰기 확정"
-                            : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
-                nextPatternButton.interactable = infiniteLoadoutSelectLike || !snapshot.SaveSlotChoiceRequired;
+                        : !canSaveCandidate
+                            ? "저장 후보 없음"
+                            : snapshot.SaveSlotOverwriteConfirmationPending
+                                ? "덮어쓰기 확정"
+                                : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
+                nextPatternButton.interactable = infiniteLoadoutSelectLike
+                    || (!snapshot.SaveSlotChoiceRequired && canSaveCandidate);
                 SetButtonLabel(returnLobbyButton, infiniteLoadoutSelectLike
                     ? "로비로"
                     : snapshot.SaveSlotChoiceRequired
                         ? "저장 안 함"
-                        : "선택만 하고 로비로");
+                        : canSaveCandidate ? "선택만 하고 로비로" : "로비로");
                 SetButtonLabel(saveSlotDetailButton, snapshot.SaveSlotDetailViewActive
                     ? "목록 보기"
-                    : infiniteLoadoutSelectLike ? "상세 보기" : "상세 비교");
+                    : infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교");
                 SetButtonLabel(saveSlotRenameButton, snapshot.SaveSlotRenameConfirmationPending ? "이름 확정" : "이름 변경");
                 SetButtonLabel(saveSlotDeleteButton, snapshot.SaveSlotDeleteConfirmationPending ? "삭제 확정" : "슬롯 삭제");
                 if (!selectedSaveSlotOccupied)
