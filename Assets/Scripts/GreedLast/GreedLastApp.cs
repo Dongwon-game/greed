@@ -3215,7 +3215,7 @@ namespace GreedLast
         {
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
-                bool skippedClearSave = saveDraftRequiresExplicitSlotChoice;
+                bool skippedClearSave = backend.HasSaveLoadoutCandidate;
                 saveDraftRequiresExplicitSlotChoice = false;
                 saveDraftOverwriteConfirmPending = false;
                 saveSlotDeleteConfirmPending = false;
@@ -3812,7 +3812,7 @@ namespace GreedLast
                     ? "로비로"
                     : snapshot.SaveSlotChoiceRequired
                         ? "저장 안 함"
-                        : canSaveCandidate ? "선택만 하고 로비로" : "로비로");
+                        : canSaveCandidate ? "저장 안 함" : "로비로");
                 SetButtonLabel(saveSlotDetailButton, snapshot.SaveSlotDetailViewActive
                     ? "목록 보기"
                     : infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교");
