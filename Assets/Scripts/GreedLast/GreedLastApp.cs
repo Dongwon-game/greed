@@ -244,6 +244,7 @@ namespace GreedLast
         private bool firstSaveCompleted;
         private bool saveLoadoutUnlocked;
         private bool savedLoadoutConfirmed;
+        private bool saveLoadoutCandidateAvailable;
         private bool auxiliaryWarning;
         private int selectedSaveSlotIndex;
         private GreedLastRunRecord lastRunRecord = GreedLastRunRecord.Empty;
@@ -328,6 +329,7 @@ namespace GreedLast
             return snapshot.SaveLoadoutUnlocked
                 && snapshot.PeriodId == CurrentPeriodId
                 && periodId == CurrentPeriodId
+                && saveLoadoutCandidateAvailable
                 && lastRunRecord.IsValid;
         }
 
@@ -337,6 +339,7 @@ namespace GreedLast
             {
                 firstSaveCompleted = true;
                 saveLoadoutUnlocked = true;
+                saveLoadoutCandidateAvailable = true;
                 lastRunRecord = record;
                 if (!bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord))
                 {
@@ -375,7 +378,7 @@ namespace GreedLast
 
         public string BuildSaveLoadoutDraftText(bool showSelectedSlot = true)
         {
-            if (!lastRunRecord.IsValid)
+            if (!saveLoadoutCandidateAvailable || !lastRunRecord.IsValid)
             {
                 return "저장 가능한 조합 후보가 아직 없습니다.";
             }
@@ -441,16 +444,28 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot ConfirmSaveLoadout()
         {
-            if (lastRunRecord.IsValid && saveLoadoutUnlocked)
+            if (lastRunRecord.IsValid && saveLoadoutUnlocked && saveLoadoutCandidateAvailable)
             {
                 saveLoadoutSlots[selectedSaveSlotIndex] = lastRunRecord;
                 saveLoadoutUsesRemaining[selectedSaveSlotIndex] = MaxSaveLoadoutUses;
                 saveLoadoutRenameSteps[selectedSaveSlotIndex] = 0;
                 savedLoadoutConfirmed = true;
+                saveLoadoutCandidateAvailable = false;
                 SavePersistedData();
             }
 
             return LoadLobby();
+        }
+
+        public void DiscardSaveLoadoutCandidate()
+        {
+            if (!saveLoadoutCandidateAvailable)
+            {
+                return;
+            }
+
+            saveLoadoutCandidateAvailable = false;
+            SavePersistedData();
         }
 
         public bool SelectedSaveSlotHasRecord()
@@ -712,64 +727,27 @@ namespace GreedLast
             string bestText = bestInfiniteRunRecord.IsValid
                 ? FormatInfiniteRecord(bestInfiniteRunRecord)
                 : "기록 없음";
-            string navigationHint = BuildRecordBoardNavigationHint(page);
 
             switch (page)
             {
                 case 1:
                     return "기록 보드 2/4 - 일반 런\n"
-                        + navigationHint
                         + "\n상위 기록\n" + BuildNormalRankingText()
                         + "\n\n최근 실패/중단\n" + lastAttemptText
-                        + "\n\n실패/중단 히스토리\n" + BuildNormalAttemptHistoryText()
-                        + "\n\n다음 기록으로 무한모드 요약을 봅니다.";
+                        + "\n\n실패/중단 기록\n" + BuildNormalAttemptHistoryText();
                 case 2:
-                    return "기록 보드 3/4 - 무한 요약\n"
-                        + navigationHint
+                    return "기록 보드 3/4 - 무한 기록\n"
                         + "\n최근 기록\n" + latestText
-                        + "\n\n최근 비교\n" + BuildLatestInfiniteComparisonText()
-                        + "\n\n최고 기록\n" + bestText
-                        + "\n\n다음 기록으로 무한 랭킹을 봅니다.";
+                        + "\n\n최고 기록\n" + bestText;
                 case 3:
                     return "기록 보드 4/4 - 무한 랭킹\n"
-                        + navigationHint
-                        + "\n상위 기록\n" + BuildInfiniteRankingText()
-                        + "\n\n무한모드는 저장 조합 사용 횟수를 소모해 진입합니다."
-                        + "\n이전 기록으로 무한 요약을 다시 봅니다.";
+                        + "\n상위 기록\n" + BuildInfiniteRankingText();
                 default:
                     return "기록 보드 1/4 - 요약\n"
-                        + navigationHint
-                        + "\n진행 요약\n" + BuildRunProgressSummaryText()
-                        + "\n\n일반 런 최근\n" + latestNormalText
-                        + "\n\n일반 런 비교\n" + BuildLatestNormalComparisonText()
+                        + "\n일반 런 최근\n" + latestNormalText
                         + "\n\n일반 런 최고\n" + bestNormalText
-                        + "\n\n다음 기록으로 상세 기록을 봅니다.";
-            }
-        }
-
-        private static string BuildRecordBoardNavigationHint(int page)
-        {
-            int normalizedPage = NormalizeRecordBoardPage(page);
-            int previousPage = (normalizedPage + RecordBoardPageCount - 1) % RecordBoardPageCount;
-            int nextPage = (normalizedPage + 1) % RecordBoardPageCount;
-            return "조작: 좌 " + GetRecordBoardPageName(previousPage)
-                + " / 중 요약"
-                + " / 우 " + GetRecordBoardPageName(nextPage)
-                + "\n";
-        }
-
-        private static string GetRecordBoardPageName(int page)
-        {
-            switch (NormalizeRecordBoardPage(page))
-            {
-                case 1:
-                    return "일반 런";
-                case 2:
-                    return "무한 요약";
-                case 3:
-                    return "무한 랭킹";
-                default:
-                    return "요약";
+                        + "\n\n무한모드 최근\n" + latestText
+                        + "\n\n무한모드 최고\n" + bestText;
             }
         }
 
@@ -1574,6 +1552,7 @@ namespace GreedLast
             firstSaveCompleted = data.firstSaveCompleted;
             saveLoadoutUnlocked = data.saveLoadoutUnlocked;
             savedLoadoutConfirmed = data.savedLoadoutConfirmed;
+            saveLoadoutCandidateAvailable = data.saveLoadoutCandidateAvailable && data.lastRunRecord != null && data.lastRunRecord.isValid;
             selectedSaveSlotIndex = Mathf.Clamp(data.selectedSaveSlotIndex, 0, SaveSlotCount - 1);
             lastRunRecord = FromData(data.lastRunRecord);
             lastRunAttemptRecord = FromData(data.lastRunAttemptRecord);
@@ -1710,6 +1689,7 @@ namespace GreedLast
                 firstSaveCompleted = firstSaveCompleted,
                 saveLoadoutUnlocked = saveLoadoutUnlocked,
                 savedLoadoutConfirmed = savedLoadoutConfirmed,
+                saveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable,
                 selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1),
                 lastRunRecord = ToData(lastRunRecord),
                 lastRunAttemptRecord = ToData(lastRunAttemptRecord),
@@ -1902,6 +1882,7 @@ namespace GreedLast
             public bool firstSaveCompleted;
             public bool saveLoadoutUnlocked;
             public bool savedLoadoutConfirmed;
+            public bool saveLoadoutCandidateAvailable;
             public int selectedSaveSlotIndex;
             public RunRecordSaveData lastRunRecord;
             public RunAttemptRecordSaveData lastRunAttemptRecord;
@@ -2462,7 +2443,7 @@ namespace GreedLast
             }
             else
             {
-                stateMachine.ShowLocalNotice("저장 조합은 첫 클리어 이후 최신 상태 확인을 통과해야 합니다.");
+                stateMachine.ShowLocalNotice("저장할 새 클리어 후보가 없습니다.\n일반 런을 다시 클리어하면 새 저장 기회가 생깁니다.");
             }
         }
 
@@ -3077,6 +3058,11 @@ namespace GreedLast
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
+                if (skippedClearSave)
+                {
+                    backend.DiscardSaveLoadoutCandidate();
+                }
+
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 if (skippedClearSave)
                 {
@@ -3540,7 +3526,7 @@ namespace GreedLast
                 comboBadgeRoot.SetActive(false);
             }
 
-            detailText.fontSize = recordBoardLike ? 22 : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
+            detailText.fontSize = recordBoardLike ? 26 : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
             if (recordBoardLike)
             {
                 SetAnchored(detailText.rectTransform, 0.5f, 0.55f, 920f, 640f);
