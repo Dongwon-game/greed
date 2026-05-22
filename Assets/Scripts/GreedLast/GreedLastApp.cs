@@ -3319,6 +3319,7 @@ namespace GreedLast
         private Text titleText;
         private Text subtitleText;
         private Text detailText;
+        private Text saveSlotModeText;
         private Text runHudText;
         private Text debugText;
         private GameObject runGaugeRoot;
@@ -3620,6 +3621,7 @@ namespace GreedLast
             saveSlotDetailButton.gameObject.SetActive(saveDraftLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
+            saveSlotModeText.gameObject.SetActive(saveDraftLike);
             runHudText.gameObject.SetActive(runLike);
             pauseButton.gameObject.SetActive(runLike);
             bool showDevTools = DevToolsEnabled;
@@ -3684,6 +3686,7 @@ namespace GreedLast
             if (saveDraftLike)
             {
                 bool canSaveCandidate = !infiniteLoadoutSelectLike && snapshot.SaveLoadoutCandidateAvailable;
+                UpdateSaveSlotModeText(snapshot, infiniteLoadoutSelectLike, selectedSaveSlotOccupied, canSaveCandidate);
                 UpdateSaveSlotLabels(
                     snapshot.SaveSlotChoiceRequired ? -1 : snapshot.SelectedSaveSlotIndex,
                     snapshot.SaveSlotLabels,
@@ -4250,6 +4253,80 @@ namespace GreedLast
                 && snapshot.SaveSlotOccupied[snapshot.SelectedSaveSlotIndex];
         }
 
+        private void UpdateSaveSlotModeText(
+            GreedLastStateSnapshot snapshot,
+            bool infiniteLoadoutSelectLike,
+            bool selectedSaveSlotOccupied,
+            bool canSaveCandidate)
+        {
+            saveSlotModeText.text = BuildSaveSlotModeText(snapshot, infiniteLoadoutSelectLike, selectedSaveSlotOccupied, canSaveCandidate);
+            if (snapshot.SaveSlotDeleteConfirmationPending)
+            {
+                saveSlotModeText.color = new Color32(255, 156, 126, 255);
+                return;
+            }
+
+            if (snapshot.SaveSlotOverwriteConfirmationPending || snapshot.SaveSlotRenameConfirmationPending)
+            {
+                saveSlotModeText.color = new Color32(255, 231, 154, 255);
+                return;
+            }
+
+            saveSlotModeText.color = new Color32(211, 218, 209, 235);
+        }
+
+        private static string BuildSaveSlotModeText(
+            GreedLastStateSnapshot snapshot,
+            bool infiniteLoadoutSelectLike,
+            bool selectedSaveSlotOccupied,
+            bool canSaveCandidate)
+        {
+            if (infiniteLoadoutSelectLike)
+            {
+                return "무한 준비\n슬롯 선택";
+            }
+
+            if (snapshot.SaveSlotChoiceRequired)
+            {
+                return snapshot.SaveLoadoutCandidateAvailable
+                    ? "저장 작업\n슬롯 선택"
+                    : "관리 작업\n슬롯 선택";
+            }
+
+            if (snapshot.SaveSlotDeleteConfirmationPending)
+            {
+                return "삭제 확인\n다시 누르면 삭제";
+            }
+
+            if (snapshot.SaveSlotRenameConfirmationPending)
+            {
+                return "이름 확인\n다시 누르면 적용";
+            }
+
+            if (snapshot.SaveSlotOverwriteConfirmationPending)
+            {
+                return "덮어쓰기 확인\n다시 누르면 교체";
+            }
+
+            if (snapshot.SaveSlotDetailViewActive)
+            {
+                return snapshot.SaveLoadoutCandidateAvailable
+                    ? "상세 비교\n목록 보기 가능"
+                    : "상세 보기\n목록 보기 가능";
+            }
+
+            if (!canSaveCandidate)
+            {
+                return selectedSaveSlotOccupied
+                    ? "관리 작업\n저장 후보 없음"
+                    : "관리 작업\n빈 슬롯";
+            }
+
+            return selectedSaveSlotOccupied
+                ? "저장 작업\n교체 대상"
+                : "저장 작업\n바로 저장";
+        }
+
         private void ApplyButtonTones(GreedLastStateSnapshot snapshot, bool saveDraftLike)
         {
             ResetButtonTones();
@@ -4374,6 +4451,9 @@ namespace GreedLast
             detailText = CreateText(rootPanel.transform, "Detail", string.Empty, 33, TextAnchor.UpperCenter, FontStyle.Normal);
             SetAnchored(detailText.rectTransform, 0.5f, 0.59f, 850f, 260f);
 
+            saveSlotModeText = CreateText(rootPanel.transform, "SaveSlotMode", string.Empty, 22, TextAnchor.MiddleCenter, FontStyle.Bold);
+            SetAnchored(saveSlotModeText.rectTransform, 0.895f, 0.53f, 250f, 76f);
+
             runHudText = CreateText(rootPanel.transform, "RunHud", string.Empty, 27, TextAnchor.UpperCenter, FontStyle.Bold);
             SetAnchored(runHudText.rectTransform, 0.5f, 0.255f, 900f, 245f);
 
@@ -4427,9 +4507,9 @@ namespace GreedLast
             SetAnchored(debugConnectionButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
-            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.91f, 0.47f, 180f, 54f);
-            SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.91f, 0.425f, 180f, 54f);
-            SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.91f, 0.38f, 180f, 54f);
+            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.468f, 230f, 60f);
+            SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.895f, 0.413f, 230f, 60f);
+            SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.895f, 0.358f, 230f, 60f);
             SetAnchored(pauseButton.GetComponent<RectTransform>(), 0.91f, 0.735f, 180f, 54f);
             SetAnchored(devInvincibleButton.GetComponent<RectTransform>(), 0.91f, 0.69f, 180f, 54f);
             SetAnchored(infiniteTestStopButton.GetComponent<RectTransform>(), 0.91f, 0.645f, 180f, 54f);
