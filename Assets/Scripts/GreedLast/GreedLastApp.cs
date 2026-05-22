@@ -2005,6 +2005,7 @@ namespace GreedLast
     {
         private readonly GreedLastRequestGate requestGate;
         private GreedLastLobbySnapshot lobbySnapshot;
+        private string currentDetail = string.Empty;
         private int recordBoardPageIndex = -1;
 
         public GreedLastStateMachine(GreedLastRequestGate requestGate)
@@ -2018,6 +2019,7 @@ namespace GreedLast
         public GreedLastConnectBlockReason BlockReason { get; private set; }
 
         public GreedLastLobbySnapshot LobbySnapshot => lobbySnapshot;
+        public string CurrentDetail => currentDetail;
 
         public void SetBoot(string detail)
         {
@@ -2227,6 +2229,7 @@ namespace GreedLast
             bool saveSlotRenameConfirmationPending = false,
             bool saveLoadoutCandidateAvailable = false)
         {
+            currentDetail = detail ?? string.Empty;
             StateChanged?.Invoke(new GreedLastStateSnapshot(
                 CurrentState,
                 requestGate.ActiveRequestId,
@@ -2614,7 +2617,36 @@ namespace GreedLast
             }
 
             requestGate.Complete(token);
-            OpenRecordBoard(preferredRecordBoardPageIndex);
+            int targetPage = BuildLobbyRecordButtonLabel(stateMachine.CurrentDetail) == "기록 보기"
+                ? 0
+                : preferredRecordBoardPageIndex;
+            OpenRecordBoard(targetPage);
+        }
+
+        private static string BuildLobbyRecordButtonLabel(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return "기록 보기";
+            }
+
+            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
+            {
+                return "클리어 기록";
+            }
+
+            if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
+            {
+                return "실패 기록";
+            }
+
+            if (detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal))
+            {
+                return "무한 기록";
+            }
+
+            return "기록 보기";
         }
 
         private bool TryBeginLobbyAction(out GreedLastRequestToken token)
