@@ -403,6 +403,7 @@ namespace GreedLast
             int selectedUses = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             string selectedText = text
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
+                + "\n" + BuildSaveSlotStatusLine(selectedRecord, selectedUses)
                 + "\n" + FormatSaveSlotCompact(selectedRecord, selectedUses);
 
             return hasCandidate
@@ -1489,6 +1490,18 @@ namespace GreedLast
                 ? usesRemaining + "회 남음"
                 : "사용 완료";
             return record.LoadoutName + $" / {BuildRunGrade(record)} / {record.Score}점 / {usesText}";
+        }
+
+        private static string BuildSaveSlotStatusLine(GreedLastRunRecord record, int usesRemaining)
+        {
+            if (!record.IsValid)
+            {
+                return "상태: 빈 슬롯";
+            }
+
+            return usesRemaining > 0
+                ? "상태: 사용 가능 " + usesRemaining + "회"
+                : "상태: 사용 완료";
         }
 
         private static string FormatSaveCandidateSummary(GreedLastRunRecord record)
