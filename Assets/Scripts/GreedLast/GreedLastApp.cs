@@ -733,19 +733,19 @@ namespace GreedLast
         {
             int page = NormalizeRecordBoardPage(pageIndex);
             string latestNormalText = lastRunRecord.IsValid
-                ? FormatRunRecordCompact(lastRunRecord)
+                ? FormatRunRecordBoardLine(lastRunRecord)
                 : "기록 없음";
             string bestNormalText = bestRunRecord.IsValid
-                ? FormatRunRecordCompact(bestRunRecord)
+                ? FormatRunRecordBoardLine(bestRunRecord)
                 : "기록 없음";
             string lastAttemptText = lastRunAttemptRecord.IsValid
-                ? FormatRunAttemptRecord(lastRunAttemptRecord)
+                ? FormatRunAttemptListLine(lastRunAttemptRecord)
                 : "기록 없음";
             string latestText = lastInfiniteRunRecord.IsValid
-                ? FormatInfiniteRecord(lastInfiniteRunRecord)
+                ? FormatInfiniteRecordBoardLine(lastInfiniteRunRecord)
                 : "기록 없음";
             string bestText = bestInfiniteRunRecord.IsValid
-                ? FormatInfiniteRecord(bestInfiniteRunRecord)
+                ? FormatInfiniteRecordBoardLine(bestInfiniteRunRecord)
                 : "기록 없음";
 
             switch (page)
@@ -1053,7 +1053,7 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += (i + 1) + ". " + FormatRunRecordListLine(normalRunRankings[i]);
+                text += (i + 1) + ". " + FormatRunRecordBoardLine(normalRunRankings[i]);
             }
 
             return hasRecord ? text : "기록 없음";
@@ -1107,6 +1107,18 @@ namespace GreedLast
         {
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel}";
+        }
+
+        private static string FormatInfiniteRecordBoardLine(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간"
+                + $" / 위협 {threatLevel} / 콤보 {record.MaxCombo} / Miss {record.MissCount}";
         }
 
         private static string FormatInfiniteRecordListLine(GreedLastInfiniteRunRecord record)
@@ -1167,6 +1179,17 @@ namespace GreedLast
 
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
             return $"[{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}";
+        }
+
+        private static string FormatRunRecordBoardLine(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            return $"[{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m"
+                + $" / 체력 {record.Health} / 집중 {record.Focus}";
         }
 
         private static string FormatRunAttemptRecord(GreedLastRunAttemptRecord record)
