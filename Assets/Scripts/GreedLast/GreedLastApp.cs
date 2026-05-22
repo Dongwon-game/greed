@@ -4931,6 +4931,9 @@ namespace GreedLast
 
             Text text = CreateText(buttonObject.transform, "Label", label, 33, TextAnchor.MiddleCenter, FontStyle.Bold);
             text.color = new Color32(12, 16, 17, 255);
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 18;
+            text.resizeTextMaxSize = 33;
             text.rectTransform.anchorMin = Vector2.zero;
             text.rectTransform.anchorMax = Vector2.one;
             text.rectTransform.offsetMin = Vector2.zero;
