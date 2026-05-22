@@ -751,20 +751,16 @@ namespace GreedLast
             switch (page)
             {
                 case 1:
-                    return "기록 보드 2/4 - 일반 런\n"
-                        + "\n상위 기록\n" + BuildNormalRankingText()
+                    return "상위 기록\n" + BuildNormalRankingText()
                         + "\n\n최근 실패/중단\n" + lastAttemptText
                         + "\n\n실패/중단 기록\n" + BuildNormalAttemptHistoryText();
                 case 2:
-                    return "기록 보드 3/4 - 무한 기록\n"
-                        + "\n최근 기록\n" + latestText
+                    return "최근 기록\n" + latestText
                         + "\n\n최고 기록\n" + bestText;
                 case 3:
-                    return "기록 보드 4/4 - 무한 랭킹\n"
-                        + "\n상위 기록\n" + BuildInfiniteRankingText();
+                    return "상위 기록\n" + BuildInfiniteRankingText();
                 default:
-                    return "기록 보드 1/4 - 요약\n"
-                        + "\n일반 런 최근\n" + latestNormalText
+                    return "일반 런 최근\n" + latestNormalText
                         + "\n\n일반 런 최고\n" + bestNormalText
                         + "\n\n무한모드 최근\n" + latestText
                         + "\n\n무한모드 최고\n" + bestText;
@@ -2003,6 +1999,7 @@ namespace GreedLast
 
     public sealed class GreedLastStateMachine
     {
+        private const int RecordBoardPageCount = 4;
         private readonly GreedLastRequestGate requestGate;
         private GreedLastLobbySnapshot lobbySnapshot;
         private string currentDetail = string.Empty;
@@ -2203,17 +2200,17 @@ namespace GreedLast
 
         private static string BuildRecordBoardHeadline(int pageIndex)
         {
-            int page = ((pageIndex % 4) + 4) % 4;
+            int page = ((pageIndex % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
             switch (page)
             {
                 case 1:
-                    return "일반 런 기록";
+                    return "일반 런 기록 2/4";
                 case 2:
-                    return "무한 기록";
+                    return "무한 기록 3/4";
                 case 3:
-                    return "무한 랭킹";
+                    return "무한 랭킹 4/4";
                 default:
-                    return "기록 요약";
+                    return "기록 요약 1/4";
             }
         }
 
