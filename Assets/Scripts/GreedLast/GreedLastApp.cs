@@ -739,9 +739,6 @@ namespace GreedLast
             string bestNormalText = bestRunRecord.IsValid
                 ? FormatRunRecordBoardLine(bestRunRecord)
                 : "기록 없음";
-            string lastAttemptText = lastRunAttemptRecord.IsValid
-                ? FormatRunAttemptListLine(lastRunAttemptRecord)
-                : "기록 없음";
             string latestText = lastInfiniteRunRecord.IsValid
                 ? FormatInfiniteRecordBoardLine(lastInfiniteRunRecord)
                 : "기록 없음";
@@ -753,7 +750,6 @@ namespace GreedLast
             {
                 case 1:
                     return "상위 기록\n" + BuildNormalRankingText()
-                        + "\n\n최근 실패/중단\n" + lastAttemptText
                         + "\n\n실패/중단 기록\n" + BuildNormalAttemptHistoryText();
                 case 2:
                     return "최근 기록\n" + latestText
