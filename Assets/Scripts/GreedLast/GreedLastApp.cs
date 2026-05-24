@@ -804,10 +804,10 @@ namespace GreedLast
                     return "상위 기록\n" + BuildNormalRankingText()
                         + "\n\n실패/중단 기록\n" + BuildNormalAttemptHistoryText();
                 case 2:
-                    return "최근 기록\n" + latestText
-                        + "\n\n최고 기록\n" + bestText;
+                    return "최근 " + latestText
+                        + "\n최고 " + bestText;
                 case 3:
-                    return "상위 기록\n" + BuildInfiniteRankingText();
+                    return BuildInfiniteRankingText();
                 default:
                     return "일반 런 최근\n" + latestNormalText
                         + "\n\n일반 런 최고\n" + bestNormalText
