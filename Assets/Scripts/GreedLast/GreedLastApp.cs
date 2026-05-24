@@ -587,6 +587,23 @@ namespace GreedLast
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 저장 조합을 삭제했습니다.";
         }
 
+        public string BuildSelectedSaveLoadoutDeletePreviewText()
+        {
+            selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
+            int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
+            if (!record.IsValid)
+            {
+                return "삭제 대상\n슬롯 " + (selectedSaveSlotIndex + 1) + "\n비어 있음";
+            }
+
+            return "삭제 대상"
+                + "\n슬롯 " + (selectedSaveSlotIndex + 1)
+                + "\n" + BuildSaveSlotStatusLine(record, usesRemaining)
+                + "\n" + FormatSaveSlotCompact(record, usesRemaining)
+                + "\n다시 슬롯 삭제를 누르면 이 조합이 삭제됩니다.";
+        }
+
         public string BuildActiveLoadoutText()
         {
             GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
@@ -2866,7 +2883,8 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
-            string detail = backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
+            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText()
+                + "\n\n" + backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
             if (!string.IsNullOrEmpty(notice))
             {
                 detail = notice + "\n\n" + detail;
@@ -2885,7 +2903,8 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
-            string detail = backend.BuildInfiniteLoadoutSelectText();
+            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText()
+                + "\n\n" + backend.BuildInfiniteLoadoutSelectText();
             if (!string.IsNullOrEmpty(notice))
             {
                 detail = notice + "\n\n" + detail;
