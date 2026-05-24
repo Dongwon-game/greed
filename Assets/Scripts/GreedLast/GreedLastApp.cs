@@ -537,6 +537,35 @@ namespace GreedLast
             return text;
         }
 
+        public string BuildSelectedSaveLoadoutOverwritePreviewText()
+        {
+            selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            GreedLastRunRecord slotRecord = saveLoadoutSlots[selectedSaveSlotIndex];
+            int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
+            if (!HasSaveLoadoutCandidate)
+            {
+                return "덮어쓰기 후보 없음\n새 클리어 기록이 있어야 슬롯을 갱신할 수 있습니다.";
+            }
+
+            string text = "덮어쓰기 확인"
+                + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
+                + "\n현재: " + FormatSaveSlotCompact(slotRecord, usesRemaining)
+                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ");
+
+            if (slotRecord.IsValid)
+            {
+                text += "\n차이: 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
+                    + " / 거리 " + FormatSigned(lastRunRecord.Distance - slotRecord.Distance) + "m"
+                    + " / 체력 " + FormatSigned(lastRunRecord.Health - slotRecord.Health)
+                    + " / 집중 " + FormatSigned(lastRunRecord.Focus - slotRecord.Focus);
+            }
+
+            return text
+                + "\n다시 저장을 누르면 이 후보로 교체됩니다."
+                + "\n\n슬롯\n"
+                + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
+        }
+
         public string RenameSelectedSaveLoadoutSlot()
         {
             selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
@@ -2862,7 +2891,7 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
-            string detail = backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
+            string detail = backend.BuildSelectedSaveLoadoutOverwritePreviewText();
             if (!string.IsNullOrEmpty(notice))
             {
                 detail = notice + "\n\n" + detail;
