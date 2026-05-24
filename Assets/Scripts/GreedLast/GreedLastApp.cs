@@ -2778,6 +2778,12 @@ namespace GreedLast
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
+                if (!IsSelectedSaveSlotUsable(stateMachine.LobbySnapshot))
+                {
+                    RefreshInfiniteLoadoutSelect("사용 가능한 저장 조합을 먼저 선택하세요.");
+                    return;
+                }
+
                 stateMachine.SetInfiniteStartReady(backend.LoadLobby(), backend.BuildInfiniteStartReadyText());
                 return;
             }
