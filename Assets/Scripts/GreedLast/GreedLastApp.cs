@@ -587,17 +587,22 @@ namespace GreedLast
         {
             selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
             GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
+            int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             if (!record.IsValid)
             {
                 return "선택한 슬롯이 비어 있어 이름을 바꿀 수 없습니다.";
             }
 
             string nextName = BuildNextSaveLoadoutName(selectedSaveSlotIndex);
-            return "이름 변경 후보"
-                + "\n슬롯 " + (selectedSaveSlotIndex + 1)
+            return "이름 변경 확인"
+                + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
+                + "\n" + BuildSaveSlotStatusLine(record, usesRemaining)
                 + "\n현재: " + record.LoadoutName
                 + "\n변경: " + nextName
-                + "\n다시 이름 변경을 누르면 적용됩니다.";
+                + "\n요약: " + FormatSaveSlotCompact(record, usesRemaining)
+                + "\n다시 이름 변경을 누르면 적용됩니다."
+                + "\n\n슬롯\n"
+                + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
         }
 
         public string DeleteSelectedSaveLoadoutSlot()
@@ -2952,8 +2957,7 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = true;
-            string detail = backend.BuildSelectedSaveLoadoutRenamePreviewText()
-                + "\n\n" + backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
+            string detail = backend.BuildSelectedSaveLoadoutRenamePreviewText();
             if (!string.IsNullOrEmpty(notice))
             {
                 detail = notice + "\n\n" + detail;
@@ -2972,8 +2976,7 @@ namespace GreedLast
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = true;
-            string detail = backend.BuildSelectedSaveLoadoutRenamePreviewText()
-                + "\n\n" + backend.BuildInfiniteLoadoutSelectText();
+            string detail = backend.BuildSelectedSaveLoadoutRenamePreviewText();
             if (!string.IsNullOrEmpty(notice))
             {
                 detail = notice + "\n\n" + detail;
