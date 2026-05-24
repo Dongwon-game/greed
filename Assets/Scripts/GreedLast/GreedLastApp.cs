@@ -679,7 +679,7 @@ namespace GreedLast
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
                 + (usable
                     ? "\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
-                    : "\n사용 가능한 슬롯을 고르거나 로비로 돌아가세요.");
+                    : "\n선택 불가: 사용 가능한 슬롯을 고르거나 로비로 돌아가세요.");
         }
 
         public string BuildSelectedInfiniteLoadoutDetailText()
@@ -690,7 +690,7 @@ namespace GreedLast
             {
                 return slotHeader
                     + "\n비어 있음"
-                    + "\n\n다른 슬롯을 선택하거나 로비로 돌아가세요.";
+                    + "\n\n선택 불가: 다른 슬롯을 선택하거나 로비로 돌아가세요.";
             }
 
             return slotHeader
@@ -699,7 +699,7 @@ namespace GreedLast
                 + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회"
                 + (IsSaveSlotUsable(selectedSaveSlotIndex)
                     ? "\n\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
-                    : "\n\n사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
+                    : "\n\n선택 불가: 사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
         }
 
         public bool TryConsumeSelectedSaveLoadout(
