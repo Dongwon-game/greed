@@ -658,7 +658,7 @@ namespace GreedLast
             if (!IsSaveSlotUsable(selectedSaveSlotIndex))
             {
                 return "선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                    + "\n" + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                    + "\n" + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                     + "\n\n무한 시작은 사용할 수 없습니다."
                     + "\n저장 조합 변경으로 사용 가능한 슬롯을 고르세요.";
             }
@@ -674,7 +674,7 @@ namespace GreedLast
             return "무한모드에 사용할 저장 조합을 선택합니다."
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n" + BuildSaveSlotListText(showSelectedSlot: true, compact: true)
-                + "\n\n선택 슬롯 기록: " + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n\n선택 기록: " + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n선택 상태: " + BuildSelectedInfiniteLoadoutStatusText()
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
                 + (usable
