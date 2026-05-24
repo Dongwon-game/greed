@@ -678,7 +678,7 @@ namespace GreedLast
                 + "\n선택 상태: " + BuildSelectedInfiniteLoadoutStatusText()
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
                 + (usable
-                    ? "\n준비로 돌아가면 선택한 슬롯으로 무한모드를 시작할 수 있습니다."
+                    ? "\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
                     : "\n사용 가능한 슬롯을 고르거나 로비로 돌아가세요.");
         }
 
@@ -698,7 +698,7 @@ namespace GreedLast
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
                 + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회"
                 + (IsSaveSlotUsable(selectedSaveSlotIndex)
-                    ? "\n\n준비로 돌아가면 이 슬롯으로 무한모드를 시작합니다."
+                    ? "\n\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
                     : "\n\n사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
         }
 
