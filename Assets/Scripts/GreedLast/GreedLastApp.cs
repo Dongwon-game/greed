@@ -801,8 +801,8 @@ namespace GreedLast
             switch (page)
             {
                 case 1:
-                    return "상위 기록\n" + BuildNormalRankingText()
-                        + "\n\n실패/중단 기록\n" + BuildNormalAttemptHistoryText();
+                    return "클리어\n" + BuildNormalRankingText()
+                        + "\n\n실패/중단\n" + BuildNormalAttemptHistoryText();
                 case 2:
                     return "최근 " + latestText
                         + "\n최고 " + bestText;
