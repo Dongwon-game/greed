@@ -4484,18 +4484,6 @@ namespace GreedLast
             bool selectedSaveSlotOccupied,
             bool canSaveCandidate)
         {
-            if (infiniteLoadoutSelectLike)
-            {
-                return "무한 준비\n슬롯 선택";
-            }
-
-            if (snapshot.SaveSlotChoiceRequired)
-            {
-                return snapshot.SaveLoadoutCandidateAvailable
-                    ? "저장 작업\n슬롯 선택"
-                    : "관리 작업\n슬롯 선택";
-            }
-
             if (snapshot.SaveSlotDeleteConfirmationPending)
             {
                 return "삭제 확인\n다시 누르면 삭제";
@@ -4513,9 +4501,26 @@ namespace GreedLast
 
             if (snapshot.SaveSlotDetailViewActive)
             {
+                if (infiniteLoadoutSelectLike)
+                {
+                    return "무한 상세\n목록 보기 가능";
+                }
+
                 return snapshot.SaveLoadoutCandidateAvailable
                     ? "상세 비교\n목록 보기 가능"
                     : "상세 보기\n목록 보기 가능";
+            }
+
+            if (infiniteLoadoutSelectLike)
+            {
+                return "무한 준비\n슬롯 선택";
+            }
+
+            if (snapshot.SaveSlotChoiceRequired)
+            {
+                return snapshot.SaveLoadoutCandidateAvailable
+                    ? "저장 작업\n슬롯 선택"
+                    : "관리 작업\n슬롯 선택";
             }
 
             if (!canSaveCandidate)
