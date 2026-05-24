@@ -673,7 +673,7 @@ namespace GreedLast
             bool usable = IsSaveSlotUsable(selectedSaveSlotIndex);
             return "무한모드에 사용할 저장 조합을 선택합니다."
                 + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                + "\n" + BuildSaveSlotListText()
+                + "\n" + BuildSaveSlotListText(showSelectedSlot: true, compact: true)
                 + "\n\n선택 슬롯 기록: " + FormatSaveSlot(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n선택 상태: " + BuildSelectedInfiniteLoadoutStatusText()
                 + "\n좌 / 중 / 우로 슬롯을 고릅니다."
