@@ -3875,7 +3875,7 @@ namespace GreedLast
                     snapshot.SaveSlotOccupied,
                     infiniteLoadoutSelectLike);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
-                    ? "준비로 돌아가기"
+                    ? "선택 완료"
                     : snapshot.SaveSlotChoiceRequired
                         ? "슬롯 선택 필요"
                         : !canSaveCandidate
