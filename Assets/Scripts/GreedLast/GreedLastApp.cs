@@ -3867,6 +3867,7 @@ namespace GreedLast
             if (saveDraftLike)
             {
                 bool canSaveCandidate = !infiniteLoadoutSelectLike && snapshot.SaveLoadoutCandidateAvailable;
+                bool selectedSaveSlotUsable = IsSelectedSaveSlotUsable(snapshot);
                 UpdateSaveSlotModeText(snapshot, infiniteLoadoutSelectLike, selectedSaveSlotOccupied, canSaveCandidate);
                 UpdateSaveSlotLabels(
                     snapshot.SaveSlotChoiceRequired ? -1 : snapshot.SelectedSaveSlotIndex,
@@ -3875,7 +3876,7 @@ namespace GreedLast
                     snapshot.SaveSlotOccupied,
                     infiniteLoadoutSelectLike);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
-                    ? "선택 완료"
+                    ? selectedSaveSlotUsable ? "선택 완료" : "선택 불가"
                     : snapshot.SaveSlotChoiceRequired
                         ? "슬롯 선택 필요"
                         : !canSaveCandidate
@@ -3884,7 +3885,8 @@ namespace GreedLast
                                 ? "덮어쓰기 확정"
                                 : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
                 nextPatternButton.interactable = infiniteLoadoutSelectLike
-                    || (!snapshot.SaveSlotChoiceRequired && canSaveCandidate);
+                    ? selectedSaveSlotUsable
+                    : (!snapshot.SaveSlotChoiceRequired && canSaveCandidate);
                 SetButtonLabel(returnLobbyButton, infiniteLoadoutSelectLike
                     ? "로비로"
                     : snapshot.SaveSlotChoiceRequired
