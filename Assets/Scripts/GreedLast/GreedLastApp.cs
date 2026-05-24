@@ -809,10 +809,10 @@ namespace GreedLast
                 case 3:
                     return BuildInfiniteRankingText();
                 default:
-                    return "일반 런 최근\n" + latestNormalText
-                        + "\n\n일반 런 최고\n" + bestNormalText
-                        + "\n\n무한모드 최근\n" + latestText
-                        + "\n\n무한모드 최고\n" + bestText;
+                    return "일반 최근\n" + latestNormalText
+                        + "\n\n일반 최고\n" + bestNormalText
+                        + "\n\n무한 최근\n" + latestText
+                        + "\n\n무한 최고\n" + bestText;
             }
         }
 
