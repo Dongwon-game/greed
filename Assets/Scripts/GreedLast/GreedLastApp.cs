@@ -801,8 +801,8 @@ namespace GreedLast
             switch (page)
             {
                 case 1:
-                    return "클리어\n" + BuildNormalRankingText()
-                        + "\n\n실패/중단\n" + BuildNormalAttemptHistoryText();
+                    return BuildRecordBoardSection("클리어", BuildNormalRankingText())
+                        + "\n" + BuildRecordBoardSection("실패/중단", BuildNormalAttemptHistoryText());
                 case 2:
                     return "최근 " + latestText
                         + "\n최고 " + bestText;
@@ -819,6 +819,22 @@ namespace GreedLast
         private static int NormalizeRecordBoardPage(int page)
         {
             return ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
+        }
+
+        private static string BuildRecordBoardSection(string label, string body)
+        {
+            if (string.IsNullOrEmpty(body))
+            {
+                return label + " 기록 없음";
+            }
+
+            int firstLineEnd = body.IndexOf('\n');
+            if (firstLineEnd < 0)
+            {
+                return label + " " + body;
+            }
+
+            return label + " " + body.Substring(0, firstLineEnd) + body.Substring(firstLineEnd);
         }
 
         public bool ToggleOfflineForEditorCheck()
