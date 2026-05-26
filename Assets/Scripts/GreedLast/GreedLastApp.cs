@@ -3715,6 +3715,8 @@ namespace GreedLast
         private Text[] laneLabelTexts;
         private Image[] laneImages;
         private float[] lanePressPulseUntil;
+        private float[] laneJudgementPulseUntil;
+        private Color32[] laneJudgementPulseColors;
         private Image[] runMotionLines;
         private Image beatMarker;
         private Image goodTimingBand;
@@ -3868,8 +3870,14 @@ namespace GreedLast
                         baseColor = Color32.Lerp(baseColor, new Color32(255, 238, 181, 255), pressPulse * 0.72f);
                     }
 
+                    float judgementPulse = BuildLaneJudgementPulse(i);
+                    if (judgementPulse > 0f)
+                    {
+                        baseColor = Color32.Lerp(baseColor, GetLaneJudgementPulseColor(i), judgementPulse * 0.82f);
+                    }
+
                     laneImages[i].color = baseColor;
-                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f);
+                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f + judgementPulse * 0.075f);
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
                         int targetIndex = hasRunSnapshot
@@ -3879,10 +3887,16 @@ namespace GreedLast
                             && !latestRunSnapshot.Stopped
                             ? Mathf.Clamp((int)latestRunSnapshot.Pattern.Channel - 1, 0, 2)
                             : -1;
-                        laneLabelTexts[i].color = Color32.Lerp(
+                        Color32 labelColor = Color32.Lerp(
                             BuildRunLaneLabelColor(i, targetIndex, latestRunSnapshot),
                             new Color32(255, 238, 181, 255),
                             pressPulse);
+                        if (judgementPulse > 0f)
+                        {
+                            labelColor = Color32.Lerp(labelColor, GetLaneJudgementPulseColor(i), judgementPulse);
+                        }
+
+                        laneLabelTexts[i].color = labelColor;
                     }
                 }
             }
@@ -5151,6 +5165,8 @@ namespace GreedLast
 
             laneImages = new Image[3];
             lanePressPulseUntil = new float[3];
+            laneJudgementPulseUntil = new float[3];
+            laneJudgementPulseColors = new Color32[3];
             laneButtons = new Button[3];
             laneLabelTexts = new Text[3];
             for (int i = 0; i < laneImages.Length; i += 1)
@@ -5376,6 +5392,32 @@ namespace GreedLast
             }
 
             return Mathf.Clamp01(remaining / 0.16f);
+        }
+
+        private float BuildLaneJudgementPulse(int index)
+        {
+            if (laneJudgementPulseUntil == null || index < 0 || index >= laneJudgementPulseUntil.Length)
+            {
+                return 0f;
+            }
+
+            float remaining = laneJudgementPulseUntil[index] - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Clamp01(remaining / 0.24f);
+        }
+
+        private Color32 GetLaneJudgementPulseColor(int index)
+        {
+            if (laneJudgementPulseColors == null || index < 0 || index >= laneJudgementPulseColors.Length)
+            {
+                return new Color32(255, 238, 181, 255);
+            }
+
+            return laneJudgementPulseColors[index];
         }
 
         private void UpdateForwardMotionLines()
@@ -5727,7 +5769,27 @@ namespace GreedLast
                     break;
             }
 
+            TriggerLaneJudgementPulse(snapshot);
             ShowJudgementFeedback(snapshot);
+        }
+
+        private void TriggerLaneJudgementPulse(GreedLastRunSnapshot snapshot)
+        {
+            if (laneJudgementPulseUntil == null
+                || laneJudgementPulseColors == null
+                || snapshot.Pattern.Channel == GreedLastRunChannel.None)
+            {
+                return;
+            }
+
+            int index = (int)snapshot.Pattern.Channel - 1;
+            if (index < 0 || index >= laneJudgementPulseUntil.Length)
+            {
+                return;
+            }
+
+            laneJudgementPulseUntil[index] = Time.unscaledTime + 0.24f;
+            laneJudgementPulseColors[index] = GetLaneJudgementPulseColor(snapshot.LastResult);
         }
 
         private void ShowJudgementFeedback(GreedLastRunSnapshot snapshot)
@@ -5811,6 +5873,21 @@ namespace GreedLast
                     return new Color32(231, 91, 77, 245);
                 default:
                     return new Color32(255, 255, 255, 0);
+            }
+        }
+
+        private static Color32 GetLaneJudgementPulseColor(GreedLastJudgementResult result)
+        {
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    return new Color32(255, 238, 181, 255);
+                case GreedLastJudgementResult.Good:
+                    return new Color32(132, 190, 208, 245);
+                case GreedLastJudgementResult.Miss:
+                    return new Color32(231, 91, 77, 245);
+                default:
+                    return new Color32(255, 238, 181, 255);
             }
         }
 
