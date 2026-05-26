@@ -4169,7 +4169,7 @@ namespace GreedLast
             runHudText.text = snapshot.InfiniteMode
                 ? BuildInfiniteRunHud(snapshot, runState)
                 : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
-            runHudText.fontSize = snapshot.InfiniteMode && snapshot.Stopped ? 30 : 27;
+            runHudText.fontSize = snapshot.InfiniteMode && snapshot.Stopped ? 30 : 26;
             UpdateRunGauges(snapshot);
             UpdateRunProgress(snapshot);
             UpdateComboBadge(snapshot);
@@ -4430,15 +4430,11 @@ namespace GreedLast
             string chapterText,
             string choiceText)
         {
-            return $"{runState}\n"
-                + $"{chapterText}  공명핵:{FormatBool(snapshot.CoreRetrieved)}  저장가능:{FormatBool(snapshot.SaveEligible)}\n"
-                + $"함정: {snapshot.Pattern.Prompt}\n"
-                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {FormatTimingType(snapshot.Pattern.TimingType)}\n"
-                + $"판정: {snapshot.JudgementText}\n"
-                + $"거리 {snapshot.Distance:0.0}m  점수 {snapshot.Score}\n"
-                + $"체력 {snapshot.Health}  콤보 {snapshot.Combo}  연쇄:{BuildRhythmChainLabel(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  보호:{BuildFocusGuardLabel(snapshot)}\n"
-                + $"타이밍 진단: {snapshot.TimingProfile}\n"
-                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적:{FormatBool(snapshot.DevInvincible)}  실수:{FormatMissReason(snapshot.MissReason)}"
+            return $"{runState}  {chapterText}  핵:{FormatBool(snapshot.CoreRetrieved)}  저장:{FormatBool(snapshot.SaveEligible)}\n"
+                + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
+                + $"판정 {BuildCompactJudgementText(snapshot)}\n"
+                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적 {FormatBool(snapshot.DevInvincible)}  실수 {FormatMissReason(snapshot.MissReason)}"
                 + choiceText;
         }
 
@@ -4452,7 +4448,6 @@ namespace GreedLast
                 return $"{runState}\n"
                     + $"이번 기록: [{BuildInfiniteSnapshotGrade(snapshot)}] {snapshot.Score}점 / {snapshot.Distance:0.0}m / {snapshot.InfiniteSectionsCleared}구간 / 위협 {snapshot.InfiniteThreatLevel}\n"
                     + $"판정: 정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}\n"
-                    + $"타이밍 진단: {snapshot.TimingProfile}\n"
                     + $"최대 콤보 {snapshot.MaxCombo}  {lastMissText}\n"
                     + "무한 재시작 또는 로비로 돌아갈 수 있습니다.";
             }
@@ -4462,16 +4457,37 @@ namespace GreedLast
                 : $"무한 구간 {snapshot.ChapterProgress}/{snapshot.ChapterTarget}  위협 {snapshot.InfiniteThreatLevel}";
             string resultText = $"\n누적 {snapshot.InfiniteSectionsCleared}구간  정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}";
 
-            return $"{runState}\n"
-                + $"{sectionText}\n"
-                + $"함정: {snapshot.Pattern.Prompt}\n"
-                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {FormatTimingType(snapshot.Pattern.TimingType)}\n"
-                + $"판정: {snapshot.JudgementText}\n"
-                + $"거리 {snapshot.Distance:0.0}m  점수 {snapshot.Score}\n"
-                + $"체력 {snapshot.Health}  콤보 {snapshot.Combo}  연쇄:{BuildRhythmChainLabel(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  보호:{BuildFocusGuardLabel(snapshot)}\n"
-                + $"타이밍 진단: {snapshot.TimingProfile}\n"
-                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적:{FormatBool(snapshot.DevInvincible)}  실수:{FormatMissReason(snapshot.MissReason)}"
+            return $"{runState}  {sectionText}\n"
+                + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
+                + $"판정 {BuildCompactJudgementText(snapshot)}\n"
+                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적 {FormatBool(snapshot.DevInvincible)}  실수 {FormatMissReason(snapshot.MissReason)}"
                 + resultText;
+        }
+
+        private static string FormatTrapPrompt(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern || string.IsNullOrEmpty(snapshot.Pattern.Prompt))
+            {
+                return "대기";
+            }
+
+            return snapshot.Pattern.Prompt;
+        }
+
+        private static string BuildCompactJudgementText(GreedLastRunSnapshot snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot.JudgementText))
+            {
+                return "-";
+            }
+
+            string compactText = snapshot.JudgementText
+                .Replace("\r", string.Empty)
+                .Replace("\n", " / ");
+            return compactText.Length <= 54
+                ? compactText
+                : compactText.Substring(0, 51) + "...";
         }
 
         private void RenderRunHeader(GreedLastRunSnapshot snapshot)
