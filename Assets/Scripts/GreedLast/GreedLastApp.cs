@@ -6149,14 +6149,37 @@ namespace GreedLast
             }
 
             float secondsToCore = -snapshot.CoreDeltaSeconds;
-            string timingWord = Mathf.Abs(snapshot.CoreDeltaSeconds) <= snapshot.Pattern.SuccessWindowSeconds
-                ? "지금"
-                : secondsToCore > 0f
-                    ? "준비 " + secondsToCore.ToString("0.00") + "s"
-                    : "늦음 " + Mathf.Abs(secondsToCore).ToString("0.00") + "s";
+            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            string timingWord;
+            if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
+            {
+                timingWord = "지금 누르기";
+            }
+            else if (snapshot.CoreDeltaSeconds < 0f && absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
+            {
+                timingWord = "곧 정확권 " + secondsToCore.ToString("0.00") + "s";
+            }
+            else if (snapshot.CoreDeltaSeconds > 0f && absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
+            {
+                timingWord = "보정권 / 늦음 " + snapshot.CoreDeltaSeconds.ToString("0.00") + "s";
+            }
+            else if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds)
+            {
+                timingWord = "놓침 " + snapshot.CoreDeltaSeconds.ToString("0.00") + "s";
+            }
+            else
+            {
+                timingWord = "준비 " + secondsToCore.ToString("0.00") + "s";
+            }
+
+            string windowText = absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds
+                ? $"정확권 ±{snapshot.Pattern.SuccessWindowSeconds:0.00}s"
+                : absoluteDelta <= snapshot.Pattern.GoodWindowSeconds
+                    ? $"보정권 ±{snapshot.Pattern.GoodWindowSeconds:0.00}s"
+                    : $"정확 ±{snapshot.Pattern.SuccessWindowSeconds:0.00}s";
             return FormatChannel(snapshot.Pattern.Channel)
                 + " / " + timingWord
-                + $" / 성공 ±{snapshot.Pattern.SuccessWindowSeconds:0.00}s";
+                + " / " + windowText;
         }
 
         private static Color32 GetTimingGuideColor(GreedLastRunSnapshot snapshot)
@@ -6176,9 +6199,15 @@ namespace GreedLast
                 return new Color32(125, 139, 143, 180);
             }
 
-            if (Mathf.Abs(snapshot.CoreDeltaSeconds) <= snapshot.Pattern.SuccessWindowSeconds)
+            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
             {
                 return new Color32(255, 238, 181, 255);
+            }
+
+            if (absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
+            {
+                return new Color32(105, 168, 190, 245);
             }
 
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds)
