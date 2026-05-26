@@ -1287,11 +1287,11 @@ namespace GreedLast
 
             string missText = string.IsNullOrEmpty(record.MissReason)
                 ? "-"
-                : record.MissReason;
+                : FormatMissReason(record.MissReason);
             return FormatRunAttemptOutcome(record.Outcome)
                 + $" / {record.Score}점 / {record.Distance:0.0}m / 챕터 {record.ChapterIndex} {record.ChapterProgress}/{record.ChapterTarget}"
                 + $"\n체력 {record.Health}  집중 {record.Focus}  최대 콤보 {record.MaxCombo}"
-                + $"\n판정 성공 {record.SuccessCount}  Good {record.GoodCount}  Miss {record.MissCount}"
+                + $"\n판정 정확 {record.SuccessCount}  보정 {record.GoodCount}  실수 {record.MissCount}"
                 + "\n타이밍 " + FormatTimingProfile(record.TimingProfile)
                 + "\n공명핵:" + FormatBool(record.CoreRetrieved) + "  마지막 실수:" + missText
                 + "\n선택 " + record.ChoiceSummary;
@@ -1306,7 +1306,7 @@ namespace GreedLast
 
             string missText = string.IsNullOrEmpty(record.MissReason)
                 ? "-"
-                : record.MissReason;
+                : FormatMissReason(record.MissReason);
             return FormatRunAttemptOutcome(record.Outcome)
                 + $" / {record.Score}점 / {record.Distance:0.0}m / 챕터 {record.ChapterIndex} {record.ChapterProgress}/{record.ChapterTarget}"
                 + $" / 실수 {record.MissCount} / {FormatTimingProfile(record.TimingProfile)} / {missText}";
@@ -1315,6 +1315,25 @@ namespace GreedLast
         private static string FormatTimingProfile(string timingProfile)
         {
             return string.IsNullOrEmpty(timingProfile) ? "타이밍 기록 없음" : timingProfile;
+        }
+
+        private static string FormatMissReason(string missReason)
+        {
+            switch (missReason)
+            {
+                case "wrong_channel":
+                    return "채널 오류";
+                case "no_input":
+                    return "입력 없음";
+                case "too_early":
+                    return "너무 빠름";
+                case "too_late":
+                    return "너무 늦음";
+                case "focus_guard":
+                    return "집중 보호";
+                default:
+                    return string.IsNullOrEmpty(missReason) ? "-" : missReason;
+            }
         }
 
         private static string FormatRunAttemptOutcome(GreedLastRunAttemptOutcome outcome)
@@ -4414,12 +4433,12 @@ namespace GreedLast
             return $"{runState}\n"
                 + $"{chapterText}  공명핵:{FormatBool(snapshot.CoreRetrieved)}  저장가능:{FormatBool(snapshot.SaveEligible)}\n"
                 + $"함정: {snapshot.Pattern.Prompt}\n"
-                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {snapshot.Pattern.TimingType}\n"
+                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정: {snapshot.JudgementText}\n"
                 + $"거리 {snapshot.Distance:0.0}m  점수 {snapshot.Score}\n"
                 + $"체력 {snapshot.Health}  콤보 {snapshot.Combo}  연쇄:{BuildRhythmChainLabel(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  보호:{BuildFocusGuardLabel(snapshot)}\n"
                 + $"타이밍 진단: {snapshot.TimingProfile}\n"
-                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  테스트무적:{FormatBool(snapshot.DevInvincible)}   miss: {FormatEmpty(snapshot.MissReason)}"
+                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적:{FormatBool(snapshot.DevInvincible)}  실수:{FormatMissReason(snapshot.MissReason)}"
                 + choiceText;
         }
 
@@ -4429,10 +4448,10 @@ namespace GreedLast
             {
                 string lastMissText = string.IsNullOrEmpty(snapshot.MissReason)
                     ? "마지막 실수 -"
-                    : "마지막 실수 " + snapshot.MissReason;
+                    : "마지막 실수 " + FormatMissReason(snapshot.MissReason);
                 return $"{runState}\n"
                     + $"이번 기록: [{BuildInfiniteSnapshotGrade(snapshot)}] {snapshot.Score}점 / {snapshot.Distance:0.0}m / {snapshot.InfiniteSectionsCleared}구간 / 위협 {snapshot.InfiniteThreatLevel}\n"
-                    + $"판정: 성공 {snapshot.SuccessCount}  Good {snapshot.GoodCount}  Miss {snapshot.MissCount}\n"
+                    + $"판정: 정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}\n"
                     + $"타이밍 진단: {snapshot.TimingProfile}\n"
                     + $"최대 콤보 {snapshot.MaxCombo}  {lastMissText}\n"
                     + "무한 재시작 또는 로비로 돌아갈 수 있습니다.";
@@ -4441,17 +4460,17 @@ namespace GreedLast
             string sectionText = snapshot.Stopped
                 ? $"이번 기록: {snapshot.InfiniteSectionsCleared}구간 / {snapshot.Distance:0.0}m / {snapshot.Score}점"
                 : $"무한 구간 {snapshot.ChapterProgress}/{snapshot.ChapterTarget}  위협 {snapshot.InfiniteThreatLevel}";
-            string resultText = $"\n누적 {snapshot.InfiniteSectionsCleared}구간  성공 {snapshot.SuccessCount}  Good {snapshot.GoodCount}  Miss {snapshot.MissCount}";
+            string resultText = $"\n누적 {snapshot.InfiniteSectionsCleared}구간  정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}";
 
             return $"{runState}\n"
                 + $"{sectionText}\n"
                 + $"함정: {snapshot.Pattern.Prompt}\n"
-                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {snapshot.Pattern.TimingType}\n"
+                + $"채널: {FormatChannel(snapshot.Pattern.Channel)} / 타이밍: {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정: {snapshot.JudgementText}\n"
                 + $"거리 {snapshot.Distance:0.0}m  점수 {snapshot.Score}\n"
                 + $"체력 {snapshot.Health}  콤보 {snapshot.Combo}  연쇄:{BuildRhythmChainLabel(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  보호:{BuildFocusGuardLabel(snapshot)}\n"
                 + $"타이밍 진단: {snapshot.TimingProfile}\n"
-                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  테스트무적:{FormatBool(snapshot.DevInvincible)}   miss: {FormatEmpty(snapshot.MissReason)}"
+                + $"가이드: {BuildTimingGuideLabel(snapshot)}  보정:{FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적:{FormatBool(snapshot.DevInvincible)}  실수:{FormatMissReason(snapshot.MissReason)}"
                 + resultText;
         }
 
@@ -5703,21 +5722,21 @@ namespace GreedLast
             {
                 case GreedLastJudgementResult.Success:
                     string chainText = snapshot.Combo >= 3 ? "  연쇄 " + BuildRhythmChainLabel(snapshot) : string.Empty;
-                    return string.IsNullOrEmpty(timingLine) ? "SUCCESS" + chainText : "SUCCESS" + chainText + "  " + timingLine;
+                    return string.IsNullOrEmpty(timingLine) ? "정확" + chainText : "정확" + chainText + "  " + timingLine;
                 case GreedLastJudgementResult.Good:
-                    return string.IsNullOrEmpty(timingLine) ? "GOOD" : "GOOD  " + timingLine;
+                    return string.IsNullOrEmpty(timingLine) ? "보정" : "보정  " + timingLine;
                 case GreedLastJudgementResult.Miss:
                     if (snapshot.MissReason == "wrong_channel")
                     {
-                        return string.IsNullOrEmpty(timingLine) ? "MISS  채널 오류" : "MISS  " + timingLine;
+                        return string.IsNullOrEmpty(timingLine) ? "실수  채널 오류" : "실수  " + timingLine;
                     }
 
                     if (snapshot.MissReason == "no_input")
                     {
-                        return "MISS  입력 없음";
+                        return "실수  입력 없음";
                     }
 
-                    return string.IsNullOrEmpty(timingLine) ? "MISS" : "MISS  " + timingLine;
+                    return string.IsNullOrEmpty(timingLine) ? "실수" : "실수  " + timingLine;
                 default:
                     return string.Empty;
             }
@@ -5956,9 +5975,38 @@ namespace GreedLast
             }
         }
 
-        private static string FormatEmpty(string value)
+        private static string FormatTimingType(GreedLastTimingType timingType)
         {
-            return string.IsNullOrEmpty(value) ? "-" : value;
+            switch (timingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return "정박";
+                case GreedLastTimingType.Clutch:
+                    return "압박";
+                case GreedLastTimingType.Offbeat:
+                    return "엇박";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string FormatMissReason(string missReason)
+        {
+            switch (missReason)
+            {
+                case "wrong_channel":
+                    return "채널 오류";
+                case "no_input":
+                    return "입력 없음";
+                case "too_early":
+                    return "너무 빠름";
+                case "too_late":
+                    return "너무 늦음";
+                case "focus_guard":
+                    return "집중 보호";
+                default:
+                    return string.IsNullOrEmpty(missReason) ? "-" : missReason;
+            }
         }
 
         private static string FormatBool(bool value)

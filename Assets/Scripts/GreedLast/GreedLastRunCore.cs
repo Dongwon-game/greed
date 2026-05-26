@@ -890,7 +890,7 @@ namespace GreedLast
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "MISS - 입력 없음\n늦음",
+                    "실수 - 입력 없음\n늦음",
                     string.Empty,
                     "no_input"));
                 return;
@@ -1084,7 +1084,7 @@ namespace GreedLast
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "MISS - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel),
+                    "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel),
                     string.Empty,
                     "wrong_channel"));
                 return;
@@ -1098,7 +1098,7 @@ namespace GreedLast
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Success,
                     currentPattern.TimingType,
-                    "SUCCESS / " + currentPattern.TimingType + "\n" + FormatTimingDelta(signedDelta),
+                    "정확 / " + FormatTimingType(currentPattern.TimingType) + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     string.Empty));
                 return;
@@ -1109,7 +1109,7 @@ namespace GreedLast
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Good,
                     currentPattern.TimingType,
-                    "GOOD - 생존 완충\n" + FormatTimingDelta(signedDelta),
+                    "보정 - 생존 완충\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     string.Empty));
                 return;
@@ -1119,7 +1119,7 @@ namespace GreedLast
             Resolve(new GreedLastJudgementOutcome(
                 GreedLastJudgementResult.Miss,
                 currentPattern.TimingType,
-                (judgedElapsed < currentPattern.CoreSeconds ? "MISS - 너무 빠름" : "MISS - 너무 늦음")
+                (judgedElapsed < currentPattern.CoreSeconds ? "실수 - 너무 빠름" : "실수 - 너무 늦음")
                     + "\n" + FormatTimingDelta(signedDelta),
                 string.Empty,
                 reason));
@@ -2351,6 +2351,21 @@ namespace GreedLast
                     return "중";
                 case GreedLastRunChannel.Right:
                     return "우";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string FormatTimingType(GreedLastTimingType timingType)
+        {
+            switch (timingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return "정박";
+                case GreedLastTimingType.Clutch:
+                    return "압박";
+                case GreedLastTimingType.Offbeat:
+                    return "엇박";
                 default:
                     return "-";
             }
