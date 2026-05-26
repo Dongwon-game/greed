@@ -4640,7 +4640,7 @@ namespace GreedLast
             {
                 if (infiniteLoadoutSelectLike)
                 {
-                    return "무한 상세\n목록 보기 가능";
+                    return "조합 상세\n목록 보기";
                 }
 
                 return snapshot.SaveLoadoutCandidateAvailable
@@ -4650,7 +4650,7 @@ namespace GreedLast
 
             if (infiniteLoadoutSelectLike)
             {
-                return "무한 준비\n슬롯 선택";
+                return "무한 조합\n슬롯 선택";
             }
 
             if (snapshot.SaveSlotChoiceRequired)
