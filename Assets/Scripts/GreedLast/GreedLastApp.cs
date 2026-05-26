@@ -4434,7 +4434,7 @@ namespace GreedLast
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
                 + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
-                + $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적 {FormatBool(snapshot.DevInvincible)}  실수 {FormatMissReason(snapshot.MissReason)}"
+                + BuildRunGuideLine(snapshot)
                 + choiceText;
         }
 
@@ -4461,8 +4461,24 @@ namespace GreedLast
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
                 + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
-                + $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}  무적 {FormatBool(snapshot.DevInvincible)}  실수 {FormatMissReason(snapshot.MissReason)}"
+                + BuildRunGuideLine(snapshot)
                 + resultText;
+        }
+
+        private static string BuildRunGuideLine(GreedLastRunSnapshot snapshot)
+        {
+            string line = $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}";
+            if (!string.IsNullOrEmpty(snapshot.MissReason))
+            {
+                line += "  실수 " + FormatMissReason(snapshot.MissReason);
+            }
+
+            if (snapshot.DevInvincible)
+            {
+                line += "  테스트 무적 ON";
+            }
+
+            return line;
         }
 
         private static string FormatTrapPrompt(GreedLastRunSnapshot snapshot)
