@@ -513,24 +513,28 @@ namespace GreedLast
                 }
 
                 return slotHeader
-                    + "\n\n현재 슬롯\n" + FormatRunRecordDetail(slotRecord)
-                    + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회";
+                    + "\n" + BuildSaveSlotStatusLine(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                    + "\n요약: " + FormatSaveSlotCompact(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                    + "\n구성: " + FormatLoadoutCombo(slotRecord)
+                    + "\n타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
+                    + "\n선택: " + slotRecord.ChoiceSummary;
             }
 
             string text = slotHeader
-                + "\n\n후보\n" + FormatRunRecordDetail(lastRunRecord);
+                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ")
+                + "\n후보 타이밍: " + FormatTimingProfile(lastRunRecord.TimingProfile);
 
             if (!slotRecord.IsValid)
             {
                 return text
-                    + "\n\n현재 슬롯\n비어 있음"
-                    + "\n\n이 슬롯에 저장하면 새 조합으로 2회 사용할 수 있습니다.";
+                    + "\n현재: 비어 있음"
+                    + "\n저장하면 새 조합으로 2회 사용할 수 있습니다.";
             }
 
-            text += "\n\n현재 슬롯\n" + FormatRunRecordDetail(slotRecord)
-                + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회"
-                + "\n\n차이"
-                + $"\n점수 {FormatSigned(lastRunRecord.Score - slotRecord.Score)}"
+            text += "\n현재: " + FormatSaveSlotCompact(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n현재 구성: " + FormatLoadoutCombo(slotRecord)
+                + "\n현재 타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
+                + "\n차이: 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
                 + $" / 거리 {FormatSigned(lastRunRecord.Distance - slotRecord.Distance)}m"
                 + $" / 체력 {FormatSigned(lastRunRecord.Health - slotRecord.Health)}"
                 + $" / 집중 {FormatSigned(lastRunRecord.Focus - slotRecord.Focus)}";
@@ -628,14 +632,20 @@ namespace GreedLast
             int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             if (!record.IsValid)
             {
-                return "삭제 대상\n슬롯 " + (selectedSaveSlotIndex + 1) + "\n비어 있음";
+                return "삭제 확인"
+                    + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
+                    + "\n비어 있음"
+                    + "\n\n슬롯\n"
+                    + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
             }
 
-            return "삭제 대상"
-                + "\n슬롯 " + (selectedSaveSlotIndex + 1)
+            return "삭제 확인"
+                + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n" + BuildSaveSlotStatusLine(record, usesRemaining)
-                + "\n" + FormatSaveSlotCompact(record, usesRemaining)
-                + "\n다시 슬롯 삭제를 누르면 이 조합이 삭제됩니다.";
+                + "\n요약: " + FormatSaveSlotCompact(record, usesRemaining)
+                + "\n다시 슬롯 삭제를 누르면 삭제됩니다."
+                + "\n\n슬롯\n"
+                + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
         }
 
         public string BuildActiveLoadoutText()
@@ -1591,7 +1601,17 @@ namespace GreedLast
 
             return record.LoadoutName
                 + $" / {BuildRunGrade(record)} / {record.Score}점 / {record.Distance:0.0}m"
-                + "\n" + record.StartGift + " + " + record.PrimaryGift + " + " + record.Relic;
+                + "\n" + FormatLoadoutCombo(record);
+        }
+
+        private static string FormatLoadoutCombo(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "조합 없음";
+            }
+
+            return record.StartGift + " + " + record.PrimaryGift + " + " + record.Relic;
         }
 
         private static string BuildOverwriteWarningText(GreedLastRunRecord record, int usesRemaining)
@@ -2932,19 +2952,14 @@ namespace GreedLast
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
-        private void OpenSaveLoadoutDeleteConfirmation(string notice)
+        private void OpenSaveLoadoutDeleteConfirmation()
         {
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
-            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText()
-                + "\n\n" + backend.BuildSaveLoadoutDraftText(showSelectedSlot: true);
-            if (!string.IsNullOrEmpty(notice))
-            {
-                detail = notice + "\n\n" + detail;
-            }
+            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText();
 
             stateMachine.SetSaveLoadoutDraft(
                 backend.LoadLobby(),
@@ -2954,17 +2969,12 @@ namespace GreedLast
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
-        private void OpenInfiniteLoadoutDeleteConfirmation(string notice)
+        private void OpenInfiniteLoadoutDeleteConfirmation()
         {
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
-            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText()
-                + "\n\n" + backend.BuildInfiniteLoadoutSelectText();
-            if (!string.IsNullOrEmpty(notice))
-            {
-                detail = notice + "\n\n" + detail;
-            }
+            string detail = backend.BuildSelectedSaveLoadoutDeletePreviewText();
 
             stateMachine.SetInfiniteLoadoutSelect(
                 backend.LoadLobby(),
@@ -3176,8 +3186,7 @@ namespace GreedLast
 
                 if (!saveSlotDeleteConfirmPending)
                 {
-                    OpenInfiniteLoadoutDeleteConfirmation(
-                        "선택한 저장 조합을 삭제합니다.\n다시 삭제를 누르면 슬롯이 비워집니다.");
+                    OpenInfiniteLoadoutDeleteConfirmation();
                     return;
                 }
 
@@ -3208,8 +3217,7 @@ namespace GreedLast
 
             if (!saveSlotDeleteConfirmPending)
             {
-                OpenSaveLoadoutDeleteConfirmation(
-                    "선택한 저장 조합을 삭제합니다.\n다시 삭제를 누르면 슬롯이 비워집니다.");
+                OpenSaveLoadoutDeleteConfirmation();
                 return;
             }
 
@@ -3901,6 +3909,10 @@ namespace GreedLast
                     ? selectedSaveSlotUsable ? "선택 완료" : "선택 불가"
                     : snapshot.SaveSlotChoiceRequired
                         ? "슬롯 선택 필요"
+                        : snapshot.SaveSlotDeleteConfirmationPending
+                            ? "삭제 확인 중"
+                            : snapshot.SaveSlotRenameConfirmationPending
+                                ? "이름 확인 중"
                         : !canSaveCandidate
                             ? "저장 후보 없음"
                             : snapshot.SaveSlotOverwriteConfirmationPending
@@ -3908,7 +3920,10 @@ namespace GreedLast
                                 : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
                 nextPatternButton.interactable = infiniteLoadoutSelectLike
                     ? selectedSaveSlotUsable
-                    : (!snapshot.SaveSlotChoiceRequired && canSaveCandidate);
+                    : (!snapshot.SaveSlotChoiceRequired
+                        && canSaveCandidate
+                        && !snapshot.SaveSlotDeleteConfirmationPending
+                        && !snapshot.SaveSlotRenameConfirmationPending);
                 SetButtonLabel(returnLobbyButton, infiniteLoadoutSelectLike
                     ? "로비로"
                     : snapshot.SaveSlotChoiceRequired
@@ -6108,9 +6123,9 @@ namespace GreedLast
             switch (NormalizeRecordBoardPage(page))
             {
                 case 1:
-                    return "일반\n런";
+                    return "일반\n기록";
                 case 2:
-                    return "무한\n요약";
+                    return "무한\n기록";
                 case 3:
                     return "무한\n랭킹";
                 default:
