@@ -704,9 +704,12 @@ namespace GreedLast
             }
 
             return slotHeader
-                + "\n\n" + FormatRunRecordDetail(record)
+                + "\n" + BuildSaveSlotStatusLine(record, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n요약: " + FormatSaveSlotCompact(record, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n구성: " + FormatLoadoutCombo(record)
+                + "\n타이밍: " + FormatTimingProfile(record.TimingProfile)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
-                + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회"
+                + "\n선택: " + record.ChoiceSummary
                 + (IsSaveSlotUsable(selectedSaveSlotIndex)
                     ? "\n\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
                     : "\n\n선택 불가: 사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
