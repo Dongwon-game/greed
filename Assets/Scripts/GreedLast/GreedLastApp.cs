@@ -1047,7 +1047,7 @@ namespace GreedLast
                 + $" / 구간 {FormatSigned(candidate.SectionsCleared - baseline.SectionsCleared)}"
                 + $" / 위협 {FormatSigned(candidateThreat - baselineThreat)}"
                 + $" / 콤보 {FormatSigned(candidate.MaxCombo - baseline.MaxCombo)}"
-                + $" / Miss {FormatSigned(candidate.MissCount - baseline.MissCount)}";
+                + $" / 실수 {FormatSigned(candidate.MissCount - baseline.MissCount)}";
         }
 
         private static bool IsSameInfiniteRecord(GreedLastInfiniteRunRecord left, GreedLastInfiniteRunRecord right)
@@ -1198,7 +1198,7 @@ namespace GreedLast
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간"
-                + $" / 위협 {threatLevel} / 콤보 {record.MaxCombo} / Miss {record.MissCount}";
+                + $" / 위협 {threatLevel} / 콤보 {record.MaxCombo} / 실수 {record.MissCount}";
         }
 
         private static string FormatInfiniteRecordListLine(GreedLastInfiniteRunRecord record)
@@ -1216,7 +1216,7 @@ namespace GreedLast
             }
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 콤보 {record.MaxCombo}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 콤보 {record.MaxCombo} / 실수 {record.MissCount}";
         }
 
         private static string FormatRunRecordDetail(GreedLastRunRecord record)
@@ -1303,7 +1303,7 @@ namespace GreedLast
                 : record.MissReason;
             return FormatRunAttemptOutcome(record.Outcome)
                 + $" / {record.Score}점 / {record.Distance:0.0}m / 챕터 {record.ChapterIndex} {record.ChapterProgress}/{record.ChapterTarget}"
-                + $" / Miss {record.MissCount} / {FormatTimingProfile(record.TimingProfile)} / {missText}";
+                + $" / 실수 {record.MissCount} / {FormatTimingProfile(record.TimingProfile)} / {missText}";
         }
 
         private static string FormatTimingProfile(string timingProfile)
