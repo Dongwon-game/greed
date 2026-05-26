@@ -2811,6 +2811,14 @@ namespace GreedLast
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
+                if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
+                {
+                    RefreshInfiniteLoadoutSelect(saveSlotDeleteConfirmPending
+                        ? "삭제 확인 중입니다. 삭제 확정 또는 다른 작업을 선택하세요."
+                        : "이름 확인 중입니다. 이름 확정 또는 다른 작업을 선택하세요.");
+                    return;
+                }
+
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
@@ -3446,6 +3454,14 @@ namespace GreedLast
 
         private void ConfirmSaveLoadoutAndReturn()
         {
+            if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
+            {
+                RefreshSaveLoadoutDraft(saveSlotDeleteConfirmPending
+                    ? "삭제 확인 중입니다. 삭제 확정 또는 다른 작업을 선택하세요."
+                    : "이름 확인 중입니다. 이름 확정 또는 다른 작업을 선택하세요.");
+                return;
+            }
+
             saveSlotRenameConfirmPending = false;
             if (!backend.HasSaveLoadoutCandidate)
             {
@@ -3906,7 +3922,11 @@ namespace GreedLast
                     snapshot.SaveSlotOccupied,
                     infiniteLoadoutSelectLike);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
-                    ? selectedSaveSlotUsable ? "선택 완료" : "선택 불가"
+                    ? snapshot.SaveSlotDeleteConfirmationPending
+                        ? "삭제 확인 중"
+                        : snapshot.SaveSlotRenameConfirmationPending
+                            ? "이름 확인 중"
+                            : selectedSaveSlotUsable ? "선택 완료" : "선택 불가"
                     : snapshot.SaveSlotChoiceRequired
                         ? "슬롯 선택 필요"
                         : snapshot.SaveSlotDeleteConfirmationPending
@@ -3920,6 +3940,8 @@ namespace GreedLast
                                 : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
                 nextPatternButton.interactable = infiniteLoadoutSelectLike
                     ? selectedSaveSlotUsable
+                        && !snapshot.SaveSlotDeleteConfirmationPending
+                        && !snapshot.SaveSlotRenameConfirmationPending
                     : (!snapshot.SaveSlotChoiceRequired
                         && canSaveCandidate
                         && !snapshot.SaveSlotDeleteConfirmationPending
