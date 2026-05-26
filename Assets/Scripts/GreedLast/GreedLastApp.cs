@@ -1088,6 +1088,7 @@ namespace GreedLast
         {
             string text = string.Empty;
             bool hasRecord = false;
+            int displayRank = 1;
             for (int i = 0; i < infiniteRunRankings.Length; i += 1)
             {
                 if (!infiniteRunRankings[i].IsValid)
@@ -1101,7 +1102,8 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += (i + 1) + ". " + FormatInfiniteRankingLine(infiniteRunRankings[i]);
+                text += displayRank + ". " + FormatInfiniteRankingLine(infiniteRunRankings[i]);
+                displayRank += 1;
             }
 
             return hasRecord ? text : "기록 없음";
@@ -1111,6 +1113,7 @@ namespace GreedLast
         {
             string text = string.Empty;
             bool hasRecord = false;
+            int displayRank = 1;
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
                 if (!normalRunRankings[i].IsValid)
@@ -1124,7 +1127,8 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += (i + 1) + ". " + FormatRunRecordBoardLine(normalRunRankings[i]);
+                text += displayRank + ". " + FormatRunRecordBoardLine(normalRunRankings[i]);
+                displayRank += 1;
             }
 
             return hasRecord ? text : "기록 없음";
@@ -1134,6 +1138,7 @@ namespace GreedLast
         {
             string text = string.Empty;
             bool hasRecord = false;
+            int displayRank = 1;
             for (int i = 0; i < normalAttemptHistory.Length; i += 1)
             {
                 if (!normalAttemptHistory[i].IsValid)
@@ -1147,7 +1152,8 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += (i + 1) + ". " + FormatRunAttemptListLine(normalAttemptHistory[i]);
+                text += displayRank + ". " + FormatRunAttemptListLine(normalAttemptHistory[i]);
+                displayRank += 1;
             }
 
             return hasRecord ? text : "기록 없음";
