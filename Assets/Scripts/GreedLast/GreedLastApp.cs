@@ -3872,7 +3872,17 @@ namespace GreedLast
                     laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f);
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
-                        laneLabelTexts[i].color = Color32.Lerp(new Color32(218, 226, 218, 230), new Color32(255, 238, 181, 255), pressPulse);
+                        int targetIndex = hasRunSnapshot
+                            && latestRunSnapshot.ActivePattern
+                            && !latestRunSnapshot.Paused
+                            && !latestRunSnapshot.CountdownActive
+                            && !latestRunSnapshot.Stopped
+                            ? Mathf.Clamp((int)latestRunSnapshot.Pattern.Channel - 1, 0, 2)
+                            : -1;
+                        laneLabelTexts[i].color = Color32.Lerp(
+                            BuildRunLaneLabelColor(i, targetIndex, latestRunSnapshot),
+                            new Color32(255, 238, 181, 255),
+                            pressPulse);
                     }
                 }
             }
@@ -6284,9 +6294,64 @@ namespace GreedLast
             }
 
             SetLaneLabelMode(56, false);
-            laneLabelTexts[0].text = "좌";
-            laneLabelTexts[1].text = "중";
-            laneLabelTexts[2].text = "우";
+            if (!snapshot.ActivePattern || snapshot.Paused || snapshot.CountdownActive || snapshot.Stopped)
+            {
+                laneLabelTexts[0].text = "좌";
+                laneLabelTexts[1].text = "중";
+                laneLabelTexts[2].text = "우";
+                SetRunLaneLabelColors(-1, snapshot);
+                return;
+            }
+
+            int targetIndex = Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2);
+            string timingHint = BuildLaneTimingHint(snapshot);
+            laneLabelTexts[0].text = targetIndex == 0 ? "좌\n" + timingHint : "좌";
+            laneLabelTexts[1].text = targetIndex == 1 ? "중\n" + timingHint : "중";
+            laneLabelTexts[2].text = targetIndex == 2 ? "우\n" + timingHint : "우";
+            SetLaneLabelMode(42, true);
+            SetRunLaneLabelColors(targetIndex, snapshot);
+        }
+
+        private void SetRunLaneLabelColors(int targetIndex, GreedLastRunSnapshot snapshot)
+        {
+            for (int i = 0; i < laneLabelTexts.Length; i += 1)
+            {
+                Text label = laneLabelTexts[i];
+                if (label == null)
+                {
+                    continue;
+                }
+
+                label.color = BuildRunLaneLabelColor(i, targetIndex, snapshot);
+            }
+        }
+
+        private static Color32 BuildRunLaneLabelColor(int laneIndex, int targetIndex, GreedLastRunSnapshot snapshot)
+        {
+            if (targetIndex < 0)
+            {
+                return new Color32(218, 226, 218, 230);
+            }
+
+            return laneIndex == targetIndex
+                ? GetTimingGuideColor(snapshot)
+                : new Color32(125, 139, 143, 170);
+        }
+
+        private static string BuildLaneTimingHint(GreedLastRunSnapshot snapshot)
+        {
+            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
+            {
+                return "누르기";
+            }
+
+            if (absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
+            {
+                return snapshot.CoreDeltaSeconds < 0f ? "곧" : "보정";
+            }
+
+            return snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds ? "놓침" : "대기";
         }
 
         private void UpdateSaveSlotLabels(
