@@ -3125,6 +3125,17 @@ namespace GreedLast
             if (saveSlotDetailViewActive)
             {
                 saveSlotDetailViewActive = false;
+                if (saveDraftOverwriteConfirmPending)
+                {
+                    stateMachine.SetSaveLoadoutDraft(
+                        backend.LoadLobby(),
+                        backend.BuildSaveLoadoutDraftText(showSelectedSlot: true),
+                        saveSlotChoiceRequired: false,
+                        saveSlotOverwriteConfirmationPending: true,
+                        saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+                    return;
+                }
+
                 RefreshSaveLoadoutDraft(null);
                 return;
             }
