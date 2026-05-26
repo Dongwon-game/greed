@@ -3987,7 +3987,8 @@ namespace GreedLast
                     snapshot.SaveSlotLabels,
                     snapshot.SaveSlotUsable,
                     snapshot.SaveSlotOccupied,
-                    infiniteLoadoutSelectLike);
+                    infiniteLoadoutSelectLike,
+                    canSaveCandidate);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
                     ? snapshot.SaveSlotDeleteConfirmationPending
                         ? "삭제 확인 중"
@@ -6145,7 +6146,8 @@ namespace GreedLast
             string[] slotLabels,
             bool[] slotUsable,
             bool[] slotOccupied,
-            bool showUsability)
+            bool showUsability,
+            bool canSaveCandidate)
         {
             if (laneLabelTexts == null || laneLabelTexts.Length < 3)
             {
@@ -6165,7 +6167,9 @@ namespace GreedLast
                     : "슬롯 " + (i + 1);
                 string actionHint = showUsability
                     ? usable ? "시작 가능" : occupied ? "사용 완료" : "사용 불가"
-                    : occupied ? "교체 대상" : "바로 저장";
+                    : canSaveCandidate
+                        ? occupied ? "교체 대상" : "바로 저장"
+                        : occupied ? "관리 가능" : "빈 슬롯";
 
                 laneLabelTexts[i].text = selected
                     ? "선택\nS" + (i + 1) + "\n" + slotState + "\n" + actionHint
