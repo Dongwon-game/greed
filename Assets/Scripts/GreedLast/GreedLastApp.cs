@@ -2813,7 +2813,7 @@ namespace GreedLast
             {
                 if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
                 {
-                    RefreshInfiniteLoadoutSelect(saveSlotDeleteConfirmPending
+                    RefreshInfiniteLoadoutPendingConfirmation(saveSlotDeleteConfirmPending
                         ? "삭제 확인 중입니다. 삭제 확정 또는 다른 작업을 선택하세요."
                         : "이름 확인 중입니다. 이름 확정 또는 다른 작업을 선택하세요.");
                     return;
@@ -3279,6 +3279,42 @@ namespace GreedLast
                 saveSlotRenameConfirmationPending: saveSlotRenameConfirmPending);
         }
 
+        private void RefreshSaveLoadoutPendingConfirmation(string notice)
+        {
+            string detail = saveSlotDeleteConfirmPending
+                ? backend.BuildSelectedSaveLoadoutDeletePreviewText()
+                : backend.BuildSelectedSaveLoadoutRenamePreviewText();
+            if (!string.IsNullOrEmpty(notice))
+            {
+                detail = notice + "\n\n" + detail;
+            }
+
+            stateMachine.SetSaveLoadoutDraft(
+                backend.LoadLobby(),
+                detail,
+                saveSlotChoiceRequired: false,
+                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmPending,
+                saveSlotRenameConfirmationPending: saveSlotRenameConfirmPending,
+                saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+        }
+
+        private void RefreshInfiniteLoadoutPendingConfirmation(string notice)
+        {
+            string detail = saveSlotDeleteConfirmPending
+                ? backend.BuildSelectedSaveLoadoutDeletePreviewText()
+                : backend.BuildSelectedSaveLoadoutRenamePreviewText();
+            if (!string.IsNullOrEmpty(notice))
+            {
+                detail = notice + "\n\n" + detail;
+            }
+
+            stateMachine.SetInfiniteLoadoutSelect(
+                backend.LoadLobby(),
+                detail,
+                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmPending,
+                saveSlotRenameConfirmationPending: saveSlotRenameConfirmPending);
+        }
+
         private void ToggleRunInvincible()
         {
             if (IsRunState())
@@ -3481,7 +3517,7 @@ namespace GreedLast
         {
             if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
             {
-                RefreshSaveLoadoutDraft(saveSlotDeleteConfirmPending
+                RefreshSaveLoadoutPendingConfirmation(saveSlotDeleteConfirmPending
                     ? "삭제 확인 중입니다. 삭제 확정 또는 다른 작업을 선택하세요."
                     : "이름 확인 중입니다. 이름 확정 또는 다른 작업을 선택하세요.");
                 return;
