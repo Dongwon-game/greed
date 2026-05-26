@@ -4585,7 +4585,9 @@ namespace GreedLast
 
             if (snapshot.SaveSlotOverwriteConfirmationPending)
             {
-                return "덮어쓰기 확인\n다시 누르면 교체";
+                return snapshot.SaveSlotDetailViewActive
+                    ? "상세 비교\n덮어쓰기 대기"
+                    : "덮어쓰기 확인\n다시 누르면 교체";
             }
 
             if (snapshot.SaveSlotDetailViewActive)
