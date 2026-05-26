@@ -617,10 +617,7 @@ namespace GreedLast
                 return "선택한 슬롯은 이미 비어 있습니다.";
             }
 
-            saveLoadoutSlots[selectedSaveSlotIndex] = GreedLastRunRecord.Empty;
-            saveLoadoutUsesRemaining[selectedSaveSlotIndex] = 0;
-            saveLoadoutRenameSteps[selectedSaveSlotIndex] = 0;
-            savedLoadoutConfirmed = HasAnySaveLoadoutSlot();
+            ClearSaveLoadoutSlot(selectedSaveSlotIndex);
             SavePersistedData();
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 저장 조합을 삭제했습니다.";
         }
@@ -739,14 +736,23 @@ namespace GreedLast
                 return false;
             }
 
-            saveLoadoutUsesRemaining[selectedSaveSlotIndex] = Mathf.Max(0, remainingBeforeUse - 1);
+            int remainingAfterUse = Mathf.Max(0, remainingBeforeUse - 1);
+            saveLoadoutUsesRemaining[selectedSaveSlotIndex] = remainingAfterUse;
+            bool autoClearedSlot = remainingAfterUse <= 0;
+            if (autoClearedSlot)
+            {
+                ClearSaveLoadoutSlot(selectedSaveSlotIndex);
+            }
+
             SavePersistedData();
             detail = "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
                 + "\n이번 입장으로 1회 사용"
-                + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회";
+                + (autoClearedSlot
+                    ? "\n사용 횟수 소진 - 슬롯 자동 비움"
+                    : "\n남은 사용 " + remainingAfterUse + "회");
             selectedRecord = record;
             errorMessage = string.Empty;
             return true;
@@ -1549,6 +1555,30 @@ namespace GreedLast
             return false;
         }
 
+        private void ClearSaveLoadoutSlot(int slotIndex)
+        {
+            int safeSlotIndex = Mathf.Clamp(slotIndex, 0, saveLoadoutSlots.Length - 1);
+            saveLoadoutSlots[safeSlotIndex] = GreedLastRunRecord.Empty;
+            saveLoadoutUsesRemaining[safeSlotIndex] = 0;
+            saveLoadoutRenameSteps[safeSlotIndex] = 0;
+            savedLoadoutConfirmed = HasAnySaveLoadoutSlot();
+        }
+
+        private bool ClearExhaustedSaveLoadoutSlots()
+        {
+            bool clearedAny = false;
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (saveLoadoutSlots[i].IsValid && saveLoadoutUsesRemaining[i] <= 0)
+                {
+                    ClearSaveLoadoutSlot(i);
+                    clearedAny = true;
+                }
+            }
+
+            return clearedAny;
+        }
+
         private static string FormatSaveSlot(GreedLastRunRecord record, int usesRemaining)
         {
             if (!record.IsValid)
@@ -1774,6 +1804,7 @@ namespace GreedLast
                 }
             }
 
+            bool prunedExhaustedSaveLoadouts = ClearExhaustedSaveLoadoutSlots();
             savedLoadoutConfirmed = savedLoadoutConfirmed && HasAnySaveLoadoutSlot();
 
             if (data.normalRunRankings != null)
@@ -1837,6 +1868,11 @@ namespace GreedLast
             else if (bestInfiniteRunRecord.IsValid)
             {
                 infiniteRunRankings[0] = bestInfiniteRunRecord;
+            }
+
+            if (prunedExhaustedSaveLoadouts)
+            {
+                SavePersistedData();
             }
         }
 
