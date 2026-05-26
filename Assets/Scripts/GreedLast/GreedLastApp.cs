@@ -3649,6 +3649,7 @@ namespace GreedLast
         private const float IdleBeatVolume = 0.14f;
         private const float LaneCueVolume = 0.24f;
         private const float TargetCueVolume = 0.25f;
+        private const float JudgementLinePulseDuration = 0.28f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3763,6 +3764,8 @@ namespace GreedLast
         private float nextBeatSoundAt;
         private float feedbackFlashUntil;
         private float judgementFeedbackUntil;
+        private float judgementLinePulseUntil;
+        private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
@@ -5489,6 +5492,7 @@ namespace GreedLast
                 HideTrapDangerVisuals();
                 SetJudgementLineY(0.22f);
                 judgementLine.color = new Color32(255, 238, 181, 120);
+                ApplyJudgementLinePulse();
                 HideTimingBands();
                 if (timingGuideText != null)
                 {
@@ -5505,6 +5509,7 @@ namespace GreedLast
                 HideTrapDangerVisuals();
                 SetJudgementLineY(0.22f);
                 judgementLine.color = new Color32(255, 238, 181, 120);
+                ApplyJudgementLinePulse();
                 HideTimingBands();
                 if (timingGuideText != null)
                 {
@@ -5560,11 +5565,41 @@ namespace GreedLast
             trapMarker.color = Color32.Lerp(new Color32(207, 87, 65, 170), new Color32(255, 238, 181, 255), coreNear);
             trapMarker.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.88f, 1.22f, coreNear);
             judgementLine.color = Color32.Lerp(new Color32(255, 238, 181, 150), new Color32(255, 255, 255, 255), coreNear);
+            ApplyJudgementLinePulse();
             if (timingGuideText != null)
             {
                 timingGuideText.text = BuildTimingGuideLabel(latestRunSnapshot);
                 timingGuideText.color = GetTimingGuideColor(latestRunSnapshot);
             }
+        }
+
+        private void ApplyJudgementLinePulse()
+        {
+            if (judgementLine == null)
+            {
+                return;
+            }
+
+            float pulse = BuildJudgementLinePulse();
+            if (pulse <= 0f)
+            {
+                judgementLine.rectTransform.localScale = Vector3.one;
+                return;
+            }
+
+            judgementLine.color = Color32.Lerp(judgementLine.color, judgementLinePulseColor, pulse);
+            judgementLine.rectTransform.localScale = new Vector3(1f, 1f + pulse * 0.9f, 1f);
+        }
+
+        private float BuildJudgementLinePulse()
+        {
+            float remaining = judgementLinePulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Clamp01(remaining / JudgementLinePulseDuration);
         }
 
         private void UpdateTrapDangerVisuals(float channelX, float y, float coreNear)
@@ -5770,6 +5805,7 @@ namespace GreedLast
             }
 
             TriggerLaneJudgementPulse(snapshot);
+            TriggerJudgementLinePulse(snapshot);
             ShowJudgementFeedback(snapshot);
         }
 
@@ -5790,6 +5826,17 @@ namespace GreedLast
 
             laneJudgementPulseUntil[index] = Time.unscaledTime + 0.24f;
             laneJudgementPulseColors[index] = GetLaneJudgementPulseColor(snapshot.LastResult);
+        }
+
+        private void TriggerJudgementLinePulse(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastResult == GreedLastJudgementResult.None)
+            {
+                return;
+            }
+
+            judgementLinePulseUntil = Time.unscaledTime + JudgementLinePulseDuration;
+            judgementLinePulseColor = GetLaneJudgementPulseColor(snapshot.LastResult);
         }
 
         private void ShowJudgementFeedback(GreedLastRunSnapshot snapshot)
