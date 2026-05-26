@@ -4558,7 +4558,7 @@ namespace GreedLast
             }
             else if (label == "사용 완료")
             {
-                label = "0회";
+                label = "완료";
             }
 
             return "S" + slotNumber + " " + label;
