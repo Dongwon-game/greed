@@ -3078,10 +3078,16 @@ namespace GreedLast
 
         private void RequestShowSaveLoadoutDetail()
         {
-            saveSlotDeleteConfirmPending = false;
-            saveSlotRenameConfirmPending = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
+                if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
+                {
+                    saveSlotDeleteConfirmPending = false;
+                    saveSlotRenameConfirmPending = false;
+                    RefreshInfiniteLoadoutSelect("확인을 취소했습니다.");
+                    return;
+                }
+
                 if (saveSlotDetailViewActive)
                 {
                     saveSlotDetailViewActive = false;
@@ -3099,6 +3105,14 @@ namespace GreedLast
 
             if (stateMachine.CurrentState != GreedLastScreenState.SaveLoadoutDraft)
             {
+                return;
+            }
+
+            if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
+            {
+                saveSlotDeleteConfirmPending = false;
+                saveSlotRenameConfirmPending = false;
+                RefreshSaveLoadoutDraft("확인을 취소했습니다.");
                 return;
             }
 
@@ -3951,9 +3965,12 @@ namespace GreedLast
                     : snapshot.SaveSlotChoiceRequired
                         ? "저장 안 함"
                         : canSaveCandidate ? "저장 안 함" : "로비로");
-                SetButtonLabel(saveSlotDetailButton, snapshot.SaveSlotDetailViewActive
-                    ? "목록 보기"
-                    : infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교");
+                SetButtonLabel(saveSlotDetailButton,
+                    snapshot.SaveSlotDeleteConfirmationPending || snapshot.SaveSlotRenameConfirmationPending
+                        ? "확인 취소"
+                        : snapshot.SaveSlotDetailViewActive
+                            ? "목록 보기"
+                            : infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교");
                 SetButtonLabel(saveSlotRenameButton, snapshot.SaveSlotRenameConfirmationPending ? "이름 확정" : "이름 변경");
                 SetButtonLabel(saveSlotDeleteButton, snapshot.SaveSlotDeleteConfirmationPending ? "삭제 확정" : "슬롯 삭제");
                 if (!selectedSaveSlotOccupied)
