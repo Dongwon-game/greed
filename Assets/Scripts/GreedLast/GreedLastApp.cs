@@ -3654,6 +3654,7 @@ namespace GreedLast
         private const float RunGaugePulseDuration = 0.26f;
         private const float ComboBreakBadgeDuration = 0.85f;
         private const float ComboTierBadgeDuration = 0.72f;
+        private const float ThreatProgressPulseDuration = 0.78f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3747,6 +3748,8 @@ namespace GreedLast
         private AudioClip chainClip;
         private AudioClip comboTierClip;
         private AudioClip comboBreakClip;
+        private AudioClip threatUpClip;
+        private AudioClip threatDownClip;
         private Action normalRunRequested;
         private Action saveLoadoutRequested;
         private Action infiniteRunRequested;
@@ -3779,11 +3782,14 @@ namespace GreedLast
         private float comboTierBadgeUntil;
         private float healthGaugePulseUntil;
         private float focusGaugePulseUntil;
+        private float threatProgressPulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool comboTierFeedbackPending;
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
+        private int lastProgressThreatLevel = int.MinValue;
+        private int threatProgressDirection;
         private int lastComboForBadge = int.MinValue;
         private int comboBreakBadgeCombo;
         private int comboTierBadgeLevel;
@@ -4450,6 +4456,9 @@ namespace GreedLast
             int target = Mathf.Max(1, snapshot.ChapterTarget);
             float ratio = Mathf.Clamp01(snapshot.ChapterProgress / (float)target);
             string label;
+            TrackThreatProgressState(snapshot);
+            float threatPulse = BuildThreatProgressPulse(snapshot);
+            bool threatAlert = threatPulse > 0f;
 
             if (snapshot.Stopped)
             {
@@ -4478,20 +4487,95 @@ namespace GreedLast
                 label = $"챕터 {snapshot.ChapterIndex}  {snapshot.ChapterProgress}/{target}";
             }
 
+            if (threatAlert)
+            {
+                label = threatProgressDirection >= 0
+                    ? "위험 상승  " + snapshot.InfiniteThreatLevel
+                    : "위험 하강  " + snapshot.InfiniteThreatLevel;
+            }
+
             SetGaugeFill(runProgressFill, ratio);
+            Color32 progressColor = snapshot.InfiniteMode
+                ? new Color32(205, 166, 70, 225)
+                : snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.Phase == GreedLastRunPhase.ClearResolving
+                    ? new Color32(255, 238, 181, 230)
+                    : new Color32(104, 151, 142, 220);
             if (runProgressFill != null)
             {
-                runProgressFill.color = snapshot.InfiniteMode
-                    ? new Color32(205, 166, 70, 225)
-                    : snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.Phase == GreedLastRunPhase.ClearResolving
-                        ? new Color32(255, 238, 181, 230)
-                        : new Color32(104, 151, 142, 220);
+                if (threatAlert)
+                {
+                    Color32 alertColor = threatProgressDirection >= 0
+                        ? new Color32(232, 92, 56, 238)
+                        : new Color32(85, 171, 190, 232);
+                    progressColor = Color32.Lerp(progressColor, alertColor, threatPulse * 0.85f);
+                }
+
+                runProgressFill.color = progressColor;
             }
 
             if (runProgressText != null)
             {
                 runProgressText.text = label;
+                Color32 baseTextColor = new Color32(218, 226, 218, 230);
+                runProgressText.color = threatAlert
+                    ? Color32.Lerp(
+                        baseTextColor,
+                        threatProgressDirection >= 0
+                            ? new Color32(255, 211, 154, 255)
+                            : new Color32(178, 232, 238, 255),
+                        threatPulse)
+                    : baseTextColor;
             }
+
+            float scale = threatAlert ? 1f + threatPulse * 0.055f : 1f;
+            runProgressRoot.transform.localScale = Vector3.one * scale;
+        }
+
+        private void TrackThreatProgressState(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode || snapshot.Stopped || snapshot.CountdownActive)
+            {
+                lastProgressThreatLevel = snapshot.InfiniteMode ? snapshot.InfiniteThreatLevel : int.MinValue;
+                threatProgressDirection = 0;
+                threatProgressPulseUntil = 0f;
+                return;
+            }
+
+            int currentThreat = snapshot.InfiniteThreatLevel;
+            if (lastProgressThreatLevel != int.MinValue && currentThreat != lastProgressThreatLevel)
+            {
+                threatProgressDirection = currentThreat > lastProgressThreatLevel ? 1 : -1;
+                threatProgressPulseUntil = Time.unscaledTime + ThreatProgressPulseDuration;
+                if (threatProgressDirection > 0)
+                {
+                    PlayClip(threatUpClip, 0.30f);
+                    PlayHaptic(0.036f);
+                }
+                else
+                {
+                    PlayClip(threatDownClip, 0.22f);
+                    PlayHaptic(0.020f);
+                }
+            }
+
+            lastProgressThreatLevel = currentThreat;
+        }
+
+        private float BuildThreatProgressPulse(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode || snapshot.Stopped)
+            {
+                return 0f;
+            }
+
+            float remaining = threatProgressPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / ThreatProgressPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
         }
 
         private void UpdateComboBadge(GreedLastRunSnapshot snapshot)
@@ -5419,6 +5503,8 @@ namespace GreedLast
             chainClip = CreateDoubleTone("chain_tone", 880f, 1320f, 0.12f, 0.28f);
             comboTierClip = CreateDoubleTone("combo_tier_tone", 980f, 1560f, 0.13f, 0.30f);
             comboBreakClip = CreateSweepTone("combo_break_tone", 520f, 260f, 0.11f, 0.22f);
+            threatUpClip = CreateSweepTone("threat_up_tone", 360f, 760f, 0.12f, 0.25f);
+            threatDownClip = CreateSweepTone("threat_down_tone", 760f, 360f, 0.10f, 0.18f);
         }
 
         private static void EnsureCamera()
