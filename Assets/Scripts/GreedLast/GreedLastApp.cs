@@ -3739,6 +3739,7 @@ namespace GreedLast
         private AudioClip[] laneCueClips;
         private AudioClip successClip;
         private AudioClip goodClip;
+        private AudioClip focusGuardClip;
         private AudioClip missClip;
         private AudioClip chainClip;
         private Action normalRunRequested;
@@ -5272,6 +5273,7 @@ namespace GreedLast
             laneCueClips[2] = CreateTone("right_cue", 880f, 0.08f, 0.24f);
             successClip = CreateTone("success_tone", 1040f, 0.12f, 0.35f);
             goodClip = CreateTone("good_tone", 620f, 0.09f, 0.24f);
+            focusGuardClip = CreateDoubleTone("focus_guard_tone", 520f, 920f, 0.14f, 0.30f);
             missClip = CreateTone("miss_tone", 180f, 0.15f, 0.35f);
             chainClip = CreateDoubleTone("chain_tone", 880f, 1320f, 0.12f, 0.28f);
         }
@@ -5793,10 +5795,21 @@ namespace GreedLast
                     feedbackFlashUntil = Time.unscaledTime + 0.12f;
                     break;
                 case GreedLastJudgementResult.Good:
-                    PlayClip(goodClip, 0.38f);
-                    PlayHaptic(0.012f);
-                    feedbackFlash.color = new Color32(105, 168, 190, 75);
-                    feedbackFlashUntil = Time.unscaledTime + 0.10f;
+                    if (IsFocusGuardSnapshot(snapshot))
+                    {
+                        PlayClip(focusGuardClip, 0.50f);
+                        PlayHaptic(0.045f);
+                        feedbackFlash.color = new Color32(145, 231, 199, 86);
+                        feedbackFlashUntil = Time.unscaledTime + 0.14f;
+                    }
+                    else
+                    {
+                        PlayClip(goodClip, 0.38f);
+                        PlayHaptic(0.012f);
+                        feedbackFlash.color = new Color32(105, 168, 190, 75);
+                        feedbackFlashUntil = Time.unscaledTime + 0.10f;
+                    }
+
                     break;
                 case GreedLastJudgementResult.Miss:
                     PlayClip(missClip, 0.48f);
