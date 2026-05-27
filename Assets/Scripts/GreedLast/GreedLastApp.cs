@@ -3780,6 +3780,7 @@ namespace GreedLast
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
         private int lastComboForBadge = int.MinValue;
+        private int comboBreakBadgeCombo;
         private int lastFeedbackScore;
         private int lastFeedbackHealth = -1;
         private string lastJudgementText = string.Empty;
@@ -4514,7 +4515,9 @@ namespace GreedLast
             {
                 if (showBreak)
                 {
-                    text = "연쇄 끊김";
+                    text = comboBreakBadgeCombo > 0
+                        ? "연쇄 끊김  " + comboBreakBadgeCombo + "콤보"
+                        : "연쇄 끊김";
                 }
 
                 comboBadgeText.text = text;
@@ -4549,6 +4552,7 @@ namespace GreedLast
 
             if (lastComboForBadge >= 3 && snapshot.Combo == 0)
             {
+                comboBreakBadgeCombo = lastComboForBadge;
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
             }
