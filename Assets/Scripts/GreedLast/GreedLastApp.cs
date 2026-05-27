@@ -3745,6 +3745,7 @@ namespace GreedLast
         private AudioClip focusGuardClip;
         private AudioClip missClip;
         private AudioClip chainClip;
+        private AudioClip comboTierClip;
         private AudioClip comboBreakClip;
         private Action normalRunRequested;
         private Action saveLoadoutRequested;
@@ -3780,6 +3781,7 @@ namespace GreedLast
         private float focusGaugePulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
+        private bool comboTierFeedbackPending;
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
         private int lastComboForBadge = int.MinValue;
@@ -4568,6 +4570,7 @@ namespace GreedLast
                 comboBreakBadgeCombo = lastComboForBadge;
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
                 comboTierBadgeUntil = 0f;
+                comboTierFeedbackPending = false;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
                 PlayClip(comboBreakClip, 0.24f);
                 PlayHaptic(0.024f);
@@ -4585,6 +4588,7 @@ namespace GreedLast
             {
                 comboTierBadgeLevel = currentTier;
                 comboTierBadgeUntil = Time.unscaledTime + ComboTierBadgeDuration;
+                comboTierFeedbackPending = true;
                 comboBadgePulseUntil = Time.unscaledTime + 0.24f;
             }
 
@@ -5413,6 +5417,7 @@ namespace GreedLast
             focusGuardClip = CreateDoubleTone("focus_guard_tone", 520f, 920f, 0.14f, 0.30f);
             missClip = CreateTone("miss_tone", 180f, 0.15f, 0.35f);
             chainClip = CreateDoubleTone("chain_tone", 880f, 1320f, 0.12f, 0.28f);
+            comboTierClip = CreateDoubleTone("combo_tier_tone", 980f, 1560f, 0.13f, 0.30f);
             comboBreakClip = CreateSweepTone("combo_break_tone", 520f, 260f, 0.11f, 0.22f);
         }
 
@@ -5919,20 +5924,34 @@ namespace GreedLast
                 case GreedLastJudgementResult.Success:
                     PlayClip(successClip, 0.55f);
                     comboBadgePulseUntil = Time.unscaledTime + 0.22f;
+                    bool tierFeedback = false;
                     if (snapshot.Combo >= 3)
                     {
-                        PlayClip(chainClip, Mathf.Lerp(0.24f, 0.40f, Mathf.Clamp01(snapshot.Combo / 15f)));
-                        PlayHaptic(0.035f);
+                        if (comboTierFeedbackPending)
+                        {
+                            PlayClip(comboTierClip, 0.38f);
+                            PlayHaptic(0.045f);
+                            comboTierFeedbackPending = false;
+                            tierFeedback = true;
+                        }
+                        else
+                        {
+                            PlayClip(chainClip, Mathf.Lerp(0.24f, 0.40f, Mathf.Clamp01(snapshot.Combo / 15f)));
+                            PlayHaptic(0.035f);
+                        }
                     }
                     else
                     {
                         PlayHaptic(0.018f);
                     }
 
-                    feedbackFlash.color = new Color32(255, 238, 181, 90);
-                    feedbackFlashUntil = Time.unscaledTime + 0.12f;
+                    feedbackFlash.color = tierFeedback
+                        ? new Color32(255, 214, 105, 112)
+                        : new Color32(255, 238, 181, 90);
+                    feedbackFlashUntil = Time.unscaledTime + (tierFeedback ? 0.16f : 0.12f);
                     break;
                 case GreedLastJudgementResult.Good:
+                    comboTierFeedbackPending = false;
                     if (IsFocusGuardSnapshot(snapshot))
                     {
                         PlayClip(focusGuardClip, 0.50f);
@@ -5950,6 +5969,7 @@ namespace GreedLast
 
                     break;
                 case GreedLastJudgementResult.Miss:
+                    comboTierFeedbackPending = false;
                     PlayClip(missClip, 0.48f);
                     PlayHaptic(0.075f);
                     feedbackFlash.color = new Color32(180, 42, 36, 95);
