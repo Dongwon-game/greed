@@ -3653,6 +3653,7 @@ namespace GreedLast
         private const float JudgementFeedbackPopDuration = 0.22f;
         private const float RunGaugePulseDuration = 0.26f;
         private const float ComboBreakBadgeDuration = 0.85f;
+        private const float ComboTierBadgeDuration = 0.72f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3774,6 +3775,7 @@ namespace GreedLast
         private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
         private float comboBreakBadgeUntil;
+        private float comboTierBadgeUntil;
         private float healthGaugePulseUntil;
         private float focusGaugePulseUntil;
         private float sfxVolume = DefaultSfxVolume;
@@ -3782,6 +3784,7 @@ namespace GreedLast
         private int lastGaugeFocus = int.MinValue;
         private int lastComboForBadge = int.MinValue;
         private int comboBreakBadgeCombo;
+        private int comboTierBadgeLevel;
         private int lastFeedbackScore;
         private int lastFeedbackHealth = -1;
         private string lastJudgementText = string.Empty;
@@ -4498,7 +4501,8 @@ namespace GreedLast
 
             TrackComboBadgeState(snapshot);
             bool showBreak = !snapshot.Stopped && snapshot.Combo == 0 && Time.unscaledTime < comboBreakBadgeUntil;
-            bool showBadge = showBreak || snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
+            bool showTier = !showBreak && !snapshot.Stopped && snapshot.Combo > 0 && Time.unscaledTime < comboTierBadgeUntil;
+            bool showBadge = showBreak || showTier || snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
             {
@@ -4520,6 +4524,10 @@ namespace GreedLast
                         ? "연쇄 끊김  " + comboBreakBadgeCombo + "콤보"
                         : "연쇄 끊김";
                 }
+                else if (showTier)
+                {
+                    text = "연쇄 상승  x" + comboTierBadgeLevel;
+                }
 
                 comboBadgeText.text = text;
             }
@@ -4534,6 +4542,10 @@ namespace GreedLast
                 if (showBreak)
                 {
                     comboBadgeBack.color = new Color32(120, 46, 42, 226);
+                }
+                else if (showTier)
+                {
+                    comboBadgeBack.color = new Color32(207, 151, 46, 236);
                 }
             }
 
@@ -4555,6 +4567,7 @@ namespace GreedLast
             {
                 comboBreakBadgeCombo = lastComboForBadge;
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
+                comboTierBadgeUntil = 0f;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
                 PlayClip(comboBreakClip, 0.24f);
                 PlayHaptic(0.024f);
@@ -4562,6 +4575,17 @@ namespace GreedLast
             else if (snapshot.Combo > 0)
             {
                 comboBreakBadgeUntil = 0f;
+            }
+
+            int previousTier = lastComboForBadge == int.MinValue
+                ? 0
+                : Mathf.Clamp(lastComboForBadge / 3, 0, 5);
+            int currentTier = Mathf.Clamp(snapshot.Combo / 3, 0, 5);
+            if (snapshot.Combo > 0 && currentTier > previousTier && currentTier > 0)
+            {
+                comboTierBadgeLevel = currentTier;
+                comboTierBadgeUntil = Time.unscaledTime + ComboTierBadgeDuration;
+                comboBadgePulseUntil = Time.unscaledTime + 0.24f;
             }
 
             lastComboForBadge = snapshot.Combo;
