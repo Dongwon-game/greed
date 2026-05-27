@@ -5738,6 +5738,7 @@ namespace GreedLast
                 if (timingGuideText != null)
                 {
                     timingGuideText.text = string.Empty;
+                    timingGuideText.rectTransform.localScale = Vector3.one;
                 }
 
                 lastActivePatternVisual = false;
@@ -5756,6 +5757,7 @@ namespace GreedLast
                 {
                     timingGuideText.text = runModeActive ? "다음 함정 대기" : string.Empty;
                     timingGuideText.color = new Color32(125, 139, 143, 180);
+                    timingGuideText.rectTransform.localScale = Vector3.one;
                 }
 
                 lastActivePatternVisual = false;
@@ -5814,8 +5816,12 @@ namespace GreedLast
             ApplyJudgementLinePulse();
             if (timingGuideText != null)
             {
+                float exactPulse = BuildExactTimingPulse();
                 timingGuideText.text = BuildTimingGuideLabel(latestRunSnapshot);
-                timingGuideText.color = GetTimingGuideColor(latestRunSnapshot);
+                timingGuideText.color = exactPulse > 0f
+                    ? Color32.Lerp(GetTimingGuideColor(latestRunSnapshot), new Color32(255, 248, 210, 255), exactPulse * 0.58f)
+                    : GetTimingGuideColor(latestRunSnapshot);
+                timingGuideText.rectTransform.localScale = Vector3.one * (1f + exactPulse * 0.085f);
             }
         }
 
@@ -5827,14 +5833,24 @@ namespace GreedLast
             }
 
             float pulse = BuildJudgementLinePulse();
-            if (pulse <= 0f)
+            float exactPulse = BuildExactTimingPulse();
+            if (pulse <= 0f && exactPulse <= 0f)
             {
                 judgementLine.rectTransform.localScale = Vector3.one;
                 return;
             }
 
-            judgementLine.color = Color32.Lerp(judgementLine.color, judgementLinePulseColor, pulse);
-            judgementLine.rectTransform.localScale = new Vector3(1f, 1f + pulse * 0.9f, 1f);
+            if (exactPulse > 0f)
+            {
+                judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(255, 248, 210, 255), exactPulse * 0.45f);
+            }
+
+            if (pulse > 0f)
+            {
+                judgementLine.color = Color32.Lerp(judgementLine.color, judgementLinePulseColor, pulse);
+            }
+
+            judgementLine.rectTransform.localScale = new Vector3(1f, 1f + exactPulse * 0.32f + pulse * 0.9f, 1f);
         }
 
         private float BuildJudgementLinePulse()
@@ -5858,6 +5874,30 @@ namespace GreedLast
 
             float normalized = Mathf.Clamp01(remaining / TrapEntryPulseDuration);
             return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildExactTimingPulse()
+        {
+            if (!hasRunSnapshot
+                || !runModeActive
+                || !latestRunSnapshot.ActivePattern
+                || latestRunSnapshot.Paused
+                || latestRunSnapshot.CountdownActive
+                || latestRunSnapshot.Stopped)
+            {
+                return 0f;
+            }
+
+            float successWindow = Mathf.Max(0.001f, latestRunSnapshot.Pattern.SuccessWindowSeconds);
+            float absoluteDelta = Mathf.Abs(latestRunSnapshot.CoreDeltaSeconds);
+            if (absoluteDelta > successWindow)
+            {
+                return 0f;
+            }
+
+            float centered = 1f - Mathf.Clamp01(absoluteDelta / successWindow);
+            float shimmer = 0.74f + Mathf.Sin(Time.unscaledTime * 54f) * 0.26f;
+            return Mathf.Clamp01(centered * shimmer);
         }
 
         private void UpdateTrapDangerVisuals(float channelX, float y, float coreNear)
@@ -5935,11 +5975,13 @@ namespace GreedLast
             if (goodTimingBand != null)
             {
                 goodTimingBand.color = new Color32(105, 168, 190, 0);
+                goodTimingBand.rectTransform.localScale = Vector3.one;
             }
 
             if (successTimingBand != null)
             {
                 successTimingBand.color = new Color32(255, 238, 181, 0);
+                successTimingBand.rectTransform.localScale = Vector3.one;
             }
         }
 
@@ -5971,9 +6013,11 @@ namespace GreedLast
             rect.anchorMax = new Vector2(maxX, Mathf.Max(yA, yB));
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
+            float exactPulse = band == successTimingBand ? BuildExactTimingPulse() : 0f;
             band.color = band == successTimingBand
-                ? new Color32(255, 238, 181, 116)
+                ? new Color32(255, 238, 181, (byte)Mathf.RoundToInt(Mathf.Lerp(116f, 192f, exactPulse)))
                 : new Color32(105, 168, 190, 28);
+            band.rectTransform.localScale = Vector3.one * (1f + exactPulse * 0.045f);
         }
 
         private void PlayLaneCue(GreedLastRunChannel channel)
