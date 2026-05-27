@@ -3652,6 +3652,7 @@ namespace GreedLast
         private const float JudgementLinePulseDuration = 0.28f;
         private const float JudgementFeedbackPopDuration = 0.22f;
         private const float RunGaugePulseDuration = 0.26f;
+        private const float ComboBreakBadgeDuration = 0.85f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3771,12 +3772,14 @@ namespace GreedLast
         private float judgementLinePulseUntil;
         private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
+        private float comboBreakBadgeUntil;
         private float healthGaugePulseUntil;
         private float focusGaugePulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
+        private int lastComboForBadge = int.MinValue;
         private int lastFeedbackScore;
         private int lastFeedbackHealth = -1;
         private string lastJudgementText = string.Empty;
@@ -4491,7 +4494,9 @@ namespace GreedLast
                 return;
             }
 
-            bool showBadge = snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
+            TrackComboBadgeState(snapshot);
+            bool showBreak = !snapshot.Stopped && Time.unscaledTime < comboBreakBadgeUntil;
+            bool showBadge = showBreak || snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
             {
@@ -4507,6 +4512,11 @@ namespace GreedLast
 
             if (comboBadgeText != null)
             {
+                if (showBreak)
+                {
+                    text = "연쇄 끊김";
+                }
+
                 comboBadgeText.text = text;
             }
 
@@ -4517,12 +4527,33 @@ namespace GreedLast
                     : chainActive
                         ? new Color32(178, 123, 36, 228)
                         : new Color32(35, 65, 75, 218);
+                if (showBreak)
+                {
+                    comboBadgeBack.color = new Color32(120, 46, 42, 226);
+                }
             }
 
             float pulse = Time.unscaledTime < comboBadgePulseUntil
                 ? 1.06f + Mathf.Sin(Time.unscaledTime * 48f) * 0.035f
                 : 1f;
             comboBadgeRoot.transform.localScale = Vector3.one * pulse;
+        }
+
+        private void TrackComboBadgeState(GreedLastRunSnapshot snapshot)
+        {
+            if (!runModeActive || snapshot.Stopped || snapshot.CountdownActive)
+            {
+                lastComboForBadge = snapshot.Combo;
+                return;
+            }
+
+            if (lastComboForBadge >= 3 && snapshot.Combo == 0)
+            {
+                comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
+                comboBadgePulseUntil = Time.unscaledTime + 0.20f;
+            }
+
+            lastComboForBadge = snapshot.Combo;
         }
 
         private static string BuildNormalRunHud(
