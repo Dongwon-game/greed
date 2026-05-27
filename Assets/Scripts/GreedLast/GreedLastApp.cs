@@ -5827,7 +5827,7 @@ namespace GreedLast
             }
 
             laneJudgementPulseUntil[index] = Time.unscaledTime + 0.24f;
-            laneJudgementPulseColors[index] = GetLaneJudgementPulseColor(snapshot.LastResult);
+            laneJudgementPulseColors[index] = GetJudgementPulseColor(snapshot);
         }
 
         private void TriggerJudgementLinePulse(GreedLastRunSnapshot snapshot)
@@ -5838,7 +5838,7 @@ namespace GreedLast
             }
 
             judgementLinePulseUntil = Time.unscaledTime + JudgementLinePulseDuration;
-            judgementLinePulseColor = GetLaneJudgementPulseColor(snapshot.LastResult);
+            judgementLinePulseColor = GetJudgementPulseColor(snapshot);
         }
 
         private void ShowJudgementFeedback(GreedLastRunSnapshot snapshot)
@@ -5850,7 +5850,7 @@ namespace GreedLast
 
             judgementFeedbackText.fontSize = 48;
             judgementFeedbackText.text = BuildJudgementFeedbackText(snapshot);
-            judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot.LastResult);
+            judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot);
             judgementFeedbackUntil = Time.unscaledTime + 0.82f;
             judgementFeedbackPopUntil = Time.unscaledTime + JudgementFeedbackPopDuration;
         }
@@ -5873,6 +5873,11 @@ namespace GreedLast
         {
             string[] lines = snapshot.JudgementText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             string timingLine = lines.Length > 1 ? lines[1] : string.Empty;
+            if (IsFocusGuardSnapshot(snapshot))
+            {
+                return "집중 보호  피해 무효";
+            }
+
             switch (snapshot.LastResult)
             {
                 case GreedLastJudgementResult.Success:
@@ -5925,6 +5930,31 @@ namespace GreedLast
                 default:
                     return new Color32(255, 255, 255, 0);
             }
+        }
+
+        private static Color32 GetJudgementFeedbackColor(GreedLastRunSnapshot snapshot)
+        {
+            if (IsFocusGuardSnapshot(snapshot))
+            {
+                return new Color32(145, 231, 199, 255);
+            }
+
+            return GetJudgementFeedbackColor(snapshot.LastResult);
+        }
+
+        private static Color32 GetJudgementPulseColor(GreedLastRunSnapshot snapshot)
+        {
+            if (IsFocusGuardSnapshot(snapshot))
+            {
+                return new Color32(145, 231, 199, 245);
+            }
+
+            return GetLaneJudgementPulseColor(snapshot.LastResult);
+        }
+
+        private static bool IsFocusGuardSnapshot(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.MissReason == "focus_guard";
         }
 
         private static Color32 GetLaneJudgementPulseColor(GreedLastJudgementResult result)
