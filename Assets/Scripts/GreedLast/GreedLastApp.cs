@@ -3650,6 +3650,7 @@ namespace GreedLast
         private const float LaneCueVolume = 0.24f;
         private const float TargetCueVolume = 0.25f;
         private const float JudgementLinePulseDuration = 0.28f;
+        private const float JudgementFeedbackPopDuration = 0.22f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3764,6 +3765,7 @@ namespace GreedLast
         private float nextBeatSoundAt;
         private float feedbackFlashUntil;
         private float judgementFeedbackUntil;
+        private float judgementFeedbackPopUntil;
         private float judgementLinePulseUntil;
         private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
@@ -5850,6 +5852,7 @@ namespace GreedLast
             judgementFeedbackText.text = BuildJudgementFeedbackText(snapshot);
             judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot.LastResult);
             judgementFeedbackUntil = Time.unscaledTime + 0.82f;
+            judgementFeedbackPopUntil = Time.unscaledTime + JudgementFeedbackPopDuration;
         }
 
         private void ShowResumeCountdownFeedback(GreedLastRunSnapshot snapshot)
@@ -5862,6 +5865,7 @@ namespace GreedLast
             judgementFeedbackText.fontSize = 104;
             judgementFeedbackText.text = BuildResumeCountdownFeedbackText(snapshot);
             judgementFeedbackText.color = new Color32(255, 238, 181, 255);
+            judgementFeedbackText.rectTransform.localScale = Vector3.one;
             judgementFeedbackUntil = Time.unscaledTime + 0.12f;
         }
 
@@ -5973,7 +5977,30 @@ namespace GreedLast
             {
                 judgementFeedbackText.fontSize = 48;
                 judgementFeedbackText.color = new Color32(255, 238, 181, 0);
+                judgementFeedbackText.rectTransform.localScale = Vector3.one;
+                return;
             }
+
+            ApplyJudgementFeedbackPop();
+        }
+
+        private void ApplyJudgementFeedbackPop()
+        {
+            if (judgementFeedbackText == null)
+            {
+                return;
+            }
+
+            float remaining = judgementFeedbackPopUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                judgementFeedbackText.rectTransform.localScale = Vector3.one;
+                return;
+            }
+
+            float pulse = Mathf.Clamp01(remaining / JudgementFeedbackPopDuration);
+            float eased = pulse * pulse;
+            judgementFeedbackText.rectTransform.localScale = Vector3.one * (1f + eased * 0.18f);
         }
 
         private void PlayClip(AudioClip clip, float volume)
