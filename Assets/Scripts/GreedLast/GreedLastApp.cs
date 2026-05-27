@@ -3651,6 +3651,7 @@ namespace GreedLast
         private const float TargetCueVolume = 0.25f;
         private const float JudgementLinePulseDuration = 0.28f;
         private const float JudgementFeedbackPopDuration = 0.22f;
+        private const float RunGaugePulseDuration = 0.26f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3770,8 +3771,12 @@ namespace GreedLast
         private float judgementLinePulseUntil;
         private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
+        private float healthGaugePulseUntil;
+        private float focusGaugePulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
+        private int lastGaugeHealth = int.MinValue;
+        private int lastGaugeFocus = int.MinValue;
         private int lastFeedbackScore;
         private int lastFeedbackHealth = -1;
         private string lastJudgementText = string.Empty;
@@ -4327,6 +4332,7 @@ namespace GreedLast
             }
 
             runGaugeRoot.SetActive(true);
+            TrackRunGaugeValueChanges(snapshot);
             int healthMax = Mathf.Max(3, snapshot.Health);
             float healthRatio = healthMax <= 0 ? 0f : Mathf.Clamp01(snapshot.Health / (float)healthMax);
             float focusRatio = snapshot.MaxFocus <= 0 ? 0f : Mathf.Clamp01(snapshot.Focus / (float)snapshot.MaxFocus);
@@ -4338,6 +4344,7 @@ namespace GreedLast
                 healthGaugeFill.color = snapshot.Health <= 1
                     ? new Color32(207, 87, 65, 235)
                     : new Color32(218, 86, 68, 220);
+                ApplyRunGaugePulse(healthGaugeFill, healthGaugeText, BuildRunGaugePulse(healthGaugePulseUntil), new Color32(255, 170, 150, 255));
             }
 
             if (focusGaugeFill != null)
@@ -4345,6 +4352,7 @@ namespace GreedLast
                 focusGaugeFill.color = snapshot.Focus >= snapshot.MaxFocus
                     ? new Color32(255, 238, 181, 230)
                     : new Color32(86, 158, 184, 220);
+                ApplyRunGaugePulse(focusGaugeFill, focusGaugeText, BuildRunGaugePulse(focusGaugePulseUntil), new Color32(145, 231, 199, 255));
             }
 
             if (healthGaugeText != null)
@@ -4355,6 +4363,69 @@ namespace GreedLast
             if (focusGaugeText != null)
             {
                 focusGaugeText.text = "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
+            }
+        }
+
+        private void TrackRunGaugeValueChanges(GreedLastRunSnapshot snapshot)
+        {
+            if (lastGaugeHealth != int.MinValue && snapshot.Health != lastGaugeHealth)
+            {
+                healthGaugePulseUntil = Time.unscaledTime + RunGaugePulseDuration;
+            }
+
+            if (lastGaugeFocus != int.MinValue && snapshot.Focus != lastGaugeFocus)
+            {
+                focusGaugePulseUntil = Time.unscaledTime + RunGaugePulseDuration;
+            }
+
+            lastGaugeHealth = snapshot.Health;
+            lastGaugeFocus = snapshot.Focus;
+        }
+
+        private static float BuildRunGaugePulse(float pulseUntil)
+        {
+            float remaining = pulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Clamp01(remaining / RunGaugePulseDuration);
+        }
+
+        private static void ApplyRunGaugePulse(Image fillImage, Text valueText, float pulse, Color32 pulseColor)
+        {
+            Transform gaugeBar = fillImage != null ? fillImage.transform.parent : null;
+            if (pulse <= 0f)
+            {
+                if (gaugeBar != null)
+                {
+                    gaugeBar.localScale = Vector3.one;
+                }
+
+                if (valueText != null)
+                {
+                    valueText.rectTransform.localScale = Vector3.one;
+                    valueText.color = new Color32(237, 239, 231, 240);
+                }
+
+                return;
+            }
+
+            if (fillImage != null)
+            {
+                fillImage.color = Color32.Lerp(fillImage.color, pulseColor, pulse * 0.72f);
+            }
+
+            if (gaugeBar != null)
+            {
+                gaugeBar.localScale = new Vector3(1f, 1f + pulse * 0.22f, 1f);
+            }
+
+            if (valueText != null)
+            {
+                valueText.rectTransform.localScale = Vector3.one * (1f + pulse * 0.08f);
+                valueText.color = Color32.Lerp(new Color32(237, 239, 231, 240), pulseColor, pulse * 0.8f);
             }
         }
 
