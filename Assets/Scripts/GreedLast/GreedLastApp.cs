@@ -3655,6 +3655,7 @@ namespace GreedLast
         private const float ComboBreakBadgeDuration = 0.85f;
         private const float ComboTierBadgeDuration = 0.72f;
         private const float ThreatProgressPulseDuration = 0.78f;
+        private const float TrapEntryPulseDuration = 0.34f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3783,6 +3784,7 @@ namespace GreedLast
         private float healthGaugePulseUntil;
         private float focusGaugePulseUntil;
         private float threatProgressPulseUntil;
+        private float trapEntryPulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool comboTierFeedbackPending;
@@ -3884,11 +3886,17 @@ namespace GreedLast
                         new Color32(69, 88, 92, 255),
                         lanePulse * 0.35f);
                     GreedLastRunChannel laneChannel = (GreedLastRunChannel)(i + 1);
+                    float trapEntryPulse = 0f;
                     if (hasRunSnapshot
                         && latestRunSnapshot.ActivePattern
                         && latestRunSnapshot.Pattern.Channel == laneChannel)
                     {
+                        trapEntryPulse = BuildTrapEntryPulse();
                         baseColor = Color32.Lerp(baseColor, new Color32(154, 84, 63, 255), 0.72f);
+                        if (trapEntryPulse > 0f)
+                        {
+                            baseColor = Color32.Lerp(baseColor, new Color32(255, 207, 126, 255), trapEntryPulse * 0.46f);
+                        }
                     }
 
                     float pressPulse = BuildLanePressPulse(i);
@@ -3904,7 +3912,7 @@ namespace GreedLast
                     }
 
                     laneImages[i].color = baseColor;
-                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f + judgementPulse * 0.075f);
+                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f + judgementPulse * 0.075f + trapEntryPulse * 0.045f);
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
                         int targetIndex = hasRunSnapshot
@@ -5758,6 +5766,7 @@ namespace GreedLast
             if (!lastActivePatternVisual)
             {
                 PlayLaneCue(latestRunSnapshot.Pattern.Channel);
+                trapEntryPulseUntil = Time.unscaledTime + TrapEntryPulseDuration;
                 targetCuePlayed = false;
             }
 
@@ -5789,14 +5798,18 @@ namespace GreedLast
             rect.anchoredPosition = Vector2.zero;
 
             float coreNear = Mathf.Clamp01(1f - Mathf.Abs(latestRunSnapshot.CoreDeltaSeconds) / 0.32f);
+            float entryPulse = BuildTrapEntryPulse();
             UpdateTrapDangerVisuals(channelX, y, coreNear);
             SetTimingBand(goodTimingBand, latestRunSnapshot.Pattern.GoodWindowSeconds, channelX, false);
             SetTimingBand(successTimingBand, latestRunSnapshot.Pattern.SuccessWindowSeconds, channelX, true);
 
             SetJudgementLineY(coreY);
 
-            trapMarker.color = Color32.Lerp(new Color32(207, 87, 65, 170), new Color32(255, 238, 181, 255), coreNear);
-            trapMarker.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.88f, 1.22f, coreNear);
+            trapMarker.color = Color32.Lerp(
+                Color32.Lerp(new Color32(207, 87, 65, 170), new Color32(255, 238, 181, 255), entryPulse * 0.72f),
+                new Color32(255, 238, 181, 255),
+                coreNear);
+            trapMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.88f, 1.22f, coreNear) + entryPulse * 0.18f);
             judgementLine.color = Color32.Lerp(new Color32(255, 238, 181, 150), new Color32(255, 255, 255, 255), coreNear);
             ApplyJudgementLinePulse();
             if (timingGuideText != null)
@@ -5835,17 +5848,30 @@ namespace GreedLast
             return Mathf.Clamp01(remaining / JudgementLinePulseDuration);
         }
 
+        private float BuildTrapEntryPulse()
+        {
+            float remaining = trapEntryPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / TrapEntryPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
         private void UpdateTrapDangerVisuals(float channelX, float y, float coreNear)
         {
             float threatStrength = latestRunSnapshot.InfiniteMode
                 ? Mathf.Clamp01((latestRunSnapshot.InfiniteThreatLevel - 1) / 4f)
                 : 0f;
+            float entryPulse = BuildTrapEntryPulse();
             float warningPulse = 0.5f + Mathf.Sin((beatPhase * 1.6f + coreNear) * Mathf.PI * 2f) * 0.5f;
             Color32 baseColor = GetTrapBaseColor(latestRunSnapshot.Pattern.TimingType);
             Color32 accentColor = GetTrapAccentColor(latestRunSnapshot.Pattern.TimingType);
-            int dangerAlpha = Mathf.RoundToInt(Mathf.Lerp(28f, 116f, Mathf.Max(coreNear, threatStrength * 0.7f)) * Mathf.Lerp(0.78f, 1.18f, warningPulse));
-            int glowAlpha = Mathf.RoundToInt(Mathf.Lerp(35f, 154f, coreNear) + threatStrength * 32f);
-            int strikeAlpha = Mathf.RoundToInt(Mathf.Lerp(70f, 240f, coreNear));
+            int dangerAlpha = Mathf.RoundToInt((Mathf.Lerp(28f, 116f, Mathf.Max(coreNear, threatStrength * 0.7f)) + entryPulse * 52f) * Mathf.Lerp(0.78f, 1.18f, warningPulse));
+            int glowAlpha = Mathf.RoundToInt(Mathf.Lerp(35f, 154f, Mathf.Max(coreNear, entryPulse * 0.65f)) + threatStrength * 32f);
+            int strikeAlpha = Mathf.RoundToInt(Mathf.Lerp(70f, 240f, Mathf.Max(coreNear, entryPulse * 0.54f)));
 
             if (laneDangerBand != null)
             {
@@ -5864,7 +5890,7 @@ namespace GreedLast
                 glowRect.anchorMin = new Vector2(channelX, y);
                 glowRect.anchorMax = new Vector2(channelX, y);
                 glowRect.anchoredPosition = Vector2.zero;
-                glowRect.localScale = Vector3.one * Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f));
+                glowRect.localScale = Vector3.one * (Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f)) + entryPulse * 0.24f);
                 trapGlow.color = WithAlpha(baseColor, glowAlpha);
             }
 
@@ -5875,7 +5901,7 @@ namespace GreedLast
                 strikeRect.anchorMax = new Vector2(channelX, y);
                 strikeRect.anchoredPosition = Vector2.zero;
                 strikeRect.sizeDelta = new Vector2(Mathf.Lerp(24f, 44f, coreNear), Mathf.Lerp(150f, 230f, coreNear + threatStrength * 0.25f));
-                strikeRect.localScale = Vector3.one * Mathf.Lerp(0.82f, 1.18f, warningPulse);
+                strikeRect.localScale = Vector3.one * (Mathf.Lerp(0.82f, 1.18f, warningPulse) + entryPulse * 0.16f);
                 strikeRect.localEulerAngles = new Vector3(0f, 0f, GetTrapStrikeAngle(latestRunSnapshot.Pattern.TimingType));
                 trapStrike.color = WithAlpha(accentColor, strikeAlpha);
             }
