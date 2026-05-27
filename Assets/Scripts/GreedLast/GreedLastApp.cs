@@ -3744,6 +3744,7 @@ namespace GreedLast
         private AudioClip focusGuardClip;
         private AudioClip missClip;
         private AudioClip chainClip;
+        private AudioClip comboBreakClip;
         private Action normalRunRequested;
         private Action saveLoadoutRequested;
         private Action infiniteRunRequested;
@@ -4555,6 +4556,8 @@ namespace GreedLast
                 comboBreakBadgeCombo = lastComboForBadge;
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
+                PlayClip(comboBreakClip, 0.24f);
+                PlayHaptic(0.024f);
             }
             else if (snapshot.Combo > 0)
             {
@@ -5386,6 +5389,7 @@ namespace GreedLast
             focusGuardClip = CreateDoubleTone("focus_guard_tone", 520f, 920f, 0.14f, 0.30f);
             missClip = CreateTone("miss_tone", 180f, 0.15f, 0.35f);
             chainClip = CreateDoubleTone("chain_tone", 880f, 1320f, 0.12f, 0.28f);
+            comboBreakClip = CreateSweepTone("combo_break_tone", 520f, 260f, 0.11f, 0.22f);
         }
 
         private static void EnsureCamera()
