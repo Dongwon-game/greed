@@ -4496,7 +4496,7 @@ namespace GreedLast
             }
 
             TrackComboBadgeState(snapshot);
-            bool showBreak = !snapshot.Stopped && Time.unscaledTime < comboBreakBadgeUntil;
+            bool showBreak = !snapshot.Stopped && snapshot.Combo == 0 && Time.unscaledTime < comboBreakBadgeUntil;
             bool showBadge = showBreak || snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
@@ -4555,6 +4555,10 @@ namespace GreedLast
                 comboBreakBadgeCombo = lastComboForBadge;
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
+            }
+            else if (snapshot.Combo > 0)
+            {
+                comboBreakBadgeUntil = 0f;
             }
 
             lastComboForBadge = snapshot.Combo;
