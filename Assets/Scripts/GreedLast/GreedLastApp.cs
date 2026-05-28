@@ -3658,6 +3658,8 @@ namespace GreedLast
         private const float TrapEntryPulseDuration = 0.34f;
         private const float LaneMissShakeDuration = 0.22f;
         private const float LaneMissShakePixels = 16f;
+        private const float BeatMarkerMissImpactDuration = 0.26f;
+        private const float BeatMarkerMissImpactShakePixels = 10f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3788,6 +3790,7 @@ namespace GreedLast
         private float focusGaugePulseUntil;
         private float threatProgressPulseUntil;
         private float trapEntryPulseUntil;
+        private float beatMarkerMissImpactUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool comboTierFeedbackPending;
@@ -3863,8 +3866,16 @@ namespace GreedLast
             float beatSpeed = BuildBeatVisualSpeed(latestRunSnapshot);
             beatPhase += Time.unscaledDeltaTime * beatSpeed;
             float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
-            beatMarker.color = Color32.Lerp(new Color32(240, 197, 89, 140), new Color32(255, 238, 181, 255), pulse);
-            beatMarker.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.86f, 1.18f, pulse);
+            float missImpact = BuildBeatMarkerMissImpact();
+            Color32 markerColor = Color32.Lerp(new Color32(240, 197, 89, 140), new Color32(255, 238, 181, 255), pulse);
+            if (missImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(231, 91, 77, 255), missImpact * 0.82f);
+            }
+
+            beatMarker.color = markerColor;
+            beatMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.86f, 1.18f, pulse) + missImpact * 0.16f);
+            beatMarker.rectTransform.anchoredPosition = new Vector2(BuildBeatMarkerMissShake(), 0f);
 
             if (runModeActive
                 && (latestRunSnapshot.ResumeCountdownActive || (latestRunSnapshot.StartCountdownActive && !latestRunSnapshot.Paused))
@@ -5685,6 +5696,31 @@ namespace GreedLast
             return Mathf.Sin(age * Mathf.PI * 8f) * normalized * LaneMissShakePixels;
         }
 
+        private float BuildBeatMarkerMissImpact()
+        {
+            float remaining = beatMarkerMissImpactUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerMissImpactDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildBeatMarkerMissShake()
+        {
+            float remaining = beatMarkerMissImpactUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerMissImpactDuration);
+            float age = 1f - normalized;
+            return Mathf.Sin(age * Mathf.PI * 10f) * normalized * BeatMarkerMissImpactShakePixels;
+        }
+
         private Color32 GetLaneJudgementPulseColor(int index)
         {
             if (laneJudgementPulseColors == null || index < 0 || index >= laneJudgementPulseColors.Length)
@@ -6189,6 +6225,7 @@ namespace GreedLast
             if (snapshot.LastResult == GreedLastJudgementResult.Miss && laneMissShakeUntil != null && index < laneMissShakeUntil.Length)
             {
                 laneMissShakeUntil[index] = Time.unscaledTime + LaneMissShakeDuration;
+                beatMarkerMissImpactUntil = Time.unscaledTime + BeatMarkerMissImpactDuration;
             }
         }
 
