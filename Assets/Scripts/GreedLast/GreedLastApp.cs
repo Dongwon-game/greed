@@ -3656,6 +3656,8 @@ namespace GreedLast
         private const float ComboTierBadgeDuration = 0.72f;
         private const float ThreatProgressPulseDuration = 0.78f;
         private const float TrapEntryPulseDuration = 0.34f;
+        private const float LaneMissShakeDuration = 0.22f;
+        private const float LaneMissShakePixels = 16f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3723,6 +3725,7 @@ namespace GreedLast
         private Image[] laneImages;
         private float[] lanePressPulseUntil;
         private float[] laneJudgementPulseUntil;
+        private float[] laneMissShakeUntil;
         private Color32[] laneJudgementPulseColors;
         private Image[] runMotionLines;
         private Image beatMarker;
@@ -3911,7 +3914,9 @@ namespace GreedLast
                         baseColor = Color32.Lerp(baseColor, GetLaneJudgementPulseColor(i), judgementPulse * 0.82f);
                     }
 
+                    float missShake = BuildLaneMissShake(i);
                     laneImages[i].color = baseColor;
+                    laneImages[i].rectTransform.anchoredPosition = new Vector2(missShake, 0f);
                     laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f + judgementPulse * 0.075f + trapEntryPulse * 0.045f);
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
@@ -5412,6 +5417,7 @@ namespace GreedLast
             laneImages = new Image[3];
             lanePressPulseUntil = new float[3];
             laneJudgementPulseUntil = new float[3];
+            laneMissShakeUntil = new float[3];
             laneJudgementPulseColors = new Color32[3];
             laneButtons = new Button[3];
             laneLabelTexts = new Text[3];
@@ -5659,6 +5665,24 @@ namespace GreedLast
             }
 
             return Mathf.Clamp01(remaining / 0.24f);
+        }
+
+        private float BuildLaneMissShake(int index)
+        {
+            if (laneMissShakeUntil == null || index < 0 || index >= laneMissShakeUntil.Length)
+            {
+                return 0f;
+            }
+
+            float remaining = laneMissShakeUntil[index] - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / LaneMissShakeDuration);
+            float age = 1f - normalized;
+            return Mathf.Sin(age * Mathf.PI * 8f) * normalized * LaneMissShakePixels;
         }
 
         private Color32 GetLaneJudgementPulseColor(int index)
@@ -6162,6 +6186,10 @@ namespace GreedLast
 
             laneJudgementPulseUntil[index] = Time.unscaledTime + 0.24f;
             laneJudgementPulseColors[index] = GetJudgementPulseColor(snapshot);
+            if (snapshot.LastResult == GreedLastJudgementResult.Miss && laneMissShakeUntil != null && index < laneMissShakeUntil.Length)
+            {
+                laneMissShakeUntil[index] = Time.unscaledTime + LaneMissShakeDuration;
+            }
         }
 
         private void TriggerJudgementLinePulse(GreedLastRunSnapshot snapshot)
