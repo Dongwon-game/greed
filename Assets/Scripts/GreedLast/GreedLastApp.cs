@@ -304,6 +304,7 @@ namespace GreedLast
         public GreedLastLobbySnapshot LoadLobby()
         {
             selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            EnsureSelectedSaveLoadoutSlotForLobby();
 
             string message = auxiliaryWarning
                 ? "보조 데이터 일부가 늦습니다. 핵심 진입은 유지합니다."
@@ -384,7 +385,7 @@ namespace GreedLast
         {
             bool hasCandidate = HasSaveLoadoutCandidate;
             string text = (hasCandidate
-                    ? "저장 모드\n후보: " + FormatSaveCandidateSummary(lastRunRecord)
+                    ? "저장 모드\n1회 후보: " + FormatSaveCandidateSummary(lastRunRecord)
                     : "관리 모드\n새 저장 후보 없음\n기존 슬롯만 확인 / 이름 변경 / 삭제할 수 있습니다.")
                 + "\n\n슬롯\n"
                 + BuildSaveSlotListText(showSelectedSlot, compact: true);
@@ -429,8 +430,22 @@ namespace GreedLast
             return "탈출 성공 / 기록 저장\n"
                 + FormatRunRecordBoardLine(record)
                 + "\n저장 후보: " + record.LoadoutName
+                + "\n저장 기회: 확정하거나 건너뛰면 사라짐"
                 + "\n비교: " + BuildLatestNormalComparisonText()
                 + "\n" + nextAction;
+        }
+
+        public string BuildRunClearSkipSaveMessage(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "탈출 기록을 만들지 못했습니다.";
+            }
+
+            return "탈출 성공 / 기록 저장"
+                + "\n" + FormatRunRecordBoardLine(record)
+                + "\n저장 조합 저장은 건너뛰었습니다."
+                + "\n다음: 기록 보기에서 클리어 기록 확인";
         }
 
         public string BuildRunAttemptResultMessage(GreedLastRunAttemptRecord record)
@@ -617,9 +632,11 @@ namespace GreedLast
                 return "선택한 슬롯은 이미 비어 있습니다.";
             }
 
-            ClearSaveLoadoutSlot(selectedSaveSlotIndex);
+            int deletedSlotIndex = selectedSaveSlotIndex;
+            ClearSaveLoadoutSlot(deletedSlotIndex);
+            SelectNextUsableSaveLoadoutSlot(deletedSlotIndex);
             SavePersistedData();
-            return "슬롯 " + (selectedSaveSlotIndex + 1) + " 저장 조합을 삭제했습니다.";
+            return "슬롯 " + (deletedSlotIndex + 1) + " 저장 조합을 삭제했습니다.";
         }
 
         public string BuildSelectedSaveLoadoutDeletePreviewText()
@@ -718,6 +735,7 @@ namespace GreedLast
             out string errorMessage)
         {
             selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            int usedSlotIndex = selectedSaveSlotIndex;
             GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
             if (!record.IsValid)
             {
@@ -741,17 +759,18 @@ namespace GreedLast
             bool autoClearedSlot = remainingAfterUse <= 0;
             if (autoClearedSlot)
             {
-                ClearSaveLoadoutSlot(selectedSaveSlotIndex);
+                ClearSaveLoadoutSlot(usedSlotIndex);
+                SelectNextUsableSaveLoadoutSlot(usedSlotIndex + 1);
             }
 
             SavePersistedData();
-            detail = "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입\n"
+            detail = "슬롯 " + (usedSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
                 + "\n이번 입장으로 1회 사용"
                 + (autoClearedSlot
-                    ? "\n사용 횟수 소진 - 슬롯 자동 비움"
+                    ? "\n사용 횟수 소진 - 슬롯 자동 비움" + BuildAutoSelectedSaveSlotNotice()
                     : "\n남은 사용 " + remainingAfterUse + "회");
             selectedRecord = record;
             errorMessage = string.Empty;
@@ -820,8 +839,8 @@ namespace GreedLast
             switch (page)
             {
                 case 1:
-                    return BuildRecordBoardSection("클리어", BuildNormalRankingText())
-                        + "\n" + BuildRecordBoardSection("실패/중단", BuildNormalAttemptHistoryText());
+                    return "클리어\n" + BuildNormalRankingText()
+                        + "\n\n실패/중단\n" + BuildNormalAttemptHistoryText();
                 case 2:
                     return "최근 " + latestText
                         + "\n최고 " + bestText;
@@ -1204,7 +1223,7 @@ namespace GreedLast
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간"
-                + $" / 위협 {threatLevel} / 콤보 {record.MaxCombo} / 실수 {record.MissCount}";
+                + $" / 위협 {threatLevel}";
         }
 
         private static string FormatInfiniteRecordListLine(GreedLastInfiniteRunRecord record)
@@ -1222,7 +1241,7 @@ namespace GreedLast
             }
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 콤보 {record.MaxCombo} / 실수 {record.MissCount}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel}";
         }
 
         private static string FormatRunRecordDetail(GreedLastRunRecord record)
@@ -1274,7 +1293,7 @@ namespace GreedLast
                 return "기록 없음";
             }
 
-            return $"[{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m"
+            return $"[{BuildRunGrade(record)}] {record.Score}점 / {record.Distance:0.0}m"
                 + $" / 체력 {record.Health} / 집중 {record.Focus}";
         }
 
@@ -1308,8 +1327,7 @@ namespace GreedLast
                 ? "-"
                 : FormatMissReason(record.MissReason);
             return FormatRunAttemptOutcome(record.Outcome)
-                + $" / {record.Score}점 / {record.Distance:0.0}m / 챕터 {record.ChapterIndex} {record.ChapterProgress}/{record.ChapterTarget}"
-                + $" / 실수 {record.MissCount} / {FormatTimingProfile(record.TimingProfile)} / {missText}";
+                + $" / {record.Score}점 / {record.Distance:0.0}m / 실수 {record.MissCount} / {missText}";
         }
 
         private static string FormatTimingProfile(string timingProfile)
@@ -1574,6 +1592,44 @@ namespace GreedLast
             return false;
         }
 
+        private bool SelectNextUsableSaveLoadoutSlot(int startSlotIndex)
+        {
+            if (saveLoadoutSlots.Length <= 0)
+            {
+                return false;
+            }
+
+            int safeStartIndex = ((startSlotIndex % saveLoadoutSlots.Length) + saveLoadoutSlots.Length) % saveLoadoutSlots.Length;
+            for (int offset = 0; offset < saveLoadoutSlots.Length; offset += 1)
+            {
+                int slotIndex = (safeStartIndex + offset) % saveLoadoutSlots.Length;
+                if (IsSaveSlotUsable(slotIndex))
+                {
+                    selectedSaveSlotIndex = slotIndex;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void EnsureSelectedSaveLoadoutSlotForLobby()
+        {
+            if (saveLoadoutCandidateAvailable || IsSaveSlotUsable(selectedSaveSlotIndex))
+            {
+                return;
+            }
+
+            SelectNextUsableSaveLoadoutSlot(selectedSaveSlotIndex + 1);
+        }
+
+        private string BuildAutoSelectedSaveSlotNotice()
+        {
+            return IsSaveSlotUsable(selectedSaveSlotIndex)
+                ? "\n다음 선택: 슬롯 " + (selectedSaveSlotIndex + 1)
+                : "\n남은 저장 조합 없음";
+        }
+
         private void ClearSaveLoadoutSlot(int slotIndex)
         {
             int safeSlotIndex = Mathf.Clamp(slotIndex, 0, saveLoadoutSlots.Length - 1);
@@ -1825,6 +1881,7 @@ namespace GreedLast
 
             bool prunedExhaustedSaveLoadouts = ClearExhaustedSaveLoadoutSlots();
             savedLoadoutConfirmed = savedLoadoutConfirmed && HasAnySaveLoadoutSlot();
+            EnsureSelectedSaveLoadoutSlotForLobby();
 
             if (data.normalRunRankings != null)
             {
@@ -3546,15 +3603,16 @@ namespace GreedLast
         private void CompleteClearAndReturnToLobby()
         {
             GreedLastRunRecord record = runCore.CreateRunRecord();
-            GreedLastLobbySnapshot snapshot = backend.RegisterClear(record);
+            backend.RegisterClear(record);
             if (record.IsValid)
             {
                 preferredRecordBoardPageIndex = 0;
+                backend.DiscardSaveLoadoutCandidate();
             }
 
             runCore.Exit();
-            stateMachine.SetLobbyReady(snapshot);
-            stateMachine.ShowLocalNotice(backend.BuildRunClearResultMessage(record));
+            stateMachine.SetLobbyReady(backend.LoadLobby());
+            stateMachine.ShowLocalNotice(backend.BuildRunClearSkipSaveMessage(record));
         }
 
         private void CompleteClearAndOpenSaveDraft()
@@ -3660,6 +3718,11 @@ namespace GreedLast
         private const float LaneMissShakePixels = 16f;
         private const float BeatMarkerMissImpactDuration = 0.26f;
         private const float BeatMarkerMissImpactShakePixels = 10f;
+        private const float BeatMarkerFocusGuardDuration = 0.36f;
+        private const float BeatMarkerSuccessPulseDuration = 0.22f;
+        private const float BeatMarkerGoodPulseDuration = 0.18f;
+        private const float BeatMarkerComboBreakPulseDuration = 0.34f;
+        private const float BeatMarkerComboTierPulseDuration = 0.42f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3695,6 +3758,7 @@ namespace GreedLast
         private Text runProgressText;
         private GameObject comboBadgeRoot;
         private Image comboBadgeBack;
+        private Image comboBadgeAccent;
         private Text comboBadgeText;
         private GameObject pauseMenuOverlay;
         private Image pauseMenuBackdrop;
@@ -3791,6 +3855,11 @@ namespace GreedLast
         private float threatProgressPulseUntil;
         private float trapEntryPulseUntil;
         private float beatMarkerMissImpactUntil;
+        private float beatMarkerFocusGuardUntil;
+        private float beatMarkerSuccessPulseUntil;
+        private float beatMarkerGoodPulseUntil;
+        private float beatMarkerComboBreakPulseUntil;
+        private float beatMarkerComboTierPulseUntil;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool comboTierFeedbackPending;
@@ -3867,14 +3936,44 @@ namespace GreedLast
             beatPhase += Time.unscaledDeltaTime * beatSpeed;
             float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
             float missImpact = BuildBeatMarkerMissImpact();
+            float focusGuardImpact = BuildBeatMarkerFocusGuardImpact();
+            float successImpact = BuildBeatMarkerSuccessPulse();
+            float goodImpact = BuildBeatMarkerGoodPulse();
+            float comboBreakImpact = BuildBeatMarkerComboBreakPulse();
+            float comboTierImpact = BuildBeatMarkerComboTierPulse();
             Color32 markerColor = Color32.Lerp(new Color32(240, 197, 89, 140), new Color32(255, 238, 181, 255), pulse);
+            if (successImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(255, 238, 181, 255), successImpact * 0.74f);
+            }
+
+            if (comboTierImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(255, 214, 105, 255), comboTierImpact * 0.86f);
+            }
+
+            if (goodImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(132, 190, 208, 245), goodImpact * 0.58f);
+            }
+
+            if (comboBreakImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(154, 84, 63, 255), comboBreakImpact * 0.64f);
+            }
+
             if (missImpact > 0f)
             {
                 markerColor = Color32.Lerp(markerColor, new Color32(231, 91, 77, 255), missImpact * 0.82f);
             }
 
+            if (focusGuardImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, new Color32(145, 231, 199, 255), focusGuardImpact * 0.88f);
+            }
+
             beatMarker.color = markerColor;
-            beatMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.86f, 1.18f, pulse) + missImpact * 0.16f);
+            beatMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.86f, 1.18f, pulse) + successImpact * 0.13f + goodImpact * 0.075f + comboTierImpact * 0.18f + missImpact * 0.16f + focusGuardImpact * 0.22f - comboBreakImpact * 0.075f);
             beatMarker.rectTransform.anchoredPosition = new Vector2(BuildBeatMarkerMissShake(), 0f);
 
             if (runModeActive
@@ -3961,6 +4060,7 @@ namespace GreedLast
 
             UpdateForwardMotionLines();
             UpdateRunTimingVisuals();
+            ApplyFocusGuardShieldBand();
             UpdateFeedbackFlash();
         }
 
@@ -4042,7 +4142,13 @@ namespace GreedLast
 
             if (lanePreviewRoot != null)
             {
-                lanePreviewRoot.SetActive(true);
+                lanePreviewRoot.SetActive(!recordBoardLike);
+            }
+
+            if (judgementFeedbackText != null && !runLike)
+            {
+                judgementFeedbackText.text = string.Empty;
+                judgementFeedbackText.color = new Color32(255, 238, 181, 0);
             }
 
             normalRunButton.gameObject.SetActive(lobbyLike);
@@ -4194,14 +4300,12 @@ namespace GreedLast
                 SetButtonLabel(saveLoadoutButton, snapshot.SaveLoadoutUnlocked
                     ? "저장 조합 " + selectedSlotSummary
                     : "저장 조합");
-                SetButtonLabel(infiniteButton, snapshot.InfiniteUnlocked
-                    ? "무한 " + selectedSlotSummary
-                    : "무한모드");
+                SetButtonLabel(infiniteButton, BuildLobbyInfiniteButtonLabel(snapshot, selectedSlotSummary));
                 SetButtonLabel(infiniteRecordButton, BuildLobbyRecordButtonLabel(detail));
             }
             else if (recordBoardLike)
             {
-                SetButtonLabel(nextPatternButton, "다음 기록");
+                SetButtonLabel(nextPatternButton, "다음: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex + 1).Replace("\n", " "));
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (infinitePrepLike)
@@ -4411,6 +4515,8 @@ namespace GreedLast
             {
                 focusGaugeText.text = "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
             }
+
+            ApplyFocusGuardGaugePulse(snapshot, focusRatio);
         }
 
         private void TrackRunGaugeValueChanges(GreedLastRunSnapshot snapshot)
@@ -4473,6 +4579,28 @@ namespace GreedLast
             {
                 valueText.rectTransform.localScale = Vector3.one * (1f + pulse * 0.08f);
                 valueText.color = Color32.Lerp(new Color32(237, 239, 231, 240), pulseColor, pulse * 0.8f);
+            }
+        }
+
+        private void ApplyFocusGuardGaugePulse(GreedLastRunSnapshot snapshot, float focusRatio)
+        {
+            float guardPulse = BuildBeatMarkerFocusGuardImpact();
+            if (!IsFocusGuardSnapshot(snapshot) || guardPulse <= 0f)
+            {
+                return;
+            }
+
+            if (focusGaugeFill != null)
+            {
+                SetGaugeFill(focusGaugeFill, Mathf.Max(focusRatio, guardPulse * 0.22f));
+                focusGaugeFill.color = new Color32(145, 231, 199, (byte)Mathf.RoundToInt(Mathf.Lerp(160f, 245f, guardPulse)));
+            }
+
+            if (focusGaugeText != null)
+            {
+                focusGaugeText.text = "집중 보호 소모";
+                focusGaugeText.color = new Color32(145, 231, 199, 255);
+                focusGaugeText.rectTransform.localScale = Vector3.one * (1f + guardPulse * 0.11f);
             }
         }
 
@@ -4666,6 +4794,23 @@ namespace GreedLast
                 }
             }
 
+            if (comboBadgeAccent != null)
+            {
+                comboBadgeAccent.color = snapshot.Stopped
+                    ? new Color32(125, 139, 143, 220)
+                    : chainActive
+                        ? new Color32(255, 214, 105, 245)
+                        : new Color32(105, 168, 190, 230);
+                if (showBreak)
+                {
+                    comboBadgeAccent.color = new Color32(231, 91, 77, 245);
+                }
+                else if (showTier)
+                {
+                    comboBadgeAccent.color = new Color32(255, 238, 181, 255);
+                }
+            }
+
             float pulse = Time.unscaledTime < comboBadgePulseUntil
                 ? 1.06f + Mathf.Sin(Time.unscaledTime * 48f) * 0.035f
                 : 1f;
@@ -4686,6 +4831,7 @@ namespace GreedLast
                 comboBreakBadgeUntil = Time.unscaledTime + ComboBreakBadgeDuration;
                 comboTierBadgeUntil = 0f;
                 comboTierFeedbackPending = false;
+                beatMarkerComboBreakPulseUntil = Time.unscaledTime + BeatMarkerComboBreakPulseDuration;
                 comboBadgePulseUntil = Time.unscaledTime + 0.20f;
                 PlayClip(comboBreakClip, 0.24f);
                 PlayHaptic(0.024f);
@@ -4704,27 +4850,30 @@ namespace GreedLast
                 comboTierBadgeLevel = currentTier;
                 comboTierBadgeUntil = Time.unscaledTime + ComboTierBadgeDuration;
                 comboTierFeedbackPending = true;
+                beatMarkerComboTierPulseUntil = Time.unscaledTime + BeatMarkerComboTierPulseDuration;
                 comboBadgePulseUntil = Time.unscaledTime + 0.24f;
             }
 
             lastComboForBadge = snapshot.Combo;
         }
 
-        private static string BuildNormalRunHud(
+        private string BuildNormalRunHud(
             GreedLastRunSnapshot snapshot,
             string runState,
             string chapterText,
             string choiceText)
         {
+            string protectionText = BuildFocusGuardHudLine(snapshot);
             return $"{runState}  {chapterText}  핵:{FormatBool(snapshot.CoreRetrieved)}  저장:{FormatBool(snapshot.SaveEligible)}\n"
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
                 + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + protectionText
                 + BuildRunGuideLine(snapshot)
                 + choiceText;
         }
 
-        private static string BuildInfiniteRunHud(GreedLastRunSnapshot snapshot, string runState)
+        private string BuildInfiniteRunHud(GreedLastRunSnapshot snapshot, string runState)
         {
             if (snapshot.Stopped)
             {
@@ -4742,19 +4891,35 @@ namespace GreedLast
                 ? $"이번 기록: {snapshot.InfiniteSectionsCleared}구간 / {snapshot.Distance:0.0}m / {snapshot.Score}점"
                 : $"무한 구간 {snapshot.ChapterProgress}/{snapshot.ChapterTarget}  위협 {snapshot.InfiniteThreatLevel}";
             string resultText = $"\n누적 {snapshot.InfiniteSectionsCleared}구간  정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}";
+            string protectionText = BuildFocusGuardHudLine(snapshot);
 
             return $"{runState}  {sectionText}\n"
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
                 + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + protectionText
                 + BuildRunGuideLine(snapshot)
                 + resultText;
+        }
+
+        private string BuildFocusGuardHudLine(GreedLastRunSnapshot snapshot)
+        {
+            if (!IsFocusGuardSnapshot(snapshot) || BuildBeatMarkerFocusGuardImpact() <= 0f)
+            {
+                return string.Empty;
+            }
+
+            return "보호 집중 보호 발동 - 체력 피해 없음\n";
         }
 
         private static string BuildRunGuideLine(GreedLastRunSnapshot snapshot)
         {
             string line = $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}";
-            if (!string.IsNullOrEmpty(snapshot.MissReason))
+            if (IsFocusGuardSnapshot(snapshot))
+            {
+                line += "  보호 발동";
+            }
+            else if (!string.IsNullOrEmpty(snapshot.MissReason))
             {
                 line += "  실수 " + FormatMissReason(snapshot.MissReason);
             }
@@ -4922,6 +5087,11 @@ namespace GreedLast
 
         private static string BuildSelectedSaveSlotButtonSummary(GreedLastStateSnapshot snapshot)
         {
+            if (!HasAnySaveSlotOccupied(snapshot))
+            {
+                return "없음";
+            }
+
             int slotNumber = snapshot.SelectedSaveSlotIndex + 1;
             string label = snapshot.SaveSlotLabels != null
                 && snapshot.SelectedSaveSlotIndex >= 0
@@ -4936,8 +5106,45 @@ namespace GreedLast
             {
                 label = "완료";
             }
+            else
+            {
+                label = "남은 " + label;
+            }
 
             return "S" + slotNumber + " " + label;
+        }
+
+        private static string BuildLobbyInfiniteButtonLabel(GreedLastStateSnapshot snapshot, string selectedSlotSummary)
+        {
+            if (snapshot.InfiniteUnlocked)
+            {
+                return "무한 " + selectedSlotSummary;
+            }
+
+            if (snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+            {
+                return "무한 조합 필요";
+            }
+
+            return "무한모드";
+        }
+
+        private static bool HasAnySaveSlotOccupied(GreedLastStateSnapshot snapshot)
+        {
+            if (snapshot.SaveSlotOccupied == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < snapshot.SaveSlotOccupied.Length; i += 1)
+            {
+                if (snapshot.SaveSlotOccupied[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool IsSelectedSaveSlotUsable(GreedLastLobbySnapshot snapshot)
@@ -5360,9 +5567,9 @@ namespace GreedLast
             comboBadgeBack.color = new Color32(35, 65, 75, 218);
             comboBadgeBack.raycastTarget = false;
 
-            Image accent = CreateRect("ComboBadgeAccent", comboBadgeRoot.transform, new Vector2(0f, 0f), new Vector2(0.025f, 1f), Vector2.zero, Vector2.zero).AddComponent<Image>();
-            accent.color = new Color32(255, 238, 181, 235);
-            accent.raycastTarget = false;
+            comboBadgeAccent = CreateRect("ComboBadgeAccent", comboBadgeRoot.transform, new Vector2(0f, 0f), new Vector2(0.025f, 1f), Vector2.zero, Vector2.zero).AddComponent<Image>();
+            comboBadgeAccent.color = new Color32(255, 238, 181, 235);
+            comboBadgeAccent.raycastTarget = false;
 
             comboBadgeText = CreateText(comboBadgeRoot.transform, "ComboBadgeText", string.Empty, 29, TextAnchor.MiddleCenter, FontStyle.Bold);
             comboBadgeText.rectTransform.anchorMin = Vector2.zero;
@@ -5719,6 +5926,89 @@ namespace GreedLast
             float normalized = Mathf.Clamp01(remaining / BeatMarkerMissImpactDuration);
             float age = 1f - normalized;
             return Mathf.Sin(age * Mathf.PI * 10f) * normalized * BeatMarkerMissImpactShakePixels;
+        }
+
+        private float BuildBeatMarkerFocusGuardImpact()
+        {
+            float remaining = beatMarkerFocusGuardUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerFocusGuardDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildBeatMarkerSuccessPulse()
+        {
+            float remaining = beatMarkerSuccessPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerSuccessPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildBeatMarkerGoodPulse()
+        {
+            float remaining = beatMarkerGoodPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerGoodPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildBeatMarkerComboBreakPulse()
+        {
+            float remaining = beatMarkerComboBreakPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerComboBreakPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private float BuildBeatMarkerComboTierPulse()
+        {
+            float remaining = beatMarkerComboTierPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerComboTierPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private void ApplyFocusGuardShieldBand()
+        {
+            float focusGuardImpact = BuildBeatMarkerFocusGuardImpact();
+            if (focusGuardImpact <= 0f || goodTimingBand == null || judgementLine == null)
+            {
+                return;
+            }
+
+            float lineY = judgementLine.rectTransform.anchorMin.y;
+            float halfHeight = Mathf.Lerp(0.018f, 0.055f, focusGuardImpact);
+            RectTransform bandRect = goodTimingBand.rectTransform;
+            bandRect.anchorMin = new Vector2(0.10f, Mathf.Clamp01(lineY - halfHeight));
+            bandRect.anchorMax = new Vector2(0.90f, Mathf.Clamp01(lineY + halfHeight));
+            bandRect.offsetMin = Vector2.zero;
+            bandRect.offsetMax = Vector2.zero;
+            bandRect.localScale = Vector3.one * (1f + focusGuardImpact * 0.045f);
+            goodTimingBand.color = new Color32(145, 231, 199, (byte)Mathf.RoundToInt(Mathf.Lerp(32f, 132f, focusGuardImpact)));
+
+            judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(145, 231, 199, 255), focusGuardImpact * 0.72f);
+            float currentLineScaleY = judgementLine.rectTransform.localScale.y;
+            judgementLine.rectTransform.localScale = new Vector3(1f, Mathf.Max(currentLineScaleY, 1f + focusGuardImpact * 0.56f), 1f);
         }
 
         private Color32 GetLaneJudgementPulseColor(int index)
@@ -6146,6 +6436,7 @@ namespace GreedLast
             {
                 case GreedLastJudgementResult.Success:
                     PlayClip(successClip, 0.55f);
+                    beatMarkerSuccessPulseUntil = Time.unscaledTime + BeatMarkerSuccessPulseDuration;
                     comboBadgePulseUntil = Time.unscaledTime + 0.22f;
                     bool tierFeedback = false;
                     if (snapshot.Combo >= 3)
@@ -6179,6 +6470,7 @@ namespace GreedLast
                     {
                         PlayClip(focusGuardClip, 0.50f);
                         PlayHaptic(0.045f);
+                        beatMarkerFocusGuardUntil = Time.unscaledTime + BeatMarkerFocusGuardDuration;
                         feedbackFlash.color = new Color32(145, 231, 199, 86);
                         feedbackFlashUntil = Time.unscaledTime + 0.14f;
                     }
@@ -6186,6 +6478,7 @@ namespace GreedLast
                     {
                         PlayClip(goodClip, 0.38f);
                         PlayHaptic(0.012f);
+                        beatMarkerGoodPulseUntil = Time.unscaledTime + BeatMarkerGoodPulseDuration;
                         feedbackFlash.color = new Color32(105, 168, 190, 75);
                         feedbackFlashUntil = Time.unscaledTime + 0.10f;
                     }
