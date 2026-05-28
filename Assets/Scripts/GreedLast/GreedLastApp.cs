@@ -3926,12 +3926,19 @@ namespace GreedLast
                             BuildRunLaneLabelColor(i, targetIndex, latestRunSnapshot),
                             new Color32(255, 238, 181, 255),
                             pressPulse);
+                        float exactLanePulse = i == targetIndex ? BuildExactTimingPulse() : 0f;
+                        if (exactLanePulse > 0f)
+                        {
+                            labelColor = Color32.Lerp(labelColor, new Color32(255, 248, 210, 255), exactLanePulse * 0.62f);
+                        }
+
                         if (judgementPulse > 0f)
                         {
                             labelColor = Color32.Lerp(labelColor, GetLaneJudgementPulseColor(i), judgementPulse);
                         }
 
                         laneLabelTexts[i].color = labelColor;
+                        laneLabelTexts[i].rectTransform.localScale = Vector3.one * (1f + exactLanePulse * 0.10f + pressPulse * 0.04f + judgementPulse * 0.06f);
                     }
                 }
             }
@@ -6991,6 +6998,7 @@ namespace GreedLast
                 label.resizeTextForBestFit = bestFit;
                 label.resizeTextMinSize = 20;
                 label.resizeTextMaxSize = fontSize;
+                label.rectTransform.localScale = Vector3.one;
             }
         }
 
