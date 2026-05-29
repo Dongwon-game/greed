@@ -1174,7 +1174,7 @@ namespace GreedLast
             }
 
             focus = MaxFocus;
-            judgementText = "테스트 집중 MAX - 다음 Miss에서 집중 보호를 확인할 수 있습니다.";
+            judgementText = "테스트 집중 MAX - 다음 실수에서 집중 보호를 확인할 수 있습니다.";
             Publish();
         }
 
@@ -1306,7 +1306,7 @@ namespace GreedLast
             autoFlow = true;
             nextPatternAt = now + StartBufferSeconds;
             lastTickAt = now;
-            judgementText = "GO - 함정이 내려옵니다.";
+            judgementText = "시작 - 함정이 내려옵니다.";
             Publish();
         }
 

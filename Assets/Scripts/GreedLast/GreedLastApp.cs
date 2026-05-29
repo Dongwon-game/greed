@@ -3199,6 +3199,12 @@ namespace GreedLast
 
         private void RequestShowSaveLoadoutDetail()
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard)
+            {
+                MoveRecordBoardPage(-1);
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
@@ -4089,12 +4095,13 @@ namespace GreedLast
             }
 
             SetRunMenuButtonLayout(false);
+            ResetSaveSlotUtilityButtonLayout();
 
             titleText.text = snapshot.Headline;
             subtitleText.text = "모바일 리듬 탈출 / 좌 · 중 · 우 대응";
             string detail = BuildDetail(snapshot);
             detailText.text = detail;
-            debugText.text = $"state: {snapshot.State}\nrequestId: {snapshot.RequestId}\nblock: {snapshot.BlockReason}";
+            debugText.text = $"상태: {FormatDebugState(snapshot.State)}\n요청: {snapshot.RequestId}\n차단: {FormatDebugBlock(snapshot.BlockReason)}";
 
             bool lobbyLike = snapshot.State == GreedLastScreenState.LobbyReady
                 || snapshot.State == GreedLastScreenState.ReSyncPending;
@@ -4158,7 +4165,7 @@ namespace GreedLast
             retryButton.gameObject.SetActive(snapshot.RetryVisible || snapshot.State == GreedLastScreenState.ConnectBlocked);
             nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike);
             returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike);
-            saveSlotDetailButton.gameObject.SetActive(saveDraftLike);
+            saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
             saveSlotModeText.gameObject.SetActive(saveDraftLike);
@@ -4198,7 +4205,7 @@ namespace GreedLast
             bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
             nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
             returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
-            saveSlotDetailButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired;
+            saveSlotDetailButton.interactable = recordBoardLike || (saveDraftLike && !snapshot.SaveSlotChoiceRequired);
             saveSlotRenameButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             saveSlotDeleteButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             pauseButton.interactable = runLike;
@@ -4293,6 +4300,7 @@ namespace GreedLast
                 UpdateDefaultLaneLabels();
             }
 
+            SetButtonLabel(retryButton, "동기화 재시도");
             if (lobbyLike)
             {
                 string selectedSlotSummary = BuildSelectedSaveSlotButtonSummary(snapshot);
@@ -4305,7 +4313,9 @@ namespace GreedLast
             }
             else if (recordBoardLike)
             {
+                SetRecordBoardButtonLayout();
                 SetButtonLabel(nextPatternButton, "다음: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex + 1).Replace("\n", " "));
+                SetButtonLabel(saveSlotDetailButton, "이전: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex - 1).Replace("\n", " "));
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (infinitePrepLike)
@@ -4426,12 +4436,25 @@ namespace GreedLast
 
             if (pauseMenuTitleText != null)
             {
-                pauseMenuTitleText.text = snapshot.InfiniteMode ? "무한모드 메뉴" : "일시정지 메뉴";
+                pauseMenuTitleText.text = snapshot.ResumeCountdownActive
+                    ? "재개 준비"
+                    : snapshot.InfiniteMode ? "무한모드 메뉴" : "일시정지 메뉴";
             }
 
             if (pauseMenuBodyText != null)
             {
-                pauseMenuBodyText.text = "ESC 또는 재개로 이어가기\n로비로 돌아가면 현재 런은 중단됩니다.";
+                if (snapshot.ResumeCountdownActive)
+                {
+                    pauseMenuBodyText.text = "카운트 후 함정이 다시 내려옵니다.\n입력은 재개 직후부터 받습니다.";
+                }
+                else if (snapshot.StartCountdownActive)
+                {
+                    pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다.";
+                }
+                else
+                {
+                    pauseMenuBodyText.text = "ESC 또는 재개로 이어가기\n로비로 돌아가면 현재 런은 중단됩니다.";
+                }
             }
         }
 
@@ -4472,6 +4495,18 @@ namespace GreedLast
             }
 
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
+            SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
+        }
+
+        private void ResetSaveSlotUtilityButtonLayout()
+        {
+            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.468f, 230f, 60f);
+        }
+
+        private void SetRecordBoardButtonLayout()
+        {
+            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.315f, 0.155f, 300f, 86f);
+            SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.685f, 0.155f, 300f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
         }
 
@@ -5054,6 +5089,56 @@ namespace GreedLast
                 || detail == "피라미드 입구 동기화 완료";
         }
 
+        private static string FormatDebugState(GreedLastScreenState state)
+        {
+            switch (state)
+            {
+                case GreedLastScreenState.BootInit:
+                    return "부팅";
+                case GreedLastScreenState.ConnectChecking:
+                    return "연결 확인";
+                case GreedLastScreenState.ConnectBlocked:
+                    return "진입 보류";
+                case GreedLastScreenState.LobbyLoading:
+                    return "로비 동기화";
+                case GreedLastScreenState.LobbyReady:
+                    return "로비 준비";
+                case GreedLastScreenState.ReSyncPending:
+                    return "재동기화";
+                case GreedLastScreenState.RunCoreTest:
+                    return "일반 런";
+                case GreedLastScreenState.SaveLoadoutDraft:
+                    return "저장 조합";
+                case GreedLastScreenState.InfiniteRun:
+                    return "무한 런";
+                case GreedLastScreenState.InfiniteRecordBoard:
+                    return "기록 보드";
+                case GreedLastScreenState.InfiniteStartReady:
+                    return "무한 준비";
+                case GreedLastScreenState.InfiniteLoadoutSelect:
+                    return "무한 조합";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string FormatDebugBlock(GreedLastConnectBlockReason reason)
+        {
+            switch (reason)
+            {
+                case GreedLastConnectBlockReason.NetworkUnavailable:
+                    return "네트워크";
+                case GreedLastConnectBlockReason.Maintenance:
+                    return "점검";
+                case GreedLastConnectBlockReason.VersionMismatch:
+                    return "버전";
+                case GreedLastConnectBlockReason.SessionInvalid:
+                    return "세션";
+                default:
+                    return "없음";
+            }
+        }
+
         private static string BuildLobbyRecordButtonLabel(string detail)
         {
             if (string.IsNullOrEmpty(detail))
@@ -5396,7 +5481,7 @@ namespace GreedLast
             saveLoadoutButton = CreateButton(rootPanel.transform, "SaveLoadoutButton", "저장 조합");
             infiniteButton = CreateButton(rootPanel.transform, "InfiniteButton", "무한모드");
             infiniteRecordButton = CreateButton(rootPanel.transform, "InfiniteRecordButton", "무한 기록");
-            retryButton = CreateButton(rootPanel.transform, "RetryButton", "Retry Sync");
+            retryButton = CreateButton(rootPanel.transform, "RetryButton", "동기화 재시도");
             debugConnectionButton = CreateButton(rootPanel.transform, "DebugConnectionButton", "연결 전환");
             nextPatternButton = CreateButton(rootPanel.transform, "NextPatternButton", "자동 시작");
             returnLobbyButton = CreateButton(rootPanel.transform, "ReturnLobbyButton", "로비로");
@@ -6606,7 +6691,7 @@ namespace GreedLast
                 return "1";
             }
 
-            return "GO";
+            return "시작";
         }
 
         private static Color32 GetJudgementFeedbackColor(GreedLastJudgementResult result)
