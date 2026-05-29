@@ -354,6 +354,7 @@ namespace GreedLast
             string missReason,
             int score,
             int health,
+            int maxHealth,
             int combo,
             int focus,
             int maxFocus,
@@ -400,6 +401,7 @@ namespace GreedLast
             MissReason = missReason ?? string.Empty;
             Score = score;
             Health = health;
+            MaxHealth = Mathf.Max(1, maxHealth);
             Combo = combo;
             Focus = focus;
             MaxFocus = maxFocus;
@@ -447,6 +449,7 @@ namespace GreedLast
         public string MissReason { get; }
         public int Score { get; }
         public int Health { get; }
+        public int MaxHealth { get; }
         public int Combo { get; }
         public int Focus { get; }
         public int MaxFocus { get; }
@@ -534,6 +537,7 @@ namespace GreedLast
         private int patternIndex;
         private int score;
         private int health = MaxHealth;
+        private int maxHealthThisRun = MaxHealth;
         private int combo;
         private int focus;
         private int maxCombo;
@@ -636,6 +640,7 @@ namespace GreedLast
         {
             score = 0;
             health = MaxHealth;
+            maxHealthThisRun = MaxHealth;
             combo = 0;
             focus = 0;
             ResetRunStats();
@@ -677,6 +682,7 @@ namespace GreedLast
         {
             score = 0;
             health = MaxHealth;
+            maxHealthThisRun = MaxHealth;
             combo = 0;
             focus = 0;
             ResetRunStats();
@@ -1446,6 +1452,7 @@ namespace GreedLast
                     {
                         goodHealthGain = 1;
                         health += goodHealthGain;
+                        maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     }
 
                     if (HasChoice(startGift, "고점 본능"))
@@ -1530,6 +1537,7 @@ namespace GreedLast
             if (devInvincible && health <= 0)
             {
                 health = MaxHealth;
+                maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                 stopped = false;
                 paused = false;
                 resumeCountdownActive = false;
@@ -1595,7 +1603,10 @@ namespace GreedLast
             if (health <= 0)
             {
                 health = MaxHealth;
+                maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
             }
+
+            maxHealthThisRun = Mathf.Max(MaxHealth, health);
 
             ResetRunStats();
             infiniteMode = false;
@@ -1670,6 +1681,7 @@ namespace GreedLast
         {
             score = 0;
             health = MaxHealth;
+            maxHealthThisRun = MaxHealth;
             combo = 0;
             focus = 0;
             ResetRunStats();
@@ -1871,12 +1883,14 @@ namespace GreedLast
                     return "집중 +1";
                 case "안정 호흡":
                     health = Mathf.Min(BonusHealthCap, health + 1);
+                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "고점 본능":
                     score += 80;
                     return "점수 +80";
                 case "안정 루트":
                     health = Mathf.Min(BonusHealthCap, health + 1);
+                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "변주 루트":
                     focus = Mathf.Min(MaxFocus, focus + 1);
@@ -1891,6 +1905,7 @@ namespace GreedLast
                     return "집중 +2";
                 case "생존 축":
                     health = Mathf.Min(BonusHealthCap, health + 1);
+                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "연쇄 축":
                     combo += 2;
@@ -1902,6 +1917,7 @@ namespace GreedLast
                     return "점수 +200";
                 case "사막의 잔상":
                     health = Mathf.Min(BonusHealthCap, health + 1);
+                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     focus = Mathf.Min(MaxFocus, focus + 1);
                     return "체력 +1 / 집중 +1";
                 case "파라오의 각인":
@@ -1939,6 +1955,7 @@ namespace GreedLast
             }
 
             health = Mathf.Clamp(health + bonus.HealthBonus, 1, BonusHealthCap);
+            maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
             focus = Mathf.Clamp(focus + bonus.FocusBonus, 0, MaxFocus);
             combo = Mathf.Clamp(combo + bonus.ComboBonus, 0, 9);
             maxCombo = Mathf.Max(maxCombo, combo);
@@ -2392,6 +2409,7 @@ namespace GreedLast
                 missReason,
                 score,
                 health,
+                maxHealthThisRun,
                 combo,
                 focus,
                 MaxFocus,

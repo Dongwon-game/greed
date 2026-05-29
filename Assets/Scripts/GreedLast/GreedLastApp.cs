@@ -4523,7 +4523,7 @@ namespace GreedLast
 
             runGaugeRoot.SetActive(true);
             TrackRunGaugeValueChanges(snapshot);
-            int healthMax = Mathf.Max(3, snapshot.Health);
+            int healthMax = Mathf.Max(1, snapshot.MaxHealth);
             float healthRatio = healthMax <= 0 ? 0f : Mathf.Clamp01(snapshot.Health / (float)healthMax);
             float focusRatio = snapshot.MaxFocus <= 0 ? 0f : Mathf.Clamp01(snapshot.Focus / (float)snapshot.MaxFocus);
             SetGaugeFill(healthGaugeFill, healthRatio);
@@ -4547,7 +4547,7 @@ namespace GreedLast
 
             if (healthGaugeText != null)
             {
-                healthGaugeText.text = "체력 " + snapshot.Health;
+                healthGaugeText.text = "체력 " + FormatHealthValue(snapshot);
             }
 
             if (focusGaugeText != null)
@@ -4906,7 +4906,7 @@ namespace GreedLast
             return $"{runState}  {chapterText}  핵:{FormatBool(snapshot.CoreRetrieved)}  저장:{FormatBool(snapshot.SaveEligible)}\n"
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
-                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {FormatHealthValue(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
                 + protectionText
                 + BuildRunGuideLine(snapshot)
                 + choiceText;
@@ -4935,7 +4935,7 @@ namespace GreedLast
             return $"{runState}  {sectionText}\n"
                 + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
                 + $"판정 {BuildCompactJudgementText(snapshot)}\n"
-                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {snapshot.Health}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
+                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {FormatHealthValue(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
                 + protectionText
                 + BuildRunGuideLine(snapshot)
                 + resultText;
@@ -7016,6 +7016,12 @@ namespace GreedLast
         private static string FormatBool(bool value)
         {
             return value ? "Y" : "N";
+        }
+
+        private static string FormatHealthValue(GreedLastRunSnapshot snapshot)
+        {
+            int maxHealth = Mathf.Max(1, snapshot.MaxHealth);
+            return snapshot.Health + "/" + maxHealth;
         }
 
         private static string FormatTimingOffset(float seconds)
