@@ -2596,7 +2596,11 @@ namespace GreedLast
                 HandleRunChannelInput(GreedLastRunChannel.Left);
                 return true;
             }
-            else if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.UpArrow))
+            else if (Input.GetKeyDown(KeyCode.S)
+                || Input.GetKeyDown(KeyCode.W)
+                || Input.GetKeyDown(KeyCode.Space)
+                || Input.GetKeyDown(KeyCode.UpArrow)
+                || Input.GetKeyDown(KeyCode.DownArrow))
             {
                 HandleRunChannelInput(GreedLastRunChannel.Center);
                 return true;
