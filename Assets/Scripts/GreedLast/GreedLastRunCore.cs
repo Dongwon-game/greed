@@ -393,6 +393,10 @@ namespace GreedLast
             float resumeCountdownRemainingSeconds,
             float startCountdownRemainingSeconds,
             float inputTimingOffsetSeconds,
+            bool hasTimingRecommendation,
+            int timingRecommendationMilliseconds,
+            int timingRecommendationSampleCount,
+            int timingRecommendationSampleTarget,
             string timingProfile)
         {
             Pattern = pattern;
@@ -440,6 +444,10 @@ namespace GreedLast
             ResumeCountdownRemainingSeconds = resumeCountdownRemainingSeconds;
             StartCountdownRemainingSeconds = startCountdownRemainingSeconds;
             InputTimingOffsetSeconds = inputTimingOffsetSeconds;
+            HasTimingRecommendation = hasTimingRecommendation;
+            TimingRecommendationMilliseconds = timingRecommendationMilliseconds;
+            TimingRecommendationSampleCount = Mathf.Max(0, timingRecommendationSampleCount);
+            TimingRecommendationSampleTarget = Mathf.Max(1, timingRecommendationSampleTarget);
             TimingProfile = timingProfile ?? string.Empty;
         }
 
@@ -491,6 +499,10 @@ namespace GreedLast
         public float StartCountdownRemainingSeconds { get; }
         public float CountdownRemainingSeconds => ResumeCountdownActive ? ResumeCountdownRemainingSeconds : StartCountdownRemainingSeconds;
         public float InputTimingOffsetSeconds { get; }
+        public bool HasTimingRecommendation { get; }
+        public int TimingRecommendationMilliseconds { get; }
+        public int TimingRecommendationSampleCount { get; }
+        public int TimingRecommendationSampleTarget { get; }
         public string TimingProfile { get; }
     }
 
@@ -2448,6 +2460,10 @@ namespace GreedLast
                 resumeCountdownRemaining,
                 startCountdownRemaining,
                 inputTimingOffsetSeconds,
+                HasTimingRecommendation,
+                TimingRecommendationMilliseconds,
+                timingSampleCount,
+                TimingRecommendationMinSamples,
                 BuildTimingProfileText()));
         }
     }

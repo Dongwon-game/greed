@@ -385,8 +385,8 @@ namespace GreedLast
         {
             bool hasCandidate = HasSaveLoadoutCandidate;
             string text = (hasCandidate
-                    ? "저장 모드\n1회 후보: " + FormatSaveCandidateSummary(lastRunRecord)
-                    : "관리 모드\n새 저장 후보 없음\n기존 슬롯만 확인 / 이름 변경 / 삭제할 수 있습니다.")
+                    ? "저장 모드 / 1회 후보\n" + FormatSaveCandidateSummary(lastRunRecord)
+                    : "관리 모드 / 저장 후보 없음\n기존 슬롯만 확인 / 이름 변경 / 삭제")
                 + "\n\n슬롯\n"
                 + BuildSaveSlotListText(showSelectedSlot, compact: true);
 
@@ -411,9 +411,9 @@ namespace GreedLast
             return hasCandidate
                 ? selectedText
                     + BuildOverwriteWarningText(selectedRecord, selectedUses)
-                    + "\n\n상세 비교에서 후보와 기존 슬롯 차이를 볼 수 있습니다."
+                    + "\n\n상세 비교: 후보와 기존 슬롯 차이 확인"
                 : selectedText
-                    + "\n\n상세 보기에서 기존 저장 조합 기록을 확인할 수 있습니다.";
+                    + "\n\n상세 보기: 기존 저장 조합 기록 확인";
         }
 
         public string BuildRunClearResultMessage(GreedLastRunRecord record)
@@ -532,7 +532,7 @@ namespace GreedLast
                     + "\n요약: " + FormatSaveSlotCompact(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                     + "\n구성: " + FormatLoadoutCombo(slotRecord)
                     + "\n타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
-                    + "\n선택: " + slotRecord.ChoiceSummary;
+                    + "\n선택: " + CompactText(slotRecord.ChoiceSummary, 42);
             }
 
             string text = slotHeader
@@ -687,23 +687,23 @@ namespace GreedLast
                     + "\n저장 조합 변경으로 사용 가능한 슬롯을 고르세요.";
             }
 
+            bool lastUse = saveLoadoutUsesRemaining[selectedSaveSlotIndex] <= 1;
             return BuildActiveLoadoutText()
                 + "\n\n무한 시작을 누르면 사용 횟수 1회가 차감됩니다."
+                + (lastUse ? "\n이번 시작 후 이 슬롯은 자동으로 비워집니다." : string.Empty)
                 + "\n저장 조합 변경으로 다른 슬롯을 고를 수 있습니다.";
         }
 
         public string BuildInfiniteLoadoutSelectText()
         {
             bool usable = IsSaveSlotUsable(selectedSaveSlotIndex);
-            return "무한모드에 사용할 저장 조합을 선택합니다."
-                + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                + "\n" + BuildSaveSlotListText(showSelectedSlot: true, compact: true)
-                + "\n\n선택 기록: " + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
-                + "\n선택 상태: " + BuildSelectedInfiniteLoadoutStatusText()
-                + "\n좌 / 중 / 우로 슬롯을 고릅니다."
+            return "선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
+                + "\n상태: " + BuildSelectedInfiniteLoadoutStatusText()
+                + "\n기록: " + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n\n슬롯\n" + BuildSaveSlotListText(showSelectedSlot: true, compact: true)
                 + (usable
-                    ? "\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
-                    : "\n선택 불가: 사용 가능한 슬롯을 고르거나 로비로 돌아가세요.");
+                    ? "\n\n선택 완료: 무한모드 준비"
+                    : "\n\n선택 불가: 사용 가능한 슬롯을 고르세요.");
         }
 
         public string BuildSelectedInfiniteLoadoutDetailText()
@@ -713,8 +713,8 @@ namespace GreedLast
             if (!record.IsValid)
             {
                 return slotHeader
-                    + "\n비어 있음"
-                    + "\n\n선택 불가: 다른 슬롯을 선택하거나 로비로 돌아가세요.";
+                    + "\n상태: 빈 슬롯"
+                    + "\n\n선택 불가: 사용 가능한 슬롯을 고르세요.";
             }
 
             return slotHeader
@@ -723,10 +723,10 @@ namespace GreedLast
                 + "\n구성: " + FormatLoadoutCombo(record)
                 + "\n타이밍: " + FormatTimingProfile(record.TimingProfile)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
-                + "\n선택: " + record.ChoiceSummary
+                + "\n선택: " + CompactText(record.ChoiceSummary, 34)
                 + (IsSaveSlotUsable(selectedSaveSlotIndex)
-                    ? "\n\n선택 완료를 누르면 이 슬롯으로 무한모드 준비에 들어갑니다."
-                    : "\n\n선택 불가: 사용 완료된 조합입니다. 새 일반 런 클리어 후 이 슬롯을 교체하세요.");
+                    ? "\n\n선택 완료: 무한모드 준비"
+                    : "\n\n선택 불가: 사용 완료된 조합입니다.");
         }
 
         public bool TryConsumeSelectedSaveLoadout(
@@ -1223,7 +1223,7 @@ namespace GreedLast
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간"
-                + $" / 위협 {threatLevel}";
+                + $" / 위협 {threatLevel} / 실수 {record.MissCount}";
         }
 
         private static string FormatInfiniteRecordListLine(GreedLastInfiniteRunRecord record)
@@ -1241,7 +1241,7 @@ namespace GreedLast
             }
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 실수 {record.MissCount}";
         }
 
         private static string FormatRunRecordDetail(GreedLastRunRecord record)
@@ -1259,7 +1259,7 @@ namespace GreedLast
                 + " / 유물 " + record.Relic
                 + $"\n점수 {record.Score}  거리 {record.Distance:0.0}m  체력 {record.Health}  집중 {record.Focus}"
                 + "\n타이밍 " + FormatTimingProfile(record.TimingProfile)
-                + "\n선택 " + record.ChoiceSummary;
+                + "\n선택 " + CompactText(record.ChoiceSummary, 46);
         }
 
         private static string FormatRunRecordCompact(GreedLastRunRecord record)
@@ -1313,7 +1313,7 @@ namespace GreedLast
                 + $"\n판정 정확 {record.SuccessCount}  보정 {record.GoodCount}  실수 {record.MissCount}"
                 + "\n타이밍 " + FormatTimingProfile(record.TimingProfile)
                 + "\n공명핵:" + FormatBool(record.CoreRetrieved) + "  마지막 실수:" + missText
-                + "\n선택 " + record.ChoiceSummary;
+                + "\n선택 " + CompactText(record.ChoiceSummary, 46);
         }
 
         private static string FormatRunAttemptListLine(GreedLastRunAttemptRecord record)
@@ -1726,6 +1726,27 @@ namespace GreedLast
             }
 
             return record.StartGift + " + " + record.PrimaryGift + " + " + record.Relic;
+        }
+
+        private static string CompactText(string value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "없음";
+            }
+
+            string compact = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            while (compact.Contains("  "))
+            {
+                compact = compact.Replace("  ", " ");
+            }
+
+            if (maxLength <= 3 || compact.Length <= maxLength)
+            {
+                return compact;
+            }
+
+            return compact.Substring(0, maxLength - 3) + "...";
         }
 
         private static string BuildOverwriteWarningText(GreedLastRunRecord record, int usesRemaining)
@@ -2432,18 +2453,7 @@ namespace GreedLast
 
         private static string BuildRecordBoardHeadline(int pageIndex)
         {
-            int page = ((pageIndex % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
-            switch (page)
-            {
-                case 1:
-                    return "일반 런 기록 2/4";
-                case 2:
-                    return "무한 기록 3/4";
-                case 3:
-                    return "무한 랭킹 4/4";
-                default:
-                    return "기록 요약 1/4";
-            }
+            return "기록 보드";
         }
 
         private void Publish(
@@ -2510,7 +2520,9 @@ namespace GreedLast
 
         private void Awake()
         {
+            QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = 60;
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
             requestGate = new GreedLastRequestGate();
             backend = new GreedLastMockBackend();
@@ -3797,6 +3809,7 @@ namespace GreedLast
         private Button[] timingOffsetButtons;
         private Button[] sfxVolumeButtons;
         private Button[] laneButtons;
+        private Button[] laneHitButtons;
         private Text[] laneLabelTexts;
         private Image[] laneImages;
         private float[] lanePressPulseUntil;
@@ -4105,7 +4118,6 @@ namespace GreedLast
             subtitleText.text = "모바일 리듬 탈출 / 좌 · 중 · 우 대응";
             string detail = BuildDetail(snapshot);
             detailText.text = detail;
-            debugText.text = $"상태: {FormatDebugState(snapshot.State)}\n요청: {snapshot.RequestId}\n차단: {FormatDebugBlock(snapshot.BlockReason)}";
 
             bool lobbyLike = snapshot.State == GreedLastScreenState.LobbyReady
                 || snapshot.State == GreedLastScreenState.ReSyncPending;
@@ -4120,6 +4132,7 @@ namespace GreedLast
             bool infinitePrepLike = snapshot.State == GreedLastScreenState.InfiniteStartReady;
             runModeActive = runLike;
             saveSlotModeActive = saveDraftLike;
+            UpdateDebugText(snapshot);
             bool lobbyNoticeLike = snapshot.State == GreedLastScreenState.LobbyReady
                 && !string.IsNullOrEmpty(detail);
             if (runGaugeRoot != null)
@@ -4137,7 +4150,7 @@ namespace GreedLast
                 comboBadgeRoot.SetActive(false);
             }
 
-            detailText.fontSize = recordBoardLike ? 26 : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
+            detailText.fontSize = recordBoardLike ? BuildRecordBoardFontSize(detail) : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
             if (recordBoardLike)
             {
                 SetAnchored(detailText.rectTransform, 0.5f, 0.55f, 920f, 640f);
@@ -4292,7 +4305,7 @@ namespace GreedLast
 
                 for (int i = 0; i < laneButtons.Length; i += 1)
                 {
-                    laneButtons[i].interactable = true;
+                    SetLaneInputInteractable(i, true);
                 }
             }
             else if (recordBoardLike)
@@ -4339,6 +4352,7 @@ namespace GreedLast
             EnsureUi();
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
+            HideDebugText();
             RenderRunHeader(snapshot);
             bool showDevTools = DevToolsEnabled;
 
@@ -4402,7 +4416,7 @@ namespace GreedLast
             SetButtonLabel(threatDownButton, "위협 -1");
             UpdateHapticsButtonLabel();
             SetButtonLabel(timingOffsetButtons[0], "빠름 +20");
-            SetButtonLabel(timingOffsetButtons[1], "추천/0");
+            SetButtonLabel(timingOffsetButtons[1], BuildTimingRecommendationButtonLabel(snapshot));
             SetButtonLabel(timingOffsetButtons[2], "늦음 -20");
             SetButtonLabel(sfxVolumeButtons[0], "소리 -");
             UpdateSfxVolumeButtonLabel();
@@ -4413,11 +4427,20 @@ namespace GreedLast
             focusMaxButton.interactable = showDevTools && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
             threatUpButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
             threatDownButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
-            hapticsButton.interactable = showDevTools;
+            hapticsButton.interactable = showDevTools || snapshot.Paused;
+            for (int i = 0; i < timingOffsetButtons.Length; i += 1)
+            {
+                timingOffsetButtons[i].interactable = !snapshot.Stopped;
+            }
+
+            for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
+            {
+                sfxVolumeButtons[i].interactable = showDevTools || snapshot.Paused;
+            }
 
             for (int i = 0; i < laneButtons.Length; i += 1)
             {
-                laneButtons[i].interactable = snapshot.ChoiceActive || (!snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive);
+                SetLaneInputInteractable(i, snapshot.ChoiceActive || (!snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive));
             }
 
             UpdateLaneLabels(snapshot);
@@ -4447,31 +4470,60 @@ namespace GreedLast
 
             if (pauseMenuBodyText != null)
             {
+                string settingsLine = BuildPauseSettingsLine(snapshot);
                 if (snapshot.ResumeCountdownActive)
                 {
-                    pauseMenuBodyText.text = "카운트 후 함정이 다시 내려옵니다.\n입력은 재개 직후부터 받습니다.";
+                    pauseMenuBodyText.text = "카운트 후 함정이 다시 내려옵니다.\n입력은 재개 직후부터 받습니다.\n" + settingsLine;
                 }
                 else if (snapshot.StartCountdownActive)
                 {
-                    pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다.";
+                    pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다.\n" + settingsLine;
                 }
                 else
                 {
-                    pauseMenuBodyText.text = "ESC 또는 재개로 이어가기\n로비로 돌아가면 현재 런은 중단됩니다.";
+                    pauseMenuBodyText.text = "ESC 또는 재개로 이어가기\n로비로 돌아가면 현재 런은 중단됩니다.\n" + settingsLine;
                 }
             }
+        }
+
+        private string BuildPauseSettingsLine(GreedLastRunSnapshot snapshot)
+        {
+            int volumePercent = Mathf.RoundToInt(sfxVolume * 100f);
+            string hapticsText = hapticsEnabled ? "ON" : "OFF";
+            string recommendationText = " / 추천 " + FormatTimingRecommendationStatus(snapshot);
+            return "설정: 소리 " + volumePercent + " / 보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds) + recommendationText + " / 진동 " + hapticsText;
+        }
+
+        private static string BuildTimingRecommendationButtonLabel(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.HasTimingRecommendation
+                ? "추천 " + FormatTimingRecommendation(snapshot)
+                : "추천 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+        }
+
+        private static string FormatTimingRecommendation(GreedLastRunSnapshot snapshot)
+        {
+            return FormatTimingOffset(snapshot.TimingRecommendationMilliseconds / 1000f);
+        }
+
+        private static string FormatTimingRecommendationStatus(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.HasTimingRecommendation
+                ? FormatTimingRecommendation(snapshot)
+                : snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
         }
 
         private void UpdateRunSideToolsForPause(GreedLastRunSnapshot snapshot, bool showDevTools)
         {
             bool showSideTools = !snapshot.Paused;
+            bool showPauseSettings = snapshot.Paused;
             pauseButton.gameObject.SetActive(showSideTools);
             devInvincibleButton.gameObject.SetActive(showDevTools && showSideTools);
             infiniteTestStopButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
             focusMaxButton.gameObject.SetActive(showDevTools && showSideTools);
             threatUpButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
             threatDownButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
-            hapticsButton.gameObject.SetActive(showDevTools && showSideTools);
+            hapticsButton.gameObject.SetActive(showPauseSettings || (showDevTools && showSideTools));
 
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
@@ -4480,12 +4532,12 @@ namespace GreedLast
 
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
             {
-                timingOffsetButtons[i].gameObject.SetActive(showSideTools);
+                timingOffsetButtons[i].gameObject.SetActive(showPauseSettings || showSideTools);
             }
 
             for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
             {
-                sfxVolumeButtons[i].gameObject.SetActive(showDevTools && showSideTools);
+                sfxVolumeButtons[i].gameObject.SetActive(showPauseSettings || (showDevTools && showSideTools));
             }
         }
 
@@ -4493,18 +4545,32 @@ namespace GreedLast
         {
             if (pauseMenu)
             {
-                SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.42f, 560f, 78f);
-                SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.355f, 420f, 70f);
+                SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.475f, 560f, 78f);
+                SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.415f, 420f, 64f);
+                SetAnchored(sfxVolumeButtons[0].GetComponent<RectTransform>(), 0.37f, 0.35f, 180f, 58f);
+                SetAnchored(sfxVolumeButtons[1].GetComponent<RectTransform>(), 0.5f, 0.35f, 220f, 58f);
+                SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.63f, 0.35f, 180f, 58f);
+                SetAnchored(timingOffsetButtons[0].GetComponent<RectTransform>(), 0.37f, 0.29f, 180f, 58f);
+                SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.5f, 0.29f, 220f, 58f);
+                SetAnchored(timingOffsetButtons[2].GetComponent<RectTransform>(), 0.63f, 0.29f, 180f, 58f);
+                SetAnchored(hapticsButton.GetComponent<RectTransform>(), 0.5f, 0.23f, 250f, 58f);
                 return;
             }
 
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
+            SetAnchored(hapticsButton.GetComponent<RectTransform>(), 0.91f, 0.06f, 180f, 54f);
+            SetAnchored(timingOffsetButtons[0].GetComponent<RectTransform>(), 0.91f, 0.465f, 180f, 54f);
+            SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.91f, 0.42f, 180f, 54f);
+            SetAnchored(timingOffsetButtons[2].GetComponent<RectTransform>(), 0.91f, 0.375f, 180f, 54f);
+            SetAnchored(sfxVolumeButtons[0].GetComponent<RectTransform>(), 0.91f, 0.195f, 180f, 54f);
+            SetAnchored(sfxVolumeButtons[1].GetComponent<RectTransform>(), 0.91f, 0.15f, 180f, 54f);
+            SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.91f, 0.105f, 180f, 54f);
         }
 
         private void ResetSaveSlotUtilityButtonLayout()
         {
-            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.468f, 230f, 60f);
+            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.475f, 250f, 66f);
         }
 
         private void SetRecordBoardButtonLayout()
@@ -5087,10 +5153,67 @@ namespace GreedLast
             return snapshot.Detail;
         }
 
+        private void UpdateDebugText(GreedLastStateSnapshot snapshot)
+        {
+            bool showDebugText = DevToolsEnabled
+                && (snapshot.State == GreedLastScreenState.ConnectBlocked
+                    || snapshot.State == GreedLastScreenState.ReSyncPending);
+            if (debugText != null)
+            {
+                debugText.gameObject.SetActive(showDebugText);
+                debugText.text = showDebugText
+                    ? $"상태: {FormatDebugState(snapshot.State)}\n요청: {snapshot.RequestId}\n차단: {FormatDebugBlock(snapshot.BlockReason)}"
+                    : string.Empty;
+            }
+        }
+
+        private void HideDebugText()
+        {
+            if (debugText == null)
+            {
+                return;
+            }
+
+            debugText.text = string.Empty;
+            debugText.gameObject.SetActive(false);
+        }
+
         private static bool ShouldHideLobbyDetail(string detail)
         {
             return string.IsNullOrEmpty(detail)
                 || detail == "피라미드 입구 동기화 완료";
+        }
+
+        private static int BuildRecordBoardFontSize(string detail)
+        {
+            int lineCount = 1;
+            if (!string.IsNullOrEmpty(detail))
+            {
+                for (int i = 0; i < detail.Length; i += 1)
+                {
+                    if (detail[i] == '\n')
+                    {
+                        lineCount += 1;
+                    }
+                }
+            }
+
+            if (lineCount <= 4)
+            {
+                return 31;
+            }
+
+            if (lineCount <= 7)
+            {
+                return 28;
+            }
+
+            if (lineCount <= 10)
+            {
+                return 25;
+            }
+
+            return 22;
         }
 
         private static string FormatDebugState(GreedLastScreenState state)
@@ -5290,36 +5413,40 @@ namespace GreedLast
         {
             if (snapshot.SaveSlotDeleteConfirmationPending)
             {
-                return "삭제 확인\n다시 누르면 삭제";
+                return BuildSelectedSlotModePrefix(snapshot, "삭제")
+                    + "\n다시 누르면 삭제";
             }
 
             if (snapshot.SaveSlotRenameConfirmationPending)
             {
-                return "이름 확인\n다시 누르면 적용";
+                return BuildSelectedSlotModePrefix(snapshot, "이름")
+                    + "\n다시 누르면 적용";
             }
 
             if (snapshot.SaveSlotOverwriteConfirmationPending)
             {
                 return snapshot.SaveSlotDetailViewActive
-                    ? "상세 비교\n덮어쓰기 대기"
-                    : "덮어쓰기 확인\n다시 누르면 교체";
+                    ? BuildSelectedSlotModePrefix(snapshot, "비교") + "\n덮어쓰기 대기"
+                    : BuildSelectedSlotModePrefix(snapshot, "교체") + "\n다시 누르면 교체";
             }
 
             if (snapshot.SaveSlotDetailViewActive)
             {
                 if (infiniteLoadoutSelectLike)
                 {
-                    return "조합 상세\n목록 보기";
+                    return BuildSelectedSlotModePrefix(snapshot, "상세")
+                        + "\n목록 보기";
                 }
 
                 return snapshot.SaveLoadoutCandidateAvailable
-                    ? "상세 비교\n목록 보기 가능"
-                    : "상세 보기\n목록 보기 가능";
+                    ? BuildSelectedSlotModePrefix(snapshot, "비교") + "\n목록 보기"
+                    : BuildSelectedSlotModePrefix(snapshot, "상세") + "\n목록 보기";
             }
 
             if (infiniteLoadoutSelectLike)
             {
-                return "무한 조합\n슬롯 선택";
+                return BuildSelectedSlotModePrefix(snapshot, "무한")
+                    + "\n슬롯 선택";
             }
 
             if (snapshot.SaveSlotChoiceRequired)
@@ -5332,13 +5459,25 @@ namespace GreedLast
             if (!canSaveCandidate)
             {
                 return selectedSaveSlotOccupied
-                    ? "관리 작업\n저장 후보 없음"
-                    : "관리 작업\n빈 슬롯";
+                    ? BuildSelectedSlotModePrefix(snapshot, "관리") + "\n저장 후보 없음"
+                    : BuildSelectedSlotModePrefix(snapshot, "관리") + "\n빈 슬롯";
             }
 
             return selectedSaveSlotOccupied
-                ? "저장 작업\n교체 대상"
-                : "저장 작업\n바로 저장";
+                ? BuildSelectedSlotModePrefix(snapshot, "저장") + "\n교체 대상"
+                : BuildSelectedSlotModePrefix(snapshot, "저장") + "\n바로 저장";
+        }
+
+        private static string BuildSelectedSlotModePrefix(GreedLastStateSnapshot snapshot, string mode)
+        {
+            int slotNumber = snapshot.SelectedSaveSlotIndex + 1;
+            int slotCount = snapshot.SaveSlotLabels == null ? 0 : snapshot.SaveSlotLabels.Length;
+            if (slotNumber < 1 || (slotCount > 0 && slotNumber > slotCount))
+            {
+                return mode + " 작업";
+            }
+
+            return "S" + slotNumber + " " + mode;
         }
 
         private void ApplyButtonTones(GreedLastStateSnapshot snapshot, bool saveDraftLike)
@@ -5521,9 +5660,9 @@ namespace GreedLast
             SetAnchored(debugConnectionButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
-            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.468f, 230f, 60f);
-            SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.895f, 0.413f, 230f, 60f);
-            SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.895f, 0.358f, 230f, 60f);
+            SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.475f, 250f, 66f);
+            SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.895f, 0.407f, 250f, 66f);
+            SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.895f, 0.339f, 250f, 66f);
             SetAnchored(pauseButton.GetComponent<RectTransform>(), 0.91f, 0.735f, 180f, 54f);
             SetAnchored(devInvincibleButton.GetComponent<RectTransform>(), 0.91f, 0.69f, 180f, 54f);
             SetAnchored(infiniteTestStopButton.GetComponent<RectTransform>(), 0.91f, 0.645f, 180f, 54f);
@@ -5610,7 +5749,7 @@ namespace GreedLast
             pauseMenuBackdrop.color = new Color32(5, 8, 9, 178);
             pauseMenuBackdrop.raycastTarget = false;
 
-            GameObject panel = CreateRect("PauseMenuPanel", pauseMenuOverlay.transform, new Vector2(0.5f, 0.56f), new Vector2(0.5f, 0.56f), new Vector2(0.5f, 0.5f), new Vector2(760f, 820f));
+            GameObject panel = CreateRect("PauseMenuPanel", pauseMenuOverlay.transform, new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.5f), new Vector2(760f, 1120f));
             pauseMenuPanel = panel.AddComponent<Image>();
             pauseMenuPanel.color = new Color32(18, 27, 30, 236);
             pauseMenuPanel.raycastTarget = false;
@@ -5620,11 +5759,11 @@ namespace GreedLast
             panelGlow.raycastTarget = false;
 
             pauseMenuTitleText = CreateText(panel.transform, "PauseMenuTitle", "일시정지 메뉴", 52, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(pauseMenuTitleText.rectTransform, 0.5f, 0.72f, 650f, 90f);
+            SetAnchored(pauseMenuTitleText.rectTransform, 0.5f, 0.74f, 650f, 90f);
             pauseMenuTitleText.color = new Color32(237, 239, 231, 255);
 
             pauseMenuBodyText = CreateText(panel.transform, "PauseMenuBody", string.Empty, 29, TextAnchor.MiddleCenter, FontStyle.Normal);
-            SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.58f, 650f, 130f);
+            SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.61f, 650f, 160f);
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
         }
 
@@ -5727,10 +5866,21 @@ namespace GreedLast
             laneMissShakeUntil = new float[3];
             laneJudgementPulseColors = new Color32[3];
             laneButtons = new Button[3];
+            laneHitButtons = new Button[3];
             laneLabelTexts = new Text[3];
             for (int i = 0; i < laneImages.Length; i += 1)
             {
                 float x = 0.2f + i * 0.3f;
+                int capturedIndex = i;
+
+                GameObject hitZone = CreateRect("LaneHitZone_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(360f, 580f));
+                Image hitImage = hitZone.AddComponent<Image>();
+                hitImage.color = new Color32(255, 255, 255, 0);
+                Button hitButton = hitZone.AddComponent<Button>();
+                hitButton.transition = Selectable.Transition.None;
+                hitButton.onClick.AddListener(() => runChannelRequested?.Invoke((GreedLastRunChannel)(capturedIndex + 1)));
+                laneHitButtons[i] = hitButton;
+
                 GameObject lane = CreateRect("Lane_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(195f, 520f));
                 Image laneImage = lane.AddComponent<Image>();
                 laneImage.color = new Color32(32, 42, 49, 255);
@@ -5742,7 +5892,6 @@ namespace GreedLast
                 laneColors.pressedColor = new Color32(205, 166, 70, 255);
                 laneColors.disabledColor = new Color32(66, 71, 72, 180);
                 laneButton.colors = laneColors;
-                int capturedIndex = i;
                 laneButton.onClick.AddListener(() => runChannelRequested?.Invoke((GreedLastRunChannel)(capturedIndex + 1)));
                 laneButtons[i] = laneButton;
 
@@ -5772,6 +5921,7 @@ namespace GreedLast
             GameObject line = CreateRect("JudgementLine", laneRoot.transform, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.22f), new Vector2(0.5f, 0.5f), new Vector2(0f, 18f));
             judgementLine = line.AddComponent<Image>();
             judgementLine.color = new Color32(255, 238, 181, 205);
+            judgementLine.raycastTarget = false;
 
             GameObject dangerBand = CreateRect("LaneDangerBand", laneRoot.transform, new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.88f), Vector2.zero, Vector2.zero);
             laneDangerBand = dangerBand.AddComponent<Image>();
@@ -5782,6 +5932,7 @@ namespace GreedLast
             GameObject marker = CreateRect("BeatMarker", laneRoot.transform, new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.5f), new Vector2(112f, 112f));
             beatMarker = marker.AddComponent<Image>();
             beatMarker.color = new Color32(255, 238, 181, 255);
+            beatMarker.raycastTarget = false;
 
             GameObject glow = CreateRect("TrapGlow", laneRoot.transform, new Vector2(0.5f, 0.86f), new Vector2(0.5f, 0.86f), new Vector2(0.5f, 0.5f), new Vector2(190f, 190f));
             trapGlow = glow.AddComponent<Image>();
@@ -7392,7 +7543,7 @@ namespace GreedLast
             {
                 for (int i = 0; i < laneButtons.Length; i += 1)
                 {
-                    laneButtons[i].interactable = true;
+                    SetLaneInputInteractable(i, true);
                 }
             }
         }
@@ -7432,8 +7583,21 @@ namespace GreedLast
             {
                 for (int i = 0; i < laneButtons.Length; i += 1)
                 {
-                    laneButtons[i].interactable = false;
+                    SetLaneInputInteractable(i, false);
                 }
+            }
+        }
+
+        private void SetLaneInputInteractable(int laneIndex, bool interactable)
+        {
+            if (laneButtons != null && laneIndex >= 0 && laneIndex < laneButtons.Length && laneButtons[laneIndex] != null)
+            {
+                laneButtons[laneIndex].interactable = interactable;
+            }
+
+            if (laneHitButtons != null && laneIndex >= 0 && laneIndex < laneHitButtons.Length && laneHitButtons[laneIndex] != null)
+            {
+                laneHitButtons[laneIndex].interactable = interactable;
             }
         }
 
