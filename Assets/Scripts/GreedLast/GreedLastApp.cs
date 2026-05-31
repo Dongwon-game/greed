@@ -21,6 +21,7 @@ namespace GreedLast
         InfiniteRecordBoard = 10,
         InfiniteStartReady = 11,
         InfiniteLoadoutSelect = 12,
+        GrowthBoard = 13,
     }
 
     public enum GreedLastRequestKind
@@ -66,6 +67,7 @@ namespace GreedLast
             bool firstSaveCompleted,
             bool saveLoadoutUnlocked,
             bool infiniteUnlocked,
+            int growthPoints,
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
@@ -89,6 +91,7 @@ namespace GreedLast
             FirstSaveCompleted = firstSaveCompleted;
             SaveLoadoutUnlocked = saveLoadoutUnlocked;
             InfiniteUnlocked = infiniteUnlocked;
+            GrowthPoints = Mathf.Max(0, growthPoints);
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
@@ -113,6 +116,7 @@ namespace GreedLast
         public bool FirstSaveCompleted { get; }
         public bool SaveLoadoutUnlocked { get; }
         public bool InfiniteUnlocked { get; }
+        public int GrowthPoints { get; }
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
@@ -149,6 +153,7 @@ namespace GreedLast
             bool firstSaveCompleted,
             bool saveLoadoutUnlocked,
             bool infiniteUnlocked,
+            int growthPoints,
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
@@ -160,6 +165,7 @@ namespace GreedLast
             FirstSaveCompleted = firstSaveCompleted;
             SaveLoadoutUnlocked = saveLoadoutUnlocked;
             InfiniteUnlocked = infiniteUnlocked;
+            GrowthPoints = Mathf.Max(0, growthPoints);
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
@@ -172,6 +178,7 @@ namespace GreedLast
         public bool FirstSaveCompleted { get; }
         public bool SaveLoadoutUnlocked { get; }
         public bool InfiniteUnlocked { get; }
+        public int GrowthPoints { get; }
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
@@ -229,6 +236,7 @@ namespace GreedLast
         private const int InfiniteRankingCount = 5;
         private const int RecordBoardPageCount = 4;
         private const int MaxSaveLoadoutUses = 2;
+        private const int GrowthMaxLevel = 3;
         private const int SaveDataVersion = 1;
         private const string PlayerPrefsKey = "GreedLast.MockBackend.SaveData.v1";
         private static readonly string[] SaveLoadoutNamePresets =
@@ -267,6 +275,10 @@ namespace GreedLast
         private int normalFailCount;
         private int normalAbandonCount;
         private int infiniteRunCount;
+        private int growthPoints;
+        private int growthSurvivalLevel;
+        private int growthFocusLevel;
+        private int growthTimingLevel;
 
         public GreedLastMockBackend()
         {
@@ -275,6 +287,9 @@ namespace GreedLast
 
         public int RecordBoardPages => RecordBoardPageCount;
         public bool HasSaveLoadoutCandidate => saveLoadoutCandidateAvailable && lastRunRecord.IsValid;
+        public int GrowthSurvivalLevel => growthSurvivalLevel;
+        public int GrowthFocusLevel => growthFocusLevel;
+        public int GrowthTimingLevel => growthTimingLevel;
 
         public GreedLastConnectResult CheckConnect()
         {
@@ -316,6 +331,7 @@ namespace GreedLast
                 firstSaveCompleted,
                 saveLoadoutUnlocked,
                 hasUsableSaveSlot,
+                growthPoints,
                 selectedSaveSlotIndex,
                 BuildSaveSlotLabelSummaries(),
                 BuildSaveSlotUsableFlags(),
@@ -353,6 +369,7 @@ namespace GreedLast
 
                 InsertNormalRanking(record);
                 normalClearCount += 1;
+                AddGrowthPoints(3);
                 SavePersistedData();
             }
 
@@ -377,6 +394,7 @@ namespace GreedLast
                 normalAbandonCount += 1;
             }
 
+            AddGrowthPoints(BuildNormalAttemptGrowthReward(record));
             SavePersistedData();
             return true;
         }
@@ -429,6 +447,7 @@ namespace GreedLast
 
             return "탈출 성공 / 기록 저장\n"
                 + FormatRunRecordBoardLine(record)
+                + "\n성장 포인트 +3 / 보유 " + growthPoints
                 + "\n저장 후보: " + record.LoadoutName
                 + "\n저장 기회: 확정하거나 건너뛰면 사라짐"
                 + "\n비교: " + BuildLatestNormalComparisonText()
@@ -444,6 +463,7 @@ namespace GreedLast
 
             return "탈출 성공 / 기록 저장"
                 + "\n" + FormatRunRecordBoardLine(record)
+                + "\n성장 포인트 +3 / 보유 " + growthPoints
                 + "\n저장 조합 저장은 건너뛰었습니다."
                 + "\n다음: 기록 보기에서 클리어 기록 확인";
         }
@@ -457,6 +477,7 @@ namespace GreedLast
 
             return FormatRunAttemptOutcome(record.Outcome) + " 기록 저장\n"
                 + FormatRunAttemptListLine(record)
+                + FormatGrowthRewardLine(BuildNormalAttemptGrowthReward(record))
                 + "\n다음: 기록 보기에서 실패/중단 확인";
         }
 
@@ -794,8 +815,127 @@ namespace GreedLast
 
             InsertInfiniteRanking(record);
             infiniteRunCount += 1;
+            AddGrowthPoints(BuildInfiniteGrowthReward(record));
             SavePersistedData();
             return true;
+        }
+
+        public string BuildGrowthBoardText()
+        {
+            return "성장 포인트 " + growthPoints
+                + "\n\n좌 생존 보정 " + BuildGrowthTrackStatus(growthSurvivalLevel, "시작 체력 +" + growthSurvivalLevel)
+                + "\n중 집중 보정 " + BuildGrowthTrackStatus(growthFocusLevel, "시작 집중 +" + growthFocusLevel)
+                + "\n우 타이밍 보정 " + BuildGrowthTrackStatus(growthTimingLevel, "정확 +" + (growthTimingLevel * 5) + "ms / 보정 +" + (growthTimingLevel * 12) + "ms")
+                + "\n\n일반 런 클리어 +3 / 실패 +1 / 무한 기록 +1~3"
+                + "\n좌 · 중 · 우로 성장 축을 올립니다.";
+        }
+
+        public GreedLastLobbySnapshot UpgradeGrowth(GreedLastRunChannel channel, out string notice)
+        {
+            int trackIndex = channel == GreedLastRunChannel.Left
+                ? 0
+                : channel == GreedLastRunChannel.Center ? 1 : 2;
+            string trackName = GetGrowthTrackName(trackIndex);
+            int level = GetGrowthTrackLevel(trackIndex);
+            if (level >= GrowthMaxLevel)
+            {
+                notice = trackName + "은 이미 최대 단계입니다.";
+                return LoadLobby();
+            }
+
+            int cost = BuildGrowthUpgradeCost(level);
+            if (growthPoints < cost)
+            {
+                notice = trackName + " 성장 포인트 부족\n필요 " + cost + " / 보유 " + growthPoints;
+                return LoadLobby();
+            }
+
+            growthPoints -= cost;
+            SetGrowthTrackLevel(trackIndex, level + 1);
+            SavePersistedData();
+            notice = trackName + " Lv." + (level + 1) + " 적용";
+            return LoadLobby();
+        }
+
+        private void AddGrowthPoints(int amount)
+        {
+            growthPoints = Mathf.Max(0, growthPoints + Mathf.Max(0, amount));
+        }
+
+        private static int BuildNormalAttemptGrowthReward(GreedLastRunAttemptRecord record)
+        {
+            return record.IsValid && record.Outcome == GreedLastRunAttemptOutcome.Failed ? 1 : 0;
+        }
+
+        private static int BuildInfiniteGrowthReward(GreedLastInfiniteRunRecord record)
+        {
+            return record.IsValid ? 1 + Mathf.Min(2, record.SectionsCleared / 2) : 0;
+        }
+
+        private string FormatGrowthRewardLine(int amount)
+        {
+            return amount > 0
+                ? "\n성장 포인트 +" + amount + " / 보유 " + growthPoints
+                : string.Empty;
+        }
+
+        private static int BuildGrowthUpgradeCost(int currentLevel)
+        {
+            return Mathf.Clamp(currentLevel + 1, 1, GrowthMaxLevel);
+        }
+
+        private static string BuildGrowthTrackStatus(int level, string effectText)
+        {
+            return "Lv." + level + "/" + GrowthMaxLevel
+                + " / " + effectText
+                + (level >= GrowthMaxLevel ? " / MAX" : " / 다음 " + BuildGrowthUpgradeCost(level) + "pt");
+        }
+
+        private int GetGrowthTrackLevel(int trackIndex)
+        {
+            switch (trackIndex)
+            {
+                case 0:
+                    return growthSurvivalLevel;
+                case 1:
+                    return growthFocusLevel;
+                case 2:
+                    return growthTimingLevel;
+                default:
+                    return 0;
+            }
+        }
+
+        private void SetGrowthTrackLevel(int trackIndex, int level)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthMaxLevel);
+            switch (trackIndex)
+            {
+                case 0:
+                    growthSurvivalLevel = safeLevel;
+                    break;
+                case 1:
+                    growthFocusLevel = safeLevel;
+                    break;
+                case 2:
+                    growthTimingLevel = safeLevel;
+                    break;
+            }
+        }
+
+        private static string GetGrowthTrackName(int trackIndex)
+        {
+            switch (trackIndex)
+            {
+                case 0:
+                    return "생존 보정";
+                case 1:
+                    return "집중 보정";
+                case 2:
+                    return "타이밍 보정";
+                default:
+                    return "성장";
+            }
         }
 
         public string BuildInfiniteRunResultMessage(GreedLastInfiniteRunRecord record)
@@ -812,6 +952,7 @@ namespace GreedLast
                 + "\n이번: " + FormatInfiniteRecordCompact(record)
                 + "\n최고: " + bestText
                 + "\n비교: " + BuildInfiniteRunResultComparisonText(record)
+                + FormatGrowthRewardLine(BuildInfiniteGrowthReward(record))
                 + "\n다음: 기록 보기에서 무한 기록 확인";
         }
 
@@ -1848,6 +1989,10 @@ namespace GreedLast
             normalFailCount = Mathf.Max(0, data.normalFailCount);
             normalAbandonCount = Mathf.Max(0, data.normalAbandonCount);
             infiniteRunCount = Mathf.Max(0, data.infiniteRunCount);
+            growthPoints = Mathf.Max(0, data.growthPoints);
+            growthSurvivalLevel = Mathf.Clamp(data.growthSurvivalLevel, 0, GrowthMaxLevel);
+            growthFocusLevel = Mathf.Clamp(data.growthFocusLevel, 0, GrowthMaxLevel);
+            growthTimingLevel = Mathf.Clamp(data.growthTimingLevel, 0, GrowthMaxLevel);
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
                 normalRunRankings[i] = GreedLastRunRecord.Empty;
@@ -1998,6 +2143,10 @@ namespace GreedLast
                 bestInfiniteRunRecord = ToData(bestInfiniteRunRecord),
                 infiniteRunRankings = new InfiniteRecordSaveData[InfiniteRankingCount],
                 infiniteRunCount = infiniteRunCount,
+                growthPoints = Mathf.Max(0, growthPoints),
+                growthSurvivalLevel = Mathf.Clamp(growthSurvivalLevel, 0, GrowthMaxLevel),
+                growthFocusLevel = Mathf.Clamp(growthFocusLevel, 0, GrowthMaxLevel),
+                growthTimingLevel = Mathf.Clamp(growthTimingLevel, 0, GrowthMaxLevel),
             };
 
             for (int i = 0; i < data.normalRunRankings.Length; i += 1)
@@ -2191,6 +2340,10 @@ namespace GreedLast
             public InfiniteRecordSaveData bestInfiniteRunRecord;
             public InfiniteRecordSaveData[] infiniteRunRankings;
             public int infiniteRunCount;
+            public int growthPoints;
+            public int growthSurvivalLevel;
+            public int growthFocusLevel;
+            public int growthTimingLevel;
         }
 
         [Serializable]
@@ -2403,6 +2556,14 @@ namespace GreedLast
             Publish(BuildRecordBoardHeadline(pageIndex), detail, coreActionsEnabled: true, retryVisible: false);
         }
 
+        public void SetGrowthBoard(GreedLastLobbySnapshot snapshot, string detail)
+        {
+            lobbySnapshot = snapshot;
+            CurrentState = GreedLastScreenState.GrowthBoard;
+            BlockReason = GreedLastConnectBlockReason.None;
+            Publish("성장 보정", detail, coreActionsEnabled: true, retryVisible: false);
+        }
+
         private static string BuildSaveLoadoutHeadline(
             bool saveLoadoutCandidateAvailable,
             bool saveSlotOverwriteConfirmationPending,
@@ -2479,6 +2640,7 @@ namespace GreedLast
                 lobbySnapshot.FirstSaveCompleted,
                 lobbySnapshot.SaveLoadoutUnlocked,
                 lobbySnapshot.InfiniteUnlocked,
+                lobbySnapshot.GrowthPoints,
                 lobbySnapshot.SelectedSaveSlotIndex,
                 lobbySnapshot.SaveSlotLabels,
                 lobbySnapshot.SaveSlotUsable,
@@ -2535,6 +2697,7 @@ namespace GreedLast
                 RequestSaveLoadout,
                 RequestInfiniteRun,
                 RequestInfiniteRecordBoard,
+                RequestGrowthBoard,
                 RequestRetrySync,
                 ToggleOfflineForEditorCheck,
                 RequestNextRunPattern,
@@ -2631,7 +2794,8 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard
-                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
+                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
             {
                 RequestReturnToLobby();
                 return true;
@@ -2781,6 +2945,7 @@ namespace GreedLast
 
             requestGate.Complete(token);
             stateMachine.SetRunCoreTest();
+            ApplyGrowthToRunCore();
             runCore.Enter();
         }
 
@@ -2851,7 +3016,27 @@ namespace GreedLast
             }
 
             stateMachine.SetInfiniteRun(runDetail);
+            ApplyGrowthToRunCore();
             runCore.EnterInfiniteRun(selectedLoadout);
+        }
+
+        private void RequestGrowthBoard()
+        {
+            if (!TryBeginLobbyAction(out GreedLastRequestToken token))
+            {
+                return;
+            }
+
+            requestGate.Complete(token);
+            stateMachine.SetGrowthBoard(backend.LoadLobby(), backend.BuildGrowthBoardText());
+        }
+
+        private void ApplyGrowthToRunCore()
+        {
+            runCore.ConfigureGrowth(
+                backend.GrowthSurvivalLevel,
+                backend.GrowthFocusLevel,
+                backend.GrowthTimingLevel);
         }
 
         private void RequestInfiniteRecordBoard()
@@ -3020,6 +3205,12 @@ namespace GreedLast
                 return;
             }
 
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                UpgradeGrowth(channel);
+                return;
+            }
+
             if (IsRunState())
             {
                 runtimeUi.RecordLaneInput(channel);
@@ -3181,6 +3372,17 @@ namespace GreedLast
             }
 
             MoveRecordBoardPage(1);
+        }
+
+        private void UpgradeGrowth(GreedLastRunChannel channel)
+        {
+            runtimeUi.RecordLaneInput(channel);
+            GreedLastLobbySnapshot snapshot = backend.UpgradeGrowth(channel, out string notice);
+            stateMachine.SetGrowthBoard(
+                snapshot,
+                string.IsNullOrEmpty(notice)
+                    ? backend.BuildGrowthBoardText()
+                    : notice + "\n\n" + backend.BuildGrowthBoardText());
         }
 
         private void MoveRecordBoardPage(int delta)
@@ -3576,6 +3778,12 @@ namespace GreedLast
                 return;
             }
 
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                stateMachine.SetLobbyReady(backend.LoadLobby());
+                return;
+            }
+
             if (!IsRunState())
             {
                 return;
@@ -3654,7 +3862,7 @@ namespace GreedLast
             OpenSaveLoadoutDraft(
                 snapshot,
                 requireExplicitSlotChoice: true,
-                notice: "일반 런 클리어. 저장할 슬롯을 고른 뒤 확정하세요.");
+                notice: "일반 런 클리어. 저장할 슬롯을 고른 뒤 확정하세요.\n성장 포인트 +3 / 성장에서 보정 가능");
         }
 
         private void ConfirmSaveLoadoutAndReturn()
@@ -3791,6 +3999,7 @@ namespace GreedLast
         private Button saveLoadoutButton;
         private Button infiniteButton;
         private Button infiniteRecordButton;
+        private Button growthButton;
         private Button retryButton;
         private Button debugConnectionButton;
         private Button nextPatternButton;
@@ -3847,6 +4056,7 @@ namespace GreedLast
         private Action saveLoadoutRequested;
         private Action infiniteRunRequested;
         private Action infiniteRecordRequested;
+        private Action growthRequested;
         private Action retryRequested;
         private Action debugConnectionRequested;
         private Action nextPatternRequested;
@@ -3908,6 +4118,7 @@ namespace GreedLast
             Action onSaveLoadoutRequested,
             Action onInfiniteRunRequested,
             Action onInfiniteRecordRequested,
+            Action onGrowthRequested,
             Action onRetryRequested,
             Action onDebugConnectionRequested,
             Action onNextPatternRequested,
@@ -3929,6 +4140,7 @@ namespace GreedLast
             saveLoadoutRequested = onSaveLoadoutRequested;
             infiniteRunRequested = onInfiniteRunRequested;
             infiniteRecordRequested = onInfiniteRecordRequested;
+            growthRequested = onGrowthRequested;
             retryRequested = onRetryRequested;
             debugConnectionRequested = onDebugConnectionRequested;
             nextPatternRequested = onNextPatternRequested;
@@ -4130,6 +4342,7 @@ namespace GreedLast
             bool saveDraftLike = saveDraftConfirmLike || infiniteLoadoutSelectLike;
             bool recordBoardLike = snapshot.State == GreedLastScreenState.InfiniteRecordBoard;
             bool infinitePrepLike = snapshot.State == GreedLastScreenState.InfiniteStartReady;
+            bool growthBoardLike = snapshot.State == GreedLastScreenState.GrowthBoard;
             runModeActive = runLike;
             saveSlotModeActive = saveDraftLike;
             UpdateDebugText(snapshot);
@@ -4150,8 +4363,8 @@ namespace GreedLast
                 comboBadgeRoot.SetActive(false);
             }
 
-            detailText.fontSize = recordBoardLike ? BuildRecordBoardFontSize(detail) : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
-            if (recordBoardLike)
+            detailText.fontSize = recordBoardLike ? BuildRecordBoardFontSize(detail) : growthBoardLike ? 28 : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
+            if (recordBoardLike || growthBoardLike)
             {
                 SetAnchored(detailText.rectTransform, 0.5f, 0.55f, 920f, 640f);
             }
@@ -4179,9 +4392,10 @@ namespace GreedLast
             saveLoadoutButton.gameObject.SetActive(lobbyLike || infinitePrepLike);
             infiniteButton.gameObject.SetActive(lobbyLike && snapshot.FirstSaveCompleted);
             infiniteRecordButton.gameObject.SetActive(lobbyLike);
+            growthButton.gameObject.SetActive(lobbyLike);
             retryButton.gameObject.SetActive(snapshot.RetryVisible || snapshot.State == GreedLastScreenState.ConnectBlocked);
             nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike);
-            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike);
+            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike);
             saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
@@ -4189,7 +4403,7 @@ namespace GreedLast
             runHudText.gameObject.SetActive(runLike);
             pauseButton.gameObject.SetActive(runLike);
             bool showDevTools = DevToolsEnabled;
-            debugConnectionButton.gameObject.SetActive(showDevTools && !runLike && !saveDraftLike && !recordBoardLike && !infinitePrepLike);
+            debugConnectionButton.gameObject.SetActive(showDevTools && !runLike && !saveDraftLike && !recordBoardLike && !infinitePrepLike && !growthBoardLike);
             devInvincibleButton.gameObject.SetActive(showDevTools && runLike);
             infiniteTestStopButton.gameObject.SetActive(showDevTools && infiniteRunLike);
             focusMaxButton.gameObject.SetActive(showDevTools && runLike);
@@ -4217,11 +4431,12 @@ namespace GreedLast
                 : infinitePrepLike && snapshot.SaveLoadoutUnlocked;
             infiniteButton.interactable = snapshot.CoreActionsEnabled && snapshot.InfiniteUnlocked;
             infiniteRecordButton.interactable = snapshot.CoreActionsEnabled;
+            growthButton.interactable = snapshot.CoreActionsEnabled;
             retryButton.interactable = !snapshot.Busy;
             debugConnectionButton.interactable = showDevTools && !snapshot.Busy;
             bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
             nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
-            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
+            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike;
             saveSlotDetailButton.interactable = recordBoardLike || (saveDraftLike && !snapshot.SaveSlotChoiceRequired);
             saveSlotRenameButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             saveSlotDeleteButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
@@ -4312,6 +4527,10 @@ namespace GreedLast
             {
                 UpdateRecordBoardLaneLabels(snapshot.RecordBoardPageIndex);
             }
+            else if (growthBoardLike)
+            {
+                UpdateGrowthLaneLabels();
+            }
             else if (!runLike)
             {
                 UpdateDefaultLaneLabels();
@@ -4327,12 +4546,17 @@ namespace GreedLast
                     : "저장 조합");
                 SetButtonLabel(infiniteButton, BuildLobbyInfiniteButtonLabel(snapshot, selectedSlotSummary));
                 SetButtonLabel(infiniteRecordButton, BuildLobbyRecordButtonLabel(detail));
+                SetButtonLabel(growthButton, snapshot.GrowthPoints > 0 ? "성장 " + snapshot.GrowthPoints + "pt" : "성장");
             }
             else if (recordBoardLike)
             {
                 SetRecordBoardButtonLayout();
                 SetButtonLabel(nextPatternButton, "다음: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex + 1).Replace("\n", " "));
                 SetButtonLabel(saveSlotDetailButton, "이전: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex - 1).Replace("\n", " "));
+                SetButtonLabel(returnLobbyButton, "로비로");
+            }
+            else if (growthBoardLike)
+            {
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (infinitePrepLike)
@@ -5244,6 +5468,8 @@ namespace GreedLast
                     return "무한 준비";
                 case GreedLastScreenState.InfiniteLoadoutSelect:
                     return "무한 조합";
+                case GreedLastScreenState.GrowthBoard:
+                    return "성장 보정";
                 default:
                     return "-";
             }
@@ -5510,6 +5736,7 @@ namespace GreedLast
             SetButtonTone(saveLoadoutButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(infiniteButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(infiniteRecordButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(growthButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(retryButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(debugConnectionButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(nextPatternButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
@@ -5624,6 +5851,7 @@ namespace GreedLast
             saveLoadoutButton = CreateButton(rootPanel.transform, "SaveLoadoutButton", "저장 조합");
             infiniteButton = CreateButton(rootPanel.transform, "InfiniteButton", "무한모드");
             infiniteRecordButton = CreateButton(rootPanel.transform, "InfiniteRecordButton", "무한 기록");
+            growthButton = CreateButton(rootPanel.transform, "GrowthButton", "성장");
             retryButton = CreateButton(rootPanel.transform, "RetryButton", "동기화 재시도");
             debugConnectionButton = CreateButton(rootPanel.transform, "DebugConnectionButton", "연결 전환");
             nextPatternButton = CreateButton(rootPanel.transform, "NextPatternButton", "자동 시작");
@@ -5655,6 +5883,7 @@ namespace GreedLast
             SetAnchored(normalRunButton.GetComponent<RectTransform>(), 0.5f, 0.35f, 690f, 92f);
             SetAnchored(saveLoadoutButton.GetComponent<RectTransform>(), 0.5f, 0.29f, 690f, 92f);
             SetAnchored(infiniteButton.GetComponent<RectTransform>(), 0.5f, 0.23f, 690f, 92f);
+            SetAnchored(growthButton.GetComponent<RectTransform>(), 0.91f, 0.525f, 180f, 54f);
             SetAnchored(infiniteRecordButton.GetComponent<RectTransform>(), 0.91f, 0.47f, 180f, 54f);
             SetAnchored(retryButton.GetComponent<RectTransform>(), 0.5f, 0.17f, 690f, 92f);
             SetAnchored(debugConnectionButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
@@ -5681,6 +5910,7 @@ namespace GreedLast
             SetAnchored(sfxVolumeButtons[1].GetComponent<RectTransform>(), 0.91f, 0.15f, 180f, 54f);
             SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.91f, 0.105f, 180f, 54f);
             SetButtonFontSize(infiniteRecordButton, 24);
+            SetButtonFontSize(growthButton, 24);
             SetButtonFontSize(saveSlotDetailButton, 24);
             SetButtonFontSize(saveSlotRenameButton, 24);
             SetButtonFontSize(saveSlotDeleteButton, 24);
@@ -5710,6 +5940,7 @@ namespace GreedLast
             saveLoadoutButton.onClick.AddListener(() => saveLoadoutRequested?.Invoke());
             infiniteButton.onClick.AddListener(() => infiniteRunRequested?.Invoke());
             infiniteRecordButton.onClick.AddListener(() => infiniteRecordRequested?.Invoke());
+            growthButton.onClick.AddListener(() => growthRequested?.Invoke());
             retryButton.onClick.AddListener(() => retryRequested?.Invoke());
             debugConnectionButton.onClick.AddListener(() => debugConnectionRequested?.Invoke());
             nextPatternButton.onClick.AddListener(() => nextPatternRequested?.Invoke());
@@ -7539,6 +7770,26 @@ namespace GreedLast
             laneLabelTexts[0].text = "좌\n" + GetRecordBoardPageLabel(previousPage);
             laneLabelTexts[1].text = "중\n요약";
             laneLabelTexts[2].text = "우\n" + GetRecordBoardPageLabel(nextPage);
+            if (laneButtons != null)
+            {
+                for (int i = 0; i < laneButtons.Length; i += 1)
+                {
+                    SetLaneInputInteractable(i, true);
+                }
+            }
+        }
+
+        private void UpdateGrowthLaneLabels()
+        {
+            if (laneLabelTexts == null || laneLabelTexts.Length < 3)
+            {
+                return;
+            }
+
+            SetLaneLabelMode(33, true);
+            laneLabelTexts[0].text = "좌\n생존";
+            laneLabelTexts[1].text = "중\n집중";
+            laneLabelTexts[2].text = "우\n타이밍";
             if (laneButtons != null)
             {
                 for (int i = 0; i < laneButtons.Length; i += 1)

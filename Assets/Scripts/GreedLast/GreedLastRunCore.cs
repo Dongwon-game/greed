@@ -509,8 +509,8 @@ namespace GreedLast
     public sealed class GreedLastRunCore
     {
         private const int MaxHealth = 3;
-        private const int BonusHealthCap = MaxHealth + 2;
         private const int MaxFocus = 3;
+        private const int MaxGrowthLevel = 3;
         private const int MaxChoiceHistory = 12;
         private const float StaggerSeconds = 0.55f;
         private const float AutoGapSeconds = 0.75f;
@@ -589,6 +589,9 @@ namespace GreedLast
         private bool saveEligible;
         private bool devInvincible;
         private bool infiniteMode;
+        private int growthSurvivalLevel;
+        private int growthFocusLevel;
+        private int growthTimingLevel;
         private float inputTimingOffsetSeconds;
         private readonly string[] choiceHistory = new string[MaxChoiceHistory];
         private int choiceHistoryCount;
@@ -624,6 +627,13 @@ namespace GreedLast
 
         private bool CanAutoStartPattern => phase == GreedLastRunPhase.RunPlaying || phase == GreedLastRunPhase.EscapeRunning;
 
+        public void ConfigureGrowth(int survivalLevel, int focusLevel, int timingLevel)
+        {
+            growthSurvivalLevel = Mathf.Clamp(survivalLevel, 0, MaxGrowthLevel);
+            growthFocusLevel = Mathf.Clamp(focusLevel, 0, MaxGrowthLevel);
+            growthTimingLevel = Mathf.Clamp(timingLevel, 0, MaxGrowthLevel);
+        }
+
         public GreedLastRunCore()
         {
             inputTimingOffsetSeconds = Mathf.Clamp(
@@ -648,13 +658,70 @@ namespace GreedLast
             maxInfiniteThreatLevel = 1;
         }
 
+        private void ResetRunVitals()
+        {
+            int maxHealth = BuildGrowthMaxHealth();
+            health = maxHealth;
+            maxHealthThisRun = maxHealth;
+            focus = BuildGrowthStartFocus();
+        }
+
+        private int BuildGrowthMaxHealth()
+        {
+            return MaxHealth + growthSurvivalLevel;
+        }
+
+        private int BuildBonusHealthCap()
+        {
+            return BuildGrowthMaxHealth() + 2;
+        }
+
+        private int BuildGrowthStartFocus()
+        {
+            return Mathf.Clamp(growthFocusLevel, 0, MaxFocus);
+        }
+
+        private float BuildGrowthSuccessWindowBonus()
+        {
+            return growthTimingLevel * 0.005f;
+        }
+
+        private float BuildGrowthGoodWindowBonus()
+        {
+            return growthTimingLevel * 0.012f;
+        }
+
+        private string BuildGrowthAppliedText()
+        {
+            if (growthSurvivalLevel <= 0 && growthFocusLevel <= 0 && growthTimingLevel <= 0)
+            {
+                return string.Empty;
+            }
+
+            string text = "\n성장 보정:";
+            if (growthSurvivalLevel > 0)
+            {
+                text += " 체력 +" + growthSurvivalLevel;
+            }
+
+            if (growthFocusLevel > 0)
+            {
+                text += " 집중 +" + growthFocusLevel;
+            }
+
+            if (growthTimingLevel > 0)
+            {
+                text += " 판정 +" + (growthTimingLevel * 5) + "/" + (growthTimingLevel * 12) + "ms";
+            }
+
+            return text;
+        }
+
         public void Enter()
         {
             score = 0;
-            health = MaxHealth;
-            maxHealthThisRun = MaxHealth;
             combo = 0;
-            focus = 0;
+            ResetRunVitals();
             ResetRunStats();
             currentPattern = GreedLastPatternModel.Empty;
             activePattern = false;
@@ -678,7 +745,7 @@ namespace GreedLast
             activeInfiniteLoadoutName = string.Empty;
             ClearChoices();
             OpenChoice(GreedLastChoiceKind.StartGift);
-            judgementText = "시작 기프트를 선택하세요.";
+            judgementText = "시작 기프트를 선택하세요." + BuildGrowthAppliedText();
             ignoreReason = string.Empty;
             missReason = string.Empty;
             lastResult = GreedLastJudgementResult.None;
@@ -693,10 +760,8 @@ namespace GreedLast
         public void EnterInfiniteRun(GreedLastRunRecord loadoutRecord)
         {
             score = 0;
-            health = MaxHealth;
-            maxHealthThisRun = MaxHealth;
             combo = 0;
-            focus = 0;
+            ResetRunVitals();
             ResetRunStats();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
@@ -738,6 +803,7 @@ namespace GreedLast
             string bonusText = ApplyInfiniteLoadoutBonus(loadoutRecord);
             PrepareStartCountdown(now, "무한모드 시작 준비 - " + loadoutName
                 + "\n" + bonusText
+                + BuildGrowthAppliedText()
                 + "\n카운트 뒤 첫 함정이 내려옵니다.");
             Publish();
         }
@@ -1460,7 +1526,7 @@ namespace GreedLast
                         focus = Mathf.Min(MaxFocus, focus + goodFocusGain);
                     }
 
-                    if (HasChoice(primaryGift, "생존 축") && health < BonusHealthCap)
+                    if (HasChoice(primaryGift, "생존 축") && health < BuildBonusHealthCap())
                     {
                         goodHealthGain = 1;
                         health += goodHealthGain;
@@ -1548,7 +1614,7 @@ namespace GreedLast
             devInvincible = !devInvincible;
             if (devInvincible && health <= 0)
             {
-                health = MaxHealth;
+                health = BuildGrowthMaxHealth();
                 maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                 stopped = false;
                 paused = false;
@@ -1614,11 +1680,11 @@ namespace GreedLast
         {
             if (health <= 0)
             {
-                health = MaxHealth;
+                health = BuildGrowthMaxHealth();
                 maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
             }
 
-            maxHealthThisRun = Mathf.Max(MaxHealth, health);
+            maxHealthThisRun = Mathf.Max(BuildGrowthMaxHealth(), health);
 
             ResetRunStats();
             infiniteMode = false;
@@ -1692,10 +1758,8 @@ namespace GreedLast
         private void RestartAutoFlow(float now)
         {
             score = 0;
-            health = MaxHealth;
-            maxHealthThisRun = MaxHealth;
             combo = 0;
-            focus = 0;
+            ResetRunVitals();
             ResetRunStats();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
@@ -1719,7 +1783,7 @@ namespace GreedLast
             ClearChoices();
             OpenChoice(GreedLastChoiceKind.StartGift);
             autoFlow = false;
-            judgementText = "재도전 시작 - 시작 기프트를 선택하세요.";
+            judgementText = "재도전 시작 - 시작 기프트를 선택하세요." + BuildGrowthAppliedText();
             ignoreReason = string.Empty;
             missReason = string.Empty;
             lastResult = GreedLastJudgementResult.None;
@@ -1894,14 +1958,14 @@ namespace GreedLast
                     focus = Mathf.Min(MaxFocus, focus + 1);
                     return "집중 +1";
                 case "안정 호흡":
-                    health = Mathf.Min(BonusHealthCap, health + 1);
+                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "고점 본능":
                     score += 80;
                     return "점수 +80";
                 case "안정 루트":
-                    health = Mathf.Min(BonusHealthCap, health + 1);
+                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "변주 루트":
@@ -1916,7 +1980,7 @@ namespace GreedLast
                     focus = Mathf.Min(MaxFocus, focus + 2);
                     return "집중 +2";
                 case "생존 축":
-                    health = Mathf.Min(BonusHealthCap, health + 1);
+                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "연쇄 축":
@@ -1928,7 +1992,7 @@ namespace GreedLast
                     score += 200;
                     return "점수 +200";
                 case "사막의 잔상":
-                    health = Mathf.Min(BonusHealthCap, health + 1);
+                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     focus = Mathf.Min(MaxFocus, focus + 1);
                     return "체력 +1 / 집중 +1";
@@ -1966,7 +2030,7 @@ namespace GreedLast
                 return "무한 보너스: 기본 진입";
             }
 
-            health = Mathf.Clamp(health + bonus.HealthBonus, 1, BonusHealthCap);
+            health = Mathf.Clamp(health + bonus.HealthBonus, 1, BuildBonusHealthCap());
             maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
             focus = Mathf.Clamp(focus + bonus.FocusBonus, 0, MaxFocus);
             combo = Mathf.Clamp(combo + bonus.ComboBonus, 0, 9);
@@ -2287,8 +2351,8 @@ namespace GreedLast
                     source.Prompt + suffix + routeSuffix,
                     source.TelegraphSeconds * normalSpeedScale,
                     source.CoreSeconds * normalSpeedScale,
-                    source.SuccessWindowSeconds * normalWindowScale,
-                    source.GoodWindowSeconds * normalWindowScale,
+                    source.SuccessWindowSeconds * normalWindowScale + BuildGrowthSuccessWindowBonus(),
+                    source.GoodWindowSeconds * normalWindowScale + BuildGrowthGoodWindowBonus(),
                     source.HitSeconds * normalSpeedScale);
             }
 
@@ -2302,8 +2366,8 @@ namespace GreedLast
                 source.Prompt + " [위협 " + threatLevel + "]",
                 source.TelegraphSeconds * speedScale,
                 source.CoreSeconds * speedScale,
-                source.SuccessWindowSeconds * windowScale,
-                source.GoodWindowSeconds * windowScale,
+                source.SuccessWindowSeconds * windowScale + BuildGrowthSuccessWindowBonus(),
+                source.GoodWindowSeconds * windowScale + BuildGrowthGoodWindowBonus(),
                 source.HitSeconds * speedScale);
         }
 
