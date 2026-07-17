@@ -22,6 +22,7 @@ namespace GreedLast
         InfiniteStartReady = 11,
         InfiniteLoadoutSelect = 12,
         GrowthBoard = 13,
+        ProfileBoard = 14,
     }
 
     public enum GreedLastRequestKind
@@ -68,12 +69,18 @@ namespace GreedLast
             bool saveLoadoutUnlocked,
             bool infiniteUnlocked,
             int growthPoints,
+            int growthSurvivalLevel,
+            int growthFocusLevel,
+            int growthTimingLevel,
+            int recommendedGrowthTrackIndex,
+            string profileButtonSummary,
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
             bool[] saveSlotOccupied,
             bool saveSlotChoiceRequired,
             bool saveSlotOverwriteConfirmationPending,
+            bool saveLoadoutSkipConfirmationPending,
             bool saveSlotDeleteConfirmationPending,
             bool saveSlotDetailViewActive,
             bool saveSlotRenameConfirmationPending,
@@ -92,12 +99,20 @@ namespace GreedLast
             SaveLoadoutUnlocked = saveLoadoutUnlocked;
             InfiniteUnlocked = infiniteUnlocked;
             GrowthPoints = Mathf.Max(0, growthPoints);
+            GrowthSurvivalLevel = Mathf.Clamp(growthSurvivalLevel, 0, 3);
+            GrowthFocusLevel = Mathf.Clamp(growthFocusLevel, 0, 3);
+            GrowthTimingLevel = Mathf.Clamp(growthTimingLevel, 0, 3);
+            RecommendedGrowthTrackIndex = recommendedGrowthTrackIndex >= 0 && recommendedGrowthTrackIndex < 3
+                ? recommendedGrowthTrackIndex
+                : -1;
+            ProfileButtonSummary = string.IsNullOrEmpty(profileButtonSummary) ? "흔적" : profileButtonSummary;
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
             SaveSlotOccupied = saveSlotOccupied ?? Array.Empty<bool>();
             SaveSlotChoiceRequired = saveSlotChoiceRequired;
             SaveSlotOverwriteConfirmationPending = saveSlotOverwriteConfirmationPending;
+            SaveLoadoutSkipConfirmationPending = saveLoadoutSkipConfirmationPending;
             SaveSlotDeleteConfirmationPending = saveSlotDeleteConfirmationPending;
             SaveSlotDetailViewActive = saveSlotDetailViewActive;
             SaveSlotRenameConfirmationPending = saveSlotRenameConfirmationPending;
@@ -117,12 +132,18 @@ namespace GreedLast
         public bool SaveLoadoutUnlocked { get; }
         public bool InfiniteUnlocked { get; }
         public int GrowthPoints { get; }
+        public int GrowthSurvivalLevel { get; }
+        public int GrowthFocusLevel { get; }
+        public int GrowthTimingLevel { get; }
+        public int RecommendedGrowthTrackIndex { get; }
+        public string ProfileButtonSummary { get; }
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
         public bool[] SaveSlotOccupied { get; }
         public bool SaveSlotChoiceRequired { get; }
         public bool SaveSlotOverwriteConfirmationPending { get; }
+        public bool SaveLoadoutSkipConfirmationPending { get; }
         public bool SaveSlotDeleteConfirmationPending { get; }
         public bool SaveSlotDetailViewActive { get; }
         public bool SaveSlotRenameConfirmationPending { get; }
@@ -153,7 +174,13 @@ namespace GreedLast
             bool firstSaveCompleted,
             bool saveLoadoutUnlocked,
             bool infiniteUnlocked,
+            bool saveLoadoutCandidateAvailable,
             int growthPoints,
+            int growthSurvivalLevel,
+            int growthFocusLevel,
+            int growthTimingLevel,
+            int recommendedGrowthTrackIndex,
+            string profileButtonSummary,
             int selectedSaveSlotIndex,
             string[] saveSlotLabels,
             bool[] saveSlotUsable,
@@ -165,7 +192,15 @@ namespace GreedLast
             FirstSaveCompleted = firstSaveCompleted;
             SaveLoadoutUnlocked = saveLoadoutUnlocked;
             InfiniteUnlocked = infiniteUnlocked;
+            SaveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable;
             GrowthPoints = Mathf.Max(0, growthPoints);
+            GrowthSurvivalLevel = Mathf.Clamp(growthSurvivalLevel, 0, 3);
+            GrowthFocusLevel = Mathf.Clamp(growthFocusLevel, 0, 3);
+            GrowthTimingLevel = Mathf.Clamp(growthTimingLevel, 0, 3);
+            RecommendedGrowthTrackIndex = recommendedGrowthTrackIndex >= 0 && recommendedGrowthTrackIndex < 3
+                ? recommendedGrowthTrackIndex
+                : -1;
+            ProfileButtonSummary = string.IsNullOrEmpty(profileButtonSummary) ? "흔적" : profileButtonSummary;
             SelectedSaveSlotIndex = selectedSaveSlotIndex;
             SaveSlotLabels = saveSlotLabels ?? Array.Empty<string>();
             SaveSlotUsable = saveSlotUsable ?? Array.Empty<bool>();
@@ -178,7 +213,13 @@ namespace GreedLast
         public bool FirstSaveCompleted { get; }
         public bool SaveLoadoutUnlocked { get; }
         public bool InfiniteUnlocked { get; }
+        public bool SaveLoadoutCandidateAvailable { get; }
         public int GrowthPoints { get; }
+        public int GrowthSurvivalLevel { get; }
+        public int GrowthFocusLevel { get; }
+        public int GrowthTimingLevel { get; }
+        public int RecommendedGrowthTrackIndex { get; }
+        public string ProfileButtonSummary { get; }
         public int SelectedSaveSlotIndex { get; }
         public string[] SaveSlotLabels { get; }
         public bool[] SaveSlotUsable { get; }
@@ -234,7 +275,10 @@ namespace GreedLast
         private const int NormalRankingCount = 5;
         private const int NormalAttemptHistoryCount = 5;
         private const int InfiniteRankingCount = 5;
+        private const int RecordBoardVisibleRows = 3;
         private const int RecordBoardPageCount = 4;
+        private const int ProfileBoardPageCount = 4;
+        private const string PrototypeCompletionLoopContract = "완성 루프: 일반→저장→무한→기록";
         private const int MaxSaveLoadoutUses = 2;
         private const int GrowthMaxLevel = 3;
         private const int SaveDataVersion = 1;
@@ -247,6 +291,15 @@ namespace GreedLast
             "장거리 저장",
             "집중 저장",
         };
+
+        private enum ProgressEventKind
+        {
+            None = 0,
+            NormalClear = 1,
+            NormalFailed = 2,
+            NormalAbandoned = 3,
+            InfiniteRun = 4,
+        }
 
         private bool online = true;
         private bool maintenance;
@@ -261,6 +314,8 @@ namespace GreedLast
         private GreedLastRunRecord lastRunRecord = GreedLastRunRecord.Empty;
         private GreedLastRunAttemptRecord lastRunAttemptRecord = GreedLastRunAttemptRecord.Empty;
         private GreedLastRunRecord bestRunRecord = GreedLastRunRecord.Empty;
+        private GreedLastRunRecord previousBestBeforeLastRun = GreedLastRunRecord.Empty;
+        private bool lastRunWasNewBest;
         private readonly GreedLastRunRecord[] normalRunRankings = new GreedLastRunRecord[NormalRankingCount];
         private readonly GreedLastRunAttemptRecord[] normalAttemptHistory = new GreedLastRunAttemptRecord[NormalAttemptHistoryCount];
         private readonly GreedLastRunRecord[] saveLoadoutSlots = new GreedLastRunRecord[SaveSlotCount];
@@ -271,6 +326,11 @@ namespace GreedLast
         private GreedLastInfiniteRunRecord previousBestBeforeLastInfiniteRun = GreedLastInfiniteRunRecord.Empty;
         private bool lastInfiniteRunWasNewBest;
         private readonly GreedLastInfiniteRunRecord[] infiniteRunRankings = new GreedLastInfiniteRunRecord[InfiniteRankingCount];
+        private int lastConsumedSaveSlotIndex = -1;
+        private string lastConsumedSaveSlotName = string.Empty;
+        private string lastConsumedSaveSlotProfile = string.Empty;
+        private int lastConsumedSaveSlotRemainingAfterUse = -1;
+        private bool lastConsumedSaveSlotAutoCleared;
         private int normalClearCount;
         private int normalFailCount;
         private int normalAbandonCount;
@@ -279,6 +339,9 @@ namespace GreedLast
         private int growthSurvivalLevel;
         private int growthFocusLevel;
         private int growthTimingLevel;
+        private ProgressEventKind lastProgressEvent;
+        private bool profileNoticePending;
+        private int sampleSaveLoadoutSequence;
 
         public GreedLastMockBackend()
         {
@@ -286,10 +349,38 @@ namespace GreedLast
         }
 
         public int RecordBoardPages => RecordBoardPageCount;
+        public int ProfileBoardPages => ProfileBoardPageCount;
         public bool HasSaveLoadoutCandidate => saveLoadoutCandidateAvailable && lastRunRecord.IsValid;
         public int GrowthSurvivalLevel => growthSurvivalLevel;
         public int GrowthFocusLevel => growthFocusLevel;
         public int GrowthTimingLevel => growthTimingLevel;
+
+        public int ResolveRecentRecordBoardPageIndex()
+        {
+            switch (lastProgressEvent)
+            {
+                case ProgressEventKind.NormalClear:
+                case ProgressEventKind.NormalFailed:
+                case ProgressEventKind.NormalAbandoned:
+                    return 1;
+                case ProgressEventKind.InfiniteRun:
+                    return 2;
+                default:
+                    if (lastRunRecord.IsValid || lastRunAttemptRecord.IsValid || bestRunRecord.IsValid)
+                    {
+                        return 1;
+                    }
+
+                    return lastInfiniteRunRecord.IsValid || bestInfiniteRunRecord.IsValid ? 2 : 0;
+            }
+        }
+
+        public int ResolveProfileRecordBoardShortcutPageIndex()
+        {
+            return IsPrototypeCompletionRecordCheckActive()
+                ? 0
+                : ResolveRecentRecordBoardPageIndex();
+        }
 
         public GreedLastConnectResult CheckConnect()
         {
@@ -321,23 +412,60 @@ namespace GreedLast
             selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
             EnsureSelectedSaveLoadoutSlotForLobby();
 
-            string message = auxiliaryWarning
-                ? "보조 데이터 일부가 늦습니다. 핵심 진입은 유지합니다."
-                : "피라미드 입구 동기화 완료";
             bool hasUsableSaveSlot = HasAnyUsableSaveLoadoutSlot();
+            string message = BuildLobbyStatusMessage(hasUsableSaveSlot);
 
             return new GreedLastLobbySnapshot(
                 CurrentPeriodId,
                 firstSaveCompleted,
                 saveLoadoutUnlocked,
                 hasUsableSaveSlot,
+                HasSaveLoadoutCandidate,
                 growthPoints,
+                growthSurvivalLevel,
+                growthFocusLevel,
+                growthTimingLevel,
+                BuildRecommendedGrowthTrackIndex(),
+                BuildProfileButtonSummary(),
                 selectedSaveSlotIndex,
                 BuildSaveSlotLabelSummaries(),
                 BuildSaveSlotUsableFlags(),
                 BuildSaveSlotOccupiedFlags(),
                 auxiliaryWarning,
                 message);
+        }
+
+        private string BuildLobbyStatusMessage(bool hasUsableSaveSlot)
+        {
+            string prefix = auxiliaryWarning
+                ? "보조 데이터 일부가 늦습니다. 핵심 진입은 유지합니다.\n"
+                : string.Empty;
+
+            if (HasSaveLoadoutCandidate)
+            {
+                return prefix
+                    + "저장 후보 대기\n"
+                    + "좌 · 중 · 우 슬롯을 고른 뒤 저장 또는 포기를 선택하세요.";
+            }
+
+            if ((firstSaveCompleted || saveLoadoutUnlocked) && !hasUsableSaveSlot)
+            {
+                return prefix
+                    + "저장 조합 없음\n"
+                    + "무한 조합 보충으로 보충 런에 들어가세요.\n"
+                    + "보충 런 클리어 뒤 새 슬롯을 저장하면 무한모드가 다시 열립니다.";
+            }
+
+            if (IsPrototypeCompletionRecordCheckActive())
+            {
+                return prefix
+                    + "프로토타입 완성 루프 확인\n"
+                    + "다음 확인: 완성 루프 기록 확인";
+            }
+
+            return auxiliaryWarning
+                ? prefix.TrimEnd()
+                : "피라미드 입구 동기화 완료";
         }
 
         public GreedLastLobbySnapshot ReSyncLobby()
@@ -362,14 +490,19 @@ namespace GreedLast
                 saveLoadoutUnlocked = true;
                 saveLoadoutCandidateAvailable = true;
                 lastRunRecord = record;
-                if (!bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord))
+                previousBestBeforeLastRun = bestRunRecord;
+                lastRunWasNewBest = !bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord);
+                if (lastRunWasNewBest)
                 {
                     bestRunRecord = record;
                 }
 
                 InsertNormalRanking(record);
                 normalClearCount += 1;
+                lastProgressEvent = ProgressEventKind.NormalClear;
+                profileNoticePending = true;
                 AddGrowthPoints(3);
+                SelectRecommendedSaveLoadoutSlotForCandidate();
                 SavePersistedData();
             }
 
@@ -388,12 +521,15 @@ namespace GreedLast
             if (record.Outcome == GreedLastRunAttemptOutcome.Failed)
             {
                 normalFailCount += 1;
+                lastProgressEvent = ProgressEventKind.NormalFailed;
             }
             else if (record.Outcome == GreedLastRunAttemptOutcome.Abandoned)
             {
                 normalAbandonCount += 1;
+                lastProgressEvent = ProgressEventKind.NormalAbandoned;
             }
 
+            profileNoticePending = true;
             AddGrowthPoints(BuildNormalAttemptGrowthReward(record));
             SavePersistedData();
             return true;
@@ -402,36 +538,51 @@ namespace GreedLast
         public string BuildSaveLoadoutDraftText(bool showSelectedSlot = true)
         {
             bool hasCandidate = HasSaveLoadoutCandidate;
+            bool hasAnyUsableSlot = HasAnyUsableSaveLoadoutSlot();
+            bool hasAnyStoredSlot = HasAnySaveLoadoutSlot();
+            string noCandidateHeader = !hasAnyUsableSlot
+                ? "보충 안내 / 저장 조합 없음\n보충 런 클리어 후 새 저장 조합을 만들 수 있습니다."
+                : "관리 모드 / 저장 후보 없음\n기존 슬롯 확인/변경/삭제 / 새 저장은 다음 클리어 후 1회";
             string text = (hasCandidate
                     ? "저장 모드 / 1회 후보\n" + FormatSaveCandidateSummary(lastRunRecord)
-                    : "관리 모드 / 저장 후보 없음\n기존 슬롯만 확인 / 이름 변경 / 삭제")
-                + "\n\n슬롯\n"
+                        + "\n" + BuildSaveLoadoutRecommendationText()
+                    : noCandidateHeader)
+                + "\n슬롯\n"
                 + BuildSaveSlotListText(showSelectedSlot, compact: true);
 
             if (!showSelectedSlot)
             {
                 return hasCandidate
                     ? text
-                        + "\n\n좌 / 중 / 우로 저장할 슬롯을 고르세요."
-                        + "\n고른 뒤 저장 여부를 확정합니다."
+                        + "\n\n다음: 좌 / 중 / 우로 저장할 슬롯 선택"
+                        + "\n후보는 저장 또는 포기 뒤 사라집니다."
+                    : !hasAnyStoredSlot
+                        ? text
+                            + "\n\n다음: 보충 런 클리어 후 새 조합 저장"
+                            + "\n무한 조합 보충 또는 일반 보충 런으로 새 후보를 만드세요."
                     : text
-                        + "\n\n좌 / 중 / 우로 확인할 슬롯을 고르세요.";
+                        + "\n\n다음: 좌 / 중 / 우로 확인할 슬롯 선택";
             }
 
             GreedLastRunRecord selectedRecord = saveLoadoutSlots[selectedSaveSlotIndex];
             int selectedUses = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             string selectedText = text
-                + "\n\n선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
-                + "\n" + BuildSaveSlotStatusLine(selectedRecord, selectedUses)
+                + "\n선택: 슬롯 " + (selectedSaveSlotIndex + 1) + " / " + BuildSaveSlotStatusLine(selectedRecord, selectedUses)
                 + "\n" + BuildSaveSlotActionLine(hasCandidate, selectedRecord)
                 + "\n" + FormatSaveSlotCompact(selectedRecord, selectedUses);
 
             return hasCandidate
                 ? selectedText
                     + BuildOverwriteWarningText(selectedRecord, selectedUses)
-                    + "\n\n상세 비교: 후보와 기존 슬롯 차이 확인"
+                    + "\n다음: " + BuildSaveLoadoutNextActionText(hasCandidate, selectedRecord, selectedUses)
+                    + "\n" + BuildSaveCandidateHandlingLine(selectedRecord)
+                : !hasAnyStoredSlot
+                    ? selectedText
+                        + "\n다음: 보충 런 클리어 후 새 조합 저장"
+                        + "\n무한 조합 보충 또는 일반 보충 런으로 새 후보를 만드세요."
                 : selectedText
-                    + "\n\n상세 보기: 기존 저장 조합 기록 확인";
+                    + "\n다음: " + BuildSaveLoadoutNextActionText(hasCandidate, selectedRecord, selectedUses)
+                    + "\n상세 보기: 기존 저장 조합 기록 확인";
         }
 
         public string BuildRunClearResultMessage(GreedLastRunRecord record)
@@ -441,17 +592,25 @@ namespace GreedLast
                 return "탈출 기록을 만들지 못했습니다.";
             }
 
-            string nextAction = HasAnySaveLoadoutSlot()
-                ? "다음: 저장 조합에서 후보 비교 / 슬롯 갱신"
-                : "다음: 저장 조합에서 첫 슬롯 확정";
-
+            GreedLastRunRecord saveCandidate = BuildSaveLoadoutRecord(record);
             return "탈출 성공 / 기록 저장\n"
                 + FormatRunRecordBoardLine(record)
+                + "\n판정: " + FormatRunRecordJudgementCounts(record)
+                + "\n흐름: " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + "\n회피: " + BuildAvoidancePerformanceSummary(record.TimingProfile)
+                + "\n집중: " + BuildFocusPerformanceSummary(record.TimingProfile)
                 + "\n성장 포인트 +3 / 보유 " + growthPoints
-                + "\n저장 후보: " + record.LoadoutName
-                + "\n저장 기회: 확정하거나 건너뛰면 사라짐"
+                + "\n강점: " + BuildRunClearStrengthText(record)
+                + "\n복기: " + BuildRunClearReviewText(record)
+                + FormatReviewTargetResultLine(record.TimingProfile)
+                + "\n타이밍 진단: " + BuildTimingProfileAdvice(record.TimingProfile)
+                + "\n다음 목표: " + BuildNormalRunNextTargetText(record)
+                + "\n유물: " + (string.IsNullOrEmpty(record.Relic) ? "없음" : record.Relic + " / 이번 런 전용")
+                + "\n저장 후보: " + saveCandidate.LoadoutName + " / " + BuildStoredGiftStackSummary(saveCandidate)
+                + "\n저장 기회: 저장하거나 포기하면 사라짐"
+                + FormatProfileResultTraceLine()
                 + "\n비교: " + BuildLatestNormalComparisonText()
-                + "\n" + nextAction;
+                + "\n" + BuildPostRunNextActionLine(preferSaveCandidate: true, preferInfinite: false);
         }
 
         public string BuildRunClearSkipSaveMessage(GreedLastRunRecord record)
@@ -463,9 +622,25 @@ namespace GreedLast
 
             return "탈출 성공 / 기록 저장"
                 + "\n" + FormatRunRecordBoardLine(record)
+                + "\n판정: " + FormatRunRecordJudgementCounts(record)
+                + "\n흐름: " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + "\n회피: " + BuildAvoidancePerformanceSummary(record.TimingProfile)
+                + "\n집중: " + BuildFocusPerformanceSummary(record.TimingProfile)
                 + "\n성장 포인트 +3 / 보유 " + growthPoints
-                + "\n저장 조합 저장은 건너뛰었습니다."
-                + "\n다음: 기록 보기에서 클리어 기록 확인";
+                + "\n강점: " + BuildRunClearStrengthText(record)
+                + "\n복기: " + BuildRunClearReviewText(record)
+                + FormatReviewTargetResultLine(record.TimingProfile)
+                + "\n타이밍 진단: " + BuildTimingProfileAdvice(record.TimingProfile)
+                + "\n다음 목표: " + BuildNormalRunNextTargetText(record)
+                + "\n저장 조합 슬롯에는 저장하지 않았습니다."
+                + "\n저장 후보는 사라지고 기록 보드에는 남습니다."
+                + FormatProfileResultTraceLine()
+                + "\n" + BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: false);
+        }
+
+        public string BuildLastRunClearSkipSaveMessage()
+        {
+            return BuildRunClearSkipSaveMessage(lastRunRecord);
         }
 
         public string BuildRunAttemptResultMessage(GreedLastRunAttemptRecord record)
@@ -477,8 +652,19 @@ namespace GreedLast
 
             return FormatRunAttemptOutcome(record.Outcome) + " 기록 저장\n"
                 + FormatRunAttemptListLine(record)
+                + "\n성공축: " + BuildTimingAxisPerformanceSummary(record.TimingProfile, record.SuccessCount)
+                + "\n흐름: " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + "\n회피: " + BuildAvoidancePerformanceSummary(record.TimingProfile)
+                + "\n집중: " + BuildFocusPerformanceSummary(record.TimingProfile)
+                + "\n약점 구간: " + BuildChapterWeaknessSummary(record.TimingProfile)
                 + FormatGrowthRewardLine(BuildNormalAttemptGrowthReward(record))
-                + "\n다음: 기록 보기에서 실패/중단 확인";
+                + "\n훈련 힌트: " + BuildNormalAttemptTrainingHint(record)
+                + "\n복기: " + BuildNormalAttemptReviewText(record)
+                + FormatReviewTargetResultLine(record.TimingProfile)
+                + "\n타이밍 진단: " + BuildTimingProfileAdvice(record.TimingProfile)
+                + "\n재도전 목표: " + BuildNormalAttemptNextTargetText(record)
+                + FormatProfileResultTraceLine()
+                + "\n" + BuildNormalAttemptNextActionLine(record);
         }
 
         public GreedLastLobbySnapshot SelectSaveLoadoutSlot(int slotIndex)
@@ -492,11 +678,12 @@ namespace GreedLast
         {
             if (lastRunRecord.IsValid && saveLoadoutUnlocked && saveLoadoutCandidateAvailable)
             {
-                saveLoadoutSlots[selectedSaveSlotIndex] = lastRunRecord;
+                saveLoadoutSlots[selectedSaveSlotIndex] = BuildSaveLoadoutRecord(lastRunRecord);
                 saveLoadoutUsesRemaining[selectedSaveSlotIndex] = MaxSaveLoadoutUses;
                 saveLoadoutRenameSteps[selectedSaveSlotIndex] = 0;
                 savedLoadoutConfirmed = true;
                 saveLoadoutCandidateAvailable = false;
+                profileNoticePending = true;
                 SavePersistedData();
             }
 
@@ -511,6 +698,7 @@ namespace GreedLast
             }
 
             saveLoadoutCandidateAvailable = false;
+            profileNoticePending = true;
             SavePersistedData();
         }
 
@@ -529,8 +717,11 @@ namespace GreedLast
 
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 저장 조합 확정 완료\n"
                 + lastRunRecord.LoadoutName
-                + "\n사용 가능 횟수 2회"
-                + "\n무한모드가 열렸습니다.";
+                + "\n사용 가능 횟수 2회 / 모두 쓰면 자동 비움"
+                + "\n요약: " + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n" + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[selectedSaveSlotIndex])
+                + "\n저장 후보 소모 완료"
+                + "\n다음: 저장 조합으로 무한모드 시작";
         }
 
         public string BuildSelectedSaveLoadoutComparisonText()
@@ -551,6 +742,8 @@ namespace GreedLast
                 return slotHeader
                     + "\n" + BuildSaveSlotStatusLine(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                     + "\n요약: " + FormatSaveSlotCompact(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                    + "\n보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(slotRecord)
+                    + " / " + BuildInfiniteLoadoutStartStatePreview(slotRecord).Replace("\n", " / ")
                     + "\n구성: " + FormatLoadoutCombo(slotRecord)
                     + "\n타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
                     + "\n선택: " + CompactText(slotRecord.ChoiceSummary, 42);
@@ -558,6 +751,8 @@ namespace GreedLast
 
             string text = slotHeader
                 + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ")
+                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(lastRunRecord)
+                + " / " + BuildInfiniteLoadoutStartStatePreview(lastRunRecord)
                 + "\n후보 타이밍: " + FormatTimingProfile(lastRunRecord.TimingProfile);
 
             if (!slotRecord.IsValid)
@@ -568,12 +763,18 @@ namespace GreedLast
             }
 
             text += "\n현재: " + FormatSaveSlotCompact(slotRecord, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n현재 품질: " + BuildSaveLoadoutQualitySummary(slotRecord)
+                + "\n현재 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(slotRecord)
+                + " / " + BuildInfiniteLoadoutStartStatePreview(slotRecord).Replace("\n", " / ")
                 + "\n현재 구성: " + FormatLoadoutCombo(slotRecord)
                 + "\n현재 타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
-                + "\n차이: 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
+                + "\n차이: " + FormatSaveLoadoutQualityDelta(lastRunRecord, slotRecord)
+                + " / 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
                 + $" / 거리 {FormatSigned(lastRunRecord.Distance - slotRecord.Distance)}m"
                 + $" / 체력 {FormatSigned(lastRunRecord.Health - slotRecord.Health)}"
-                + $" / 집중 {FormatSigned(lastRunRecord.Focus - slotRecord.Focus)}";
+                + $" / 집중 {FormatSigned(lastRunRecord.Focus - slotRecord.Focus)}"
+                + $" / 콤보 {FormatSigned(lastRunRecord.MaxCombo - slotRecord.MaxCombo)}"
+                + $" / 실수 {FormatSigned(lastRunRecord.MissCount - slotRecord.MissCount)}";
             return text;
         }
 
@@ -590,18 +791,25 @@ namespace GreedLast
             string text = "덮어쓰기 확인"
                 + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n현재: " + FormatSaveSlotCompact(slotRecord, usesRemaining)
-                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ");
+                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ")
+                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(lastRunRecord)
+                + " / " + BuildInfiniteLoadoutStartStatePreview(lastRunRecord).Replace("\n", " / ");
 
             if (slotRecord.IsValid)
             {
-                text += "\n차이: 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
+                text += "\n현재 품질: " + BuildSaveLoadoutQualitySummary(slotRecord)
+                    + "\n차이: " + FormatSaveLoadoutQualityDelta(lastRunRecord, slotRecord)
+                    + " / 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
                     + " / 거리 " + FormatSigned(lastRunRecord.Distance - slotRecord.Distance) + "m"
                     + " / 체력 " + FormatSigned(lastRunRecord.Health - slotRecord.Health)
-                    + " / 집중 " + FormatSigned(lastRunRecord.Focus - slotRecord.Focus);
+                    + " / 집중 " + FormatSigned(lastRunRecord.Focus - slotRecord.Focus)
+                    + " / 콤보 " + FormatSigned(lastRunRecord.MaxCombo - slotRecord.MaxCombo)
+                    + " / 실수 " + FormatSigned(lastRunRecord.MissCount - slotRecord.MissCount);
             }
 
             return text
-                + "\n다시 저장을 누르면 이 후보로 교체됩니다."
+                + "\n다시 저장을 누르면 기존 슬롯이 후보로 교체되고 후보는 소모됩니다."
+                + "\n다른 슬롯을 고르면 덮어쓰기 확인이 취소됩니다."
                 + "\n\n슬롯\n"
                 + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
         }
@@ -619,6 +827,7 @@ namespace GreedLast
                 (saveLoadoutRenameSteps[selectedSaveSlotIndex] + 1) % SaveLoadoutNamePresets.Length;
             string newName = BuildSaveLoadoutNameForStep(selectedSaveSlotIndex, saveLoadoutRenameSteps[selectedSaveSlotIndex]);
             saveLoadoutSlots[selectedSaveSlotIndex] = WithLoadoutName(record, newName);
+            profileNoticePending = true;
             SavePersistedData();
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 이름 변경: " + newName;
         }
@@ -656,8 +865,135 @@ namespace GreedLast
             int deletedSlotIndex = selectedSaveSlotIndex;
             ClearSaveLoadoutSlot(deletedSlotIndex);
             SelectNextUsableSaveLoadoutSlot(deletedSlotIndex);
+            profileNoticePending = true;
             SavePersistedData();
             return "슬롯 " + (deletedSlotIndex + 1) + " 저장 조합을 삭제했습니다.";
+        }
+
+        public GreedLastLobbySnapshot AddSampleSaveLoadoutForTest(out string notice)
+        {
+            int targetSlotIndex = FindFirstEmptySaveLoadoutSlot();
+            bool replacedWeakestSlot = false;
+            GreedLastRunRecord previousRecord = GreedLastRunRecord.Empty;
+            if (targetSlotIndex < 0)
+            {
+                targetSlotIndex = FindWeakestSaveLoadoutSlot();
+                if (targetSlotIndex < 0)
+                {
+                    targetSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+                }
+
+                previousRecord = saveLoadoutSlots[targetSlotIndex];
+                replacedWeakestSlot = previousRecord.IsValid;
+            }
+
+            GreedLastRunRecord record = BuildSampleSaveLoadoutRecordForTest(targetSlotIndex, sampleSaveLoadoutSequence);
+            sampleSaveLoadoutSequence += 1;
+            saveLoadoutSlots[targetSlotIndex] = record;
+            saveLoadoutUsesRemaining[targetSlotIndex] = MaxSaveLoadoutUses;
+            saveLoadoutRenameSteps[targetSlotIndex] = 0;
+            selectedSaveSlotIndex = targetSlotIndex;
+            firstSaveCompleted = true;
+            saveLoadoutUnlocked = true;
+            savedLoadoutConfirmed = true;
+            saveLoadoutCandidateAvailable = false;
+            profileNoticePending = true;
+            SavePersistedData();
+
+            notice = (replacedWeakestSlot ? "빈 슬롯이 없어 최약 슬롯을 테스트 조합으로 교체했습니다." : "테스트 저장 조합을 만들었습니다.")
+                + "\n대상: 슬롯 " + (targetSlotIndex + 1)
+                + "\n신규: " + FormatSaveSlotCompact(record, MaxSaveLoadoutUses)
+                + "\n" + BuildSaveLoadoutQualitySummary(record)
+                + (previousRecord.IsValid
+                    ? "\n교체 전: " + BuildSaveLoadoutQualitySummary(previousRecord)
+                        + "\n차이: " + FormatSaveLoadoutQualityDelta(record, previousRecord)
+                    : string.Empty)
+                + "\n" + BuildBestSaveLoadoutSlotSummaryText();
+            return LoadLobby();
+        }
+
+        public GreedLastLobbySnapshot AddSampleClearCandidateForTest(out string notice)
+        {
+            int referenceSlotIndex = FindFirstEmptySaveLoadoutSlot();
+            if (referenceSlotIndex < 0)
+            {
+                referenceSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            }
+
+            int sampleOffset = sampleSaveLoadoutSequence;
+            GreedLastRunRecord record = WithLoadoutName(
+                BuildSampleSaveLoadoutRecordForTest(referenceSlotIndex, sampleOffset),
+                "테스트 후보 S" + (referenceSlotIndex + 1) + "-" + (sampleOffset + 1));
+            sampleSaveLoadoutSequence += 1;
+            firstSaveCompleted = true;
+            saveLoadoutUnlocked = true;
+            saveLoadoutCandidateAvailable = true;
+            lastRunRecord = record;
+            if (!bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord))
+            {
+                bestRunRecord = record;
+            }
+
+            InsertNormalRanking(record);
+            normalClearCount += 1;
+            lastProgressEvent = ProgressEventKind.NormalClear;
+            profileNoticePending = true;
+            AddGrowthPoints(3);
+            SelectRecommendedSaveLoadoutSlotForCandidate();
+            SavePersistedData();
+
+            notice = "테스트 저장 후보를 만들었습니다."
+                + "\n추천 슬롯: " + (selectedSaveSlotIndex + 1)
+                + "\n" + FormatSaveCandidateSummary(record).Replace("\n", " / ")
+                + "\n" + BuildBestSaveLoadoutSlotSummaryText();
+            return LoadLobby();
+        }
+
+        public GreedLastLobbySnapshot ConsumeSelectedSaveLoadoutUseForTest(out string notice)
+        {
+            selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1);
+            int usedSlotIndex = selectedSaveSlotIndex;
+            GreedLastRunRecord record = saveLoadoutSlots[usedSlotIndex];
+            if (!record.IsValid || saveLoadoutUsesRemaining[usedSlotIndex] <= 0)
+            {
+                EnsureSelectedSaveLoadoutSlotForLobby();
+                bool refillRouteAvailable = firstSaveCompleted || saveLoadoutUnlocked;
+                notice = "저장 소모할 조합이 없습니다."
+                    + (HasAnyUsableSaveLoadoutSlot()
+                        ? "\n사용 가능한 슬롯을 선택하세요."
+                        : refillRouteAvailable
+                            ? "\n무한 버튼으로 보충 런 흐름을 확인할 수 있습니다."
+                            : "\n먼저 저장 조합을 만들어야 합니다.")
+                    + (refillRouteAvailable
+                        ? "\n샘플 저장이 필요하면 F6 저장 생성을 먼저 누르세요."
+                        : "\n테스트하려면 F6 저장 생성 또는 일반 런 클리어를 먼저 확인하세요.");
+                return LoadLobby();
+            }
+
+            int remainingAfterUse = Mathf.Max(0, saveLoadoutUsesRemaining[usedSlotIndex] - 1);
+            saveLoadoutUsesRemaining[usedSlotIndex] = remainingAfterUse;
+            lastConsumedSaveSlotIndex = usedSlotIndex;
+            lastConsumedSaveSlotName = record.LoadoutName;
+            lastConsumedSaveSlotProfile = BuildLoadoutAndRouteProfile(record);
+            lastConsumedSaveSlotRemainingAfterUse = remainingAfterUse;
+            lastConsumedSaveSlotAutoCleared = remainingAfterUse <= 0;
+            if (lastConsumedSaveSlotAutoCleared)
+            {
+                ClearSaveLoadoutSlot(usedSlotIndex);
+                SelectBestUsableSaveLoadoutSlotForInfinite();
+            }
+
+            profileNoticePending = true;
+            SavePersistedData();
+            notice = "저장 조합 소모: 슬롯 " + (usedSlotIndex + 1)
+                + "\n" + CompactText(record.LoadoutName, 24)
+                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
+                + "\n" + BuildSaveLoadoutUseConsumptionLine(remainingAfterUse + 1, remainingAfterUse)
+                + (lastConsumedSaveSlotAutoCleared
+                    ? "\n사용 횟수 소진 - 슬롯 자동 비움" + BuildAutoSelectedSaveSlotNotice()
+                    : "\n남은 사용 " + remainingAfterUse + "회"
+                        + (remainingAfterUse <= 1 ? "\n다음 소모 후 슬롯 자동 비움" : string.Empty));
+            return LoadLobby();
         }
 
         public string BuildSelectedSaveLoadoutDeletePreviewText()
@@ -693,61 +1029,121 @@ namespace GreedLast
 
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
+                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
+                + "\n기프트 누적: " + BuildStoredGiftStackSummary(record)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
-                + "\n남은 사용 " + saveLoadoutUsesRemaining[selectedSaveSlotIndex] + "회";
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(record)
+                + "\n사용 상태: " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[selectedSaveSlotIndex], includeAutoClearHint: true)
+                + "\n" + BuildSaveLoadoutUsePreviewLine(saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n입장 체크: 위협 폭·보상 / PgUp·PgDn";
         }
 
         public string BuildInfiniteStartReadyText()
         {
             if (!IsSaveSlotUsable(selectedSaveSlotIndex))
             {
+                SelectBestUsableSaveLoadoutSlotForInfinite();
+            }
+
+            if (!IsSaveSlotUsable(selectedSaveSlotIndex))
+            {
+                bool hasAnyUsableSlot = HasAnyUsableSaveLoadoutSlot();
                 return "선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
                     + "\n" + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
-                    + "\n\n무한 시작은 사용할 수 없습니다."
-                    + "\n저장 조합 변경으로 사용 가능한 슬롯을 고르세요.";
+                    + (hasAnyUsableSlot
+                        ? "\n\n선택한 슬롯은 사용할 수 없습니다."
+                        : "\n\n무한 시작 전 저장 조합 보충이 필요합니다.")
+                    + (hasAnyUsableSlot
+                        ? "\n다음: 저장 조합 변경에서 사용 가능한 슬롯 선택"
+                        : "\n보충 런 버튼: 보충 런 진입"
+                            + "\n다음: 보충 런 클리어 후 새 조합 저장");
+            }
+
+            int selectedUses = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
+            bool lastUse = selectedUses <= 1;
+            return BuildActiveLoadoutText()
+                + "\n" + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[selectedSaveSlotIndex])
+                + "\n" + BuildSelectedSaveLoadoutQualityPositionText(selectedSaveSlotIndex)
+                + "\n\n무한 시작을 누르면 사용 횟수 1회가 차감됩니다."
+                + (lastUse ? "\n이번 시작 후 이 슬롯은 자동으로 비워집니다." : string.Empty)
+                + "\n" + BuildInfiniteSlotNextActionText(true, selectedUses)
+                + "\n입장 체크: 위협 폭·보상 / PgUp·PgDn"
+                + "\n저장 조합 변경으로 다른 슬롯을 고를 수 있습니다.";
+        }
+
+        public string BuildInfiniteStartReadyBriefText()
+        {
+            if (!IsSaveSlotUsable(selectedSaveSlotIndex))
+            {
+                SelectBestUsableSaveLoadoutSlotForInfinite();
+            }
+
+            if (!IsSaveSlotUsable(selectedSaveSlotIndex))
+            {
+                return "재시작 불가: 저장 조합 보충 필요 / 일반 런 클리어";
             }
 
             bool lastUse = saveLoadoutUsesRemaining[selectedSaveSlotIndex] <= 1;
-            return BuildActiveLoadoutText()
-                + "\n\n무한 시작을 누르면 사용 횟수 1회가 차감됩니다."
-                + (lastUse ? "\n이번 시작 후 이 슬롯은 자동으로 비워집니다." : string.Empty)
-                + "\n저장 조합 변경으로 다른 슬롯을 고를 수 있습니다.";
+            return "재시작: S" + (selectedSaveSlotIndex + 1)
+                + " " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[selectedSaveSlotIndex], includeAutoClearHint: false)
+                + " / " + BuildRunGrade(saveLoadoutSlots[selectedSaveSlotIndex])
+                + " " + BuildLoadoutAndRouteProfileCompact(saveLoadoutSlots[selectedSaveSlotIndex])
+                + (lastUse ? " / 시작 후 자동 비움" : " / 시작 시 -1회")
+                + " / 위협 체크";
         }
 
         public string BuildInfiniteLoadoutSelectText()
         {
             bool usable = IsSaveSlotUsable(selectedSaveSlotIndex);
+            bool hasAnyUsableSlot = HasAnyUsableSaveLoadoutSlot();
             return "선택 슬롯: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n상태: " + BuildSelectedInfiniteLoadoutStatusText()
+                + (usable ? "\n" + BuildSaveLoadoutUsePreviewLine(saveLoadoutUsesRemaining[selectedSaveSlotIndex]) : string.Empty)
                 + "\n기록: " + FormatSaveSlotCompact(saveLoadoutSlots[selectedSaveSlotIndex], saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + (saveLoadoutSlots[selectedSaveSlotIndex].IsValid ? "\n성향: " + BuildLoadoutAndRouteProfile(saveLoadoutSlots[selectedSaveSlotIndex]) : string.Empty)
+                + (saveLoadoutSlots[selectedSaveSlotIndex].IsValid ? "\n품질: " + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[selectedSaveSlotIndex]) : string.Empty)
+                + (!usable && !hasAnyUsableSlot
+                    ? "\n\n무한 시작 전 저장 조합 보충이 필요합니다."
+                        + "\n보충 런 버튼: 보충 런 진입"
+                    : string.Empty)
+                + (hasAnyUsableSlot ? "\n" + BuildSelectedSaveLoadoutQualityPositionText(selectedSaveSlotIndex) : string.Empty)
                 + "\n\n슬롯\n" + BuildSaveSlotListText(showSelectedSlot: true, compact: true)
-                + (usable
-                    ? "\n\n선택 완료: 무한모드 준비"
-                    : "\n\n선택 불가: 사용 가능한 슬롯을 고르세요.");
+                + "\n\n" + BuildInfiniteSlotNextActionText(usable, saveLoadoutUsesRemaining[selectedSaveSlotIndex], hasAnyUsableSlot);
         }
 
         public string BuildSelectedInfiniteLoadoutDetailText()
         {
             GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
+            bool hasAnyUsableSlot = HasAnyUsableSaveLoadoutSlot();
             string slotHeader = "슬롯 " + (selectedSaveSlotIndex + 1) + " 저장 조합 상세";
             if (!record.IsValid)
             {
                 return slotHeader
                     + "\n상태: 빈 슬롯"
-                    + "\n\n선택 불가: 사용 가능한 슬롯을 고르세요.";
+                    + (hasAnyUsableSlot
+                        ? "\n\n선택 불가: 사용 가능한 슬롯을 고르세요."
+                        : "\n\n보충 런 버튼: 보충 런 진입"
+                            + "\n다음: 보충 런 클리어 후 새 조합 저장");
             }
 
             return slotHeader
                 + "\n" + BuildSaveSlotStatusLine(record, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n요약: " + FormatSaveSlotCompact(record, saveLoadoutUsesRemaining[selectedSaveSlotIndex])
+                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
+                + "\n품질: " + BuildSaveLoadoutQualitySummary(record)
                 + "\n구성: " + FormatLoadoutCombo(record)
                 + "\n타이밍: " + FormatTimingProfile(record.TimingProfile)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
+                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusBreakdown(record)
+                + "\n" + BuildSelectedSaveLoadoutQualityPositionText(selectedSaveSlotIndex)
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(record)
+                + "\n" + BuildSaveLoadoutUsePreviewLine(saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n선택: " + CompactText(record.ChoiceSummary, 34)
-                + (IsSaveSlotUsable(selectedSaveSlotIndex)
-                    ? "\n\n선택 완료: 무한모드 준비"
-                    : "\n\n선택 불가: 사용 완료된 조합입니다.");
+                + "\n\n" + BuildInfiniteSlotNextActionText(
+                    IsSaveSlotUsable(selectedSaveSlotIndex),
+                    saveLoadoutUsesRemaining[selectedSaveSlotIndex],
+                    hasAnyUsableSlot);
         }
 
         public bool TryConsumeSelectedSaveLoadout(
@@ -777,22 +1173,32 @@ namespace GreedLast
 
             int remainingAfterUse = Mathf.Max(0, remainingBeforeUse - 1);
             saveLoadoutUsesRemaining[selectedSaveSlotIndex] = remainingAfterUse;
+            lastConsumedSaveSlotIndex = usedSlotIndex;
+            lastConsumedSaveSlotName = record.LoadoutName;
+            lastConsumedSaveSlotProfile = BuildLoadoutAndRouteProfile(record);
+            lastConsumedSaveSlotRemainingAfterUse = remainingAfterUse;
+            lastConsumedSaveSlotAutoCleared = remainingAfterUse <= 0;
             bool autoClearedSlot = remainingAfterUse <= 0;
             if (autoClearedSlot)
             {
                 ClearSaveLoadoutSlot(usedSlotIndex);
-                SelectNextUsableSaveLoadoutSlot(usedSlotIndex + 1);
+                SelectBestUsableSaveLoadoutSlotForInfinite();
             }
 
+            profileNoticePending = true;
             SavePersistedData();
             detail = "슬롯 " + (usedSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
+                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
+                + "\n" + BuildSaveLoadoutQualitySummary(record)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(record)
                 + "\n이번 입장으로 1회 사용"
+                + "\n" + BuildSaveLoadoutUseConsumptionLine(remainingBeforeUse, remainingAfterUse)
                 + (autoClearedSlot
                     ? "\n사용 횟수 소진 - 슬롯 자동 비움" + BuildAutoSelectedSaveSlotNotice()
-                    : "\n남은 사용 " + remainingAfterUse + "회");
+                    : "\n사용 후 상태: " + BuildSaveUseStatusText(remainingAfterUse, includeAutoClearHint: true));
             selectedRecord = record;
             errorMessage = string.Empty;
             return true;
@@ -815,6 +1221,8 @@ namespace GreedLast
 
             InsertInfiniteRanking(record);
             infiniteRunCount += 1;
+            lastProgressEvent = ProgressEventKind.InfiniteRun;
+            profileNoticePending = true;
             AddGrowthPoints(BuildInfiniteGrowthReward(record));
             SavePersistedData();
             return true;
@@ -823,11 +1231,13 @@ namespace GreedLast
         public string BuildGrowthBoardText()
         {
             return "성장 포인트 " + growthPoints
-                + "\n\n좌 생존 보정 " + BuildGrowthTrackStatus(growthSurvivalLevel, "시작 체력 +" + growthSurvivalLevel)
-                + "\n중 집중 보정 " + BuildGrowthTrackStatus(growthFocusLevel, "시작 집중 +" + growthFocusLevel)
-                + "\n우 타이밍 보정 " + BuildGrowthTrackStatus(growthTimingLevel, "정확 +" + (growthTimingLevel * 5) + "ms / 보정 +" + (growthTimingLevel * 12) + "ms")
-                + "\n\n일반 런 클리어 +3 / 실패 +1 / 무한 기록 +1~3"
-                + "\n좌 · 중 · 우로 성장 축을 올립니다.";
+                + "\n\n좌 생존 " + BuildGrowthTrackStatus(growthSurvivalLevel, BuildGrowthTrackEffectText(0, growthSurvivalLevel))
+                + "\n중 집중 " + BuildGrowthTrackStatus(growthFocusLevel, BuildGrowthTrackEffectText(1, growthFocusLevel))
+                + "\n우 타이밍 " + BuildGrowthTrackStatus(growthTimingLevel, BuildGrowthTrackEffectText(2, growthTimingLevel))
+                + "\n\n" + BuildGrowthRecommendationText()
+                + "\n" + BuildGrowthRecommendationDetailText()
+                + "\n\n보상: 클리어 +3 / 실패 +1 / 무한 +1~3"
+                + "\n추천 강화 버튼 또는 좌 · 중 · 우 입력으로 적용";
         }
 
         public GreedLastLobbySnapshot UpgradeGrowth(GreedLastRunChannel channel, out string notice)
@@ -846,14 +1256,49 @@ namespace GreedLast
             int cost = BuildGrowthUpgradeCost(level);
             if (growthPoints < cost)
             {
-                notice = trackName + " 성장 포인트 부족\n필요 " + cost + " / 보유 " + growthPoints;
+                notice = trackName + " 성장 포인트 부족\n필요 " + cost + " / 보유 " + growthPoints
+                    + "\n보충: " + BuildGrowthPointRefillHint();
                 return LoadLobby();
             }
 
             growthPoints -= cost;
-            SetGrowthTrackLevel(trackIndex, level + 1);
+            int nextLevel = level + 1;
+            SetGrowthTrackLevel(trackIndex, nextLevel);
+            profileNoticePending = true;
             SavePersistedData();
-            notice = trackName + " Lv." + (level + 1) + " 적용";
+            notice = trackName + " Lv." + nextLevel + " 적용"
+                + "\n" + BuildGrowthTrackEffectText(trackIndex, nextLevel)
+                + "\n남은 포인트 " + growthPoints
+                + "\n다음: " + BuildRecommendedGrowthActionSummary();
+            return LoadLobby();
+        }
+
+        public GreedLastLobbySnapshot AddGrowthPointsForTest(int amount)
+        {
+            AddGrowthPoints(amount);
+            profileNoticePending = true;
+            SavePersistedData();
+            return LoadLobby();
+        }
+
+        public GreedLastLobbySnapshot MaxGrowthForTest()
+        {
+            growthSurvivalLevel = GrowthMaxLevel;
+            growthFocusLevel = GrowthMaxLevel;
+            growthTimingLevel = GrowthMaxLevel;
+            profileNoticePending = true;
+            SavePersistedData();
+            return LoadLobby();
+        }
+
+        public GreedLastLobbySnapshot ResetGrowthForTest()
+        {
+            growthPoints = 0;
+            growthSurvivalLevel = 0;
+            growthFocusLevel = 0;
+            growthTimingLevel = 0;
+            profileNoticePending = true;
+            SavePersistedData();
             return LoadLobby();
         }
 
@@ -879,6 +1324,21 @@ namespace GreedLast
                 : string.Empty;
         }
 
+        private string BuildGrowthPointRefillHint()
+        {
+            if (HasSaveLoadoutCandidate)
+            {
+                return "저장 후보 처리 후 무한모드 또는 일반 런";
+            }
+
+            if (HasAnyUsableSaveLoadoutSlot())
+            {
+                return "무한모드 기록 또는 일반 런";
+            }
+
+            return "일반 런 클리어/실패 기록";
+        }
+
         private static int BuildGrowthUpgradeCost(int currentLevel)
         {
             return Mathf.Clamp(currentLevel + 1, 1, GrowthMaxLevel);
@@ -887,8 +1347,24 @@ namespace GreedLast
         private static string BuildGrowthTrackStatus(int level, string effectText)
         {
             return "Lv." + level + "/" + GrowthMaxLevel
-                + " / " + effectText
-                + (level >= GrowthMaxLevel ? " / MAX" : " / 다음 " + BuildGrowthUpgradeCost(level) + "pt");
+                + "  " + effectText
+                + (level >= GrowthMaxLevel ? "  MAX" : "  다음 " + BuildGrowthUpgradeCost(level) + "pt");
+        }
+
+        private static string BuildGrowthTrackEffectText(int trackIndex, int level)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthMaxLevel);
+            switch (trackIndex)
+            {
+                case 0:
+                    return "시작 체력 +" + safeLevel;
+                case 1:
+                    return "시작 집중 +" + safeLevel;
+                case 2:
+                    return "정확 +" + (safeLevel * 5) + "ms / 보정 +" + (safeLevel * 12) + "ms";
+                default:
+                    return "보정 +" + safeLevel;
+            }
         }
 
         private int GetGrowthTrackLevel(int trackIndex)
@@ -938,6 +1414,239 @@ namespace GreedLast
             }
         }
 
+        private string BuildGrowthRecommendationText()
+        {
+            if (growthSurvivalLevel >= GrowthMaxLevel
+                && growthFocusLevel >= GrowthMaxLevel
+                && growthTimingLevel >= GrowthMaxLevel)
+            {
+                return "추천: 모든 성장 보정 MAX";
+            }
+
+            int targetTrack = SelectRecommendedGrowthTrack(out string reason);
+            int level = GetGrowthTrackLevel(targetTrack);
+            int cost = BuildGrowthUpgradeCost(level);
+            string trackName = GetGrowthTrackName(targetTrack);
+            string reasonText = string.IsNullOrEmpty(reason) ? string.Empty : " / " + reason;
+            return growthPoints >= cost
+                ? "추천: " + trackName + " / 필요 " + cost + "pt" + reasonText
+                : "추천: " + trackName + " / " + (cost - growthPoints) + "pt 부족" + reasonText;
+        }
+
+        private string BuildGrowthRecommendationDetailText()
+        {
+            if (growthSurvivalLevel >= GrowthMaxLevel
+                && growthFocusLevel >= GrowthMaxLevel
+                && growthTimingLevel >= GrowthMaxLevel)
+            {
+                return "근거: 성장 완료 / 다음은 기록 갱신";
+            }
+
+            int targetTrack = SelectRecommendedGrowthTrack(out string reason);
+            if (targetTrack < 0)
+            {
+                return "근거: 성장 완료 / 다음은 기록 갱신";
+            }
+
+            int level = GetGrowthTrackLevel(targetTrack);
+            int nextLevel = Mathf.Clamp(level + 1, 0, GrowthMaxLevel);
+            int cost = BuildGrowthUpgradeCost(level);
+            string affordance = growthPoints >= cost
+                ? "지금 적용 가능"
+                : (cost - growthPoints) + "pt 필요";
+            string reasonText = string.IsNullOrEmpty(reason) ? "낮은 레벨 보강" : reason;
+            return "근거: " + reasonText
+                + " / 다음 " + BuildGrowthTrackEffectText(targetTrack, nextLevel)
+                + " / " + affordance;
+        }
+
+        private int BuildRecommendedGrowthTrackIndex()
+        {
+            if (growthSurvivalLevel >= GrowthMaxLevel
+                && growthFocusLevel >= GrowthMaxLevel
+                && growthTimingLevel >= GrowthMaxLevel)
+            {
+                return -1;
+            }
+
+            return SelectRecommendedGrowthTrack(out _);
+        }
+
+        private int SelectRecommendedGrowthTrack(out string reason)
+        {
+            if (TrySelectRecentGrowthRecommendation(out int recentTrack, out string recentReason)
+                && GetGrowthTrackLevel(recentTrack) < GrowthMaxLevel)
+            {
+                reason = recentReason;
+                return recentTrack;
+            }
+
+            reason = "낮은 레벨 우선";
+            return SelectLowestOpenGrowthTrack();
+        }
+
+        private int SelectLowestOpenGrowthTrack()
+        {
+            int track = 0;
+            int level = int.MaxValue;
+            for (int i = 0; i < 3; i += 1)
+            {
+                int candidateLevel = GetGrowthTrackLevel(i);
+                if (candidateLevel < GrowthMaxLevel && candidateLevel < level)
+                {
+                    track = i;
+                    level = candidateLevel;
+                }
+            }
+
+            return track;
+        }
+
+        private bool TrySelectRecentGrowthRecommendation(out int track, out string reason)
+        {
+            switch (lastProgressEvent)
+            {
+                case ProgressEventKind.NormalClear:
+                    return TrySelectClearGrowthRecommendation(out track, out reason)
+                        || TrySelectRunAttemptGrowthRecommendation(out track, out reason)
+                        || TrySelectInfiniteGrowthRecommendation(out track, out reason);
+                case ProgressEventKind.NormalFailed:
+                case ProgressEventKind.NormalAbandoned:
+                    return TrySelectRunAttemptGrowthRecommendation(out track, out reason)
+                        || TrySelectClearGrowthRecommendation(out track, out reason)
+                        || TrySelectInfiniteGrowthRecommendation(out track, out reason);
+                case ProgressEventKind.InfiniteRun:
+                    return TrySelectInfiniteGrowthRecommendation(out track, out reason)
+                        || TrySelectRunAttemptGrowthRecommendation(out track, out reason)
+                        || TrySelectClearGrowthRecommendation(out track, out reason);
+                default:
+                    return TrySelectRunAttemptGrowthRecommendation(out track, out reason)
+                        || TrySelectClearGrowthRecommendation(out track, out reason)
+                        || TrySelectInfiniteGrowthRecommendation(out track, out reason);
+            }
+        }
+
+        private bool TrySelectRunAttemptGrowthRecommendation(out int track, out string reason)
+        {
+            if (lastRunAttemptRecord.IsValid && lastRunAttemptRecord.MissReason == "focus_guard")
+            {
+                track = 1;
+                reason = "집중 보호 발생";
+                return true;
+            }
+
+            if (lastRunAttemptRecord.IsValid && IsTimingMissReason(lastRunAttemptRecord.MissReason))
+            {
+                track = 2;
+                reason = "최근 입력 실수";
+                return true;
+            }
+
+            if (lastRunAttemptRecord.IsValid
+                && (lastRunAttemptRecord.Health <= 0 || lastRunAttemptRecord.Outcome == GreedLastRunAttemptOutcome.Failed))
+            {
+                track = 0;
+                reason = "최근 체력 소진";
+                return true;
+            }
+
+            track = 0;
+            reason = string.Empty;
+            return false;
+        }
+
+        private bool TrySelectClearGrowthRecommendation(out int track, out string reason)
+        {
+            if (lastRunRecord.IsValid)
+            {
+                if (lastRunRecord.Health <= 2)
+                {
+                    track = 0;
+                    reason = "클리어 체력 낮음";
+                    return true;
+                }
+
+                if (lastRunRecord.Focus <= 1)
+                {
+                    track = 1;
+                    reason = "클리어 집중 낮음";
+                    return true;
+                }
+
+                if (TimingProfileNeedsGrowth(lastRunRecord.TimingProfile))
+                {
+                    track = 2;
+                    reason = "클리어 타이밍 흔들림";
+                    return true;
+                }
+            }
+
+            track = 0;
+            reason = string.Empty;
+            return false;
+        }
+
+        private bool TrySelectInfiniteGrowthRecommendation(out int track, out string reason)
+        {
+            if (lastInfiniteRunRecord.IsValid)
+            {
+                if (lastInfiniteRunRecord.MissReason == "focus_guard")
+                {
+                    track = 1;
+                    reason = "무한 집중 보호";
+                    return true;
+                }
+
+                if (IsTimingMissReason(lastInfiniteRunRecord.MissReason))
+                {
+                    track = 2;
+                    reason = "무한 입력 실수";
+                    return true;
+                }
+
+                if (TimingProfileNeedsGrowth(lastInfiniteRunRecord.TimingProfile))
+                {
+                    track = 2;
+                    reason = "무한 타이밍 흔들림";
+                    return true;
+                }
+
+                if (lastInfiniteRunRecord.MaxThreatLevel >= 4 && lastInfiniteRunRecord.SectionsCleared <= 2)
+                {
+                    track = 0;
+                    reason = "고위험 생존 보강";
+                    return true;
+                }
+
+                if (lastInfiniteRunRecord.MissCount >= Mathf.Max(3, lastInfiniteRunRecord.SuccessCount + lastInfiniteRunRecord.GoodCount))
+                {
+                    track = 2;
+                    reason = "무한 실수 많음";
+                    return true;
+                }
+            }
+
+            track = 0;
+            reason = string.Empty;
+            return false;
+        }
+
+        private static bool IsTimingMissReason(string missReason)
+        {
+            return missReason == "wrong_channel"
+                || missReason == "no_input"
+                || missReason == "too_early"
+                || missReason == "too_late";
+        }
+
+        private static bool TimingProfileNeedsGrowth(string timingProfile)
+        {
+            string advice = BuildTimingProfileAdvice(timingProfile);
+            return advice.StartsWith("빠른 편", StringComparison.Ordinal)
+                || advice.StartsWith("늦은 편", StringComparison.Ordinal)
+                || advice.StartsWith("흔들림", StringComparison.Ordinal);
+        }
+
         public string BuildInfiniteRunResultMessage(GreedLastInfiniteRunRecord record)
         {
             if (!record.IsValid)
@@ -945,15 +1654,74 @@ namespace GreedLast
                 return "무한모드 기록이 없습니다.";
             }
 
+            return BuildInfiniteRunResultSummaryText(record, "무한모드 종료 / 기록 저장");
+        }
+
+        public string BuildInfiniteRunNoRecordMessage()
+        {
+            return "무한모드 기록이 없습니다."
+                + BuildLastSaveLoadoutUseResultLine()
+                + "\n저장 조합은 무한 시작 시점에 1회 차감됩니다."
+                + "\n" + BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: true);
+        }
+
+        public string BuildInfiniteRunSavedPrepMessage(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return BuildInfiniteRunNoRecordMessage();
+            }
+
+            return BuildInfiniteRunResultSummaryText(record, "무한 기록 저장");
+        }
+
+        private string BuildInfiniteRunResultSummaryText(GreedLastInfiniteRunRecord record, string title)
+        {
             string bestText = bestInfiniteRunRecord.IsValid
                 ? FormatInfiniteRecordCompact(bestInfiniteRunRecord)
                 : FormatInfiniteRecordCompact(record);
-            return "무한모드 종료 / 기록 저장"
-                + "\n이번: " + FormatInfiniteRecordCompact(record)
+            return title
+                + "\n이번: " + FormatInfiniteRecordCompact(record) + " / " + BuildInfiniteRunResultHighlight(record)
+                + "\n흐름: " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + "\n회피: " + BuildAvoidancePerformanceSummary(record.TimingProfile)
+                + FormatRelevantInfiniteSegmentResultLine(record.TimingProfile)
+                + "\n집중: " + BuildFocusPerformanceSummary(record.TimingProfile)
                 + "\n최고: " + bestText
                 + "\n비교: " + BuildInfiniteRunResultComparisonText(record)
+                + BuildLastSaveLoadoutUseResultLine()
                 + FormatGrowthRewardLine(BuildInfiniteGrowthReward(record))
-                + "\n다음: 기록 보기에서 무한 기록 확인";
+                + "\n힌트: " + BuildCompactInfinitePostRunHint(record)
+                + "\n복기: " + BuildInfiniteRunReviewText(record)
+                + FormatReviewTargetResultLine(record.TimingProfile)
+                + FormatInfiniteLoadoutAdviceLine(record)
+                + "\n목표: " + BuildInfiniteRunNextTargetText(record)
+                + FormatProfileResultTraceLine()
+                + "\n" + BuildInfiniteRunNextActionLine(record);
+        }
+
+        private string BuildCompactInfinitePostRunHint(GreedLastInfiniteRunRecord record)
+        {
+            if (record.MissReason == "test_stop")
+            {
+                return CompactText(BuildInfiniteRunTrainingHint(record), 46);
+            }
+
+            bool relevantSegmentNeedsWork = record.MissReason != "test_stop"
+                && (ExtractTimingProfileCount(record.TimingProfile, "종료 구간 실수 ") > 0
+                    || ExtractTimingProfileCount(record.TimingProfile, "종료 구간 보정 ") > 0
+                    || ExtractTimingProfileCount(record.TimingProfile, "최근 구간 실수 ") > 0
+                    || ExtractTimingProfileCount(record.TimingProfile, "최근 구간 보정 ") > 0);
+            if (relevantSegmentNeedsWork)
+            {
+                return CompactText(BuildInfiniteRunTrainingHint(record), 46);
+            }
+
+            string timingAdvice = BuildTimingProfileAdvice(record.TimingProfile);
+            bool timingNeedsWork = timingAdvice.StartsWith("빠른 편", StringComparison.Ordinal)
+                || timingAdvice.StartsWith("늦은 편", StringComparison.Ordinal)
+                || timingAdvice.StartsWith("흔들림", StringComparison.Ordinal);
+            string hint = timingNeedsWork ? timingAdvice : BuildInfiniteRunTrainingHint(record);
+            return CompactText(hint, 46);
         }
 
         public string BuildInfiniteRecordBoardText()
@@ -961,38 +1729,2424 @@ namespace GreedLast
             return BuildRecordBoardText(0);
         }
 
+        public string BuildProfileBoardText(int pageIndex = 0)
+        {
+            switch (NormalizeProfileBoardPage(pageIndex))
+            {
+                case 1:
+                    return "저장 조합\n" + BuildProfileSaveLoadoutTraceText()
+                        + "\n\n성장 흔적\n" + BuildProfileGrowthTraceText()
+                        + "\n\n다음 행동\n" + BuildProfileNextActionText();
+                case 2:
+                    return "장식\n" + BuildProfileBadgeText()
+                        + "\n\n대표 기록\n" + BuildProfileRepresentativeRecordText();
+                case 3:
+                    return "검증 순서\n" + BuildPrototypePlaytestOrderText()
+                        + "\n\n조작 체크\n" + BuildPrototypeInteractionChecklistText()
+                        + "\n\n현재 추천\n" + BuildProfileNextActionText();
+                default:
+                    return "성과 요약\n" + BuildRunProgressSummaryText()
+                        + "\n\n프로토타입 체크 - 기획 체감 검증\n" + BuildPrototypePlaytestChecklistText()
+                        + "\n\n다음 행동\n" + BuildProfileNextActionText();
+            }
+        }
+
+        private string BuildPrototypePlaytestChecklistText()
+        {
+            string runStatus = bestRunRecord.IsValid
+                ? "일반 " + BuildRunGrade(bestRunRecord) + " 완료"
+                : normalFailCount + normalAbandonCount > 0 ? "일반 재도전 필요" : "일반 대기";
+            string saveStatus = HasSaveLoadoutCandidate
+                ? "저장 후보 우선"
+                : HasAnyUsableSaveLoadoutSlot()
+                    ? "저장 조합 가능"
+                    : firstSaveCompleted ? "조합 보충 필요" : "저장 조합 대기";
+            string infiniteStatus = bestInfiniteRunRecord.IsValid
+                ? "무한 " + bestInfiniteRunRecord.SectionsCleared + "구간 기록"
+                : HasSaveLoadoutCandidate
+                    ? "후보 처리 후 무한"
+                    : infiniteRunCount > 0 ? "무한 기록 갱신 대기" : "무한 대기";
+            string growthStatus = growthSurvivalLevel + growthFocusLevel + growthTimingLevel > 0
+                ? "성장 Lv." + (growthSurvivalLevel + growthFocusLevel + growthTimingLevel)
+                : growthPoints > 0 ? "성장 포인트 보유" : "성장 대기";
+            string recordStatus = bestRunRecord.IsValid || bestInfiniteRunRecord.IsValid || lastRunAttemptRecord.IsValid
+                ? "기록 보드 확인 가능"
+                : "기록 대기";
+            string cueStatus = BuildPrototypeCueChecklistText();
+            string consumptionStatus = BuildSaveLoadoutConsumptionChecklistText();
+            string reviewStatus = BuildPrototypeReviewChecklistText();
+            string sensoryStatus = BuildPrototypeSensoryChecklistText();
+            string threatStatus = BuildPrototypeThreatChecklistText();
+            string nextCheck = BuildPrototypeNextCheckText();
+
+            return "체감 목표: 피하기 + 정확 타이밍 / " + BuildPrototypeProgressChecklistStatusText()
+                + "·" + BuildPrototypeCompletionLoopStatusText()
+                + " / 다음 확인: " + nextCheck
+                + " / 실행: " + BuildPrototypeNextCheckActionText(nextCheck)
+                + " / " + runStatus + " / " + saveStatus
+                + "\n" + infiniteStatus + " / " + threatStatus + " / " + growthStatus + " / " + cueStatus
+                + "\n" + recordStatus + " / " + consumptionStatus + " / " + reviewStatus + " / " + sensoryStatus;
+        }
+
+        private string BuildPrototypeProgressChecklistStatusText()
+        {
+            const int totalChecks = 7;
+            int completedChecks = 0;
+            bool hasRunTrace = normalClearCount > 0
+                || normalFailCount > 0
+                || normalAbandonCount > 0
+                || lastRunAttemptRecord.IsValid;
+
+            if (hasRunTrace)
+            {
+                completedChecks += 1;
+            }
+
+            if (bestRunRecord.IsValid)
+            {
+                completedChecks += 1;
+            }
+
+            if (firstSaveCompleted || saveLoadoutUnlocked || HasSaveLoadoutCandidate || HasAnySaveLoadoutSlot())
+            {
+                completedChecks += 1;
+            }
+
+            if (HasLastSaveLoadoutUseTrace())
+            {
+                completedChecks += 1;
+            }
+
+            if (lastConsumedSaveSlotAutoCleared)
+            {
+                completedChecks += 1;
+            }
+
+            if (infiniteRunCount > 0 || bestInfiniteRunRecord.IsValid || lastInfiniteRunRecord.IsValid)
+            {
+                completedChecks += 1;
+            }
+
+            if (bestRunRecord.IsValid || bestInfiniteRunRecord.IsValid || lastRunAttemptRecord.IsValid)
+            {
+                completedChecks += 1;
+            }
+
+            return "체크 " + completedChecks + "/" + totalChecks;
+        }
+
+        private string BuildPrototypeCompletionLoopStatusText()
+        {
+            const int totalLoopSteps = 4;
+            int completedSteps = 0;
+            if (bestRunRecord.IsValid)
+            {
+                completedSteps += 1;
+            }
+
+            if (savedLoadoutConfirmed
+                || HasAnySaveLoadoutSlot()
+                || HasLastSaveLoadoutUseTrace()
+                || lastConsumedSaveSlotAutoCleared)
+            {
+                completedSteps += 1;
+            }
+
+            if (infiniteRunCount > 0 || bestInfiniteRunRecord.IsValid || lastInfiniteRunRecord.IsValid)
+            {
+                completedSteps += 1;
+            }
+
+            if (bestRunRecord.IsValid || bestInfiniteRunRecord.IsValid || lastRunAttemptRecord.IsValid)
+            {
+                completedSteps += 1;
+            }
+
+            return "루프 " + completedSteps + "/" + totalLoopSteps;
+        }
+
+        private bool HasPrototypeCompletionLoopCompleted()
+        {
+            return bestRunRecord.IsValid
+                && (savedLoadoutConfirmed
+                    || HasAnySaveLoadoutSlot()
+                    || HasLastSaveLoadoutUseTrace()
+                    || lastConsumedSaveSlotAutoCleared)
+                && (infiniteRunCount > 0 || bestInfiniteRunRecord.IsValid || lastInfiniteRunRecord.IsValid);
+        }
+
+        private bool IsPrototypeCompletionRecordCheckActive()
+        {
+            return HasPrototypeCompletionLoopCompleted()
+                && string.Equals(BuildPrototypeNextCheckText(), "완성 루프 기록 확인", StringComparison.Ordinal);
+        }
+
+        private string BuildPrototypeNextCheckText()
+        {
+            bool hasRunTrace = normalClearCount > 0
+                || normalFailCount > 0
+                || normalAbandonCount > 0
+                || lastRunAttemptRecord.IsValid;
+
+            if (!hasRunTrace)
+            {
+                return "일반 런 첫 함정";
+            }
+
+            if (!bestRunRecord.IsValid)
+            {
+                return lastRunAttemptRecord.IsValid ? "복기 연습 후 탈출" : "일반 런 탈출";
+            }
+
+            if (HasSaveLoadoutCandidate)
+            {
+                return "저장 후보 저장/포기";
+            }
+
+            if (!firstSaveCompleted && !saveLoadoutUnlocked && !HasAnySaveLoadoutSlot())
+            {
+                return "클리어 후 저장 후보";
+            }
+
+            if (!HasLastSaveLoadoutUseTrace())
+            {
+                return HasAnyUsableSaveLoadoutSlot() ? "저장 조합으로 무한 시작" : "무한 조합 보충";
+            }
+
+            if (!lastConsumedSaveSlotAutoCleared)
+            {
+                return "저장 조합 2회 소진";
+            }
+
+            if (lastConsumedSaveSlotAutoCleared && !HasAnyUsableSaveLoadoutSlot())
+            {
+                return "보충 후 무한 재진입";
+            }
+
+            if (infiniteRunCount <= 0 && !bestInfiniteRunRecord.IsValid && !lastInfiniteRunRecord.IsValid)
+            {
+                return "무한 기록 생성";
+            }
+
+            if (!bestRunRecord.IsValid && !bestInfiniteRunRecord.IsValid && !lastRunAttemptRecord.IsValid)
+            {
+                return "기록 보드 확인";
+            }
+
+            string avoidancePractice = BuildAvoidancePracticeNextActionFromProgress();
+            if (!string.IsNullOrEmpty(avoidancePractice))
+            {
+                return CompactText(avoidancePractice, 34);
+            }
+
+            string nextAction = BuildReviewTargetNextActionFromProgress();
+            if (!string.IsNullOrEmpty(nextAction))
+            {
+                return CompactText(nextAction, 34);
+            }
+
+            if (HasPrototypeCompletionLoopCompleted())
+            {
+                return "완성 루프 기록 확인";
+            }
+
+            return HasAnyUsableSaveLoadoutSlot() ? "무한 기록 갱신" : "보충 후 무한 재진입";
+        }
+
+        private string BuildPrototypeNextCheckActionText(string nextCheck)
+        {
+            if (string.IsNullOrWhiteSpace(nextCheck))
+            {
+                return "강조 버튼";
+            }
+
+            if (nextCheck.StartsWith("클리어 후", StringComparison.Ordinal)
+                || nextCheck.StartsWith("일반 런", StringComparison.Ordinal))
+            {
+                return "일반 런";
+            }
+
+            if (nextCheck.Contains("저장 후보", StringComparison.Ordinal))
+            {
+                return "저장 조합";
+            }
+
+            if (nextCheck.Contains("2회 소진", StringComparison.Ordinal))
+            {
+                return HasAnyUsableSaveLoadoutSlot() ? "PgUp 소모" : "무한 조합 보충";
+            }
+
+            if (nextCheck.Contains("보충", StringComparison.Ordinal)
+                || nextCheck.Contains("무한 조합", StringComparison.Ordinal))
+            {
+                return "무한 조합 보충";
+            }
+
+            if (nextCheck.Contains("복기 재도전", StringComparison.Ordinal))
+            {
+                return nextCheck.Contains("무한", StringComparison.Ordinal) ? "무한모드" : "일반 런";
+            }
+
+            if (nextCheck.Contains("복기", StringComparison.Ordinal)
+                || nextCheck.Contains("기초연습", StringComparison.Ordinal)
+                || nextCheck.Contains("실수", StringComparison.Ordinal)
+                || nextCheck.Contains("보정", StringComparison.Ordinal))
+            {
+                return "복기 연습";
+            }
+
+            if (nextCheck.Contains("무한", StringComparison.Ordinal))
+            {
+                return "무한모드";
+            }
+
+            if (nextCheck.Contains("기록", StringComparison.Ordinal))
+            {
+                return "기록 보기";
+            }
+
+            return "일반 런";
+        }
+
+        private string BuildPrototypePlaytestOrderText()
+        {
+            string normalStep = bestRunRecord.IsValid ? "완료" : "첫 탈출";
+            string saveStep = HasSaveLoadoutCandidate
+                ? "후보 저장/포기"
+                : HasAnySaveLoadoutSlot()
+                    ? "저장됨"
+                    : firstSaveCompleted ? "보충 클리어 후 저장" : "클리어 후 저장";
+            string infiniteStep = HasSaveLoadoutCandidate
+                ? "후보 처리 후 시작"
+                : firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot()
+                ? "조합 보충"
+                : infiniteRunCount > 0
+                    ? "기록 확인"
+                    : HasAnyUsableSaveLoadoutSlot() ? "저장 조합 시작" : "조합 보충";
+            string recordStep = bestRunRecord.IsValid || bestInfiniteRunRecord.IsValid || lastRunAttemptRecord.IsValid
+                ? "기록 비교"
+                : "기록 생성";
+
+            return "1 일반 런: " + normalStep + " / 위험→동작·박자·보상·상태줄·루트 버튼"
+                + "\n2 저장 조합: " + saveStep + " / 저장 없이 로비→클리어 복기 / 2회 소진"
+                + "\n3 무한모드: " + infiniteStep + " / 위협·정산·실전 재개"
+                + "\n4 기록/흔적: " + recordStep + " / 기록만 / 2/4 버튼";
+        }
+
+        private string BuildPrototypeInteractionChecklistText()
+        {
+            string saveUseCheck = HasLastSaveLoadoutUseTrace()
+                ? BuildSaveLoadoutConsumptionChecklistText()
+                    + (lastConsumedSaveSlotAutoCleared ? string.Empty : " / 자동 비움 대기")
+                : "저장 조합 2회 소진 후 자동 비움";
+            string infiniteCheck = HasAnyUsableSaveLoadoutSlot()
+                ? "무한 위협 +/- / 폭·보상 읽기 / 정산 종료"
+                : firstSaveCompleted ? "무한 조합 보충 / 무한 위협 전 준비 / 폭·보상" : "무한 위협 전 저장 조합 준비 / 폭·보상";
+            return "체감 목표: 피하기 + 정확 타이밍 / 동작 확인 위험→동작 바닥↑점 상단↓숙 측면↔틀 / 상태줄 보상·3동작 HUD / 최근 흐름/F8 경로 ↑↓↔·↔↓↑·↓↔↑"
+                + "\n테스트키: 중앙/레인 큐 / F1 무적 / F2 기프트·F3 유물·F4 핵·F5 탈출 / F6 집중 / F7 목표·F8 경로·F9 동작 / PgUp·PgDn·End"
+                + "\nEnter: 강조 다음 행동 / 일시정지 배경차단·선택·정산 큐 숨김 / GO 첫 함정 / 복기 약점 반복 / 보정 빠름·추천·늦음 / 감각 소리%·진동 / 터치 탭"
+                + "\n" + PrototypeCompletionLoopContract + " / " + infiniteCheck + " / 저장: " + saveUseCheck;
+        }
+
+        private static string BuildPrototypeSensoryChecklistText()
+        {
+            string calibration = GreedLastRunCore.BuildStoredInputTimingOffsetChecklistText()
+                .Replace("보정: ", "보정:");
+            string sensory = GreedLastRuntimeUi.BuildSensorySettingsChecklistTextFromPrefs()
+                .Replace("감각: ", string.Empty)
+                .Replace("소리 ", "소리")
+                .Replace("진동 ", "진동");
+            return "감각 " + calibration + "·" + sensory;
+        }
+
+        private string BuildPrototypeThreatChecklistText()
+        {
+            if (HasAnyUsableSaveLoadoutSlot() || infiniteRunCount > 0 || bestInfiniteRunRecord.IsValid)
+            {
+                return "위협 폭·보상 확인";
+            }
+
+            return firstSaveCompleted ? "위협 폭·보상 대기" : "위협 전 저장";
+        }
+
+        private string BuildPrototypeReviewChecklistText()
+        {
+            string attemptWeakness = lastRunAttemptRecord.IsValid
+                ? BuildAvoidanceWeaknessSummary(lastRunAttemptRecord.TimingProfile)
+                : string.Empty;
+            if (!string.IsNullOrEmpty(attemptWeakness))
+            {
+                return "복기 약점 " + BuildPrototypeWeaknessChecklistText(attemptWeakness, 38);
+            }
+
+            string infiniteWeakness = lastInfiniteRunRecord.IsValid
+                ? BuildAvoidanceWeaknessSummary(lastInfiniteRunRecord.TimingProfile)
+                : string.Empty;
+            if (!string.IsNullOrEmpty(infiniteWeakness))
+            {
+                return "무한 약점 " + BuildPrototypeWeaknessChecklistText(infiniteWeakness, 34);
+            }
+
+            string nextAction = BuildReviewTargetNextActionFromProgress();
+            if (!string.IsNullOrEmpty(nextAction))
+            {
+                return "복기 다음 " + CompactText(nextAction, 48);
+            }
+
+            if (lastRunAttemptRecord.IsValid || lastInfiniteRunRecord.IsValid)
+            {
+                return "복기 기록 확인 가능";
+            }
+
+            return "복기 대기";
+        }
+
+        private static string BuildPrototypeWeaknessChecklistText(string weakness, int maxLength)
+        {
+            string compact = weakness
+                .Replace("기초연습 ", "연습 ")
+                .Replace(" 단계", string.Empty)
+                .Replace("실수 ", "실")
+                .Replace("보정 ", "보")
+                .Replace("회", string.Empty);
+            return CompactText(compact, maxLength);
+        }
+
+        private string BuildPrototypeCueChecklistText()
+        {
+            bool hasRunTrace = normalClearCount > 0
+                || normalFailCount > 0
+                || normalAbandonCount > 0
+                || infiniteRunCount > 0;
+            string cueContract = BuildPrototypeCueContractText(Application.isEditor || Debug.isDebugBuild);
+
+            return hasRunTrace
+                ? "중앙/레인 큐+상태줄 확인: " + cueContract
+                : "중앙/레인 큐+상태줄 대기: 첫 함정 " + cueContract;
+        }
+
+        private static string BuildPrototypeCueContractText(bool devToolsEnabled)
+        {
+            return devToolsEnabled ? "위험→동작·키·1박·보상" : "위험→동작·탭·1박·보상";
+        }
+
+        private string BuildSaveLoadoutConsumptionChecklistText()
+        {
+            if (!HasLastSaveLoadoutUseTrace())
+            {
+                return "소진 확인 대기";
+            }
+
+            return lastConsumedSaveSlotAutoCleared
+                ? "최근 소진 자동 비움"
+                : "최근 소모 " + BuildSaveUseStatusText(lastConsumedSaveSlotRemainingAfterUse, includeAutoClearHint: false);
+        }
+
+        public string BuildProfileButtonSummary()
+        {
+            if (!HasAnyProfileTrace())
+            {
+                return "흔적";
+            }
+
+            if (HasSaveLoadoutCandidate)
+            {
+                return profileNoticePending ? "흔적 저장 NEW" : "흔적 저장";
+            }
+
+            if (firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot())
+            {
+                return profileNoticePending ? "흔적 보충 NEW" : "흔적 보충";
+            }
+
+            if (!string.IsNullOrEmpty(BuildReviewTargetNextActionFromProgress())
+                || !string.IsNullOrEmpty(BuildAvoidancePracticeNextActionFromProgress()))
+            {
+                return profileNoticePending ? "흔적 복기 NEW" : "흔적 복기";
+            }
+
+            if (IsPrototypeCompletionRecordCheckActive())
+            {
+                return profileNoticePending ? "흔적 완성 NEW" : "흔적 완성";
+            }
+
+            if (HasAnyGrowthUpgradeAvailable() || growthPoints > 0)
+            {
+                return profileNoticePending ? "흔적 성장 NEW" : "흔적 성장";
+            }
+
+            if (profileNoticePending)
+            {
+                return "흔적 NEW";
+            }
+
+            string tier = BuildProfileTierLabel();
+            return string.IsNullOrEmpty(tier) ? "흔적" : "흔적 " + tier;
+        }
+
+        public GreedLastLobbySnapshot MarkProfileSeen()
+        {
+            if (profileNoticePending)
+            {
+                profileNoticePending = false;
+                SavePersistedData();
+            }
+
+            return LoadLobby();
+        }
+
+        private string FormatProfileResultTraceLine()
+        {
+            return HasAnyProfileTrace()
+                ? "\n흔적: " + BuildProfileBadgeName() + " / " + BuildProfileTierLabel()
+                : string.Empty;
+        }
+
+        private static string FormatReviewTargetResultLine(string timingProfile)
+        {
+            string result = ExtractReviewTargetResultSummary(timingProfile);
+            return string.IsNullOrEmpty(result)
+                ? string.Empty
+                : "\n복기 목표: " + CompactText(result, 78);
+        }
+
+        private static string ExtractReviewTargetResultSummary(string timingProfile)
+        {
+            if (string.IsNullOrWhiteSpace(timingProfile))
+            {
+                return string.Empty;
+            }
+
+            const string targetMarker = "복기 목표 ";
+            const string resultMarker = " / 복기 결과 ";
+            string normalized = timingProfile.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            int targetStart = normalized.IndexOf(targetMarker, StringComparison.Ordinal);
+            if (targetStart < 0)
+            {
+                return string.Empty;
+            }
+
+            targetStart += targetMarker.Length;
+            int resultStart = normalized.IndexOf(resultMarker, targetStart, StringComparison.Ordinal);
+            if (resultStart < 0)
+            {
+                return string.Empty;
+            }
+
+            string target = normalized.Substring(targetStart, resultStart - targetStart).Trim();
+            string result = normalized.Substring(resultStart + resultMarker.Length).Trim();
+            int nextSeparator = result.IndexOf(" / ", StringComparison.Ordinal);
+            if (nextSeparator >= 0)
+            {
+                result = result.Substring(0, nextSeparator).Trim();
+            }
+
+            return string.IsNullOrEmpty(target) || string.IsNullOrEmpty(result)
+                ? string.Empty
+                : target + " / " + result;
+        }
+
         public string BuildRecordBoardText(int pageIndex)
         {
             int page = NormalizeRecordBoardPage(pageIndex);
-            string latestNormalText = lastRunRecord.IsValid
-                ? FormatRunRecordBoardLine(lastRunRecord)
-                : "기록 없음";
-            string bestNormalText = bestRunRecord.IsValid
-                ? FormatRunRecordBoardLine(bestRunRecord)
-                : "기록 없음";
-            string latestText = lastInfiniteRunRecord.IsValid
-                ? FormatInfiniteRecordBoardLine(lastInfiniteRunRecord)
-                : "기록 없음";
-            string bestText = bestInfiniteRunRecord.IsValid
-                ? FormatInfiniteRecordBoardLine(bestInfiniteRunRecord)
-                : "기록 없음";
-
             switch (page)
             {
                 case 1:
-                    return "클리어\n" + BuildNormalRankingText()
-                        + "\n\n실패/중단\n" + BuildNormalAttemptHistoryText();
+                    return BuildNormalRecordBoardText();
                 case 2:
-                    return "최근 " + latestText
-                        + "\n최고 " + bestText;
+                    return BuildInfiniteRecordListText();
                 case 3:
                     return BuildInfiniteRankingText();
                 default:
-                    return "일반 최근 " + latestNormalText
-                        + "\n일반 최고 " + bestNormalText
-                        + "\n무한 최근 " + latestText
-                        + "\n무한 최고 " + bestText;
+                    return BuildRecordBoardSummaryText();
             }
+        }
+
+        private string BuildRecordBoardSummaryText()
+        {
+            string text = string.Empty;
+            if (bestRunRecord.IsValid)
+            {
+                AppendRecordBoardLine(ref text, "일반 최고", FormatRunRecordBoardCompactLine(bestRunRecord));
+            }
+
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                AppendRecordBoardLine(ref text, "무한 최고", FormatInfiniteRecordBoardCompactLine(bestInfiniteRunRecord));
+            }
+
+            string recentRecord = BuildRecentRecordBoardSummaryLine(out string recentLabel);
+            if (recentRecord != "기록 없음"
+                && !IsDuplicateRecordBoardSummaryLine(recentRecord, bestRunRecord, bestInfiniteRunRecord))
+            {
+                AppendRecordBoardLine(ref text, recentLabel, recentRecord);
+            }
+
+            return string.IsNullOrEmpty(text) ? "기록 없음" : text;
+        }
+
+        private static bool IsDuplicateRecordBoardSummaryLine(
+            string recentRecord,
+            GreedLastRunRecord bestNormalRecord,
+            GreedLastInfiniteRunRecord bestInfiniteRecord)
+        {
+            if (string.IsNullOrEmpty(recentRecord) || recentRecord == "기록 없음")
+            {
+                return true;
+            }
+
+            return (bestNormalRecord.IsValid && recentRecord == FormatRunRecordBoardLine(bestNormalRecord))
+                || (bestNormalRecord.IsValid && recentRecord == FormatRunRecordBoardCompactLine(bestNormalRecord))
+                || (bestInfiniteRecord.IsValid && recentRecord == FormatInfiniteRecordBoardLine(bestInfiniteRecord))
+                || (bestInfiniteRecord.IsValid && recentRecord == FormatInfiniteRecordBoardCompactLine(bestInfiniteRecord));
+        }
+
+        private string BuildNormalRecordBoardText()
+        {
+            string attemptProbeText = BuildNormalAttemptHistoryText(1);
+            bool hasAttemptRecords = attemptProbeText != "기록 없음";
+            int clearLimit = hasAttemptRecords
+                ? Mathf.Max(1, RecordBoardVisibleRows - 1)
+                : RecordBoardVisibleRows;
+            string clearText = BuildNormalRankingText(clearLimit);
+            int clearRowCount = CountRecordBoardRows(clearText);
+            int attemptLimit = clearText == "기록 없음"
+                ? RecordBoardVisibleRows
+                : Mathf.Max(1, RecordBoardVisibleRows + 1 - clearRowCount);
+            string attemptText = hasAttemptRecords
+                ? BuildNormalAttemptHistoryText(attemptLimit)
+                : "기록 없음";
+            if (clearText == "기록 없음" && attemptText == "기록 없음")
+            {
+                return "기록 없음";
+            }
+
+            string text = clearText == "기록 없음" ? string.Empty : clearText;
+            if (attemptText != "기록 없음")
+            {
+                AppendPlainRecordBoardText(ref text, attemptText);
+            }
+
+            return text;
+        }
+
+        private string BuildInfiniteRecordListText()
+        {
+            if (!bestInfiniteRunRecord.IsValid && !lastInfiniteRunRecord.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            string text = string.Empty;
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                AppendRecordBoardLine(ref text, "최고", FormatInfiniteRecordBoardCompactLine(bestInfiniteRunRecord));
+            }
+
+            if (lastInfiniteRunRecord.IsValid
+                && !IsSameInfiniteRecordIdentity(lastInfiniteRunRecord, bestInfiniteRunRecord))
+            {
+                AppendRecordBoardLine(ref text, "최근", FormatInfiniteRecordBoardCompactLine(lastInfiniteRunRecord));
+            }
+
+            return text;
+        }
+
+        private string BuildRecentRecordBoardSummaryLine(out string label)
+        {
+            switch (lastProgressEvent)
+            {
+                case ProgressEventKind.NormalClear:
+                    label = "최근 일반";
+                    return lastRunRecord.IsValid ? FormatRunRecordBoardCompactLine(lastRunRecord) : "기록 없음";
+                case ProgressEventKind.NormalFailed:
+                case ProgressEventKind.NormalAbandoned:
+                    label = "최근 시도";
+                    return lastRunAttemptRecord.IsValid ? FormatRunAttemptBoardCompactLine(lastRunAttemptRecord) : "기록 없음";
+                case ProgressEventKind.InfiniteRun:
+                    label = "최근 무한";
+                    return lastInfiniteRunRecord.IsValid ? FormatInfiniteRecordBoardCompactLine(lastInfiniteRunRecord) : "기록 없음";
+                default:
+                    if (lastInfiniteRunRecord.IsValid)
+                    {
+                        label = "최근 무한";
+                        return FormatInfiniteRecordBoardCompactLine(lastInfiniteRunRecord);
+                    }
+
+                    label = "최근 일반";
+                    return lastRunRecord.IsValid ? FormatRunRecordBoardCompactLine(lastRunRecord) : "기록 없음";
+            }
+        }
+
+        private static void AppendRecordBoardLine(ref string text, string label, string recordText)
+        {
+            if (!string.IsNullOrEmpty(text))
+            {
+                text += "\n";
+            }
+
+            string compactRecord = CompactRecordBoardLine(recordText);
+            text += label + "  " + CompactText(compactRecord, 58);
+        }
+
+        private static void AppendPlainRecordBoardText(ref string text, string recordText)
+        {
+            if (string.IsNullOrWhiteSpace(recordText) || recordText == "기록 없음")
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                text += "\n";
+            }
+
+            text += recordText.Trim();
+        }
+
+        internal static string CompactRecordBoardLine(string recordText)
+        {
+            if (string.IsNullOrWhiteSpace(recordText))
+            {
+                return "기록 없음";
+            }
+
+            string normalized = recordText.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+            string[] lines = normalized.Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string sanitized = SanitizeRecordBoardLine(lines[i]);
+                if (!string.IsNullOrWhiteSpace(sanitized) && HasRecordBoardMetric(sanitized))
+                {
+                    return sanitized.Trim();
+                }
+            }
+
+            return "기록 없음";
+        }
+
+        private static string SanitizeRecordBoardLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return string.Empty;
+            }
+
+            if (IsRecordBoardManagementLine(line.Trim()))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = line.Split(new[] { " / " }, StringSplitOptions.None);
+            string text = string.Empty;
+            for (int i = 0; i < parts.Length; i += 1)
+            {
+                string part = parts[i].Trim();
+                if (string.IsNullOrEmpty(part) || IsRecordBoardCoachingPart(part))
+                {
+                    continue;
+                }
+
+                text = string.IsNullOrEmpty(text) ? part : text + " / " + part;
+            }
+
+            return text;
+        }
+
+        private static int CountRecordBoardRows(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || text == "기록 없음")
+            {
+                return 0;
+            }
+
+            int count = 1;
+            for (int i = 0; i < text.Length; i += 1)
+            {
+                if (text[i] == '\n')
+                {
+                    count += 1;
+                }
+            }
+
+            return count;
+        }
+
+        private static bool IsRecordBoardManagementLine(string line)
+        {
+            return line.StartsWith("관리 모드", StringComparison.Ordinal)
+                || line.StartsWith("저장 모드", StringComparison.Ordinal)
+                || line.StartsWith("선택:", StringComparison.Ordinal)
+                || line.StartsWith("슬롯 ", StringComparison.Ordinal)
+                || line.StartsWith("> 슬롯 ", StringComparison.Ordinal)
+                || LooksLikeSaveLoadoutManagementSummaryLine(line);
+        }
+
+        private static bool LooksLikeSaveLoadoutManagementSummaryLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return false;
+            }
+
+            string trimmed = line.Trim();
+            if (trimmed.StartsWith("품질 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("현재 품질", StringComparison.Ordinal)
+                || trimmed.StartsWith("차이:", StringComparison.Ordinal)
+                || trimmed.Contains(" / 조합 ", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            bool looksLikePlayableRecord = trimmed.StartsWith("[", StringComparison.Ordinal)
+                || trimmed.StartsWith("탈출 ", StringComparison.Ordinal)
+                || trimmed.Contains("위  [", StringComparison.Ordinal);
+            if (looksLikePlayableRecord)
+            {
+                return false;
+            }
+
+            return trimmed.Contains("점", StringComparison.Ordinal)
+                && trimmed.Contains("m", StringComparison.Ordinal)
+                && (trimmed.Contains("형", StringComparison.Ordinal)
+                    || trimmed.Contains("축", StringComparison.Ordinal)
+                    || trimmed.Contains("기프트", StringComparison.Ordinal)
+                    || trimmed.Contains("유물", StringComparison.Ordinal)
+                    || trimmed.Contains("조합", StringComparison.Ordinal));
+        }
+
+        private static bool IsRecordBoardCoachingPart(string part)
+        {
+            return part.StartsWith("복기 목표", StringComparison.Ordinal)
+                || part.StartsWith("재도전 목표", StringComparison.Ordinal)
+                || part.StartsWith("목표:", StringComparison.Ordinal)
+                || part.StartsWith("복기:", StringComparison.Ordinal)
+                || part.StartsWith("힌트:", StringComparison.Ordinal)
+                || part.StartsWith("훈련 힌트", StringComparison.Ordinal)
+                || part.StartsWith("정산 종료", StringComparison.Ordinal)
+                || part.StartsWith("정산 종료 확인 완료", StringComparison.Ordinal)
+                || part.StartsWith("이번 입장은", StringComparison.Ordinal)
+                || part.StartsWith("실제 생존 흐름", StringComparison.Ordinal)
+                || part.StartsWith("실제 플레이", StringComparison.Ordinal)
+                || part.StartsWith("무한 실전 재개", StringComparison.Ordinal)
+                || part.StartsWith("실전 재개", StringComparison.Ordinal)
+                || part.StartsWith("연습 ", StringComparison.Ordinal)
+                || part.StartsWith("가이드", StringComparison.Ordinal)
+                || part.StartsWith("코칭", StringComparison.Ordinal)
+                || part.StartsWith("상태 ", StringComparison.Ordinal)
+                || part.StartsWith("재개 목표", StringComparison.Ordinal)
+                || part.StartsWith("선택 입력", StringComparison.Ordinal)
+                || part.StartsWith("일시정지", StringComparison.Ordinal)
+                || part.StartsWith("Enter/", StringComparison.Ordinal)
+                || part.StartsWith("테스트키", StringComparison.Ordinal)
+                || part.StartsWith("상태:", StringComparison.Ordinal)
+                || part.StartsWith("채널:", StringComparison.Ordinal)
+                || part.StartsWith("판정:", StringComparison.Ordinal)
+                || part.StartsWith("흐름:", StringComparison.Ordinal)
+                || part.StartsWith("집중:", StringComparison.Ordinal)
+                || part.StartsWith("회피:", StringComparison.Ordinal)
+                || part.StartsWith("강점:", StringComparison.Ordinal)
+                || part.StartsWith("타이밍 진단", StringComparison.Ordinal)
+                || part.StartsWith("다음 목표", StringComparison.Ordinal)
+                || part.StartsWith("저장 후보", StringComparison.Ordinal)
+                || part.StartsWith("저장 조합 소모", StringComparison.Ordinal)
+                || part.StartsWith("저장 소모", StringComparison.Ordinal)
+                || part.StartsWith("저장 기회", StringComparison.Ordinal)
+                || part.StartsWith("후보 처리", StringComparison.Ordinal)
+                || part.StartsWith("작업:", StringComparison.Ordinal)
+                || part.StartsWith("선택 슬롯", StringComparison.Ordinal)
+                || part.StartsWith("선택:", StringComparison.Ordinal)
+                || part.StartsWith("슬롯 ", StringComparison.Ordinal)
+                || part.StartsWith("> 슬롯 ", StringComparison.Ordinal)
+                || part.StartsWith("품질 ", StringComparison.Ordinal)
+                || part.StartsWith("현재 품질", StringComparison.Ordinal)
+                || part.StartsWith("차이:", StringComparison.Ordinal)
+                || part.StartsWith("조합 ", StringComparison.Ordinal)
+                || part.StartsWith("사용 상태", StringComparison.Ordinal)
+                || part.StartsWith("사용 흐름", StringComparison.Ordinal)
+                || part.StartsWith("사용 결과", StringComparison.Ordinal)
+                || part.StartsWith("남은 사용", StringComparison.Ordinal)
+                || part.StartsWith("다음 소모", StringComparison.Ordinal)
+                || part.StartsWith("보정:", StringComparison.Ordinal)
+                || part.StartsWith("보정 ", StringComparison.Ordinal)
+                || part.StartsWith("관리 모드", StringComparison.Ordinal)
+                || part.StartsWith("저장 모드", StringComparison.Ordinal)
+                || part.StartsWith("기존 슬롯", StringComparison.Ordinal)
+                || part.StartsWith("이름 변경", StringComparison.Ordinal)
+                || part.StartsWith("삭제", StringComparison.Ordinal)
+                || part.StartsWith("새 저장은", StringComparison.Ordinal)
+                || part.StartsWith("상세 보기", StringComparison.Ordinal)
+                || part.StartsWith("상세 비교", StringComparison.Ordinal)
+                || part.StartsWith("보충 안내", StringComparison.Ordinal)
+                || part.StartsWith("보충 런 버튼", StringComparison.Ordinal)
+                || part.StartsWith("무한 시작 전", StringComparison.Ordinal)
+                || part.StartsWith("자동 ", StringComparison.Ordinal)
+                || part.StartsWith("GO 뒤", StringComparison.Ordinal)
+                || part.StartsWith("중앙/레인 큐", StringComparison.Ordinal)
+                || part.StartsWith("상태줄", StringComparison.Ordinal)
+                || part.StartsWith("동작 ", StringComparison.Ordinal)
+                || part.StartsWith("3동작", StringComparison.Ordinal)
+                || part.StartsWith("프로토타입:", StringComparison.Ordinal)
+                || part.StartsWith("프로토타입 완성", StringComparison.Ordinal)
+                || part.StartsWith("프로토타입 체크", StringComparison.Ordinal)
+                || part.StartsWith("기획 체감", StringComparison.Ordinal)
+                || part.StartsWith("완성 루프", StringComparison.Ordinal)
+                || part.StartsWith("완성 진행", StringComparison.Ordinal)
+                || part.StartsWith("완성 기준", StringComparison.Ordinal)
+                || part.StartsWith("완성 기록", StringComparison.Ordinal)
+                || part.StartsWith("프로토 완성", StringComparison.Ordinal)
+                || part.StartsWith("체크 ", StringComparison.Ordinal)
+                || part.StartsWith("루프", StringComparison.Ordinal)
+                || part.StartsWith("감각", StringComparison.Ordinal)
+                || part.StartsWith("소리", StringComparison.Ordinal)
+                || part.StartsWith("진동", StringComparison.Ordinal)
+                || part.StartsWith("회피 ", StringComparison.Ordinal)
+                || part.StartsWith("복기 약점", StringComparison.Ordinal)
+                || part.StartsWith("무한 복기 약점", StringComparison.Ordinal)
+                || part.StartsWith("무한 약점", StringComparison.Ordinal)
+                || part.StartsWith("기초연습", StringComparison.Ordinal)
+                || part.StartsWith("다음 행동", StringComparison.Ordinal)
+                || part.StartsWith("다음 확인", StringComparison.Ordinal)
+                || part.StartsWith("다음:", StringComparison.Ordinal)
+                || part.StartsWith("실행", StringComparison.Ordinal)
+                || part.StartsWith("흔적 ", StringComparison.Ordinal)
+                || part.StartsWith("위험→동작", StringComparison.Ordinal)
+                || part.StartsWith("폭·보상", StringComparison.Ordinal)
+                || part.StartsWith("타이밍:", StringComparison.Ordinal)
+                || part.StartsWith("현재 ", StringComparison.Ordinal)
+                || part.StartsWith("최근 ", StringComparison.Ordinal)
+                || part.StartsWith("테스트 위협", StringComparison.Ordinal)
+                || part.StartsWith("위협 상승", StringComparison.Ordinal)
+                || part.StartsWith("위협 하강", StringComparison.Ordinal)
+                || (part.StartsWith("위협 ", StringComparison.Ordinal) && part.Contains("/5", StringComparison.Ordinal))
+                || part.StartsWith("위험폭", StringComparison.Ordinal)
+                || part.StartsWith("첫 함정", StringComparison.Ordinal)
+                || part.StartsWith("짧은 호흡", StringComparison.Ordinal)
+                || part.StartsWith("최고 대비", StringComparison.Ordinal)
+                || part.StartsWith("이전 대비", StringComparison.Ordinal)
+                || part.StartsWith("비교", StringComparison.Ordinal)
+                || IsRecordBoardComparisonDeltaPart(part)
+                || IsRecordBoardRewardDeltaPart(part)
+                || part.StartsWith("추천", StringComparison.Ordinal)
+                || part.StartsWith("약점", StringComparison.Ordinal)
+                || part.StartsWith("성장", StringComparison.Ordinal)
+                || part.StartsWith("보유 ", StringComparison.Ordinal)
+                || part.StartsWith("입력 보정", StringComparison.Ordinal)
+                || part.StartsWith("검증", StringComparison.Ordinal)
+                || part.StartsWith("체감 목표", StringComparison.Ordinal)
+                || part.StartsWith("성과 요약", StringComparison.Ordinal)
+                || part.StartsWith("클리어율", StringComparison.Ordinal)
+                || (part.StartsWith("일반 ", StringComparison.Ordinal)
+                    && part.Contains("클리어", StringComparison.Ordinal))
+                || part.StartsWith("실패 ", StringComparison.Ordinal)
+                || part.StartsWith("중단 ", StringComparison.Ordinal)
+                || part.StartsWith("복기 결과", StringComparison.Ordinal)
+                || part.StartsWith("페이지", StringComparison.Ordinal)
+                || part.StartsWith("선택 ", StringComparison.Ordinal)
+                || part.StartsWith("정답키 ", StringComparison.Ordinal)
+                || part.StartsWith("정답 ", StringComparison.Ordinal)
+                || part == "탭"
+                || part.EndsWith(" 탭", StringComparison.Ordinal)
+                || part.Contains("터치 탭", StringComparison.Ordinal)
+                || part.Contains("버튼", StringComparison.Ordinal)
+                || part.Contains("슬롯을 고른 뒤", StringComparison.Ordinal)
+                || part.Contains("저장 또는 포기", StringComparison.Ordinal)
+                || part.Contains(" + 탭", StringComparison.Ordinal)
+                || part.Contains("동작 + 키", StringComparison.Ordinal)
+                || part.Contains("상태줄", StringComparison.Ordinal)
+                || part.Contains("HUD", StringComparison.Ordinal)
+                || part.Contains("폭·보상", StringComparison.Ordinal)
+                || part.Contains("1박 전", StringComparison.Ordinal)
+                || part.Contains("A/←", StringComparison.Ordinal)
+                || part.Contains("S/Space", StringComparison.Ordinal)
+                || part.Contains("D/→", StringComparison.Ordinal)
+                || part.Contains("F1", StringComparison.Ordinal)
+                || part.Contains("F2", StringComparison.Ordinal)
+                || part.Contains("F3", StringComparison.Ordinal)
+                || part.Contains("F4", StringComparison.Ordinal)
+                || part.Contains("F5", StringComparison.Ordinal)
+                || part.Contains("F6", StringComparison.Ordinal)
+                || part.Contains("F7", StringComparison.Ordinal)
+                || part.Contains("F8", StringComparison.Ordinal)
+                || part.Contains("F9", StringComparison.Ordinal)
+                || part.Contains("PgUp", StringComparison.Ordinal)
+                || part.Contains("PgDn", StringComparison.Ordinal)
+                || part.Contains("End", StringComparison.Ordinal)
+                || part.Contains("빠름 +20ms", StringComparison.Ordinal)
+                || part.Contains("늦음 -20ms", StringComparison.Ordinal)
+                || part.Contains("감각 소리", StringComparison.Ordinal)
+                || part.Contains("진동 ON/OFF", StringComparison.Ordinal)
+                || part.Contains("강화 가능", StringComparison.Ordinal)
+                || part.Contains("포인트 부족", StringComparison.Ordinal)
+                || part.Contains("→↑점프", StringComparison.Ordinal)
+                || part.Contains("→↓숙이기", StringComparison.Ordinal)
+                || part.Contains("→↔비틀기", StringComparison.Ordinal)
+                || part.Contains("위험 →", StringComparison.Ordinal)
+                || part.Contains("위험군 →", StringComparison.Ordinal)
+                || part.Contains("회피 ·", StringComparison.Ordinal)
+                || part.Contains("정확+", StringComparison.Ordinal)
+                || part.Contains("보정+", StringComparison.Ordinal)
+                || part.Contains("충전+", StringComparison.Ordinal)
+                || part.Contains("반격+", StringComparison.Ordinal)
+                || part.Contains("연쇄+", StringComparison.Ordinal)
+                || part.Contains("복구+", StringComparison.Ordinal)
+                || IsAvoidanceReviewCoachingPart(part)
+                || part.Contains("후보", StringComparison.Ordinal);
+        }
+
+        private static bool IsRecordBoardComparisonDeltaPart(string part)
+        {
+            if (string.IsNullOrWhiteSpace(part))
+            {
+                return false;
+            }
+
+            string trimmed = part.Trim();
+            bool comparisonMetric = trimmed.StartsWith("점수 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("거리 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("체력 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("집중 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("구간 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("위협 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("콤보 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("실수 ", StringComparison.Ordinal)
+                || trimmed.StartsWith("정확률 ", StringComparison.Ordinal);
+            if (!comparisonMetric)
+            {
+                return false;
+            }
+
+            return trimmed.Contains("+", StringComparison.Ordinal)
+                || trimmed.Contains("-", StringComparison.Ordinal)
+                || trimmed.Contains("%p", StringComparison.Ordinal);
+        }
+
+        private static bool IsRecordBoardRewardDeltaPart(string part)
+        {
+            if (string.IsNullOrWhiteSpace(part))
+            {
+                return false;
+            }
+
+            string trimmed = part.Trim();
+            return ContainsSignedRewardDelta(trimmed, "정확")
+                || ContainsSignedRewardDelta(trimmed, "보정")
+                || ContainsSignedRewardDelta(trimmed, "충전")
+                || ContainsSignedRewardDelta(trimmed, "반격")
+                || ContainsSignedRewardDelta(trimmed, "연쇄")
+                || ContainsSignedRewardDelta(trimmed, "집중")
+                || ContainsSignedRewardDelta(trimmed, "체력")
+                || ContainsSignedRewardDelta(trimmed, "회복")
+                || ContainsSignedRewardDelta(trimmed, "복구")
+                || ContainsSignedRewardDelta(trimmed, "상쇄");
+        }
+
+        private static bool ContainsSignedRewardDelta(string text, string label)
+        {
+            return text.Contains(label + " +", StringComparison.Ordinal)
+                || text.Contains(label + "+", StringComparison.Ordinal)
+                || text.Contains(label + " -", StringComparison.Ordinal)
+                || text.Contains(label + "-", StringComparison.Ordinal);
+        }
+
+        private static bool HasRecordBoardMetric(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            if (text.Contains("기록 없음", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return ContainsDigitBeforeMetricMarker(text, "점")
+                || ContainsDigitBeforeMetricMarker(text, "m")
+                || ContainsDigitBeforeMetricMarker(text, "구간")
+                || ContainsDigitAfterMetricMarker(text, "위협")
+                || ContainsDigitAfterMetricMarker(text, "위")
+                || ContainsDigitAfterMetricMarker(text, "콤보")
+                || ContainsDigitAfterMetricMarker(text, "콤")
+                || ContainsDigitAfterMetricMarker(text, "실수")
+                || ContainsDigitAfterMetricMarker(text, "실");
+        }
+
+        private static bool ContainsDigitBeforeMetricMarker(string text, string marker)
+        {
+            int startIndex = 0;
+            while (startIndex < text.Length)
+            {
+                int markerIndex = text.IndexOf(marker, startIndex, StringComparison.Ordinal);
+                if (markerIndex < 0)
+                {
+                    return false;
+                }
+
+                if (marker == "m"
+                    && markerIndex + 1 < text.Length
+                    && char.ToLowerInvariant(text[markerIndex + 1]) == 's')
+                {
+                    startIndex = markerIndex + marker.Length;
+                    continue;
+                }
+
+                if (markerIndex > 0 && char.IsDigit(text[markerIndex - 1]))
+                {
+                    return true;
+                }
+
+                startIndex = markerIndex + marker.Length;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsDigitAfterMetricMarker(string text, string marker)
+        {
+            int startIndex = 0;
+            while (startIndex < text.Length)
+            {
+                int markerIndex = text.IndexOf(marker, startIndex, StringComparison.Ordinal);
+                if (markerIndex < 0)
+                {
+                    return false;
+                }
+
+                int digitIndex = markerIndex + marker.Length;
+                while (digitIndex < text.Length && char.IsWhiteSpace(text[digitIndex]))
+                {
+                    digitIndex += 1;
+                }
+
+                if (digitIndex < text.Length && char.IsDigit(text[digitIndex]))
+                {
+                    return true;
+                }
+
+                startIndex = markerIndex + marker.Length;
+            }
+
+            return false;
+        }
+
+        private static bool IsAvoidanceReviewCoachingPart(string part)
+        {
+            return part.Contains("기초연습", StringComparison.Ordinal)
+                || part.StartsWith("점프 ", StringComparison.Ordinal)
+                || part.StartsWith("숙이기 ", StringComparison.Ordinal)
+                || part.StartsWith("비틀기 ", StringComparison.Ordinal);
+        }
+
+        private string BuildProfileRepresentativeRecordText()
+        {
+            string text = string.Empty;
+            if (bestRunRecord.IsValid)
+            {
+                text = "일반 " + FormatRunRecordBoardCompactLine(bestRunRecord);
+            }
+
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                text = string.IsNullOrEmpty(text)
+                    ? "무한 " + FormatInfiniteRecordBoardCompactLine(bestInfiniteRunRecord)
+                    : text + "\n무한 " + FormatInfiniteRecordBoardCompactLine(bestInfiniteRunRecord);
+            }
+
+            string recentRecord = BuildRecentRecordBoardSummaryLine(out string recentLabel);
+            if (recentRecord != "기록 없음"
+                && !IsDuplicateRecordBoardSummaryLine(recentRecord, bestRunRecord, bestInfiniteRunRecord))
+            {
+                string recentText = recentLabel + " " + CompactText(CompactRecordBoardLine(recentRecord), 58);
+                text = string.IsNullOrEmpty(text) ? recentText : text + "\n" + recentText;
+            }
+
+            return string.IsNullOrEmpty(text) ? "기록 없음" : text;
+        }
+
+        private string BuildProfileSaveLoadoutTraceText()
+        {
+            return BuildSaveLoadoutInventoryOverviewText()
+                + "\n최근 소모: " + BuildLastSaveLoadoutUseSummaryText()
+                + "\n다음 무한: " + BuildNextInfiniteLoadoutTraceText()
+                + BuildSaveLoadoutTraceActionLine();
+        }
+
+        private string BuildNextInfiniteLoadoutTraceText()
+        {
+            int slotIndex = FindBestUsableSaveLoadoutSlot();
+            if (slotIndex < 0)
+            {
+                return "사용 가능 슬롯 없음";
+            }
+
+            return "S" + (slotIndex + 1) + " "
+                + BuildSaveUseStatusText(saveLoadoutUsesRemaining[slotIndex], includeAutoClearHint: false)
+                + " / " + BuildRunGrade(saveLoadoutSlots[slotIndex])
+                + " " + BuildLoadoutAndRouteProfileCompact(saveLoadoutSlots[slotIndex])
+                + " / " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(saveLoadoutSlots[slotIndex]);
+        }
+
+        private string BuildSaveLoadoutTraceActionLine()
+        {
+            if (HasAnyUsableSaveLoadoutSlot())
+            {
+                return string.Empty;
+            }
+
+            if (HasSaveLoadoutCandidate)
+            {
+                return "\n필요 행동: 저장 후보를 슬롯에 저장 또는 포기";
+            }
+
+            if (firstSaveCompleted)
+            {
+                return "\n필요 행동: 무한 조합 보충으로 보충 런 진입";
+            }
+
+            return "\n필요 행동: 일반 런 첫 클리어";
+        }
+
+        private string BuildSaveLoadoutInventorySummaryText()
+        {
+            string text = string.Empty;
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (i > 0)
+                {
+                    text += " / ";
+                }
+
+                text += "S" + (i + 1) + " " + FormatSaveSlotLabel(saveLoadoutSlots[i], saveLoadoutUsesRemaining[i]);
+            }
+
+            return text;
+        }
+
+        private string BuildSaveLoadoutInventoryOverviewText()
+        {
+            int occupiedCount = 0;
+            int usableCount = 0;
+            int exhaustedCount = 0;
+            string slotLine = string.Empty;
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (saveLoadoutSlots[i].IsValid)
+                {
+                    occupiedCount += 1;
+                    if (saveLoadoutUsesRemaining[i] > 0)
+                    {
+                        usableCount += 1;
+                    }
+                    else
+                    {
+                        exhaustedCount += 1;
+                    }
+                }
+
+                if (i > 0)
+                {
+                    slotLine += " / ";
+                }
+
+                slotLine += BuildCompactSaveLoadoutSlotTrace(i);
+            }
+
+            string text = "사용 가능 " + usableCount + "/" + SaveSlotCount
+                + " / 저장 " + occupiedCount + "/" + SaveSlotCount;
+            if (exhaustedCount > 0)
+            {
+                text += " / 완료 " + exhaustedCount;
+            }
+
+            return text + "\n" + slotLine.Replace(" / ", "\n");
+        }
+
+        private string BuildCompactSaveLoadoutSlotTrace(int slotIndex)
+        {
+            int safeSlotIndex = Mathf.Clamp(slotIndex, 0, SaveSlotCount - 1);
+            GreedLastRunRecord record = saveLoadoutSlots[safeSlotIndex];
+            if (!record.IsValid)
+            {
+                return "S" + (safeSlotIndex + 1) + " 빈칸";
+            }
+
+            int usesRemaining = saveLoadoutUsesRemaining[safeSlotIndex];
+            string useText = usesRemaining <= 0
+                ? "완료"
+                : usesRemaining == 1 ? "마지막" : usesRemaining + "회";
+            return "S" + (safeSlotIndex + 1) + " " + useText + "/" + BuildRunGrade(record)
+                + "/" + CompactText(BuildLoadoutProfile(record), 4);
+        }
+
+        private string BuildLastSaveLoadoutUseSummaryText()
+        {
+            if (!HasLastSaveLoadoutUseTrace())
+            {
+                return "아직 없음";
+            }
+
+            string status = lastConsumedSaveSlotAutoCleared
+                ? "자동 비움"
+                : BuildSaveUseStatusText(lastConsumedSaveSlotRemainingAfterUse, includeAutoClearHint: true);
+            string text = "S" + (lastConsumedSaveSlotIndex + 1) + " "
+                + CompactText(lastConsumedSaveSlotName, 18)
+                + FormatLastConsumedSaveProfileSuffix(12)
+                + " / " + status;
+            return lastConsumedSaveSlotAutoCleared
+                ? text + " / " + BuildAutoClearFollowupText()
+                : text;
+        }
+
+        private string BuildLastSaveLoadoutUseResultLine()
+        {
+            if (!HasLastSaveLoadoutUseTrace())
+            {
+                return string.Empty;
+            }
+
+            string line = "\n저장 조합 소모: S" + (lastConsumedSaveSlotIndex + 1)
+                + " " + CompactText(lastConsumedSaveSlotName, 20)
+                + FormatLastConsumedSaveProfileSuffix(12);
+            if (lastConsumedSaveSlotAutoCleared)
+            {
+                return line + " / 자동 비움 / " + BuildAutoClearFollowupText();
+            }
+
+            return line + " / " + BuildSaveUseStatusText(lastConsumedSaveSlotRemainingAfterUse, includeAutoClearHint: true);
+        }
+
+        private string BuildAutoClearFollowupText()
+        {
+            string nextUsable = BuildNextUsableSaveLoadoutSummaryText();
+            return nextUsable == "보충 필요"
+                ? "무한 조합 보충 필요"
+                : "다음 조합 " + nextUsable;
+        }
+
+        private string FormatLastConsumedSaveProfileSuffix(int maxLength)
+        {
+            return string.IsNullOrEmpty(lastConsumedSaveSlotProfile)
+                ? string.Empty
+                : " / " + CompactText(CompactInfiniteLoadoutProfileText(lastConsumedSaveSlotProfile), maxLength);
+        }
+
+        private bool HasLastSaveLoadoutUseTrace()
+        {
+            return lastConsumedSaveSlotIndex >= 0
+                && lastConsumedSaveSlotIndex < SaveSlotCount
+                && !string.IsNullOrEmpty(lastConsumedSaveSlotName);
+        }
+
+        private string BuildProfileGrowthTraceText()
+        {
+            int totalLevel = growthSurvivalLevel + growthFocusLevel + growthTimingLevel;
+            string profile = totalLevel >= GrowthMaxLevel * 3
+                ? "전부 MAX"
+                : totalLevel >= 6
+                    ? "안정권 진입"
+                    : totalLevel >= 3
+                        ? "보정 형성 중"
+                        : "초기 흔적";
+
+            return "생존 Lv." + growthSurvivalLevel
+                + " / 집중 Lv." + growthFocusLevel
+                + " / 타이밍 Lv." + growthTimingLevel
+                + "\n보유 " + growthPoints + "pt / 상태 " + profile;
+        }
+
+        private string BuildProfileNextActionText()
+        {
+            string action = BuildProfileNextActionCoreText(out string highlightAction);
+            return FormatProfileNextActionText(highlightAction, action);
+        }
+
+        private string BuildProfileNextActionCoreText(out string highlightAction)
+        {
+            if (HasSaveLoadoutCandidate)
+            {
+                highlightAction = "저장 조합";
+                return HasAnySaveLoadoutSlot()
+                    ? "저장 조합에서 후보 비교 후 저장/포기"
+                    : "저장 후보를 첫 슬롯에 저장 또는 포기";
+            }
+
+            if (firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot())
+            {
+                highlightAction = "무한 조합 보충";
+                return "무한 조합 보충으로 보충 런 진입";
+            }
+
+            string reviewTargetNextAction = BuildReviewTargetNextActionFromProgress();
+            if (lastProgressEvent == ProgressEventKind.InfiniteRun
+                && lastInfiniteRunRecord.IsValid
+                && lastInfiniteRunRecord.MissReason == "test_stop"
+                && !IsReviewTargetEscalationAction(reviewTargetNextAction))
+            {
+                highlightAction = "무한모드";
+                return "정산 종료 확인 완료 / 실제 무한 런으로 생존 흐름 확인";
+            }
+
+            if (!string.IsNullOrEmpty(reviewTargetNextAction))
+            {
+                highlightAction = ResolveProfileHighlightActionFromNextAction(reviewTargetNextAction);
+                return reviewTargetNextAction;
+            }
+
+            string avoidancePracticeNextAction = BuildAvoidancePracticeNextActionFromProgress();
+            if (!string.IsNullOrEmpty(avoidancePracticeNextAction))
+            {
+                highlightAction = "복기 연습";
+                return avoidancePracticeNextAction;
+            }
+
+            if (IsPrototypeCompletionRecordCheckActive())
+            {
+                highlightAction = "기록 보기";
+                return "완성 루프 기록 확인";
+            }
+
+            if (HasAnyGrowthUpgradeAvailable())
+            {
+                highlightAction = "성장 보정";
+                return "성장 보정에서 " + BuildRecommendedGrowthActionSummary();
+            }
+
+            if (growthPoints > 0)
+            {
+                highlightAction = "성장 보정";
+                return "성장 포인트 보유 " + growthPoints + "pt / " + BuildRecommendedGrowthActionSummary();
+            }
+
+            if (!firstSaveCompleted)
+            {
+                highlightAction = "일반 런";
+                return "일반 런 첫 클리어로 저장 후보 만들기";
+            }
+
+            if (infiniteRunCount <= 0)
+            {
+                highlightAction = "무한모드";
+                return "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인";
+            }
+
+            if (lastProgressEvent == ProgressEventKind.InfiniteRun)
+            {
+                highlightAction = "기록 보기";
+                return BuildInfiniteRunTrainingHint(lastInfiniteRunRecord);
+            }
+
+            if (lastProgressEvent == ProgressEventKind.NormalFailed
+                || lastProgressEvent == ProgressEventKind.NormalAbandoned)
+            {
+                highlightAction = "복기 연습";
+                return BuildNormalAttemptTrainingHint(lastRunAttemptRecord);
+            }
+
+            highlightAction = "기록 보기";
+            return "기록 보드에서 최근 기록 확인 후 무한모드 갱신";
+        }
+
+        private static string FormatProfileNextActionText(string highlightAction, string action)
+        {
+            if (string.IsNullOrEmpty(highlightAction))
+            {
+                return action;
+            }
+
+            if (string.IsNullOrEmpty(action))
+            {
+                return "Enter/강조: " + highlightAction;
+            }
+
+            return "Enter/강조: " + highlightAction + " - " + CompactText(action, 66);
+        }
+
+        private static string ResolveProfileHighlightActionFromNextAction(string action)
+        {
+            if (string.IsNullOrEmpty(action))
+            {
+                return string.Empty;
+            }
+
+            if (action.StartsWith("일반 런", StringComparison.Ordinal)
+                || action.StartsWith("클리어 후", StringComparison.Ordinal))
+            {
+                return "일반 런";
+            }
+
+            if (action.Contains("저장 후보", StringComparison.Ordinal))
+            {
+                return "저장 조합";
+            }
+
+            if (action.StartsWith("무한 복기 재도전", StringComparison.Ordinal)
+                || action.StartsWith("저장 조합으로 무한", StringComparison.Ordinal)
+                || action.StartsWith("정산 종료", StringComparison.Ordinal)
+                || action.StartsWith("무한 기록", StringComparison.Ordinal)
+                || action.StartsWith("무한 위협", StringComparison.Ordinal)
+                || action.Contains("실제 무한 런", StringComparison.Ordinal)
+                || action.Contains("2회 소진", StringComparison.Ordinal))
+            {
+                return "무한모드";
+            }
+
+            if (action.StartsWith("무한 조합 보충", StringComparison.Ordinal)
+                || action.StartsWith("무한 버튼으로 보충 런", StringComparison.Ordinal)
+                || action.StartsWith("보충 후 무한 재진입", StringComparison.Ordinal)
+                || action.StartsWith("보충 런", StringComparison.Ordinal))
+            {
+                return "무한 조합 보충";
+            }
+
+            if (action.StartsWith("복기 연습", StringComparison.Ordinal)
+                || action.StartsWith("무한 복기 전", StringComparison.Ordinal)
+                || action.StartsWith("복기 약점", StringComparison.Ordinal)
+                || action.Contains("기초연습", StringComparison.Ordinal))
+            {
+                return "복기 연습";
+            }
+
+            if (action.StartsWith("복기 재도전", StringComparison.Ordinal))
+            {
+                return "일반 런";
+            }
+
+            if (action.StartsWith("성장 보정", StringComparison.Ordinal))
+            {
+                return "성장 보정";
+            }
+
+            if (action.StartsWith("저장 조합", StringComparison.Ordinal))
+            {
+                return "저장 조합";
+            }
+
+            if (action.StartsWith("완성 루프 기록", StringComparison.Ordinal)
+                || action.StartsWith("기록 보기", StringComparison.Ordinal)
+                || action.StartsWith("기록 보드", StringComparison.Ordinal))
+            {
+                return "기록 보기";
+            }
+
+            return string.Empty;
+        }
+
+        private string BuildAvoidancePracticeNextActionFromProgress()
+        {
+            if (lastProgressEvent == ProgressEventKind.NormalFailed
+                || lastProgressEvent == ProgressEventKind.NormalAbandoned)
+            {
+                string weakness = BuildAvoidanceWeaknessSummary(lastRunAttemptRecord.TimingProfile);
+                string step = BuildAvoidancePracticeStepText(weakness);
+                return string.IsNullOrEmpty(step) ? string.Empty : "복기 연습으로 " + step + " 반복";
+            }
+
+            if (lastProgressEvent == ProgressEventKind.InfiniteRun)
+            {
+                string weakness = BuildAvoidanceWeaknessSummary(lastInfiniteRunRecord.TimingProfile);
+                string step = BuildAvoidancePracticeStepText(weakness);
+                return string.IsNullOrEmpty(step) ? string.Empty : "무한 복기 전 " + step + " 확인";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildAvoidancePracticeStepText(string weakness)
+        {
+            if (string.IsNullOrEmpty(weakness))
+            {
+                return string.Empty;
+            }
+
+            if (weakness.Contains("비틀기", StringComparison.Ordinal))
+            {
+                return "기초연습 비틀기 단계";
+            }
+
+            if (weakness.Contains("숙이기", StringComparison.Ordinal))
+            {
+                return "기초연습 숙이기 단계";
+            }
+
+            return weakness.Contains("점프", StringComparison.Ordinal)
+                ? "기초연습 점프 단계"
+                : string.Empty;
+        }
+
+        private string BuildPostRunNextActionLine(bool preferSaveCandidate, bool preferInfinite)
+        {
+            if (preferSaveCandidate && HasSaveLoadoutCandidate)
+            {
+                return HasAnySaveLoadoutSlot()
+                    ? "다음: 저장 조합에서 후보 비교 / 저장 또는 포기"
+                    : "다음: 저장 조합에서 첫 슬롯 저장 또는 포기";
+            }
+
+            if (firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot())
+            {
+                if (HasSaveLoadoutCandidate)
+                {
+                    return "다음: 저장 조합에서 후보 저장 또는 포기";
+                }
+
+                return "다음: 무한 버튼으로 보충 런 진입";
+            }
+
+            string reviewTargetNextAction = BuildReviewTargetNextActionFromProgress();
+            if (!string.IsNullOrEmpty(reviewTargetNextAction))
+            {
+                return "다음: " + reviewTargetNextAction;
+            }
+
+            string performanceNextAction = BuildPerformanceNextActionFromProgress(preferInfinite);
+            if (!string.IsNullOrEmpty(performanceNextAction))
+            {
+                return "다음: " + performanceNextAction;
+            }
+
+            if (HasAnyGrowthUpgradeAvailable())
+            {
+                return "다음: 성장 보정에서 " + BuildRecommendedGrowthActionSummary();
+            }
+
+            if (preferInfinite && HasAnyUsableSaveLoadoutSlot())
+            {
+                return "다음: 저장 조합으로 무한모드 기록 갱신";
+            }
+
+            if (HasAnyProfileTrace())
+            {
+                return "다음: 흔적에서 성장/저장 변화 확인";
+            }
+
+            return "다음: 기록 보기에서 최근 기록 확인";
+        }
+
+        private string BuildNormalAttemptNextActionLine(GreedLastRunAttemptRecord record)
+        {
+            string reviewTargetNextAction = BuildReviewTargetNextAction(record.TimingProfile, infinite: false);
+            if (!string.IsNullOrEmpty(reviewTargetNextAction))
+            {
+                return "다음: " + reviewTargetNextAction;
+            }
+
+            string performanceNextAction = BuildNormalAttemptFollowupAction(record);
+            if (!string.IsNullOrEmpty(performanceNextAction))
+            {
+                return "다음: " + performanceNextAction;
+            }
+
+            if (HasAnyGrowthUpgradeAvailable())
+            {
+                return "다음: 성장 보정에서 " + BuildRecommendedGrowthActionSummary();
+            }
+
+            return HasAnyProfileTrace()
+                ? "다음: 흔적에서 성장/저장 변화 확인"
+                : "다음: 기록 보기에서 최근 기록 확인";
+        }
+
+        private string BuildInfiniteRunNextActionLine(GreedLastInfiniteRunRecord record)
+        {
+            string reviewTargetNextAction = BuildReviewTargetNextAction(record.TimingProfile, infinite: true);
+            if (record.MissReason == "test_stop"
+                && !IsReviewTargetEscalationAction(reviewTargetNextAction))
+            {
+                return HasAnyUsableSaveLoadoutSlot()
+                    ? "다음: 정산 종료 확인 후 무한모드 실전 재개"
+                    : BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: true);
+            }
+
+            if (!string.IsNullOrEmpty(reviewTargetNextAction))
+            {
+                return "다음: " + reviewTargetNextAction;
+            }
+
+            string performanceNextAction = BuildInfiniteRunFollowupAction(record);
+            if (!string.IsNullOrEmpty(performanceNextAction))
+            {
+                return "다음: " + performanceNextAction;
+            }
+
+            if (HasAnyGrowthUpgradeAvailable())
+            {
+                return "다음: 성장 보정에서 " + BuildRecommendedGrowthActionSummary();
+            }
+
+            return HasAnyUsableSaveLoadoutSlot()
+                ? "다음: 저장 조합으로 무한모드 기록 갱신"
+                : BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: true);
+        }
+
+        private static bool IsReviewTargetEscalationAction(string action)
+        {
+            return !string.IsNullOrEmpty(action)
+                && action.Contains("목표 상향", StringComparison.Ordinal);
+        }
+
+        private string BuildPerformanceNextActionFromProgress(bool preferInfinite)
+        {
+            switch (lastProgressEvent)
+            {
+                case ProgressEventKind.NormalFailed:
+                case ProgressEventKind.NormalAbandoned:
+                    return BuildNormalAttemptFollowupAction(lastRunAttemptRecord);
+                case ProgressEventKind.InfiniteRun:
+                    return preferInfinite ? BuildInfiniteRunFollowupAction(lastInfiniteRunRecord) : string.Empty;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildNormalAttemptFollowupAction(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return string.Empty;
+            }
+
+            if (record.GoodCount > 0 && record.MissCount <= 0)
+            {
+                return "복기 연습으로 정확권 전환";
+            }
+
+            if (record.MissCount > 0 || !string.IsNullOrEmpty(record.MissReason))
+            {
+                return record.CoreRetrieved
+                    ? "복기 재도전으로 탈출 구간 보완"
+                    : "복기 재도전으로 실수 구간 보완";
+            }
+
+            return record.SuccessCount > 0 ? "복기 재도전으로 다음 챕터 진입" : string.Empty;
+        }
+
+        private static string BuildInfiniteRunFollowupAction(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid || record.MissReason == "test_stop")
+            {
+                return string.Empty;
+            }
+
+            if (record.MissCount > 0)
+            {
+                return "무한 복기 재도전으로 실수 구간 보완";
+            }
+
+            return record.GoodCount > 0 ? "무한 복기 재도전으로 보정 0회 도전" : string.Empty;
+        }
+
+        private string BuildReviewTargetNextActionFromProgress()
+        {
+            switch (lastProgressEvent)
+            {
+                case ProgressEventKind.NormalClear:
+                    return BuildReviewTargetNextAction(lastRunRecord.TimingProfile, infinite: false);
+                case ProgressEventKind.NormalFailed:
+                case ProgressEventKind.NormalAbandoned:
+                    return BuildReviewTargetNextAction(lastRunAttemptRecord.TimingProfile, infinite: false);
+                case ProgressEventKind.InfiniteRun:
+                    return BuildReviewTargetNextAction(lastInfiniteRunRecord.TimingProfile, infinite: true);
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildReviewTargetNextAction(string timingProfile, bool infinite)
+        {
+            string summary = ExtractReviewTargetResultSummary(timingProfile);
+            if (string.IsNullOrEmpty(summary))
+            {
+                return string.Empty;
+            }
+
+            if (summary.Contains("실패 실수", StringComparison.Ordinal))
+            {
+                return infinite ? "무한 복기 재도전으로 실수 구간 보완" : "복기 재도전으로 실수 구간 보완";
+            }
+
+            if (summary.Contains("실패 보정", StringComparison.Ordinal))
+            {
+                return "복기 연습으로 정확권 전환";
+            }
+
+            if (summary.Contains("달성", StringComparison.Ordinal))
+            {
+                string nextTarget = BuildAdvancedReviewTargetText(summary, infinite);
+                if (!string.IsNullOrEmpty(nextTarget))
+                {
+                    return (infinite ? "무한 복기 재도전으로 " : "복기 재도전으로 ")
+                        + "목표 상향 - " + nextTarget;
+                }
+
+                return infinite ? "무한 복기 재도전으로 달성 흐름 연장" : "복기 재도전으로 달성 흐름 연장";
+            }
+
+            if (summary.Contains("진행", StringComparison.Ordinal))
+            {
+                return infinite ? "무한 복기 재도전으로 목표 진행" : "복기 재도전으로 목표 진행";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildAdvancedReviewTargetText(string summary, bool infinite)
+        {
+            string target = ExtractReviewTargetSummaryTarget(summary);
+            if (string.IsNullOrEmpty(target))
+            {
+                return string.Empty;
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                string scope = ExtractReviewTargetScope(target, "무실수");
+                return string.IsNullOrEmpty(scope)
+                    ? "보정 0회"
+                    : scope + " 보정 0회";
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                return "정박 3연속";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "무실수";
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 보정 0회" : "보정 0회";
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal)
+                || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "최대 콤보 6";
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "800점 탈출";
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int nextScore = Mathf.Max(800, ExtractNumberBeforeMarker(target, "점") + 200);
+                return nextScore + (infinite ? "점 갱신" : "점 탈출");
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int nextSections = Mathf.Max(1, ExtractNumberBeforeMarker(target, "구간") + 1);
+                return nextSections + "구간 생존";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int currentThreat = ExtractNumberBeforeMarker(target, "진입");
+                return currentThreat >= 5
+                    ? "3구간 생존"
+                    : "위협 " + Mathf.Clamp(currentThreat + 1, 2, 5) + " 진입";
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int currentMisses = ExtractNumberBeforeMarker(target, "이하");
+                if (currentMisses <= 0)
+                {
+                    return infinite ? "다음 구간 무실수" : "정박 3연속";
+                }
+
+                return "실수 " + (currentMisses - 1) + " 이하";
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal)
+                || target.Contains("생존", StringComparison.Ordinal)
+                || target.Contains("집중", StringComparison.Ordinal))
+            {
+                return "정박 3연속";
+            }
+
+            return string.Empty;
+        }
+
+        private static string ExtractReviewTargetSummaryTarget(string summary)
+        {
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                return string.Empty;
+            }
+
+            string[] markers =
+            {
+                " / 실패 ",
+                " / 달성 ",
+                " / 진행 ",
+                " / 기록됨",
+            };
+            for (int i = 0; i < markers.Length; i += 1)
+            {
+                int markerIndex = summary.IndexOf(markers[i], StringComparison.Ordinal);
+                if (markerIndex > 0)
+                {
+                    return summary.Substring(0, markerIndex).Trim();
+                }
+            }
+
+            return summary.Trim();
+        }
+
+        private static string ExtractReviewTargetScope(string target, string keyword)
+        {
+            int detailIndex = target.IndexOf(" / ", StringComparison.Ordinal);
+            string compactTarget = detailIndex >= 0 ? target.Substring(0, detailIndex).Trim() : target.Trim();
+            int keywordIndex = compactTarget.IndexOf(keyword, StringComparison.Ordinal);
+            if (keywordIndex <= 0)
+            {
+                return string.Empty;
+            }
+
+            return compactTarget.Substring(0, keywordIndex).Trim();
+        }
+
+        private static int ExtractNumberBeforeMarker(string text, string marker)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(marker))
+            {
+                return 0;
+            }
+
+            int markerIndex = text.IndexOf(marker, StringComparison.Ordinal);
+            if (markerIndex <= 0)
+            {
+                return 0;
+            }
+
+            int end = markerIndex - 1;
+            while (end >= 0 && char.IsWhiteSpace(text[end]))
+            {
+                end -= 1;
+            }
+
+            int start = end;
+            while (start >= 0 && char.IsDigit(text[start]))
+            {
+                start -= 1;
+            }
+
+            if (start == end)
+            {
+                return 0;
+            }
+
+            string value = text.Substring(start + 1, end - start);
+            return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+        }
+
+        private string BuildRecommendedGrowthActionSummary()
+        {
+            if (growthSurvivalLevel >= GrowthMaxLevel
+                && growthFocusLevel >= GrowthMaxLevel
+                && growthTimingLevel >= GrowthMaxLevel)
+            {
+                return "모든 성장 보정 MAX";
+            }
+
+            int targetTrack = SelectRecommendedGrowthTrack(out string reason);
+            if (targetTrack < 0)
+            {
+                return "모든 성장 보정 MAX";
+            }
+
+            int level = GetGrowthTrackLevel(targetTrack);
+            int cost = BuildGrowthUpgradeCost(level);
+            string trackName = GetGrowthTrackName(targetTrack);
+            string reasonText = string.IsNullOrEmpty(reason) ? string.Empty : " / " + reason;
+            if (growthPoints >= cost)
+            {
+                return trackName + " 강화 가능 / 보유 " + growthPoints + "pt" + reasonText;
+            }
+
+            return trackName + "까지 " + (cost - growthPoints) + "pt 더 필요" + reasonText;
+        }
+
+        private bool HasAnyGrowthUpgradeAvailable()
+        {
+            return CanUpgradeGrowthTrack(growthSurvivalLevel)
+                || CanUpgradeGrowthTrack(growthFocusLevel)
+                || CanUpgradeGrowthTrack(growthTimingLevel);
+        }
+
+        private bool CanUpgradeGrowthTrack(int level)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthMaxLevel);
+            return safeLevel < GrowthMaxLevel && growthPoints >= BuildGrowthUpgradeCost(safeLevel);
+        }
+
+        private string BuildProfileBadgeText()
+        {
+            return "대표 칭호: " + BuildProfileBadgeName()
+                + "\n등급 흔적: " + BuildProfileTierLabel()
+                + "\n" + BuildProfileSignatureText()
+                + "\n축 숙련: " + BuildProfileTimingAxisMasteryText()
+                + "\n경로 숙련: " + BuildProfileRouteMasteryText()
+                + "\n경로 완주: " + BuildProfileRouteBundleMasteryText()
+                + "\n회피 숙련: " + BuildProfileAvoidanceMasteryText()
+                + "\n동작 성과: " + BuildProfileThreeActionAchievementText()
+                + "\n획득 배지: " + CompactText(BuildProfileUnlockedBadgesText(), 44)
+                + "\n다음 흔적: " + BuildProfileNextGoalText();
+        }
+
+        private string BuildProfileTimingAxisMasteryText()
+        {
+            int perfectCharge = BuildProfileTimingAxisPeakCount("정박 충전 ");
+            int clutchCounter = BuildProfileTimingAxisPeakCount("압박 반격 ");
+            int offbeatFlow = BuildProfileTimingAxisPeakCount("엇박 연쇄 ");
+            if (perfectCharge + clutchCounter + offbeatFlow <= 0)
+            {
+                return "정밀 보상 기록 없음";
+            }
+
+            return "정박 충전 " + perfectCharge
+                + " / 압박 반격 " + clutchCounter
+                + " / 엇박 연쇄 " + offbeatFlow;
+        }
+
+        private int BuildProfileTimingAxisPeakCount(string prefix)
+        {
+            int peak = 0;
+            peak = Mathf.Max(peak, ExtractTimingProfileCount(bestRunRecord.TimingProfile, prefix));
+            peak = Mathf.Max(peak, ExtractTimingProfileCount(lastRunRecord.TimingProfile, prefix));
+            peak = Mathf.Max(peak, ExtractTimingProfileCount(bestInfiniteRunRecord.TimingProfile, prefix));
+            peak = Mathf.Max(peak, ExtractTimingProfileCount(lastInfiniteRunRecord.TimingProfile, prefix));
+            for (int i = 0; i < normalRunRankings.Length; i += 1)
+            {
+                peak = Mathf.Max(peak, ExtractTimingProfileCount(normalRunRankings[i].TimingProfile, prefix));
+            }
+
+            for (int i = 0; i < infiniteRunRankings.Length; i += 1)
+            {
+                peak = Mathf.Max(peak, ExtractTimingProfileCount(infiniteRunRankings[i].TimingProfile, prefix));
+            }
+
+            return peak;
+        }
+
+        private string BuildProfileRouteMasteryText()
+        {
+            int stableRecovery = BuildProfileTimingAxisPeakCount("안정 복구 ");
+            int variationFlow = BuildProfileTimingAxisPeakCount("변주 공명 ");
+            int pressureCounter = BuildProfileTimingAxisPeakCount("압박 증폭 ");
+            if (stableRecovery + variationFlow + pressureCounter <= 0)
+            {
+                return "안정 0 / 변주 0 / 압박 0";
+            }
+
+            return "안정 복구 " + stableRecovery
+                + " / 변주 공명 " + variationFlow
+                + " / 압박 증폭 " + pressureCounter;
+        }
+
+        private string BuildProfileRouteBundleMasteryText()
+        {
+            int stableBundle = BuildProfileTimingAxisPeakCount("안정 완주 ");
+            int variationBundle = BuildProfileTimingAxisPeakCount("변주 완주 ");
+            int pressureBundle = BuildProfileTimingAxisPeakCount("압박 완주 ");
+            return "안정 " + stableBundle
+                + " / 변주 " + variationBundle
+                + " / 압박 " + pressureBundle;
+        }
+
+        private string BuildProfileAvoidanceMasteryText()
+        {
+            int jumpExact = BuildProfileTimingAxisPeakCount("점프 정확 ");
+            int jumpGood = BuildProfileTimingAxisPeakCount("점프 보정 ");
+            int jumpMiss = BuildProfileTimingAxisPeakCount("점프 실수 ");
+            int slideExact = BuildProfileTimingAxisPeakCount("숙이기 정확 ");
+            int slideGood = BuildProfileTimingAxisPeakCount("숙이기 보정 ");
+            int slideMiss = BuildProfileTimingAxisPeakCount("숙이기 실수 ");
+            int twistExact = BuildProfileTimingAxisPeakCount("비틀기 정확 ");
+            int twistGood = BuildProfileTimingAxisPeakCount("비틀기 보정 ");
+            int twistMiss = BuildProfileTimingAxisPeakCount("비틀기 실수 ");
+            int total = jumpExact + jumpGood + jumpMiss
+                + slideExact + slideGood + slideMiss
+                + twistExact + twistGood + twistMiss;
+            if (total <= 0)
+            {
+                return "회피 기록 없음";
+            }
+
+            return "점프 " + FormatAvoidanceCounts(jumpExact, jumpGood, jumpMiss)
+                + " / 숙 " + FormatAvoidanceCounts(slideExact, slideGood, slideMiss)
+                + " / 틀 " + FormatAvoidanceCounts(twistExact, twistGood, twistMiss);
+        }
+
+        private string BuildProfileThreeActionAchievementText()
+        {
+            int threeActionExact = BuildProfileTimingAxisPeakCount("3동작 정확 ");
+            return threeActionExact > 0
+                ? "3동작 정확 " + threeActionExact + "구간"
+                : "3동작 정확 대기";
+        }
+
+        private string BuildProfileBadgeName()
+        {
+            if (bestInfiniteRunRecord.IsValid && bestInfiniteRunRecord.MaxThreatLevel >= 5)
+            {
+                return "고위험 생존자";
+            }
+
+            if (HasPrecisionRunRecord(bestRunRecord))
+            {
+                return "정박 탈출자";
+            }
+
+            if (HasCleanRunRecord(bestRunRecord))
+            {
+                return "정확 탈출자";
+            }
+
+            if (HasChainRunRecord(bestRunRecord))
+            {
+                return "연쇄 탈출자";
+            }
+
+            if (bestRunRecord.IsValid && bestRunRecord.Score >= 800)
+            {
+                return "정확한 탈출자";
+            }
+
+            if (normalClearCount >= 3)
+            {
+                return "반복 탈출자";
+            }
+
+            if (infiniteRunCount > 0)
+            {
+                return "무한 기록자";
+            }
+
+            if (normalFailCount + normalAbandonCount > 0)
+            {
+                return "다시 일어서는 자";
+            }
+
+            return "피라미드 입구";
+        }
+
+        private string BuildProfileTierLabel()
+        {
+            int score = normalClearCount * 3
+                + infiniteRunCount * 2
+                + Mathf.Clamp(growthSurvivalLevel + growthFocusLevel + growthTimingLevel, 0, GrowthMaxLevel * 3);
+            if (bestRunRecord.IsValid && bestRunRecord.Score >= 800)
+            {
+                score += 3;
+            }
+
+            if (HasChainRunRecord(bestRunRecord))
+            {
+                score += 2;
+            }
+
+            if (HasCleanRunRecord(bestRunRecord))
+            {
+                score += 2;
+            }
+
+            if (HasPrecisionRunRecord(bestRunRecord))
+            {
+                score += 2;
+            }
+
+            if (bestInfiniteRunRecord.IsValid && bestInfiniteRunRecord.MaxThreatLevel >= 5)
+            {
+                score += 4;
+            }
+
+            if (score >= 18)
+            {
+                return "S";
+            }
+
+            if (score >= 11)
+            {
+                return "A";
+            }
+
+            if (score >= 5)
+            {
+                return "B";
+            }
+
+            return "C";
+        }
+
+        private string BuildProfileSignatureText()
+        {
+            string normalProfile = bestRunRecord.IsValid
+                ? CompactText(BuildLoadoutAndRouteProfile(bestRunRecord), 24)
+                : "-";
+            string infiniteProfile = FindRepresentativeInfiniteProfile();
+            string compactInfiniteProfile = string.IsNullOrEmpty(infiniteProfile)
+                ? "-"
+                : CompactText(CompactInfiniteLoadoutProfileText(infiniteProfile), 24);
+
+            return "성향 일반 " + normalProfile + " / 무한 " + compactInfiniteProfile;
+        }
+
+        private string FindRepresentativeInfiniteProfile()
+        {
+            if (bestInfiniteRunRecord.IsValid && !string.IsNullOrEmpty(bestInfiniteRunRecord.LoadoutProfile))
+            {
+                return bestInfiniteRunRecord.LoadoutProfile;
+            }
+
+            if (lastInfiniteRunRecord.IsValid && !string.IsNullOrEmpty(lastInfiniteRunRecord.LoadoutProfile))
+            {
+                return lastInfiniteRunRecord.LoadoutProfile;
+            }
+
+            for (int i = 0; i < infiniteRunRankings.Length; i += 1)
+            {
+                if (infiniteRunRankings[i].IsValid && !string.IsNullOrEmpty(infiniteRunRankings[i].LoadoutProfile))
+                {
+                    return infiniteRunRankings[i].LoadoutProfile;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private bool HasAnyProfileTrace()
+        {
+            return normalClearCount > 0
+                || normalFailCount > 0
+                || normalAbandonCount > 0
+                || infiniteRunCount > 0
+                || firstSaveCompleted
+                || HasAnySaveLoadoutSlot()
+                || HasLastSaveLoadoutUseTrace()
+                || growthPoints > 0
+                || growthSurvivalLevel > 0
+                || growthFocusLevel > 0
+                || growthTimingLevel > 0
+                || bestRunRecord.IsValid
+                || bestInfiniteRunRecord.IsValid;
+        }
+
+        private string BuildProfileUnlockedBadgesText()
+        {
+            string text = string.Empty;
+            AppendProfileBadge(ref text, normalClearCount > 0, "첫 탈출");
+            AppendProfileBadge(ref text, infiniteRunCount > 0, "무한 진입");
+            AppendProfileBadge(ref text, HasPrototypeCompletionLoopCompleted(), "완성 루프");
+            AppendProfileBadge(ref text, growthSurvivalLevel + growthFocusLevel + growthTimingLevel >= 3, "보정 각성");
+            AppendProfileBadge(ref text, bestRunRecord.IsValid && bestRunRecord.Score >= 800, "고득점");
+            AppendProfileBadge(ref text, HasChainRunRecord(bestRunRecord), "연쇄 숙련");
+            AppendProfileBadge(ref text, HasPrecisionRunRecord(bestRunRecord), "정박 숙련");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("3동작 정확 ") >= 1, "3동작 정확");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("정박 충전 ") >= 3, "집중 정박");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("압박 반격 ") >= 3, "압박 반격");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("엇박 연쇄 ") >= 3, "엇박 연쇄");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("안정 복구 ") >= 3, "안정 보험");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("변주 공명 ") >= 3, "변주 공명");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("압박 증폭 ") >= 3, "압박 증폭");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("안정 완주 ") >= 2, "안정 완주");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("변주 완주 ") >= 2, "변주 완주");
+            AppendProfileBadge(ref text, BuildProfileTimingAxisPeakCount("압박 완주 ") >= 2, "압박 완주");
+            AppendProfileBadge(ref text, HasCleanRunRecord(bestRunRecord), "정확 탈출");
+            AppendProfileBadge(ref text, bestInfiniteRunRecord.IsValid && bestInfiniteRunRecord.MaxThreatLevel >= 5, "고위험");
+            AppendProfileBadge(ref text, !string.IsNullOrEmpty(FindRepresentativeInfiniteProfile()), "무한 성향");
+            AppendProfileBadge(ref text, HasLastSaveLoadoutUseTrace(), "조합 소모");
+            AppendProfileBadge(ref text, lastConsumedSaveSlotAutoCleared, "자동 정리");
+            AppendProfileBadge(ref text, growthSurvivalLevel >= GrowthMaxLevel && growthFocusLevel >= GrowthMaxLevel && growthTimingLevel >= GrowthMaxLevel, "성장 MAX");
+            return string.IsNullOrEmpty(text) ? "없음" : text;
+        }
+
+        private static void AppendProfileBadge(ref string text, bool unlocked, string badge)
+        {
+            if (!unlocked)
+            {
+                return;
+            }
+
+            text = string.IsNullOrEmpty(text) ? badge : text + " / " + badge;
+        }
+
+        private string BuildProfileNextGoalText()
+        {
+            if (normalClearCount <= 0)
+            {
+                return "일반 런 첫 탈출";
+            }
+
+            if (firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot())
+            {
+                return HasSaveLoadoutCandidate
+                    ? "저장 후보를 슬롯에 저장 또는 포기"
+                    : "무한 조합 보충으로 새 조합 만들기";
+            }
+
+            if (infiniteRunCount <= 0)
+            {
+                return "저장 조합으로 무한모드 기록 / 위협 폭·보상";
+            }
+
+            if (bestInfiniteRunRecord.IsValid
+                && string.IsNullOrEmpty(bestInfiniteRunRecord.LoadoutProfile)
+                && string.IsNullOrEmpty(FindRepresentativeInfiniteProfile()))
+            {
+                return "저장 성향이 남는 무한모드 기록";
+            }
+
+            int totalGrowth = growthSurvivalLevel + growthFocusLevel + growthTimingLevel;
+            if (totalGrowth < 3)
+            {
+                return "성장 보정 합계 Lv.3 / 현재 Lv." + totalGrowth;
+            }
+
+            if (!HasChainRunRecord(bestRunRecord))
+            {
+                int currentCombo = bestRunRecord.IsValid ? Mathf.Max(0, bestRunRecord.MaxCombo) : 0;
+                return "일반 런 최대 콤보 6 / 현재 " + currentCombo;
+            }
+
+            if (!HasPrecisionRunRecord(bestRunRecord))
+            {
+                int currentPrecision = bestRunRecord.IsValid ? ExtractPrecisionStreak(bestRunRecord.TimingProfile) : 0;
+                return "일반 런 정박 3연속 / 현재 " + currentPrecision;
+            }
+
+            int threeActionExact = BuildProfileTimingAxisPeakCount("3동작 정확 ");
+            if (threeActionExact < 1)
+            {
+                return "3동작 정확 1구간 / 현재 0";
+            }
+
+            string timingAxisGoal = BuildProfileTimingAxisNextGoalText();
+            if (!string.IsNullOrEmpty(timingAxisGoal))
+            {
+                return timingAxisGoal;
+            }
+
+            string routeGoal = BuildProfileRouteNextGoalText();
+            if (!string.IsNullOrEmpty(routeGoal))
+            {
+                return routeGoal;
+            }
+
+            string routeBundleGoal = BuildProfileRouteBundleNextGoalText();
+            if (!string.IsNullOrEmpty(routeBundleGoal))
+            {
+                return routeBundleGoal;
+            }
+
+            if (!HasCleanRunRecord(bestRunRecord))
+            {
+                int currentMiss = bestRunRecord.IsValid ? Mathf.Max(0, bestRunRecord.MissCount) : 99;
+                return "일반 런 실수 1 이하 / 현재 " + currentMiss;
+            }
+
+            if (!bestRunRecord.IsValid || bestRunRecord.Score < 800)
+            {
+                int currentScore = bestRunRecord.IsValid ? bestRunRecord.Score : 0;
+                return "일반 런 800점 / 현재 " + currentScore + "점";
+            }
+
+            if (!bestInfiniteRunRecord.IsValid || bestInfiniteRunRecord.MaxThreatLevel < 5)
+            {
+                int currentThreat = bestInfiniteRunRecord.IsValid ? Mathf.Max(1, bestInfiniteRunRecord.MaxThreatLevel) : 0;
+                return "무한모드 위협 5 / 현재 " + currentThreat + " / 폭·보상 확인";
+            }
+
+            if (totalGrowth < GrowthMaxLevel * 3)
+            {
+                return "모든 성장 보정 MAX / 현재 Lv." + totalGrowth + "/" + (GrowthMaxLevel * 3);
+            }
+
+            return "새 기록 갱신";
+        }
+
+        private string BuildProfileTimingAxisNextGoalText()
+        {
+            int perfectCharge = BuildProfileTimingAxisPeakCount("정박 충전 ");
+            if (perfectCharge < 3)
+            {
+                return "정박 충전 3회 / 최고 " + perfectCharge;
+            }
+
+            int clutchCounter = BuildProfileTimingAxisPeakCount("압박 반격 ");
+            if (clutchCounter < 3)
+            {
+                return "압박 반격 3회 / 최고 " + clutchCounter;
+            }
+
+            int offbeatFlow = BuildProfileTimingAxisPeakCount("엇박 연쇄 ");
+            return offbeatFlow < 3
+                ? "엇박 연쇄 3회 / 최고 " + offbeatFlow
+                : string.Empty;
+        }
+
+        private string BuildProfileRouteNextGoalText()
+        {
+            int stableRecovery = BuildProfileTimingAxisPeakCount("안정 복구 ");
+            if (stableRecovery < 3)
+            {
+                return "안정 복구 3회 / 최고 " + stableRecovery;
+            }
+
+            int variationFlow = BuildProfileTimingAxisPeakCount("변주 공명 ");
+            if (variationFlow < 3)
+            {
+                return "변주 공명 3회 / 최고 " + variationFlow;
+            }
+
+            int pressureCounter = BuildProfileTimingAxisPeakCount("압박 증폭 ");
+            return pressureCounter < 3
+                ? "압박 증폭 3회 / 최고 " + pressureCounter
+                : string.Empty;
+        }
+
+        private string BuildProfileRouteBundleNextGoalText()
+        {
+            int stableBundle = BuildProfileTimingAxisPeakCount("안정 완주 ");
+            if (stableBundle <= 0)
+            {
+                return "안정 경로 3패턴 완주";
+            }
+
+            int variationBundle = BuildProfileTimingAxisPeakCount("변주 완주 ");
+            if (variationBundle <= 0)
+            {
+                return "변주 경로 3패턴 완주";
+            }
+
+            return BuildProfileTimingAxisPeakCount("압박 완주 ") <= 0
+                ? "압박 경로 3패턴 완주"
+                : string.Empty;
+        }
+
+        private static bool HasChainRunRecord(GreedLastRunRecord record)
+        {
+            return record.IsValid && record.MaxCombo >= 6;
+        }
+
+        private static bool HasCleanRunRecord(GreedLastRunRecord record)
+        {
+            return record.IsValid
+                && record.SuccessCount > 0
+                && record.MissCount <= 1
+                && record.SuccessCount >= record.GoodCount + record.MissCount;
+        }
+
+        private static bool HasPrecisionRunRecord(GreedLastRunRecord record)
+        {
+            return record.IsValid && ExtractPrecisionStreak(record.TimingProfile) >= 3;
         }
 
         private static int NormalizeRecordBoardPage(int page)
@@ -1000,20 +4154,9 @@ namespace GreedLast
             return ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
         }
 
-        private static string BuildRecordBoardSection(string label, string body)
+        private static int NormalizeProfileBoardPage(int page)
         {
-            if (string.IsNullOrEmpty(body))
-            {
-                return label + " 기록 없음";
-            }
-
-            int firstLineEnd = body.IndexOf('\n');
-            if (firstLineEnd < 0)
-            {
-                return label + " " + body;
-            }
-
-            return label + " " + body.Substring(0, firstLineEnd) + body.Substring(firstLineEnd);
+            return ((page % ProfileBoardPageCount) + ProfileBoardPageCount) % ProfileBoardPageCount;
         }
 
         public bool ToggleOfflineForEditorCheck()
@@ -1039,11 +4182,182 @@ namespace GreedLast
                 return candidate.Health > currentBest.Health;
             }
 
-            return candidate.Focus > currentBest.Focus;
+            if (candidate.Focus != currentBest.Focus)
+            {
+                return candidate.Focus > currentBest.Focus;
+            }
+
+            if (candidate.MaxCombo != currentBest.MaxCombo)
+            {
+                return candidate.MaxCombo > currentBest.MaxCombo;
+            }
+
+            return candidate.MissCount < currentBest.MissCount;
+        }
+
+        private static bool IsBetterSaveLoadoutRecord(GreedLastRunRecord candidate, GreedLastRunRecord current)
+        {
+            if (!candidate.IsValid)
+            {
+                return false;
+            }
+
+            if (!current.IsValid)
+            {
+                return true;
+            }
+
+            int candidateQuality = BuildSaveLoadoutQualityScore(candidate);
+            int currentQuality = BuildSaveLoadoutQualityScore(current);
+            if (candidateQuality != currentQuality)
+            {
+                return candidateQuality > currentQuality;
+            }
+
+            return IsBetterRunRecord(candidate, current);
+        }
+
+        private static int BuildSaveLoadoutQualityScore(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return int.MinValue;
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            int focusActivations = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
+            int focusedSuccesses = ExtractTimingProfileCount(record.TimingProfile, "집중 성공 ");
+            int cleanBonus = record.MissCount <= 0 ? 90 : record.MissCount == 1 ? 35 : 0;
+            int loadoutIdentityBonus = BuildLoadoutProfile(record) == "균형형" ? 15 : 35;
+            int segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
+            return record.Score
+                + Mathf.RoundToInt(record.Distance * 2.2f)
+                + record.Health * 95
+                + record.Focus * 75
+                + record.MaxCombo * 55
+                + record.SuccessCount * 16
+                + record.GoodCount * 5
+                + precisionStreak * 70
+                + focusActivations * 75
+                + focusedSuccesses * 20
+                + cleanBonus
+                + loadoutIdentityBonus
+                + segmentStabilityBonus
+                - record.MissCount * 85;
+        }
+
+        private static string BuildSaveLoadoutQualitySummary(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "품질 없음";
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            int focusActivations = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
+            int segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
+            string text = "품질 " + BuildSaveLoadoutQualityScore(record)
+                + " / " + BuildRunGrade(record)
+                + " / " + BuildLoadoutAndRouteProfileCompact(record)
+                + " / " + BuildStoredGiftStackSummary(record)
+                + " / " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(record)
+                + (focusActivations > 0 ? " / 집중 발동 " + focusActivations : string.Empty)
+                + (segmentStabilityBonus != 0 ? " / 구간 " + FormatSigned(segmentStabilityBonus) : string.Empty);
+            return precisionStreak > 0 ? text + " / 정박 " + precisionStreak : text;
+        }
+
+        private static int BuildSegmentStabilityQualityBonus(string timingProfile)
+        {
+            if (!HasDetailedSegmentPerformance(timingProfile))
+            {
+                return 0;
+            }
+
+            string[] segments = { "1장", "2장", "3장", "4장", "탈출" };
+            int bonus = 0;
+            int totalExact = 0;
+            int totalGood = 0;
+            int totalMiss = 0;
+            for (int i = 0; i < segments.Length; i += 1)
+            {
+                int exact = ExtractTimingProfileCount(timingProfile, segments[i] + " 정확 ");
+                int good = ExtractTimingProfileCount(timingProfile, segments[i] + " 보정 ");
+                int miss = ExtractTimingProfileCount(timingProfile, segments[i] + " 실수 ");
+                int lateRunWeight = i >= 3 ? 2 : 1;
+                bonus += exact * 4 * lateRunWeight;
+                bonus += good * lateRunWeight;
+                bonus -= miss * 18 * lateRunWeight;
+                totalExact += exact;
+                totalGood += good;
+                totalMiss += miss;
+            }
+
+            if (totalMiss <= 0)
+            {
+                bonus += 25;
+            }
+
+            if (totalExact >= 15 && totalGood <= 0 && totalMiss <= 0)
+            {
+                bonus += 35;
+            }
+
+            return bonus;
+        }
+
+        private static string BuildStoredGiftStackSummary(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기프트 없음";
+            }
+
+            int focusStacks = CountChoiceOccurrences(record.ChoiceSummary, "집중 축");
+            int survivalStacks = CountChoiceOccurrences(record.ChoiceSummary, "생존 축");
+            int chainStacks = CountChoiceOccurrences(record.ChoiceSummary, "연쇄 축");
+            string text = string.Empty;
+            if (focusStacks > 0)
+            {
+                text = "집중 x" + focusStacks;
+            }
+
+            if (survivalStacks > 0)
+            {
+                text = string.IsNullOrEmpty(text) ? "생존 x" + survivalStacks : text + " / 생존 x" + survivalStacks;
+            }
+
+            if (chainStacks > 0)
+            {
+                text = string.IsNullOrEmpty(text) ? "연쇄 x" + chainStacks : text + " / 연쇄 x" + chainStacks;
+            }
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                return text;
+            }
+
+            return string.IsNullOrWhiteSpace(record.PrimaryGift)
+                ? "기프트 없음"
+                : "기프트 " + record.PrimaryGift;
+        }
+
+        private static string FormatSaveLoadoutQualityDelta(GreedLastRunRecord candidate, GreedLastRunRecord baseline)
+        {
+            if (!candidate.IsValid || !baseline.IsValid)
+            {
+                return "품질 비교 없음";
+            }
+
+            return "품질 " + FormatSigned(BuildSaveLoadoutQualityScore(candidate) - BuildSaveLoadoutQualityScore(baseline));
         }
 
         private void InsertNormalRanking(GreedLastRunRecord record)
         {
+            if (HasNormalRankingRecord(record))
+            {
+                return;
+            }
+
             int insertIndex = NormalRankingCount;
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
@@ -1065,6 +4379,83 @@ namespace GreedLast
             }
 
             normalRunRankings[insertIndex] = record;
+        }
+
+        private bool HasNormalRankingRecord(GreedLastRunRecord record)
+        {
+            for (int i = 0; i < normalRunRankings.Length; i += 1)
+            {
+                if (IsSameRunRecord(record, normalRunRankings[i])
+                    && record.LoadoutName == normalRunRankings[i].LoadoutName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool PruneDuplicateRankings()
+        {
+            bool prunedNormal = PruneDuplicateNormalRankings();
+            bool prunedInfinite = PruneDuplicateInfiniteRankings();
+            return prunedNormal || prunedInfinite;
+        }
+
+        private bool PruneDuplicateNormalRankings()
+        {
+            GreedLastRunRecord[] uniqueRecords = new GreedLastRunRecord[NormalRankingCount];
+            int uniqueCount = 0;
+            bool changed = false;
+            for (int i = 0; i < normalRunRankings.Length; i += 1)
+            {
+                GreedLastRunRecord record = normalRunRankings[i];
+                if (!record.IsValid)
+                {
+                    continue;
+                }
+
+                if (ContainsNormalRankingRecord(uniqueRecords, uniqueCount, record))
+                {
+                    changed = true;
+                    continue;
+                }
+
+                if (uniqueCount != i)
+                {
+                    changed = true;
+                }
+
+                uniqueRecords[uniqueCount] = record;
+                uniqueCount += 1;
+            }
+
+            if (!changed)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < normalRunRankings.Length; i += 1)
+            {
+                normalRunRankings[i] = i < uniqueCount ? uniqueRecords[i] : GreedLastRunRecord.Empty;
+            }
+
+            return true;
+        }
+
+        private static bool ContainsNormalRankingRecord(GreedLastRunRecord[] records, int count, GreedLastRunRecord record)
+        {
+            int safeCount = Mathf.Clamp(count, 0, records.Length);
+            for (int i = 0; i < safeCount; i += 1)
+            {
+                if (IsSameRunRecord(record, records[i])
+                    && record.LoadoutName == records[i].LoadoutName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void InsertNormalAttemptHistory(GreedLastRunAttemptRecord record)
@@ -1099,7 +4490,17 @@ namespace GreedLast
                 return candidate.MaxThreatLevel > currentBest.MaxThreatLevel;
             }
 
-            return candidate.SectionsCleared > currentBest.SectionsCleared;
+            if (candidate.SectionsCleared != currentBest.SectionsCleared)
+            {
+                return candidate.SectionsCleared > currentBest.SectionsCleared;
+            }
+
+            if (candidate.MaxCombo != currentBest.MaxCombo)
+            {
+                return candidate.MaxCombo > currentBest.MaxCombo;
+            }
+
+            return candidate.MissCount < currentBest.MissCount;
         }
 
         private string BuildInfiniteRunResultComparisonText(GreedLastInfiniteRunRecord record)
@@ -1141,6 +4542,11 @@ namespace GreedLast
                     + FormatInfiniteRecordDelta(lastInfiniteRunRecord, previousBestBeforeLastInfiniteRun);
             }
 
+            if (lastInfiniteRunWasNewBest)
+            {
+                return "최근 기록이 첫 무한모드 최고 기록입니다.";
+            }
+
             if (IsSameInfiniteRecord(lastInfiniteRunRecord, bestInfiniteRunRecord))
             {
                 return "최근 기록이 현재 최고 기록입니다.";
@@ -1155,11 +4561,52 @@ namespace GreedLast
             return "비교할 최고 기록이 아직 없습니다.";
         }
 
+        private string BuildLatestInfiniteBoardComparisonText()
+        {
+            if (!lastInfiniteRunRecord.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            if (lastInfiniteRunWasNewBest && previousBestBeforeLastInfiniteRun.IsValid)
+            {
+                return "신기록 / 이전 대비 " + FormatInfiniteRecordBoardDelta(lastInfiniteRunRecord, previousBestBeforeLastInfiniteRun);
+            }
+
+            if (lastInfiniteRunWasNewBest)
+            {
+                return "첫 무한 최고 기록";
+            }
+
+            if (IsSameInfiniteRecord(lastInfiniteRunRecord, bestInfiniteRunRecord))
+            {
+                return "최근 기록 = 현재 최고";
+            }
+
+            if (bestInfiniteRunRecord.IsValid)
+            {
+                return "최고 대비 " + FormatInfiniteRecordBoardDelta(lastInfiniteRunRecord, bestInfiniteRunRecord);
+            }
+
+            return "비교 기준 없음";
+        }
+
         private string BuildLatestNormalComparisonText()
         {
             if (!lastRunRecord.IsValid)
             {
                 return "기록 없음";
+            }
+
+            if (lastRunWasNewBest && previousBestBeforeLastRun.IsValid)
+            {
+                return "신기록 / 이전 최고 대비 "
+                    + FormatRunRecordDelta(lastRunRecord, previousBestBeforeLastRun);
+            }
+
+            if (lastRunWasNewBest)
+            {
+                return "첫 일반 런 최고 기록입니다.";
             }
 
             if (IsSameRunRecord(lastRunRecord, bestRunRecord))
@@ -1176,6 +4623,870 @@ namespace GreedLast
             return "비교할 최고 기록이 아직 없습니다.";
         }
 
+        private static string BuildRunClearStrengthText(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            int recoveryPrecisionCount = ExtractTimingProfileCount(record.TimingProfile, "복구 정박 ");
+            if (record.MissCount > 0 && recoveryPrecisionCount >= record.MissCount)
+            {
+                return "실수 후 복구 정박 " + recoveryPrecisionCount + "회 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            string routeBundleStrength = BuildRouteBundleStrengthText(record.TimingProfile);
+            if (!string.IsNullOrEmpty(routeBundleStrength))
+            {
+                return routeBundleStrength + " / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            string routePayoffStrength = BuildRoutePayoffStrengthText(record.TimingProfile);
+            if (!string.IsNullOrEmpty(routePayoffStrength))
+            {
+                return routePayoffStrength + " / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            int perfectFocusChargeCount = ExtractTimingProfileCount(record.TimingProfile, "정박 충전 ");
+            if (perfectFocusChargeCount >= 3)
+            {
+                return "정박 집중 충전 " + perfectFocusChargeCount + "회 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            int clutchCounterCount = ExtractTimingProfileCount(record.TimingProfile, "압박 반격 ");
+            if (clutchCounterCount >= 3)
+            {
+                return "압박 반격 " + clutchCounterCount + "회 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            int offbeatFlowCount = ExtractTimingProfileCount(record.TimingProfile, "엇박 연쇄 ");
+            if (offbeatFlowCount >= 3)
+            {
+                return "엇박 연쇄 가속 " + offbeatFlowCount + "회 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            string timingAxisStrength = BuildDominantTimingAxisStrength(record.TimingProfile);
+            if (!string.IsNullOrEmpty(timingAxisStrength))
+            {
+                return timingAxisStrength + " / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (record.Health >= 4)
+            {
+                return "생존 여유 확보 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            int focusSuccessCount = ExtractTimingProfileCount(record.TimingProfile, "집중 성공 ");
+            if (focusSuccessCount >= 3)
+            {
+                return "집중 고점 유지 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            int focusActivationCount = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
+            if (focusActivationCount > 0)
+            {
+                return "집중 상태 " + focusActivationCount + "회 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (record.Focus >= 2)
+            {
+                return "집중 유지 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (ExtractPrecisionStreak(record.TimingProfile) >= 3)
+            {
+                return "정박 흐름 확보 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (record.MaxCombo >= 6)
+            {
+                return "연쇄 흐름 확보 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (record.MissCount <= 1 && record.SuccessCount >= 4)
+            {
+                return "판정 안정 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            if (record.Score >= 500)
+            {
+                return "점수 흐름 안정 / " + BuildLoadoutAndRouteProfile(record);
+            }
+
+            return "탈출 루트 확보 / " + BuildLoadoutAndRouteProfile(record);
+        }
+
+        private static string BuildRoutePayoffStrengthText(string timingProfile)
+        {
+            int stableRecoveryCount = ExtractTimingProfileCount(timingProfile, "안정 복구 ");
+            int variationFlowCount = ExtractTimingProfileCount(timingProfile, "변주 공명 ");
+            int pressureCounterCount = ExtractTimingProfileCount(timingProfile, "압박 증폭 ");
+            int top = Mathf.Max(stableRecoveryCount, variationFlowCount, pressureCounterCount);
+            if (top <= 0)
+            {
+                return string.Empty;
+            }
+
+            if (stableRecoveryCount == top)
+            {
+                return "안정 복구 " + stableRecoveryCount + "회";
+            }
+
+            return variationFlowCount == top
+                ? "변주 공명 " + variationFlowCount + "회"
+                : "압박 증폭 " + pressureCounterCount + "회";
+        }
+
+        private static string BuildRouteBundleStrengthText(string timingProfile)
+        {
+            int stableBundleCount = ExtractTimingProfileCount(timingProfile, "안정 완주 ");
+            int variationBundleCount = ExtractTimingProfileCount(timingProfile, "변주 완주 ");
+            int pressureBundleCount = ExtractTimingProfileCount(timingProfile, "압박 완주 ");
+            int top = Mathf.Max(stableBundleCount, variationBundleCount, pressureBundleCount);
+            if (top <= 0)
+            {
+                return string.Empty;
+            }
+
+            if (stableBundleCount == top)
+            {
+                return "안정 완주 " + stableBundleCount + "회";
+            }
+
+            return variationBundleCount == top
+                ? "변주 완주 " + variationBundleCount + "회"
+                : "압박 완주 " + pressureBundleCount + "회";
+        }
+
+        private static string BuildNormalRunNextTargetText(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "일반 런 기록 만들기";
+            }
+
+            int escapeMissCount = ExtractTimingProfileCount(record.TimingProfile, "탈출 실수 ");
+            if (escapeMissCount > 0)
+            {
+                return "탈출 구간 무실수 / 현재 " + escapeMissCount;
+            }
+
+            int chapterFourMissCount = ExtractTimingProfileCount(record.TimingProfile, "4장 실수 ");
+            if (chapterFourMissCount > 0)
+            {
+                return "챕터 4 무실수 / 현재 " + chapterFourMissCount;
+            }
+
+            if (record.MissCount > 1)
+            {
+                return "실수 1 이하 / 현재 " + record.MissCount;
+            }
+
+            string chapterAccuracyTarget = BuildChapterAccuracyTarget(record.TimingProfile);
+            if (!string.IsNullOrEmpty(chapterAccuracyTarget))
+            {
+                return chapterAccuracyTarget;
+            }
+
+            int focusActivationCount = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
+            if (focusActivationCount <= 0 && record.SuccessCount >= 3)
+            {
+                return "집중 상태 1회 발동 / 현재 0회";
+            }
+
+            string weakTimingAxisTarget = BuildWeakTimingAxisTarget(record.TimingProfile, record.SuccessCount);
+            if (!string.IsNullOrEmpty(weakTimingAxisTarget))
+            {
+                return weakTimingAxisTarget;
+            }
+
+            if (record.MaxCombo < 6)
+            {
+                return "최대 콤보 6 / 현재 " + record.MaxCombo;
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            if (precisionStreak < 3)
+            {
+                return "정박 3연속 / 현재 " + precisionStreak;
+            }
+
+            if (record.Score < 800)
+            {
+                return "800점 탈출 / 현재 " + record.Score + "점";
+            }
+
+            if (record.Health < 3)
+            {
+                return "체력 3 이상으로 탈출 / 현재 " + record.Health;
+            }
+
+            string profileTarget = BuildLoadoutProfileNextTargetText(record);
+            if (!string.IsNullOrEmpty(profileTarget))
+            {
+                return profileTarget;
+            }
+
+            return "저장 조합 확정 후 무한모드 기록 갱신";
+        }
+
+        private static string BuildLoadoutProfileNextTargetText(GreedLastRunRecord record)
+        {
+            switch (BuildLoadoutProfile(record))
+            {
+                case "안정형":
+                    return record.MissCount <= 0 ? "안정형 무실수 저장 조합 확정" : string.Empty;
+                case "집중형":
+                    return ExtractPrecisionStreak(record.TimingProfile) >= 4 ? "집중형 정박 4연속 조합 확정" : string.Empty;
+                case "연쇄형":
+                    return record.MaxCombo >= 9 ? "연쇄형 콤보 9 조합 확정" : string.Empty;
+                case "고점형":
+                    return record.Score >= 1000 ? "고점형 1000점 조합 확정" : string.Empty;
+                case "균형형":
+                    return record.Health >= 3 && record.MaxCombo >= 6 ? "균형형 안정 조합 확정" : string.Empty;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildNormalAttemptTrainingHint(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "일반 런을 한 번 진행해 기록을 남기기";
+            }
+
+            string routeHint = BuildRouteAttemptTrainingHint(record);
+            if (!string.IsNullOrEmpty(routeHint))
+            {
+                return routeHint;
+            }
+
+            string avoidanceWeakness = BuildAvoidanceWeaknessSummary(record.TimingProfile);
+            string avoidanceSuffix = string.IsNullOrEmpty(avoidanceWeakness)
+                ? string.Empty
+                : " / " + avoidanceWeakness;
+
+            if (record.CoreRetrieved)
+            {
+                return CompactText("공명핵 이후 탈출 구간 반복" + avoidanceSuffix, 82);
+            }
+
+            if (record.MissCount <= 0 && record.GoodCount > 0)
+            {
+                return BuildChapterWeaknessSummary(record.TimingProfile)
+                    + avoidanceSuffix
+                    + " / 판정선 안쪽으로 입력 좁히기";
+            }
+
+            if (record.MaxCombo >= 6)
+            {
+                return CompactText("연쇄는 좋음 / 생존 보정이나 집중 보정으로 마무리 보완" + avoidanceSuffix, 82);
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            if (precisionStreak >= 3)
+            {
+                return CompactText("정박 흐름은 좋음 / 루트 선택과 생존 보정으로 마무리" + avoidanceSuffix, 82);
+            }
+
+            switch (record.MissReason)
+            {
+                case "wrong_channel":
+                    return CompactText("밝아진 목표 레인만 보고 입력" + avoidanceSuffix, 82);
+                case "no_input":
+                    return CompactText("가이드가 '지금 누르기'로 바뀌는 순간까지 대기" + avoidanceSuffix, 82);
+                case "too_early":
+                    return CompactText("한 박자 늦게, 정확권 밴드 안에서 입력" + avoidanceSuffix, 82);
+                case "too_late":
+                    return CompactText("보정권이 지나기 전에 조금 빠르게 입력" + avoidanceSuffix, 82);
+                case "focus_guard":
+                    return CompactText("집중 보호 발동 후 집중 회복 루트 선택" + avoidanceSuffix, 82);
+                default:
+                    return record.MissCount > record.SuccessCount + record.GoodCount
+                        ? CompactText("타이밍보다 생존 보정 우선" + avoidanceSuffix, 82)
+                        : CompactText("현재 루트 유지, 다음 챕터까지 반복" + avoidanceSuffix, 82);
+            }
+        }
+
+        private static string BuildNormalAttemptNextTargetText(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "일반 런 시작";
+            }
+
+            if (record.CoreRetrieved)
+            {
+                return "공명핵 이후 탈출 함정 통과";
+            }
+
+            string segmentTarget = BuildChapterAccuracyTarget(record.TimingProfile);
+            if (!string.IsNullOrEmpty(segmentTarget))
+            {
+                return segmentTarget;
+            }
+
+            string routeTarget = BuildRouteAttemptNextTargetText(record);
+            if (!string.IsNullOrEmpty(routeTarget))
+            {
+                return routeTarget;
+            }
+
+            if (record.ChapterIndex >= 4)
+            {
+                return "챕터 4 탈출 구간 진입";
+            }
+
+            if (IsTimingMissReason(record.MissReason))
+            {
+                return "같은 챕터에서 정확권 입력";
+            }
+
+            if (record.Health <= 0)
+            {
+                return "체력 1 이상 남기고 다음 선택 진입";
+            }
+
+            int nextChapter = Mathf.Clamp(record.ChapterIndex + 1, 1, 4);
+            return "챕터 " + nextChapter + " 진입";
+        }
+
+        private static string BuildRouteAttemptNextTargetText(GreedLastRunAttemptRecord record)
+        {
+            string route = BuildRouteProfile(record);
+            switch (route)
+            {
+                case "압박 루트":
+                    return "압박 루트 정확권 1회 통과";
+                case "변주 루트":
+                    return "변주 루트 엇박 입력 1회 성공";
+                case "안정 루트":
+                    return record.Health <= 1 ? "안정 루트 체력 2 이상 유지" : string.Empty;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildRouteAttemptTrainingHint(GreedLastRunAttemptRecord record)
+        {
+            string route = BuildRouteProfile(record);
+            switch (route)
+            {
+                case "압박 루트":
+                    if (record.MissReason == "too_early")
+                    {
+                        return "압박 루트는 판정이 좁음 / 판정선까지 더 대기";
+                    }
+
+                    if (record.MissReason == "too_late")
+                    {
+                        return "압박 루트는 예고 직후 준비 / 늦음 줄이기";
+                    }
+
+                    return record.MissCount > 0 ? "압박 루트 반복 / 정박 성공 우선" : string.Empty;
+                case "변주 루트":
+                    if (IsTimingMissReason(record.MissReason))
+                    {
+                        return "변주 루트는 엇박 확인 / 가이드 변화 뒤 입력";
+                    }
+
+                    return record.MissReason == "no_input" ? "변주 루트 입력 대기 줄이기" : string.Empty;
+                case "안정 루트":
+                    return record.Health <= 0 ? "안정 루트에서도 체력 관리 / 생존 보정 선택" : string.Empty;
+                case "혼합 루트":
+                    return record.MissCount >= 2 ? "혼합 루트는 한 축으로 좁혀 반복" : string.Empty;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private string BuildInfiniteRunTrainingHint(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "무한모드 기록을 한 번 남기기";
+            }
+
+            if (record.MissReason == "test_stop")
+            {
+                return "정산 종료 기록 / 실제 생존 흐름은 다음 무한 런에서 확인";
+            }
+
+            int terminalSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 실수 ");
+            if (terminalSegmentMissCount > 0)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(
+                    BuildInfiniteTerminalSegmentSummary(record.TimingProfile)
+                        + " / 다음 첫 함정부터 생존 안정화",
+                    record.TimingProfile);
+            }
+
+            int terminalSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 보정 ");
+            if (terminalSegmentGoodCount > 0)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(
+                    BuildInfiniteTerminalSegmentSummary(record.TimingProfile)
+                        + " / 다음 구간 정확권 전환",
+                    record.TimingProfile);
+            }
+
+            int latestSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 실수 ");
+            if (latestSegmentMissCount > 0)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(
+                    BuildLatestCompletedSegmentSummary(record.TimingProfile)
+                        + " / 다음 첫 함정부터 생존 안정화",
+                    record.TimingProfile);
+            }
+
+            int latestSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 보정 ");
+            if (latestSegmentGoodCount > 0)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(
+                    BuildLatestCompletedSegmentSummary(record.TimingProfile)
+                        + " / 다음 구간 정확권 전환",
+                    record.TimingProfile);
+            }
+
+            if (lastInfiniteRunWasNewBest)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(
+                    "신기록 흐름 유지 / 다음 목표는 위협 " + Mathf.Min(5, record.MaxThreatLevel + 1) + " / 폭·보상 확인",
+                    record.TimingProfile);
+            }
+
+            string loadoutHint = BuildInfiniteLoadoutAdvice(record);
+            if (!string.IsNullOrEmpty(loadoutHint))
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix(loadoutHint, record.TimingProfile);
+            }
+
+            if (record.MissCount >= Mathf.Max(3, record.SuccessCount + record.GoodCount))
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix("위험도 상승 전 보정권 입력 안정화", record.TimingProfile);
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            if (precisionStreak >= 4)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix("정박 흐름 좋음 / 위협 상승 직후 첫 함정 안정화", record.TimingProfile);
+            }
+
+            switch (record.MissReason)
+            {
+                case "wrong_channel":
+                    return AppendInfiniteAvoidanceTrainingSuffix("고위협에서는 목표 레인 색 변화만 보고 반응", record.TimingProfile);
+                case "no_input":
+                    return AppendInfiniteAvoidanceTrainingSuffix("다음 목표는 입력 없음 줄이기 / 가이드가 누르기로 바뀌는 순간 입력", record.TimingProfile);
+                case "too_early":
+                    return AppendInfiniteAvoidanceTrainingSuffix("무한모드 박자를 조금 늦게 잡기", record.TimingProfile);
+                case "too_late":
+                    return AppendInfiniteAvoidanceTrainingSuffix("무한모드 박자를 조금 빠르게 잡기", record.TimingProfile);
+                case "focus_guard":
+                    return AppendInfiniteAvoidanceTrainingSuffix("집중 보호 후 집중 회복 선택으로 다음 구간 대비", record.TimingProfile);
+            }
+
+            if (record.MaxCombo >= 9)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix("연쇄 유지 좋음 / 더 긴 거리 목표", record.TimingProfile);
+            }
+
+            if (record.SectionsCleared <= 1)
+            {
+                return AppendInfiniteAvoidanceTrainingSuffix("저장 조합 보너스와 성장 보정 확인", record.TimingProfile);
+            }
+
+            return AppendInfiniteAvoidanceTrainingSuffix("최근 최고와 비교해 약한 구간 반복", record.TimingProfile);
+        }
+
+        private static string AppendInfiniteAvoidanceTrainingSuffix(string hint, string timingProfile)
+        {
+            string avoidanceWeakness = BuildAvoidanceWeaknessSummary(timingProfile);
+            return string.IsNullOrEmpty(avoidanceWeakness)
+                ? hint
+                : CompactText(hint + " / " + avoidanceWeakness, 128);
+        }
+
+        private static string BuildRunClearReviewText(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "탈출 기록 없음";
+            }
+
+            string weakness = BuildChapterWeaknessSummary(record.TimingProfile);
+            string target = BuildNormalRunNextTargetText(record);
+            if (record.MissCount <= 0 && record.GoodCount <= 0)
+            {
+                return CompactText("전 구간 정확 흐름 / 다음 " + target, 82);
+            }
+
+            int recoveryPrecisionCount = ExtractTimingProfileCount(record.TimingProfile, "복구 정박 ");
+            string avoidanceWeakness = BuildAvoidanceWeaknessSummary(record.TimingProfile);
+            string avoidanceSuffix = string.IsNullOrEmpty(avoidanceWeakness)
+                ? string.Empty
+                : " / " + avoidanceWeakness;
+            if (recoveryPrecisionCount > 0)
+            {
+                return CompactText(weakness + avoidanceSuffix + " / 복구 정박 " + recoveryPrecisionCount + " -> " + target, 82);
+            }
+
+            return CompactText(weakness + avoidanceSuffix + " -> " + target, 82);
+        }
+
+        private static string BuildNormalAttemptReviewText(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "입구에서 첫 기록 만들기";
+            }
+
+            string cause = BuildMissReasonReviewText(record.MissReason);
+            string weakness = BuildChapterWeaknessSummary(record.TimingProfile);
+            string target = BuildNormalAttemptNextTargetText(record);
+            string prefix = string.IsNullOrEmpty(cause)
+                ? BuildAttemptOutcomeReviewText(record.Outcome)
+                : cause;
+            if (record.CoreRetrieved)
+            {
+                prefix = "공명핵 이후";
+            }
+
+            int recoveryPrecisionCount = ExtractTimingProfileCount(record.TimingProfile, "복구 정박 ");
+            if (recoveryPrecisionCount > 0)
+            {
+                prefix += " / 복구 정박 " + recoveryPrecisionCount;
+            }
+
+            string avoidanceWeakness = BuildAvoidanceWeaknessSummary(record.TimingProfile);
+            string avoidanceSuffix = string.IsNullOrEmpty(avoidanceWeakness)
+                ? string.Empty
+                : " / " + avoidanceWeakness;
+            return CompactText(prefix + " / " + weakness + avoidanceSuffix + " -> " + target, 82);
+        }
+
+        private string BuildInfiniteRunReviewText(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "무한 기록 없음";
+            }
+
+            string segment = BuildInfiniteTerminalSegmentSummary(record.TimingProfile);
+            if (string.IsNullOrEmpty(segment))
+            {
+                segment = BuildLatestCompletedSegmentSummary(record.TimingProfile);
+            }
+
+            string cause = BuildMissReasonReviewText(record.MissReason);
+            string source = string.IsNullOrEmpty(segment)
+                ? (string.IsNullOrEmpty(cause) ? BuildInfiniteRunResultHighlight(record) : cause)
+                : segment;
+            if (!string.IsNullOrEmpty(cause)
+                && !source.Contains(cause, StringComparison.Ordinal)
+                && record.MissReason != "test_stop")
+            {
+                source += " / " + cause;
+            }
+
+            int recoveryPrecisionCount = ExtractTimingProfileCount(record.TimingProfile, "복구 정박 ");
+            if (recoveryPrecisionCount > 0)
+            {
+                source += " / 복구 정박 " + recoveryPrecisionCount;
+            }
+
+            string avoidanceWeakness = BuildAvoidanceWeaknessSummary(record.TimingProfile);
+            if (!string.IsNullOrEmpty(avoidanceWeakness))
+            {
+                source += " / " + avoidanceWeakness;
+            }
+
+            return CompactText(source + " -> " + BuildInfiniteRunNextTargetText(record), 92);
+        }
+
+        private static string BuildMissReasonReviewText(string missReason)
+        {
+            switch (missReason)
+            {
+                case "wrong_channel":
+                    return "채널 확인";
+                case "no_input":
+                    return "입력 없음";
+                case "too_early":
+                    return "빠른 입력";
+                case "too_late":
+                    return "늦은 입력";
+                case "focus_guard":
+                    return "집중 보호";
+                case "test_stop":
+                    return "정산 종료";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildAttemptOutcomeReviewText(GreedLastRunAttemptOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case GreedLastRunAttemptOutcome.Failed:
+                    return "실패";
+                case GreedLastRunAttemptOutcome.Abandoned:
+                    return "중단";
+                default:
+                    return "기록 없음";
+            }
+        }
+
+        private static string FormatInfiniteLoadoutAdviceLine(GreedLastInfiniteRunRecord record)
+        {
+            string advice = BuildInfiniteLoadoutAdvice(record);
+            return string.IsNullOrEmpty(advice)
+                ? string.Empty
+                : "\n조합 진단: " + CompactText(advice, 48);
+        }
+
+        private static string BuildInfiniteLoadoutAdvice(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid || string.IsNullOrEmpty(record.LoadoutProfile))
+            {
+                return string.Empty;
+            }
+
+            string profile = record.LoadoutProfile;
+            if (profile.Contains("압박", StringComparison.Ordinal))
+            {
+                if (record.MissReason == "too_early")
+                {
+                    return "압박 조합 / 판정선까지 더 대기";
+                }
+
+                if (record.MissReason == "too_late")
+                {
+                    return "압박 조합 / 예고 직후 준비";
+                }
+
+                return record.MaxCombo < 6
+                    ? "압박 조합 / 콤보 6 먼저 고정"
+                    : "압박 조합 / 고위험 정박 유지";
+            }
+
+            if (profile.Contains("변주", StringComparison.Ordinal))
+            {
+                if (record.MissReason == "no_input")
+                {
+                    return "변주 조합 / 입력 대기 줄이기";
+                }
+
+                return TimingProfileNeedsGrowth(record.TimingProfile)
+                    ? "변주 조합 / 오차 보정 우선"
+                    : "변주 조합 / 엇박 첫 입력 확인";
+            }
+
+            if (profile.Contains("안정", StringComparison.Ordinal))
+            {
+                if (record.MissCount >= 3)
+                {
+                    return "안정 조합 / 실수 2 이하 목표";
+                }
+
+                return record.SectionsCleared < 3
+                    ? "안정 조합 / 3구간 생존 목표"
+                    : "안정 조합 / 무실수 거리 갱신";
+            }
+
+            return profile.Contains("혼합", StringComparison.Ordinal)
+                ? "혼합 조합 / 다음 저장은 한 축 강화"
+                : string.Empty;
+        }
+
+        private static string BuildInfiniteRunNextTargetText(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "무한모드 첫 기록 남기기";
+            }
+
+            if (record.MissReason == "test_stop")
+            {
+                return "실제 플레이로 무한 종료 기록 확인";
+            }
+
+            int terminalSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 실수 ");
+            if (terminalSegmentMissCount > 0)
+            {
+                return "다음 구간 무실수 / 종료 구간 " + terminalSegmentMissCount;
+            }
+
+            int terminalSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 보정 ");
+            if (terminalSegmentGoodCount > 0)
+            {
+                return "다음 구간 보정 0회 / 종료 구간 " + terminalSegmentGoodCount;
+            }
+
+            int latestSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 실수 ");
+            if (latestSegmentMissCount > 0)
+            {
+                return "다음 구간 무실수 / 직전 " + latestSegmentMissCount;
+            }
+
+            int latestSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 보정 ");
+            if (latestSegmentGoodCount > 0)
+            {
+                return "다음 구간 보정 0회 / 직전 " + latestSegmentGoodCount;
+            }
+
+            int focusActivationCount = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
+            if (focusActivationCount <= 0 && record.SuccessCount >= 3)
+            {
+                return "집중 상태 1회 발동 / 현재 0회";
+            }
+
+            string loadoutTarget = BuildInfiniteLoadoutNextTargetText(record);
+            if (!string.IsNullOrEmpty(loadoutTarget))
+            {
+                return loadoutTarget;
+            }
+
+            int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
+            if (threatLevel < 5)
+            {
+                return "위협 " + (threatLevel + 1) + " 진입 / 현재 " + threatLevel + " / 폭·보상 확인";
+            }
+
+            if (record.SectionsCleared < 3)
+            {
+                return "3구간 생존 / 현재 " + record.SectionsCleared;
+            }
+
+            if (record.MissCount > 0)
+            {
+                return "실수 " + Mathf.Max(0, record.MissCount - 1) + " 이하 / 현재 " + record.MissCount;
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            if (precisionStreak < 4)
+            {
+                return "무한 정박 4연속 / 현재 " + precisionStreak;
+            }
+
+            if (record.MaxCombo < 9)
+            {
+                return "무한 콤보 9 / 현재 " + record.MaxCombo;
+            }
+
+            int nextScoreMilestone = Mathf.Max(1000, (record.Score / 500 + 1) * 500);
+            return "무한 " + nextScoreMilestone + "점 갱신 / 현재 " + record.Score + "점";
+        }
+
+        private static string BuildInfiniteLoadoutNextTargetText(GreedLastInfiniteRunRecord record)
+        {
+            if (string.IsNullOrEmpty(record.LoadoutProfile))
+            {
+                return string.Empty;
+            }
+
+            string profile = record.LoadoutProfile;
+            int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
+            if (profile.Contains("압박", StringComparison.Ordinal))
+            {
+                if (record.MaxCombo < 6)
+                {
+                    return "압박 조합 콤보 6 / 현재 " + record.MaxCombo;
+                }
+
+                return precisionStreak < 4
+                    ? "압박 조합 정박 4연속 / 현재 " + precisionStreak
+                    : string.Empty;
+            }
+
+            if (profile.Contains("변주", StringComparison.Ordinal))
+            {
+                if (record.MissReason == "no_input")
+                {
+                    return "변주 조합 입력 없음 0회 목표";
+                }
+
+                return TimingProfileNeedsGrowth(record.TimingProfile)
+                    ? "변주 조합 추천 보정 적용"
+                    : string.Empty;
+            }
+
+            if (profile.Contains("안정", StringComparison.Ordinal))
+            {
+                if (record.MissCount > 0)
+                {
+                    return "안정 조합 실수 " + Mathf.Max(0, record.MissCount - 1) + " 이하";
+                }
+
+                return record.SectionsCleared < 3
+                    ? "안정 조합 3구간 생존 / 현재 " + record.SectionsCleared
+                    : string.Empty;
+            }
+
+            return profile.Contains("혼합", StringComparison.Ordinal) && record.SectionsCleared < 3
+                ? "혼합 조합 3구간 생존 / 현재 " + record.SectionsCleared
+                : string.Empty;
+        }
+
+        private string BuildInfiniteRunResultHighlight(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            if (lastInfiniteRunWasNewBest)
+            {
+                return previousBestBeforeLastInfiniteRun.IsValid
+                    ? "신기록 갱신"
+                    : "첫 최고 기록";
+            }
+
+            if (record.MissCount <= 1 && record.SectionsCleared >= 2)
+            {
+                return "안정 생존";
+            }
+
+            if (ExtractTimingProfileCount(record.TimingProfile, "집중 성공 ") >= 3)
+            {
+                return "집중 고점 유지";
+            }
+
+            int recoveryPrecisionCount = ExtractTimingProfileCount(record.TimingProfile, "복구 정박 ");
+            if (recoveryPrecisionCount >= 2)
+            {
+                return "복구 정박 " + recoveryPrecisionCount + "회";
+            }
+
+            if (record.MaxCombo >= 9)
+            {
+                return "연쇄 유지";
+            }
+
+            if (record.MaxThreatLevel >= 4)
+            {
+                return "고위험 진입";
+            }
+
+            return "기록 축적";
+        }
+
+        private static string FormatInfiniteLoadoutName(GreedLastInfiniteRunRecord record)
+        {
+            return string.IsNullOrEmpty(record.LoadoutName) ? "조합 없음" : CompactText(record.LoadoutName, 24);
+        }
+
+        private static string FormatInfiniteJudgementCounts(GreedLastInfiniteRunRecord record)
+        {
+            return BuildTimingAxisPerformanceSummary(record.TimingProfile, record.SuccessCount)
+                + " / 보정 " + record.GoodCount
+                + " / 실수 " + record.MissCount
+                + " / 최대 콤보 " + record.MaxCombo;
+        }
+
         private static string FormatRunRecordDelta(GreedLastRunRecord candidate, GreedLastRunRecord baseline)
         {
             if (!candidate.IsValid || !baseline.IsValid)
@@ -1184,9 +5495,12 @@ namespace GreedLast
             }
 
             return $"점수 {FormatSigned(candidate.Score - baseline.Score)}"
-                + $" / 거리 {FormatSigned(candidate.Distance - baseline.Distance)}m"
                 + $" / 체력 {FormatSigned(candidate.Health - baseline.Health)}"
-                + $" / 집중 {FormatSigned(candidate.Focus - baseline.Focus)}";
+                + $" / 콤보 {FormatSigned(candidate.MaxCombo - baseline.MaxCombo)}"
+                + $" / 실수 {FormatSigned(candidate.MissCount - baseline.MissCount)}"
+                + " / 정확률 " + FormatSigned(
+                    CalculateExactRatePercent(candidate.SuccessCount, candidate.GoodCount, candidate.MissCount)
+                    - CalculateExactRatePercent(baseline.SuccessCount, baseline.GoodCount, baseline.MissCount)) + "%p";
         }
 
         private static bool IsSameRunRecord(GreedLastRunRecord left, GreedLastRunRecord right)
@@ -1196,7 +5510,11 @@ namespace GreedLast
                 && left.Score == right.Score
                 && Mathf.Approximately(left.Distance, right.Distance)
                 && left.Health == right.Health
-                && left.Focus == right.Focus;
+                && left.Focus == right.Focus
+                && left.MaxCombo == right.MaxCombo
+                && left.SuccessCount == right.SuccessCount
+                && left.GoodCount == right.GoodCount
+                && left.MissCount == right.MissCount;
         }
 
         private static string FormatInfiniteRecordDelta(GreedLastInfiniteRunRecord candidate, GreedLastInfiniteRunRecord baseline)
@@ -1213,6 +5531,22 @@ namespace GreedLast
                 + $" / 구간 {FormatSigned(candidate.SectionsCleared - baseline.SectionsCleared)}"
                 + $" / 위협 {FormatSigned(candidateThreat - baselineThreat)}"
                 + $" / 콤보 {FormatSigned(candidate.MaxCombo - baseline.MaxCombo)}"
+                + $" / 실수 {FormatSigned(candidate.MissCount - baseline.MissCount)}"
+                + " / 정확률 " + FormatSigned(
+                    CalculateExactRatePercent(candidate.SuccessCount, candidate.GoodCount, candidate.MissCount)
+                    - CalculateExactRatePercent(baseline.SuccessCount, baseline.GoodCount, baseline.MissCount)) + "%p";
+        }
+
+        private static string FormatInfiniteRecordBoardDelta(GreedLastInfiniteRunRecord candidate, GreedLastInfiniteRunRecord baseline)
+        {
+            if (!candidate.IsValid || !baseline.IsValid)
+            {
+                return "비교 기준 없음";
+            }
+
+            return $"점수 {FormatSigned(candidate.Score - baseline.Score)}"
+                + $" / 거리 {FormatSigned(candidate.Distance - baseline.Distance)}m"
+                + $" / 구간 {FormatSigned(candidate.SectionsCleared - baseline.SectionsCleared)}"
                 + $" / 실수 {FormatSigned(candidate.MissCount - baseline.MissCount)}";
         }
 
@@ -1225,11 +5559,25 @@ namespace GreedLast
                 && left.SectionsCleared == right.SectionsCleared
                 && left.MaxThreatLevel == right.MaxThreatLevel
                 && left.MaxCombo == right.MaxCombo
+                && left.SuccessCount == right.SuccessCount
+                && left.GoodCount == right.GoodCount
                 && left.MissCount == right.MissCount;
+        }
+
+        private static bool IsSameInfiniteRecordIdentity(GreedLastInfiniteRunRecord left, GreedLastInfiniteRunRecord right)
+        {
+            return IsSameInfiniteRecord(left, right)
+                && left.LoadoutName == right.LoadoutName
+                && left.LoadoutProfile == right.LoadoutProfile;
         }
 
         private void InsertInfiniteRanking(GreedLastInfiniteRunRecord record)
         {
+            if (HasInfiniteRankingRecord(record))
+            {
+                return;
+            }
+
             int insertIndex = InfiniteRankingCount;
             for (int i = 0; i < infiniteRunRankings.Length; i += 1)
             {
@@ -1253,6 +5601,74 @@ namespace GreedLast
             infiniteRunRankings[insertIndex] = record;
         }
 
+        private bool HasInfiniteRankingRecord(GreedLastInfiniteRunRecord record)
+        {
+            for (int i = 0; i < infiniteRunRankings.Length; i += 1)
+            {
+                if (IsSameInfiniteRecordIdentity(record, infiniteRunRankings[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool PruneDuplicateInfiniteRankings()
+        {
+            GreedLastInfiniteRunRecord[] uniqueRecords = new GreedLastInfiniteRunRecord[InfiniteRankingCount];
+            int uniqueCount = 0;
+            bool changed = false;
+            for (int i = 0; i < infiniteRunRankings.Length; i += 1)
+            {
+                GreedLastInfiniteRunRecord record = infiniteRunRankings[i];
+                if (!record.IsValid)
+                {
+                    continue;
+                }
+
+                if (ContainsInfiniteRankingRecord(uniqueRecords, uniqueCount, record))
+                {
+                    changed = true;
+                    continue;
+                }
+
+                if (uniqueCount != i)
+                {
+                    changed = true;
+                }
+
+                uniqueRecords[uniqueCount] = record;
+                uniqueCount += 1;
+            }
+
+            if (!changed)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < infiniteRunRankings.Length; i += 1)
+            {
+                infiniteRunRankings[i] = i < uniqueCount ? uniqueRecords[i] : GreedLastInfiniteRunRecord.Empty;
+            }
+
+            return true;
+        }
+
+        private static bool ContainsInfiniteRankingRecord(GreedLastInfiniteRunRecord[] records, int count, GreedLastInfiniteRunRecord record)
+        {
+            int safeCount = Mathf.Clamp(count, 0, records.Length);
+            for (int i = 0; i < safeCount; i += 1)
+            {
+                if (IsSameInfiniteRecordIdentity(record, records[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private string BuildInfiniteRankingText()
         {
             string text = string.Empty;
@@ -1265,24 +5681,30 @@ namespace GreedLast
                     continue;
                 }
 
+                if (displayRank > RecordBoardVisibleRows)
+                {
+                    continue;
+                }
+
                 if (hasRecord)
                 {
                     text += "\n";
                 }
 
                 hasRecord = true;
-                text += displayRank + ". " + FormatInfiniteRankingLine(infiniteRunRankings[i]);
+                text += displayRank + "위  " + FormatInfiniteRecordBoardCompactLine(infiniteRunRankings[i]);
                 displayRank += 1;
             }
 
             return hasRecord ? text : "기록 없음";
         }
 
-        private string BuildNormalRankingText()
+        private string BuildNormalRankingText(int maxRows = RecordBoardVisibleRows)
         {
             string text = string.Empty;
             bool hasRecord = false;
             int displayRank = 1;
+            int safeMaxRows = Mathf.Max(1, maxRows);
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
                 if (!normalRunRankings[i].IsValid)
@@ -1290,27 +5712,7 @@ namespace GreedLast
                     continue;
                 }
 
-                if (hasRecord)
-                {
-                    text += "\n";
-                }
-
-                hasRecord = true;
-                text += displayRank + ". " + FormatRunRecordBoardLine(normalRunRankings[i]);
-                displayRank += 1;
-            }
-
-            return hasRecord ? text : "기록 없음";
-        }
-
-        private string BuildNormalAttemptHistoryText()
-        {
-            string text = string.Empty;
-            bool hasRecord = false;
-            int displayRank = 1;
-            for (int i = 0; i < normalAttemptHistory.Length; i += 1)
-            {
-                if (!normalAttemptHistory[i].IsValid)
+                if (displayRank > safeMaxRows)
                 {
                     continue;
                 }
@@ -1321,7 +5723,38 @@ namespace GreedLast
                 }
 
                 hasRecord = true;
-                text += displayRank + ". " + FormatRunAttemptListLine(normalAttemptHistory[i]);
+                text += displayRank + "위  " + FormatRunRecordBoardCompactLine(normalRunRankings[i]);
+                displayRank += 1;
+            }
+
+            return hasRecord ? text : "기록 없음";
+        }
+
+        private string BuildNormalAttemptHistoryText(int maxRows = RecordBoardVisibleRows)
+        {
+            string text = string.Empty;
+            bool hasRecord = false;
+            int displayRank = 1;
+            int safeMaxRows = Mathf.Max(1, maxRows);
+            for (int i = 0; i < normalAttemptHistory.Length; i += 1)
+            {
+                if (!normalAttemptHistory[i].IsValid)
+                {
+                    continue;
+                }
+
+                if (displayRank > safeMaxRows)
+                {
+                    continue;
+                }
+
+                if (hasRecord)
+                {
+                    text += "\n";
+                }
+
+                hasRecord = true;
+                text += "시도" + displayRank + "  " + FormatRunAttemptBoardCompactLine(normalAttemptHistory[i]);
                 displayRank += 1;
             }
 
@@ -1336,8 +5769,12 @@ namespace GreedLast
                 ? 0
                 : Mathf.RoundToInt(normalClearCount / (float)survivalAttempts * 100f);
 
-            return $"일반 {normalAttemptCount}회  클리어 {normalClearCount} / 실패 {normalFailCount} / 중단 {normalAbandonCount}"
-                + $"\n클리어율 {survivalRate}%  무한 기록 {infiniteRunCount}회";
+            string text = $"일반 {normalAttemptCount}회  클리어 {normalClearCount} / 실패 {normalFailCount} / 중단 {normalAbandonCount}"
+                + $"\n클리어율 {survivalRate}%  무한 기록 {infiniteRunCount}회 / {BuildPrototypeCompletionLoopStatusText()}";
+
+            return lastInfiniteRunRecord.IsValid
+                ? text + "\n최근 무한 " + FormatInfiniteRecordBoardCompactLine(lastInfiniteRunRecord)
+                : text;
         }
 
         private static string FormatInfiniteRecord(GreedLastInfiniteRunRecord record)
@@ -1345,14 +5782,31 @@ namespace GreedLast
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
             return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 콤보 {record.MaxCombo}"
-                + "\n조합: " + loadoutText
+                + "\n조합: " + loadoutText + FormatInfiniteRecordProfileSuffix(record, 8)
+                + "\n판정: " + FormatInfiniteJudgementCounts(record)
+                + "\n흐름: " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + FormatLatestCompletedSegmentResultLine(record.TimingProfile)
+                + "\n집중: " + BuildFocusPerformanceSummary(record.TimingProfile)
                 + "\n타이밍: " + FormatTimingProfile(record.TimingProfile);
         }
 
         private static string FormatInfiniteRecordCompact(GreedLastInfiniteRunRecord record)
         {
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel}"
+                + FormatInfiniteRecordProfileSuffix(record, 8);
+        }
+
+        private static string FormatInfiniteProfileRecordLine(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            return FormatInfiniteRecordBoardLine(record)
+                + " / 조합 " + FormatInfiniteRecordLoadoutName(record, 13)
+                + FormatInfiniteRecordProfileSuffix(record, 8);
         }
 
         private static string FormatInfiniteRecordBoardLine(GreedLastInfiniteRunRecord record)
@@ -1363,15 +5817,30 @@ namespace GreedLast
             }
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간"
-                + $" / 위협 {threatLevel} / 실수 {record.MissCount}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.SectionsCleared}구간 / {record.Distance:0.0}m"
+                + $" / 위협{threatLevel} / 실{record.MissCount} / 콤{record.MaxCombo}"
+                + FormatInfiniteRecordProfileSuffix(record, 8)
+                + FormatPrecisionRecordSuffix(record.TimingProfile);
+        }
+
+        private static string FormatInfiniteRecordBoardCompactLine(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.SectionsCleared}구간 / {record.Distance:0}m"
+                + $" / 위{threatLevel} / 콤{record.MaxCombo} / 실{record.MissCount}";
         }
 
         private static string FormatInfiniteRecordListLine(GreedLastInfiniteRunRecord record)
         {
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}"
+                + FormatInfiniteRecordProfileSuffix(record, 8);
         }
 
         private static string FormatInfiniteRankingLine(GreedLastInfiniteRunRecord record)
@@ -1382,7 +5851,30 @@ namespace GreedLast
             }
 
             int threatLevel = Mathf.Max(1, record.MaxThreatLevel);
-            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.Distance:0.0}m / {record.SectionsCleared}구간 / 위협 {threatLevel} / 실수 {record.MissCount}";
+            return $"[{BuildInfiniteGrade(record)}] {record.Score}점 / {record.SectionsCleared}구간 / {record.Distance:0.0}m"
+                + $" / 위협{threatLevel} / 실{record.MissCount} / 콤{record.MaxCombo}"
+                + FormatInfiniteRecordProfileSuffix(record, 8);
+        }
+
+        private static string FormatInfiniteRecordLoadoutName(GreedLastInfiniteRunRecord record, int maxLength)
+        {
+            return string.IsNullOrEmpty(record.LoadoutName)
+                ? "-"
+                : CompactText(record.LoadoutName, maxLength);
+        }
+
+        private static string FormatInfiniteRecordProfileSuffix(GreedLastInfiniteRunRecord record, int maxLength)
+        {
+            return string.IsNullOrEmpty(record.LoadoutProfile)
+                ? string.Empty
+                : " / " + CompactText(CompactInfiniteLoadoutProfileText(record.LoadoutProfile), maxLength);
+        }
+
+        private static string CompactInfiniteLoadoutProfileText(string profile)
+        {
+            return string.IsNullOrEmpty(profile)
+                ? string.Empty
+                : profile.Replace(" 루트", string.Empty).Replace(" / ", "/");
         }
 
         private static string FormatRunRecordDetail(GreedLastRunRecord record)
@@ -1394,11 +5886,15 @@ namespace GreedLast
 
             return record.LoadoutName
                 + "\n등급 " + BuildRunGrade(record)
-                + "\n성향 " + BuildLoadoutProfile(record)
+                + "\n성향 " + BuildLoadoutAndRouteProfile(record)
                 + "\n시작 " + record.StartGift
-                + " / 기프트 " + record.PrimaryGift
-                + " / 유물 " + record.Relic
+                + " / " + BuildStoredGiftStackSummary(record)
+                + " / 유물 " + (string.IsNullOrEmpty(record.Relic) ? "없음" : record.Relic)
                 + $"\n점수 {record.Score}  거리 {record.Distance:0.0}m  체력 {record.Health}  집중 {record.Focus}"
+                + "\n판정 " + FormatRunRecordJudgementCounts(record)
+                + "\n흐름 " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + "\n집중 " + BuildFocusPerformanceSummary(record.TimingProfile)
+                + "\n구간 " + BuildChapterPerformanceDetailSummary(record.TimingProfile)
                 + "\n타이밍 " + FormatTimingProfile(record.TimingProfile)
                 + "\n선택 " + CompactText(record.ChoiceSummary, 46);
         }
@@ -1411,8 +5907,10 @@ namespace GreedLast
             }
 
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
-            return $"[{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m"
+            return $"[{BuildRunGrade(record)}] {BuildLoadoutAndRouteProfile(record)} / {record.Score}점 / {record.Distance:0.0}m"
                 + "\n조합: " + loadoutText
+                + "\n판정: " + FormatRunRecordJudgementCounts(record)
+                + "\n구간: " + BuildChapterPerformanceDetailSummary(record.TimingProfile)
                 + "\n타이밍: " + FormatTimingProfile(record.TimingProfile);
         }
 
@@ -1424,7 +5922,7 @@ namespace GreedLast
             }
 
             string loadoutText = string.IsNullOrEmpty(record.LoadoutName) ? "조합 -" : record.LoadoutName;
-            return $"[{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}";
+            return $"[{BuildRunGrade(record)}] {BuildLoadoutAndRouteProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / 콤보 {record.MaxCombo} / {FormatTimingProfile(record.TimingProfile)} / {loadoutText}";
         }
 
         private static string FormatRunRecordBoardLine(GreedLastRunRecord record)
@@ -1435,7 +5933,160 @@ namespace GreedLast
             }
 
             return $"[{BuildRunGrade(record)}] {record.Score}점 / {record.Distance:0.0}m"
-                + $" / 체력 {record.Health} / 집중 {record.Focus}";
+                + $" / 실{record.MissCount} / 콤{record.MaxCombo}"
+                + FormatPrecisionRecordSuffix(record.TimingProfile);
+        }
+
+        private static string FormatRunRecordBoardCompactLine(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            return $"[{BuildRunGrade(record)}] {record.Score}점 / {record.Distance:0}m"
+                + $" / 콤{record.MaxCombo} / 실{record.MissCount}";
+        }
+
+        private static string FormatPrecisionRecordSuffix(string timingProfile)
+        {
+            int precisionStreak = ExtractPrecisionStreak(timingProfile);
+            return precisionStreak > 0 ? " / 정박 " + precisionStreak : string.Empty;
+        }
+
+        private static string FormatRunRecordJudgementCounts(GreedLastRunRecord record)
+        {
+            int totalJudgements = record.SuccessCount + record.GoodCount + record.MissCount;
+            if (totalJudgements <= 0)
+            {
+                return record.MaxCombo > 0
+                    ? "기록 없음 / 최대 콤보 " + record.MaxCombo
+                    : "기록 없음";
+            }
+
+            return BuildTimingAxisPerformanceSummary(record.TimingProfile, record.SuccessCount)
+                + " / 보정 " + record.GoodCount
+                + " / 실수 " + record.MissCount
+                + " / 최대 콤보 " + record.MaxCombo;
+        }
+
+        private static string BuildJudgementFlowSummary(
+            int successCount,
+            int goodCount,
+            int missCount,
+            string timingProfile)
+        {
+            int safeSuccess = Mathf.Max(0, successCount);
+            int safeGood = Mathf.Max(0, goodCount);
+            int safeMiss = Mathf.Max(0, missCount);
+            int total = safeSuccess + safeGood + safeMiss;
+            if (total <= 0)
+            {
+                return "판정 기록 없음";
+            }
+
+            float exactRatio = safeSuccess / (float)total;
+            float goodRatio = safeGood / (float)total;
+            float missRatio = safeMiss / (float)total;
+            int focusActivations = ExtractTimingProfileCount(timingProfile, "집중 발동 ");
+            string classification;
+            if (missRatio >= 0.25f || safeMiss >= 3)
+            {
+                classification = "위험 흐름";
+            }
+            else if (goodRatio >= 0.34f)
+            {
+                classification = "보정 의존";
+            }
+            else if (exactRatio >= 0.80f && focusActivations > 0)
+            {
+                classification = "집중 정밀";
+            }
+            else if (exactRatio >= 0.80f)
+            {
+                classification = "정밀 흐름";
+            }
+            else if (focusActivations > 0 && safeSuccess > safeGood + safeMiss)
+            {
+                classification = "집중 활용";
+            }
+            else
+            {
+                classification = "혼합 흐름";
+            }
+
+            string summary = classification + " / "
+                + BuildJudgementRatioSummary(safeSuccess, safeGood, safeMiss);
+            int recoveryPrecisionCount = ExtractTimingProfileCount(timingProfile, "복구 정박 ");
+            if (recoveryPrecisionCount > 0)
+            {
+                summary += " / 복구 정박 " + recoveryPrecisionCount;
+            }
+
+            int perfectFocusChargeCount = ExtractTimingProfileCount(timingProfile, "정박 충전 ");
+            if (perfectFocusChargeCount > 0)
+            {
+                summary += " / 충전 " + perfectFocusChargeCount;
+            }
+
+            int clutchCounterCount = ExtractTimingProfileCount(timingProfile, "압박 반격 ");
+            if (clutchCounterCount > 0)
+            {
+                summary += " / 반격 " + clutchCounterCount;
+            }
+
+            int offbeatFlowCount = ExtractTimingProfileCount(timingProfile, "엇박 연쇄 ");
+            if (offbeatFlowCount > 0)
+            {
+                summary += " / 엇박 연쇄 " + offbeatFlowCount;
+            }
+
+            int stableRecoveryCount = ExtractTimingProfileCount(timingProfile, "안정 복구 ");
+            if (stableRecoveryCount > 0)
+            {
+                summary += " / 안정 복구 " + stableRecoveryCount;
+            }
+
+            int variationFlowCount = ExtractTimingProfileCount(timingProfile, "변주 공명 ");
+            if (variationFlowCount > 0)
+            {
+                summary += " / 변주 공명 " + variationFlowCount;
+            }
+
+            int pressureCounterCount = ExtractTimingProfileCount(timingProfile, "압박 증폭 ");
+            if (pressureCounterCount > 0)
+            {
+                summary += " / 압박 증폭 " + pressureCounterCount;
+            }
+
+            int stableBundleCount = ExtractTimingProfileCount(timingProfile, "안정 완주 ");
+            int variationBundleCount = ExtractTimingProfileCount(timingProfile, "변주 완주 ");
+            int pressureBundleCount = ExtractTimingProfileCount(timingProfile, "압박 완주 ");
+            int totalRouteBundles = stableBundleCount + variationBundleCount + pressureBundleCount;
+            return totalRouteBundles > 0
+                ? summary + " / 경로 완주 " + totalRouteBundles
+                : summary;
+        }
+
+        private static string BuildJudgementRatioSummary(int successCount, int goodCount, int missCount)
+        {
+            int total = Mathf.Max(0, successCount) + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
+            if (total <= 0)
+            {
+                return "정확 0% · 보정 0% · 실수 0%";
+            }
+
+            int exactPercent = CalculateExactRatePercent(successCount, goodCount, missCount);
+            int missPercent = Mathf.RoundToInt(Mathf.Max(0, missCount) / (float)total * 100f);
+            int goodPercent = Mathf.Max(0, 100 - exactPercent - missPercent);
+            return "정확 " + exactPercent + "% · 보정 " + goodPercent + "% · 실수 " + missPercent + "%";
+        }
+
+        private static int CalculateExactRatePercent(int successCount, int goodCount, int missCount)
+        {
+            int safeSuccess = Mathf.Max(0, successCount);
+            int total = safeSuccess + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
+            return total <= 0 ? 0 : Mathf.RoundToInt(safeSuccess / (float)total * 100f);
         }
 
         private static string FormatRunAttemptRecord(GreedLastRunAttemptRecord record)
@@ -1452,6 +6103,8 @@ namespace GreedLast
                 + $" / {record.Score}점 / {record.Distance:0.0}m / 챕터 {record.ChapterIndex} {record.ChapterProgress}/{record.ChapterTarget}"
                 + $"\n체력 {record.Health}  집중 {record.Focus}  최대 콤보 {record.MaxCombo}"
                 + $"\n판정 정확 {record.SuccessCount}  보정 {record.GoodCount}  실수 {record.MissCount}"
+                + "\n흐름 " + BuildJudgementFlowSummary(record.SuccessCount, record.GoodCount, record.MissCount, record.TimingProfile)
+                + FormatRunAttemptProfileLine(record)
                 + "\n타이밍 " + FormatTimingProfile(record.TimingProfile)
                 + "\n공명핵:" + FormatBool(record.CoreRetrieved) + "  마지막 실수:" + missText
                 + "\n선택 " + CompactText(record.ChoiceSummary, 46);
@@ -1464,16 +6117,592 @@ namespace GreedLast
                 return "기록 없음";
             }
 
-            string missText = string.IsNullOrEmpty(record.MissReason)
-                ? "-"
-                : FormatMissReason(record.MissReason);
+            string chapterText = "C" + Mathf.Max(1, record.ChapterIndex)
+                + " " + Mathf.Max(0, record.ChapterProgress)
+                + "/" + Mathf.Max(1, record.ChapterTarget);
             return FormatRunAttemptOutcome(record.Outcome)
-                + $" / {record.Score}점 / {record.Distance:0.0}m / 실수 {record.MissCount} / {missText}";
+                + $" / {chapterText} / {record.Score}점 / 실수 {record.MissCount}"
+                + FormatRunAttemptProfileSuffix(record);
+        }
+
+        private static string FormatRunAttemptBoardCompactLine(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "기록 없음";
+            }
+
+            string chapterText = "C" + Mathf.Max(1, record.ChapterIndex)
+                + " " + Mathf.Max(0, record.ChapterProgress)
+                + "/" + Mathf.Max(1, record.ChapterTarget);
+            return FormatRunAttemptOutcome(record.Outcome)
+                + $" / {chapterText} / {record.Score}점 / 콤{record.MaxCombo} / 실{record.MissCount}";
+        }
+
+        private static string FormatRunAttemptProfileLine(GreedLastRunAttemptRecord record)
+        {
+            string profile = BuildChoiceSummaryProfile(record.ChoiceSummary);
+            string route = BuildRouteProfile(record);
+            string text = JoinProfileAndRoute(profile, route);
+            return string.IsNullOrEmpty(text) ? string.Empty : "\n성향 " + text;
+        }
+
+        private static string FormatRunAttemptProfileSuffix(GreedLastRunAttemptRecord record)
+        {
+            string profile = BuildChoiceSummaryProfile(record.ChoiceSummary);
+            string route = BuildRouteProfile(record);
+            string text = JoinProfileAndRoute(profile, route);
+            return string.IsNullOrEmpty(text) ? string.Empty : " / " + CompactInfiniteLoadoutProfileText(text);
+        }
+
+        private static string JoinProfileAndRoute(string profile, string route)
+        {
+            bool hasProfile = !string.IsNullOrEmpty(profile);
+            bool hasRoute = !string.IsNullOrEmpty(route) && route != "루트 미정";
+            if (hasProfile && hasRoute)
+            {
+                return profile + " / " + route;
+            }
+
+            if (hasProfile)
+            {
+                return profile;
+            }
+
+            return hasRoute ? route : string.Empty;
+        }
+
+        private static string BuildMissRecordShortText(int missCount, string missReason)
+        {
+            string reason = string.IsNullOrEmpty(missReason) ? string.Empty : FormatMissReason(missReason);
+            return string.IsNullOrEmpty(reason) || reason == "-"
+                ? "실수 " + missCount
+                : "실수 " + missCount + "(" + reason + ")";
         }
 
         private static string FormatTimingProfile(string timingProfile)
         {
-            return string.IsNullOrEmpty(timingProfile) ? "타이밍 기록 없음" : timingProfile;
+            if (string.IsNullOrWhiteSpace(timingProfile))
+            {
+                return "타이밍 기록 없음";
+            }
+
+            string normalized = timingProfile.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (normalized.StartsWith("타이밍 기록 없음", StringComparison.Ordinal))
+            {
+                return "타이밍 기록 없음";
+            }
+
+            string[] parts = normalized.Split(new[] { " / " }, StringSplitOptions.None);
+            if (parts.Length < 2)
+            {
+                return CompactText(normalized, 54);
+            }
+
+            string summary = parts[0].Trim();
+            if (parts.Length > 1)
+            {
+                summary += " / " + parts[1].Trim();
+            }
+
+            string precision = FindTimingProfilePart(parts, "정박 최고");
+            if (!string.IsNullOrEmpty(precision) && ExtractPrecisionStreak(normalized) > 0)
+            {
+                summary += " / " + precision.Replace("정박 최고", "정박").Trim();
+            }
+
+            string recommendation = FindTimingProfilePart(parts, "추천 보정");
+            if (string.IsNullOrEmpty(recommendation))
+            {
+                recommendation = FindTimingProfilePart(parts, "추천 샘플");
+            }
+
+            if (!string.IsNullOrEmpty(recommendation))
+            {
+                recommendation = recommendation.Replace("추천 보정", "추천").Trim();
+                summary += " / " + recommendation;
+            }
+
+            return CompactText(summary, 54);
+        }
+
+        private static string BuildTimingProfileAdvice(string timingProfile)
+        {
+            if (string.IsNullOrWhiteSpace(timingProfile)
+                || timingProfile.StartsWith("타이밍 기록 없음", StringComparison.Ordinal))
+            {
+                return "샘플 부족";
+            }
+
+            string normalized = timingProfile.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            int averageError = ExtractTimingProfileMilliseconds(normalized, "오차 ");
+            bool averageFast = normalized.Contains("평균 빠름", StringComparison.Ordinal);
+            bool averageLate = normalized.Contains("평균 늦음", StringComparison.Ordinal);
+            if (averageFast)
+            {
+                return averageError >= 95 ? "빠른 편 / 판정선까지 더 대기" : "빠른 편 / 조금 늦게";
+            }
+
+            if (averageLate)
+            {
+                return averageError >= 95 ? "늦은 편 / 예고 후 더 빨리" : "늦은 편 / 조금 빠르게";
+            }
+
+            if (averageError >= 110)
+            {
+                return "흔들림 / 정확권 밴드 먼저 보기";
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(normalized);
+            if (precisionStreak >= 4)
+            {
+                return "정박 안정 / 현재 보정 유지";
+            }
+
+            if (precisionStreak > 0 && precisionStreak < 3)
+            {
+                return "정박 형성 중 / 중앙 타이밍 반복";
+            }
+
+            if (normalized.Contains("추천 샘플", StringComparison.Ordinal))
+            {
+                return "샘플 추가 필요";
+            }
+
+            return "안정 / 현재 보정 유지";
+        }
+
+        private static string BuildFocusPerformanceSummary(string timingProfile)
+        {
+            int activationCount = ExtractTimingProfileCount(timingProfile, "집중 발동 ");
+            int focusSuccessCount = ExtractTimingProfileCount(timingProfile, "집중 성공 ");
+            float activeSeconds = ExtractTimingProfileSeconds(timingProfile, "집중 유지 ");
+            if (activationCount <= 0)
+            {
+                return "미발동 / 정확 성공으로 게이지 3칸 목표";
+            }
+
+            return "발동 " + activationCount
+                + "회 / 집중 중 정확 " + focusSuccessCount
+                + "회 / 유지 " + activeSeconds.ToString("0.0") + "초";
+        }
+
+        private static string BuildTimingAxisPerformanceSummary(string timingProfile, int fallbackSuccessCount)
+        {
+            int perfectCount = ExtractTimingProfileCount(timingProfile, "정박 성공 ");
+            int clutchCount = ExtractTimingProfileCount(timingProfile, "압박 성공 ");
+            int offbeatCount = ExtractTimingProfileCount(timingProfile, "엇박 성공 ");
+            if (perfectCount + clutchCount + offbeatCount <= 0)
+            {
+                return "정확 " + Mathf.Max(0, fallbackSuccessCount);
+            }
+
+            return "정박 " + perfectCount
+                + " / 압박 " + clutchCount
+                + " / 엇박 " + offbeatCount;
+        }
+
+        private static string BuildAvoidancePerformanceSummary(string timingProfile)
+        {
+            int jumpExact = ExtractTimingProfileCount(timingProfile, "점프 정확 ");
+            int jumpGood = ExtractTimingProfileCount(timingProfile, "점프 보정 ");
+            int jumpMiss = ExtractTimingProfileCount(timingProfile, "점프 실수 ");
+            int slideExact = ExtractTimingProfileCount(timingProfile, "숙이기 정확 ");
+            int slideGood = ExtractTimingProfileCount(timingProfile, "숙이기 보정 ");
+            int slideMiss = ExtractTimingProfileCount(timingProfile, "숙이기 실수 ");
+            int twistExact = ExtractTimingProfileCount(timingProfile, "비틀기 정확 ");
+            int twistGood = ExtractTimingProfileCount(timingProfile, "비틀기 보정 ");
+            int twistMiss = ExtractTimingProfileCount(timingProfile, "비틀기 실수 ");
+            int total = jumpExact + jumpGood + jumpMiss
+                + slideExact + slideGood + slideMiss
+                + twistExact + twistGood + twistMiss;
+            if (total <= 0)
+            {
+                return "기록 없음";
+            }
+
+            int threeActionExact = ExtractTimingProfileCount(timingProfile, "3동작 정확 ");
+
+            return "점프 " + FormatAvoidanceCounts(jumpExact, jumpGood, jumpMiss)
+                + " · 숙이기 " + FormatAvoidanceCounts(slideExact, slideGood, slideMiss)
+                + " · 비틀기 " + FormatAvoidanceCounts(twistExact, twistGood, twistMiss)
+                + " (정/보/실)"
+                + (threeActionExact > 0 ? " / 3동작 " + threeActionExact + "구간" : string.Empty);
+        }
+
+        private static string FormatAvoidanceCounts(int exact, int good, int miss)
+        {
+            return exact + "/" + good + "/" + miss;
+        }
+
+        private static string BuildAvoidanceWeaknessSummary(string timingProfile)
+        {
+            string[] labels = { "점프", "숙이기", "비틀기" };
+            string[] displayLabels = { "바닥→↑점프", "상단→↓숙이기", "측면→↔비틀기" };
+            int topIndex = -1;
+            int topScore = 0;
+            int topGood = 0;
+            int topMiss = 0;
+            for (int i = 0; i < labels.Length; i += 1)
+            {
+                int good = ExtractTimingProfileCount(timingProfile, labels[i] + " 보정 ");
+                int miss = ExtractTimingProfileCount(timingProfile, labels[i] + " 실수 ");
+                int score = miss * 3 + good;
+                if (score > topScore)
+                {
+                    topIndex = i;
+                    topScore = score;
+                    topGood = good;
+                    topMiss = miss;
+                }
+            }
+
+            if (topIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            string issue = topMiss > 0 ? "실수 " + topMiss + "회" : "보정 " + topGood + "회";
+            if (topMiss > 0 && topGood > 0)
+            {
+                issue += "·보정 " + topGood + "회";
+            }
+
+            return displayLabels[topIndex] + " " + issue + " / 기초연습 " + labels[topIndex] + " 단계";
+        }
+
+        private static string BuildDominantTimingAxisStrength(string timingProfile)
+        {
+            int perfectCount = ExtractTimingProfileCount(timingProfile, "정박 성공 ");
+            int clutchCount = ExtractTimingProfileCount(timingProfile, "압박 성공 ");
+            int offbeatCount = ExtractTimingProfileCount(timingProfile, "엇박 성공 ");
+            int top = Mathf.Max(perfectCount, clutchCount, offbeatCount);
+            if (top < 3)
+            {
+                return string.Empty;
+            }
+
+            int second = perfectCount == top
+                ? Mathf.Max(clutchCount, offbeatCount)
+                : clutchCount == top
+                    ? Mathf.Max(perfectCount, offbeatCount)
+                    : Mathf.Max(perfectCount, clutchCount);
+            if (top < second + 2)
+            {
+                return string.Empty;
+            }
+
+            return perfectCount == top
+                ? "정박 대응 안정"
+                : clutchCount == top ? "압박 대응 안정" : "엇박 대응 안정";
+        }
+
+        private static string BuildWeakTimingAxisTarget(string timingProfile, int totalSuccessCount)
+        {
+            if (totalSuccessCount < 6)
+            {
+                return string.Empty;
+            }
+
+            int perfectCount = ExtractTimingProfileCount(timingProfile, "정박 성공 ");
+            int clutchCount = ExtractTimingProfileCount(timingProfile, "압박 성공 ");
+            int offbeatCount = ExtractTimingProfileCount(timingProfile, "엇박 성공 ");
+            if (perfectCount + clutchCount + offbeatCount <= 0)
+            {
+                return string.Empty;
+            }
+
+            int lowest = Mathf.Min(perfectCount, clutchCount, offbeatCount);
+            int highest = Mathf.Max(perfectCount, clutchCount, offbeatCount);
+            if (highest - lowest < 3)
+            {
+                return string.Empty;
+            }
+
+            string axis = perfectCount == lowest ? "정박" : clutchCount == lowest ? "압박" : "엇박";
+            return axis + " 성공 +2 / 현재 " + lowest;
+        }
+
+        private static string BuildChapterWeaknessSummary(string timingProfile)
+        {
+            if (HasDetailedSegmentPerformance(timingProfile))
+            {
+                string[] segments = { "1장", "2장", "3장", "4장", "탈출" };
+                int detailedTopIndex = -1;
+                int topSeverity = 0;
+                int topGood = 0;
+                int topMiss = 0;
+                for (int i = 0; i < segments.Length; i += 1)
+                {
+                    int good = ExtractTimingProfileCount(timingProfile, segments[i] + " 보정 ");
+                    int miss = ExtractTimingProfileCount(timingProfile, segments[i] + " 실수 ");
+                    int severity = miss * 4 + good;
+                    if (severity >= topSeverity && severity > 0)
+                    {
+                        detailedTopIndex = i;
+                        topSeverity = severity;
+                        topGood = good;
+                        topMiss = miss;
+                    }
+                }
+
+                if (detailedTopIndex < 0)
+                {
+                    return "전 구간 무실수 / 정확 흐름 유지";
+                }
+
+                string detailedSegment = segments[detailedTopIndex];
+                if (topMiss > 0)
+                {
+                    return detailedSegment + " 실수 " + topMiss + "회 / "
+                        + (detailedTopIndex >= 3 ? "마지막 검증 안정화 필요" : "해당 읽기 반복");
+                }
+
+                return detailedSegment + " 보정 " + topGood + "회 / 정확 판정 전환";
+            }
+
+            int[] misses =
+            {
+                ExtractTimingProfileCount(timingProfile, "1장 실수 "),
+                ExtractTimingProfileCount(timingProfile, "2장 실수 "),
+                ExtractTimingProfileCount(timingProfile, "3장 실수 "),
+                ExtractTimingProfileCount(timingProfile, "4장 실수 "),
+                ExtractTimingProfileCount(timingProfile, "탈출 실수 "),
+            };
+            int topIndex = -1;
+            int topCount = 0;
+            for (int i = 0; i < misses.Length; i += 1)
+            {
+                if (misses[i] >= topCount && misses[i] > 0)
+                {
+                    topIndex = i;
+                    topCount = misses[i];
+                }
+            }
+
+            if (topIndex < 0)
+            {
+                return "구간 실수 없음";
+            }
+
+            string segment = topIndex >= 4 ? "탈출" : (topIndex + 1) + "장";
+            return segment + " " + topCount + "회 / "
+                + (topIndex >= 3 ? "마지막 검증 안정화 필요" : "해당 읽기 반복");
+        }
+
+        private static string BuildChapterAccuracyTarget(string timingProfile)
+        {
+            if (!HasDetailedSegmentPerformance(timingProfile))
+            {
+                return string.Empty;
+            }
+
+            string[] segments = { "1장", "2장", "3장", "4장", "탈출" };
+            int topMissIndex = -1;
+            int topMissCount = 0;
+            int topGoodIndex = -1;
+            int topGoodCount = 0;
+            for (int i = 0; i < segments.Length; i += 1)
+            {
+                int miss = ExtractTimingProfileCount(timingProfile, segments[i] + " 실수 ");
+                if (miss >= topMissCount && miss > 0)
+                {
+                    topMissIndex = i;
+                    topMissCount = miss;
+                }
+
+                int good = ExtractTimingProfileCount(timingProfile, segments[i] + " 보정 ");
+                if (good >= topGoodCount && good > 0)
+                {
+                    topGoodIndex = i;
+                    topGoodCount = good;
+                }
+            }
+
+            if (topMissIndex >= 0)
+            {
+                return segments[topMissIndex] + " 무실수 / 현재 " + topMissCount;
+            }
+
+            return topGoodIndex >= 0
+                ? segments[topGoodIndex] + " 보정 0회 / 현재 " + topGoodCount
+                : string.Empty;
+        }
+
+        private static string BuildChapterPerformanceDetailSummary(string timingProfile)
+        {
+            if (!HasDetailedSegmentPerformance(timingProfile))
+            {
+                return "실수 | 1장 " + ExtractTimingProfileCount(timingProfile, "1장 실수 ")
+                    + " · 2장 " + ExtractTimingProfileCount(timingProfile, "2장 실수 ")
+                    + " · 3장 " + ExtractTimingProfileCount(timingProfile, "3장 실수 ")
+                    + " · 4장 " + ExtractTimingProfileCount(timingProfile, "4장 실수 ")
+                    + " · 탈출 " + ExtractTimingProfileCount(timingProfile, "탈출 실수 ");
+            }
+
+            string[] segments = { "1장", "2장", "3장", "4장", "탈출" };
+            string summary = "정/보/실 | ";
+            for (int i = 0; i < segments.Length; i += 1)
+            {
+                if (i > 0)
+                {
+                    summary += " · ";
+                }
+
+                summary += segments[i]
+                    + " " + ExtractTimingProfileCount(timingProfile, segments[i] + " 정확 ")
+                    + "/" + ExtractTimingProfileCount(timingProfile, segments[i] + " 보정 ")
+                    + "/" + ExtractTimingProfileCount(timingProfile, segments[i] + " 실수 ");
+            }
+
+            return summary;
+        }
+
+        private static string FormatLatestCompletedSegmentResultLine(string timingProfile)
+        {
+            string summary = BuildLatestCompletedSegmentSummary(timingProfile);
+            return string.IsNullOrEmpty(summary) ? string.Empty : "\n최근 구간: " + summary;
+        }
+
+        private static string FormatRelevantInfiniteSegmentResultLine(string timingProfile)
+        {
+            string terminalSummary = BuildInfiniteTerminalSegmentSummary(timingProfile);
+            return string.IsNullOrEmpty(terminalSummary)
+                ? FormatLatestCompletedSegmentResultLine(timingProfile)
+                : "\n종료 구간: " + terminalSummary;
+        }
+
+        private static string BuildLatestCompletedSegmentSummary(string timingProfile)
+        {
+            string segment = ExtractTimingProfileValue(timingProfile, "최근 구간 ", " /");
+            if (string.IsNullOrEmpty(segment))
+            {
+                return string.Empty;
+            }
+
+            return segment
+                + " / 정확 " + ExtractTimingProfileCount(timingProfile, "최근 구간 정확 ")
+                + " · 보정 " + ExtractTimingProfileCount(timingProfile, "최근 구간 보정 ")
+                + " · 실수 " + ExtractTimingProfileCount(timingProfile, "최근 구간 실수 ");
+        }
+
+        private static string BuildInfiniteTerminalSegmentSummary(string timingProfile)
+        {
+            string segment = ExtractTimingProfileValue(timingProfile, "종료 구간 ", " /");
+            if (string.IsNullOrEmpty(segment))
+            {
+                return string.Empty;
+            }
+
+            string progress = ExtractTimingProfileValue(timingProfile, "종료 구간 진행 ", " /");
+            return segment
+                + (string.IsNullOrEmpty(progress) ? string.Empty : " " + progress)
+                + " / 정확 " + ExtractTimingProfileCount(timingProfile, "종료 구간 정확 ")
+                + " · 보정 " + ExtractTimingProfileCount(timingProfile, "종료 구간 보정 ")
+                + " · 실수 " + ExtractTimingProfileCount(timingProfile, "종료 구간 실수 ");
+        }
+
+        private static bool HasDetailedSegmentPerformance(string timingProfile)
+        {
+            return !string.IsNullOrEmpty(timingProfile)
+                && timingProfile.Contains("1장 정확 ", StringComparison.Ordinal);
+        }
+
+        private static int ExtractTimingProfileCount(string timingProfile, string prefix)
+        {
+            string value = ExtractTimingProfileValue(timingProfile, prefix, "회");
+            return int.TryParse(value, out int count) ? Mathf.Max(0, count) : 0;
+        }
+
+        private static float ExtractTimingProfileSeconds(string timingProfile, string prefix)
+        {
+            string value = ExtractTimingProfileValue(timingProfile, prefix, "초");
+            return float.TryParse(value, out float seconds) ? Mathf.Max(0f, seconds) : 0f;
+        }
+
+        private static string ExtractTimingProfileValue(string timingProfile, string prefix, string suffix)
+        {
+            if (string.IsNullOrWhiteSpace(timingProfile))
+            {
+                return string.Empty;
+            }
+
+            int start = timingProfile.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return string.Empty;
+            }
+
+            start += prefix.Length;
+            int end = timingProfile.IndexOf(suffix, start, StringComparison.Ordinal);
+            return end > start ? timingProfile.Substring(start, end - start).Trim() : string.Empty;
+        }
+
+        private static int ExtractTimingProfileMilliseconds(string text, string prefix)
+        {
+            int start = text.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return 0;
+            }
+
+            start += prefix.Length;
+            int end = text.IndexOf("ms", start, StringComparison.Ordinal);
+            if (end <= start)
+            {
+                return 0;
+            }
+
+            string numberText = text.Substring(start, end - start).Trim();
+            return int.TryParse(numberText, out int milliseconds)
+                ? Mathf.Abs(milliseconds)
+                : 0;
+        }
+
+        private static int ExtractPrecisionStreak(string timingProfile)
+        {
+            if (string.IsNullOrWhiteSpace(timingProfile))
+            {
+                return 0;
+            }
+
+            string normalized = timingProfile.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            string prefix = "정박 최고 ";
+            int start = normalized.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return 0;
+            }
+
+            start += prefix.Length;
+            int end = start;
+            while (end < normalized.Length && char.IsDigit(normalized[end]))
+            {
+                end += 1;
+            }
+
+            if (end <= start)
+            {
+                return 0;
+            }
+
+            return int.TryParse(normalized.Substring(start, end - start), out int value)
+                ? Mathf.Max(0, value)
+                : 0;
+        }
+
+        private static string FindTimingProfilePart(string[] parts, string prefix)
+        {
+            for (int i = 0; i < parts.Length; i += 1)
+            {
+                string part = parts[i].Trim();
+                if (part.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return part;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static string FormatMissReason(string missReason)
@@ -1490,6 +6719,8 @@ namespace GreedLast
                     return "너무 늦음";
                 case "focus_guard":
                     return "집중 보호";
+                case "test_stop":
+                    return "정산 종료";
                 default:
                     return string.IsNullOrEmpty(missReason) ? "-" : missReason;
             }
@@ -1508,11 +6739,92 @@ namespace GreedLast
             }
         }
 
+        private static string BuildLoadoutAndRouteProfile(GreedLastRunRecord record)
+        {
+            string profile = BuildLoadoutProfile(record);
+            string route = BuildRouteProfile(record);
+            return route == "루트 미정" ? profile : profile + " / " + route;
+        }
+
+        private static string BuildLoadoutAndRouteProfileCompact(GreedLastRunRecord record)
+        {
+            return CompactInfiniteLoadoutProfileText(BuildLoadoutAndRouteProfile(record));
+        }
+
+        private static string BuildRouteProfile(GreedLastRunRecord record)
+        {
+            return !record.IsValid ? "루트 미정" : BuildRouteProfile(record.ChoiceSummary);
+        }
+
+        private static string BuildRouteProfile(GreedLastRunAttemptRecord record)
+        {
+            return !record.IsValid ? "루트 미정" : BuildRouteProfile(record.ChoiceSummary);
+        }
+
+        private static string BuildRouteProfile(string choiceSummary)
+        {
+            int safeCount = CountChoiceOccurrences(choiceSummary, "안정 루트");
+            int syncopationCount = CountChoiceOccurrences(choiceSummary, "변주 루트");
+            int pressureCount = CountChoiceOccurrences(choiceSummary, "압박 루트");
+            int total = safeCount + syncopationCount + pressureCount;
+            if (total <= 0)
+            {
+                return "루트 미정";
+            }
+
+            int top = Mathf.Max(safeCount, syncopationCount, pressureCount);
+            int topCount = 0;
+            topCount += safeCount == top ? 1 : 0;
+            topCount += syncopationCount == top ? 1 : 0;
+            topCount += pressureCount == top ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "혼합 루트";
+            }
+
+            if (safeCount == top)
+            {
+                return "안정 루트";
+            }
+
+            return syncopationCount == top ? "변주 루트" : "압박 루트";
+        }
+
+        private static int CountChoiceOccurrences(string text, string choice)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(choice))
+            {
+                return 0;
+            }
+
+            int count = 0;
+            int index = 0;
+            while (index < text.Length)
+            {
+                int nextIndex = text.IndexOf(choice, index, StringComparison.Ordinal);
+                if (nextIndex < 0)
+                {
+                    break;
+                }
+
+                count += 1;
+                index = nextIndex + choice.Length;
+            }
+
+            return count;
+        }
+
         private static string BuildLoadoutProfile(GreedLastRunRecord record)
         {
             if (!record.IsValid)
             {
                 return "-";
+            }
+
+            string choiceProfile = BuildLoadoutChoiceProfile(record);
+            if (!string.IsNullOrEmpty(choiceProfile))
+            {
+                return choiceProfile;
             }
 
             if (record.Health >= 4
@@ -1533,6 +6845,7 @@ namespace GreedLast
             }
 
             if (record.Combo >= 3
+                || record.MaxCombo >= 6
                 || ContainsChoice(record.PrimaryGift, "연쇄 축")
                 || ContainsChoice(record.Relic, "파라오의 각인"))
             {
@@ -1549,6 +6862,156 @@ namespace GreedLast
             return "균형형";
         }
 
+        private static string BuildLoadoutChoiceProfile(GreedLastRunRecord record)
+        {
+            string summaryProfile = BuildChoiceSummaryProfile(record.ChoiceSummary);
+            if (!string.IsNullOrEmpty(summaryProfile))
+            {
+                return summaryProfile;
+            }
+
+            int survivalScore = 0;
+            int focusScore = 0;
+            int comboScore = 0;
+            int scoreScore = 0;
+            AccumulateLoadoutChoiceProfileScore(record.StartGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            AccumulateLoadoutChoiceProfileScore(record.PrimaryGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            AccumulateLoadoutChoiceProfileScore(record.Relic, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+
+            return BuildLoadoutProfileFromScores(survivalScore, focusScore, comboScore, scoreScore);
+        }
+
+        private static string BuildChoiceSummaryProfile(string choiceSummary)
+        {
+            string explicitProfile = ExtractExplicitLoadoutProfile(choiceSummary);
+            if (!string.IsNullOrEmpty(explicitProfile))
+            {
+                return explicitProfile;
+            }
+
+            if (string.IsNullOrEmpty(choiceSummary)
+                || choiceSummary == "선택 없음"
+                || choiceSummary == "테스트 루트")
+            {
+                return string.Empty;
+            }
+
+            int survivalScore = 0;
+            int focusScore = 0;
+            int comboScore = 0;
+            int scoreScore = 0;
+            AccumulateLoadoutChoiceProfileScore(choiceSummary, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            return BuildLoadoutProfileFromScores(survivalScore, focusScore, comboScore, scoreScore);
+        }
+
+        private static string BuildLoadoutProfileFromScores(int survivalScore, int focusScore, int comboScore, int scoreScore)
+        {
+            int totalScore = survivalScore + focusScore + comboScore + scoreScore;
+            if (totalScore <= 0)
+            {
+                return string.Empty;
+            }
+
+            int topScore = Mathf.Max(survivalScore, focusScore, comboScore, scoreScore);
+            int topCount = 0;
+            topCount += survivalScore == topScore ? 1 : 0;
+            topCount += focusScore == topScore ? 1 : 0;
+            topCount += comboScore == topScore ? 1 : 0;
+            topCount += scoreScore == topScore ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "균형형";
+            }
+
+            if (survivalScore == topScore)
+            {
+                return "안정형";
+            }
+
+            if (focusScore == topScore)
+            {
+                return "집중형";
+            }
+
+            return comboScore == topScore ? "연쇄형" : "고점형";
+        }
+
+        private static string ExtractExplicitLoadoutProfile(string choiceSummary)
+        {
+            if (string.IsNullOrEmpty(choiceSummary))
+            {
+                return string.Empty;
+            }
+
+            string normalized = choiceSummary.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                if (!lines[i].StartsWith("조합 성향:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string profile = lines[i].Substring("조합 성향:".Length).Trim();
+                return IsKnownLoadoutProfile(profile) ? profile : string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsKnownLoadoutProfile(string profile)
+        {
+            return profile == "안정형"
+                || profile == "집중형"
+                || profile == "연쇄형"
+                || profile == "고점형"
+                || profile == "균형형";
+        }
+
+        private static void AccumulateLoadoutChoiceProfileScore(
+            string text,
+            ref int survivalScore,
+            ref int focusScore,
+            ref int comboScore,
+            ref int scoreScore)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            AddChoiceProfileScore(text, "안정 호흡", ref survivalScore, 2);
+            AddChoiceProfileScore(text, "안정 루트", ref survivalScore, 2);
+            AddChoiceProfileScore(text, "생존 축", ref survivalScore, 2);
+            AddChoiceProfileScore(text, "사막의 잔상", ref survivalScore, 2);
+            AddChoiceProfileScore(text, "박자 감각", ref focusScore, 2);
+            AddChoiceProfileScore(text, "변주 루트", ref focusScore, 2);
+            AddChoiceProfileScore(text, "집중 축", ref focusScore, 2);
+            AddChoiceProfileScore(text, "압박 루트", ref comboScore, 2);
+            AddChoiceProfileScore(text, "연쇄 축", ref comboScore, 2);
+            AddChoiceProfileScore(text, "파라오의 각인", ref comboScore, 2);
+            AddChoiceProfileScore(text, "고점 본능", ref scoreScore, 2);
+            AddChoiceProfileScore(text, "황금 박동", ref scoreScore, 2);
+
+            if (ContainsChoice(text, "사막의 잔상"))
+            {
+                focusScore += 1;
+            }
+
+            if (ContainsChoice(text, "파라오의 각인"))
+            {
+                focusScore += 1;
+            }
+        }
+
+        private static void AddChoiceProfileScore(string text, string choice, ref int score, int amount)
+        {
+            if (ContainsChoice(text, choice))
+            {
+                score += amount;
+            }
+        }
+
         private static bool ContainsChoice(string text, string choice)
         {
             return !string.IsNullOrEmpty(text)
@@ -1562,7 +7025,15 @@ namespace GreedLast
                 return "-";
             }
 
-            int gradeScore = record.Score + Mathf.RoundToInt(record.Distance * 2f) + record.Health * 80 + record.Focus * 40;
+            int gradeScore = record.Score
+                + Mathf.RoundToInt(record.Distance * 2f)
+                + record.Health * 80
+                + record.Focus * 40
+                + record.MaxCombo * 25
+                + Mathf.Clamp(ExtractPrecisionStreak(record.TimingProfile) * 30, 0, 180)
+                + record.SuccessCount * 12
+                + record.GoodCount * 4
+                - record.MissCount * 45;
             if (gradeScore >= 1100)
             {
                 return "S";
@@ -1592,6 +7063,7 @@ namespace GreedLast
                 + record.SectionsCleared * 120
                 + Mathf.Max(1, record.MaxThreatLevel) * 60
                 + record.MaxCombo * 30
+                + Mathf.Clamp(ExtractPrecisionStreak(record.TimingProfile) * 35, 0, 220)
                 - record.MissCount * 90;
             if (gradeScore >= 2000)
             {
@@ -1634,6 +7106,10 @@ namespace GreedLast
                 record.Health,
                 record.Combo,
                 record.Focus,
+                record.MaxCombo,
+                record.SuccessCount,
+                record.GoodCount,
+                record.MissCount,
                 record.Distance,
                 loadoutName,
                 record.StartGift,
@@ -1646,6 +7122,10 @@ namespace GreedLast
         private string BuildSaveSlotListText(bool showSelectedSlot = true, bool compact = false)
         {
             string text = string.Empty;
+            int recommendedSlotIndex = HasSaveLoadoutCandidate
+                ? FindRecommendedSaveLoadoutSlotForCandidate()
+                : -1;
+            int bestUsableSlotIndex = recommendedSlotIndex < 0 ? FindBestUsableSaveLoadoutSlot() : -1;
             for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
             {
                 if (i > 0)
@@ -1657,6 +7137,15 @@ namespace GreedLast
                 string slotText = compact
                     ? FormatSaveSlotCompact(saveLoadoutSlots[i], saveLoadoutUsesRemaining[i])
                     : FormatSaveSlot(saveLoadoutSlots[i], saveLoadoutUsesRemaining[i]);
+                if (i == recommendedSlotIndex)
+                {
+                    slotText += " / 추천";
+                }
+                else if (i == bestUsableSlotIndex)
+                {
+                    slotText += " / 최고";
+                }
+
                 text += marker + "슬롯 " + (i + 1) + ": " + slotText;
             }
 
@@ -1666,9 +7155,21 @@ namespace GreedLast
         private string[] BuildSaveSlotLabelSummaries()
         {
             string[] labels = new string[SaveSlotCount];
+            int recommendedSlotIndex = HasSaveLoadoutCandidate
+                ? FindRecommendedSaveLoadoutSlotForCandidate()
+                : -1;
+            int bestUsableSlotIndex = recommendedSlotIndex < 0 ? FindBestUsableSaveLoadoutSlot() : -1;
             for (int i = 0; i < labels.Length; i += 1)
             {
                 labels[i] = FormatSaveSlotLabel(saveLoadoutSlots[i], saveLoadoutUsesRemaining[i]);
+                if (i == recommendedSlotIndex)
+                {
+                    labels[i] += " / 추천";
+                }
+                else if (i == bestUsableSlotIndex)
+                {
+                    labels[i] += " / 최고";
+                }
             }
 
             return labels;
@@ -1733,11 +7234,77 @@ namespace GreedLast
             return false;
         }
 
+        private int FindRecommendedSaveLoadoutSlotForCandidate()
+        {
+            if (!HasSaveLoadoutCandidate)
+            {
+                return -1;
+            }
+
+            int emptySlotIndex = FindFirstEmptySaveLoadoutSlot();
+            if (emptySlotIndex >= 0)
+            {
+                return emptySlotIndex;
+            }
+
+            int weakestSlotIndex = FindWeakestSaveLoadoutSlot();
+            if (weakestSlotIndex < 0)
+            {
+                return -1;
+            }
+
+            return IsBetterSaveLoadoutRecord(lastRunRecord, saveLoadoutSlots[weakestSlotIndex])
+                ? weakestSlotIndex
+                : -1;
+        }
+
+        private int FindWeakestSaveLoadoutSlot()
+        {
+            int weakestSlotIndex = -1;
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                GreedLastRunRecord record = saveLoadoutSlots[i];
+                if (!record.IsValid)
+                {
+                    continue;
+                }
+
+                if (weakestSlotIndex < 0
+                    || IsBetterSaveLoadoutRecord(saveLoadoutSlots[weakestSlotIndex], record))
+                {
+                    weakestSlotIndex = i;
+                }
+            }
+
+            return weakestSlotIndex;
+        }
+
+        private void SelectRecommendedSaveLoadoutSlotForCandidate()
+        {
+            int recommendedSlotIndex = FindRecommendedSaveLoadoutSlotForCandidate();
+            if (recommendedSlotIndex >= 0)
+            {
+                selectedSaveSlotIndex = recommendedSlotIndex;
+            }
+        }
+
         private bool SelectNextUsableSaveLoadoutSlot(int startSlotIndex)
+        {
+            int slotIndex = FindUsableSaveLoadoutSlot(startSlotIndex);
+            if (slotIndex < 0)
+            {
+                return false;
+            }
+
+            selectedSaveSlotIndex = slotIndex;
+            return true;
+        }
+
+        private int FindUsableSaveLoadoutSlot(int startSlotIndex)
         {
             if (saveLoadoutSlots.Length <= 0)
             {
-                return false;
+                return -1;
             }
 
             int safeStartIndex = ((startSlotIndex % saveLoadoutSlots.Length) + saveLoadoutSlots.Length) % saveLoadoutSlots.Length;
@@ -1746,29 +7313,223 @@ namespace GreedLast
                 int slotIndex = (safeStartIndex + offset) % saveLoadoutSlots.Length;
                 if (IsSaveSlotUsable(slotIndex))
                 {
-                    selectedSaveSlotIndex = slotIndex;
-                    return true;
+                    return slotIndex;
                 }
             }
 
-            return false;
+            return -1;
         }
 
         private void EnsureSelectedSaveLoadoutSlotForLobby()
         {
-            if (saveLoadoutCandidateAvailable || IsSaveSlotUsable(selectedSaveSlotIndex))
+            if (saveLoadoutCandidateAvailable)
+            {
+                SelectRecommendedSaveLoadoutSlotForCandidate();
+                return;
+            }
+
+            if (IsSaveSlotUsable(selectedSaveSlotIndex))
             {
                 return;
             }
 
-            SelectNextUsableSaveLoadoutSlot(selectedSaveSlotIndex + 1);
+            SelectBestUsableSaveLoadoutSlotForInfinite();
+        }
+
+        private bool SelectBestUsableSaveLoadoutSlotForInfinite()
+        {
+            int slotIndex = FindBestUsableSaveLoadoutSlot();
+            if (slotIndex < 0)
+            {
+                return false;
+            }
+
+            selectedSaveSlotIndex = slotIndex;
+            return true;
+        }
+
+        private int FindBestUsableSaveLoadoutSlot()
+        {
+            int bestSlotIndex = -1;
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (!IsSaveSlotUsable(i))
+                {
+                    continue;
+                }
+
+                if (bestSlotIndex < 0 || IsBetterSaveLoadoutRecord(saveLoadoutSlots[i], saveLoadoutSlots[bestSlotIndex]))
+                {
+                    bestSlotIndex = i;
+                }
+            }
+
+            return bestSlotIndex;
         }
 
         private string BuildAutoSelectedSaveSlotNotice()
         {
             return IsSaveSlotUsable(selectedSaveSlotIndex)
-                ? "\n다음 선택: 슬롯 " + (selectedSaveSlotIndex + 1)
-                : "\n남은 저장 조합 없음";
+                ? "\n다음 선택: " + BuildNextUsableSaveLoadoutSummaryText()
+                : "\n남은 저장 조합 없음 - 무한 버튼에서 보충 런 진입 가능";
+        }
+
+        private string BuildNextUsableSaveLoadoutSummaryText()
+        {
+            int slotIndex = IsSaveSlotUsable(selectedSaveSlotIndex)
+                ? selectedSaveSlotIndex
+                : FindBestUsableSaveLoadoutSlot();
+            if (slotIndex < 0)
+            {
+                return "보충 필요";
+            }
+
+            GreedLastRunRecord record = saveLoadoutSlots[slotIndex];
+            return "S" + (slotIndex + 1)
+                + " " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[slotIndex], includeAutoClearHint: false)
+                + " / " + BuildRunGrade(record)
+                + " " + BuildLoadoutAndRouteProfileCompact(record);
+        }
+
+        private string BuildBestSaveLoadoutSlotSummaryText()
+        {
+            int bestSlotIndex = FindBestUsableSaveLoadoutSlot();
+            if (bestSlotIndex < 0)
+            {
+                return "최고 슬롯: 없음";
+            }
+
+            return "최고 슬롯: " + (bestSlotIndex + 1)
+                + " / " + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[bestSlotIndex])
+                + " / " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[bestSlotIndex], includeAutoClearHint: false);
+        }
+
+        private string BuildSelectedSaveLoadoutQualityPositionText(int slotIndex)
+        {
+            int bestSlotIndex = FindBestUsableSaveLoadoutSlot();
+            if (bestSlotIndex < 0)
+            {
+                return "추천: 사용 가능한 저장 조합 없음";
+            }
+
+            int safeSlotIndex = Mathf.Clamp(slotIndex, 0, SaveSlotCount - 1);
+            GreedLastRunRecord selectedRecord = saveLoadoutSlots[safeSlotIndex];
+            if (!selectedRecord.IsValid || saveLoadoutUsesRemaining[safeSlotIndex] <= 0)
+            {
+                return "추천: 최고 슬롯 S" + (bestSlotIndex + 1) + " 선택 권장";
+            }
+
+            if (safeSlotIndex == bestSlotIndex)
+            {
+                return "추천: 현재 선택이 최고 품질 슬롯";
+            }
+
+            return "추천: 최고 슬롯 S" + (bestSlotIndex + 1)
+                + " / 선택 대비 " + FormatSaveLoadoutQualityDelta(saveLoadoutSlots[bestSlotIndex], selectedRecord);
+        }
+
+        private string BuildSaveLoadoutRecommendationText()
+        {
+            int recommendedSlotIndex = FindRecommendedSaveLoadoutSlotForCandidate();
+            if (recommendedSlotIndex < 0)
+            {
+                int weakestSlotIndex = FindWeakestSaveLoadoutSlot();
+                string qualityText = weakestSlotIndex >= 0
+                    ? " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
+                        + " / 최약 대비 " + FormatSaveLoadoutQualityDelta(lastRunRecord, saveLoadoutSlots[weakestSlotIndex])
+                    : string.Empty;
+                return "추천: 보류 / 기존 슬롯 유지" + qualityText;
+            }
+
+            GreedLastRunRecord currentRecord = saveLoadoutSlots[recommendedSlotIndex];
+            if (!currentRecord.IsValid)
+            {
+                return "추천: 슬롯 " + (recommendedSlotIndex + 1) + " 빈 슬롯에 저장"
+                    + " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
+                    + " / " + BuildSaveLoadoutRecommendationReason(lastRunRecord, currentRecord);
+            }
+
+            return "추천: 슬롯 " + (recommendedSlotIndex + 1) + " 교체 / "
+                + FormatSaveLoadoutQualityDelta(lastRunRecord, currentRecord)
+                + " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
+                + " / " + BuildSaveLoadoutRecommendationReason(lastRunRecord, currentRecord);
+        }
+
+        private static string BuildSaveLoadoutProfileShort(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return "-";
+            }
+
+            return BuildRunGrade(record) + " " + BuildLoadoutAndRouteProfile(record)
+                + " 품질 " + BuildSaveLoadoutQualityScore(record);
+        }
+
+        private static string BuildSaveLoadoutRecommendationReason(GreedLastRunRecord candidate, GreedLastRunRecord current)
+        {
+            if (!candidate.IsValid)
+            {
+                return "후보 없음";
+            }
+
+            if (!current.IsValid)
+            {
+                return "빈 슬롯 확보";
+            }
+
+            string candidateProfile = BuildLoadoutProfile(candidate);
+            string currentProfile = BuildLoadoutProfile(current);
+            string candidateRoute = BuildRouteProfile(candidate);
+            string currentRoute = BuildRouteProfile(current);
+            if (candidate.MissCount < current.MissCount)
+            {
+                return "실수 감소";
+            }
+
+            int candidatePrecision = ExtractPrecisionStreak(candidate.TimingProfile);
+            int currentPrecision = ExtractPrecisionStreak(current.TimingProfile);
+            if (candidatePrecision > currentPrecision)
+            {
+                return "정박 증가";
+            }
+
+            int candidateFocusActivations = ExtractTimingProfileCount(candidate.TimingProfile, "집중 발동 ");
+            int currentFocusActivations = ExtractTimingProfileCount(current.TimingProfile, "집중 발동 ");
+            if (candidateFocusActivations > currentFocusActivations)
+            {
+                return "집중 발동 증가";
+            }
+
+            if (candidate.MaxCombo > current.MaxCombo)
+            {
+                return "콤보 상승";
+            }
+
+            if (candidate.Health > current.Health)
+            {
+                return "생존 상승";
+            }
+
+            if (candidate.Focus > current.Focus)
+            {
+                return "집중 상승";
+            }
+
+            if (!string.Equals(candidateProfile, currentProfile, StringComparison.Ordinal))
+            {
+                return currentProfile + " -> " + candidateProfile;
+            }
+
+            if (!string.Equals(candidateRoute, currentRoute, StringComparison.Ordinal)
+                && candidateRoute != "루트 미정")
+            {
+                return currentRoute == "루트 미정"
+                    ? candidateRoute + " 확보"
+                    : currentRoute + " -> " + candidateRoute;
+            }
+
+            return candidate.Score > current.Score ? "점수 상승" : "품질 상승";
         }
 
         private void ClearSaveLoadoutSlot(int slotIndex)
@@ -1778,6 +7539,110 @@ namespace GreedLast
             saveLoadoutUsesRemaining[safeSlotIndex] = 0;
             saveLoadoutRenameSteps[safeSlotIndex] = 0;
             savedLoadoutConfirmed = HasAnySaveLoadoutSlot();
+        }
+
+        private bool IsLastRunRecordAlreadySaved()
+        {
+            if (!lastRunRecord.IsValid)
+            {
+                return false;
+            }
+
+            GreedLastRunRecord saveCandidate = BuildSaveLoadoutRecord(lastRunRecord);
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                GreedLastRunRecord slotRecord = saveLoadoutSlots[i];
+                if (IsSameRunRecord(saveCandidate, slotRecord)
+                    && saveCandidate.LoadoutName == slotRecord.LoadoutName
+                    && saveCandidate.StartGift == slotRecord.StartGift
+                    && saveCandidate.PrimaryGift == slotRecord.PrimaryGift
+                    && saveCandidate.Relic == slotRecord.Relic)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static GreedLastRunRecord BuildSaveLoadoutRecord(GreedLastRunRecord source)
+        {
+            if (!source.IsValid)
+            {
+                return GreedLastRunRecord.Empty;
+            }
+
+            string loadoutName = source.LoadoutName;
+            if (!string.IsNullOrEmpty(source.Relic)
+                && !string.IsNullOrEmpty(loadoutName)
+                && loadoutName.Contains(source.Relic, StringComparison.Ordinal))
+            {
+                loadoutName = string.IsNullOrEmpty(source.PrimaryGift)
+                    ? "저장 조합"
+                    : source.PrimaryGift + " 조합";
+            }
+
+            return new GreedLastRunRecord(
+                true,
+                source.Score,
+                source.Health,
+                source.Combo,
+                source.Focus,
+                source.MaxCombo,
+                source.SuccessCount,
+                source.GoodCount,
+                source.MissCount,
+                source.Distance,
+                loadoutName,
+                source.StartGift,
+                source.PrimaryGift,
+                string.Empty,
+                BuildSaveLoadoutChoiceSummary(source),
+                source.TimingProfile);
+        }
+
+        private static string BuildSaveLoadoutChoiceSummary(GreedLastRunRecord source)
+        {
+            string normalized = (source.ChoiceSummary ?? string.Empty).Replace("\r", string.Empty);
+            string firstLine = normalized.Split('\n')[0];
+            string[] choices = firstLine.Split(new[] { " / " }, StringSplitOptions.RemoveEmptyEntries);
+            string summary = string.Empty;
+            for (int i = 0; i < choices.Length; i += 1)
+            {
+                string choice = choices[i].Trim();
+                if (string.IsNullOrEmpty(choice)
+                    || string.Equals(choice, source.Relic, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                summary = string.IsNullOrEmpty(summary) ? choice : summary + " / " + choice;
+            }
+
+            if (!string.IsNullOrEmpty(summary))
+            {
+                return summary;
+            }
+
+            if (!string.IsNullOrEmpty(source.StartGift) && !string.IsNullOrEmpty(source.PrimaryGift))
+            {
+                return source.StartGift + " / " + source.PrimaryGift;
+            }
+
+            return string.IsNullOrEmpty(source.PrimaryGift) ? source.StartGift : source.PrimaryGift;
+        }
+
+        private static bool SaveLoadoutRecordNeedsSanitizing(GreedLastRunRecord record)
+        {
+            if (!record.IsValid)
+            {
+                return false;
+            }
+
+            GreedLastRunRecord sanitized = BuildSaveLoadoutRecord(record);
+            return !string.IsNullOrEmpty(record.Relic)
+                || !string.Equals(record.LoadoutName, sanitized.LoadoutName, StringComparison.Ordinal)
+                || !string.Equals(record.ChoiceSummary, sanitized.ChoiceSummary, StringComparison.Ordinal);
         }
 
         private bool ClearExhaustedSaveLoadoutSlots()
@@ -1795,6 +7660,87 @@ namespace GreedLast
             return clearedAny;
         }
 
+        private bool RepairProgressUnlockFlags()
+        {
+            bool changed = false;
+            bool hasSavedLoadout = HasAnySaveLoadoutSlot();
+            bool hasNormalClearRecord = lastRunRecord.IsValid || bestRunRecord.IsValid || hasSavedLoadout;
+            if (hasNormalClearRecord && !firstSaveCompleted)
+            {
+                firstSaveCompleted = true;
+                changed = true;
+            }
+
+            if ((firstSaveCompleted || hasSavedLoadout) && !saveLoadoutUnlocked)
+            {
+                saveLoadoutUnlocked = true;
+                changed = true;
+            }
+
+            if (hasSavedLoadout && !savedLoadoutConfirmed)
+            {
+                savedLoadoutConfirmed = true;
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private int FindFirstEmptySaveLoadoutSlot()
+        {
+            for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
+            {
+                if (!saveLoadoutSlots[i].IsValid)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private GreedLastRunRecord BuildSampleSaveLoadoutRecordForTest(int slotIndex, int sampleOffset = 0)
+        {
+            int safeSlotIndex = Mathf.Clamp(slotIndex, 0, SaveSlotCount - 1);
+            int sampleSeed = Mathf.Max(1, normalClearCount + infiniteRunCount + safeSlotIndex + sampleOffset + 1);
+            int qualityTier = Mathf.Abs(sampleSeed + safeSlotIndex) % SaveSlotCount;
+            int score = 620 + sampleSeed * 28 + qualityTier * 65;
+            float distance = 76f + sampleSeed * 8.5f + qualityTier * 11f;
+            int health = 2 + ((safeSlotIndex + qualityTier) % 3);
+            int focus = 2 + ((sampleSeed + safeSlotIndex) % 3);
+            int combo = 2 + safeSlotIndex + qualityTier;
+            int successCount = 4 + safeSlotIndex + qualityTier;
+            int goodCount = qualityTier == 1 ? 1 : 0;
+            int missCount = qualityTier == 0 ? 1 : 0;
+            int precisionStreak = 2 + qualityTier + safeSlotIndex;
+            string loadoutName = "테스트 저장 S" + (safeSlotIndex + 1) + "-" + sampleSeed;
+            string startGift = safeSlotIndex == 0 ? "안정 호흡" : safeSlotIndex == 1 ? "박자 감각" : "고점 본능";
+            string primaryGift = safeSlotIndex == 0 ? "생존 축" : safeSlotIndex == 1 ? "집중 축" : "연쇄 축";
+            string relic = safeSlotIndex == 0 ? "사막의 잔상" : safeSlotIndex == 1 ? "황금 박동" : "파라오의 각인";
+            string profile = safeSlotIndex == 0 ? "안정형" : safeSlotIndex == 1 ? "집중형" : "연쇄형";
+            string routeChoice = safeSlotIndex == 0 ? "안정 루트" : safeSlotIndex == 1 ? "변주 루트" : "압박 루트";
+            string choiceSummary = startGift + " / " + routeChoice + " / " + primaryGift + " / " + relic
+                + "\n테스트 슬롯 " + (safeSlotIndex + 1) + " / 품질 비교"
+                + "\n조합 성향: " + profile;
+            return new GreedLastRunRecord(
+                true,
+                score,
+                health,
+                combo,
+                focus,
+                combo,
+                successCount,
+                goodCount,
+                missCount,
+                distance,
+                loadoutName,
+                startGift,
+                primaryGift,
+                relic,
+                choiceSummary,
+                "평균 정확 / 오차 0ms / 빠름 0 늦음 0 / 정박 최고 " + precisionStreak + " / 추천 보정 0ms");
+        }
+
         private static string FormatSaveSlot(GreedLastRunRecord record, int usesRemaining)
         {
             if (!record.IsValid)
@@ -1802,10 +7748,8 @@ namespace GreedLast
                 return "비어 있음";
             }
 
-            string usesText = usesRemaining > 0
-                ? usesRemaining + "회 남음"
-                : "사용 완료";
-            return record.LoadoutName + $" / [{BuildRunGrade(record)}] {BuildLoadoutProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / {usesText}";
+            string usesText = BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: false);
+            return record.LoadoutName + $" / [{BuildRunGrade(record)}] {BuildLoadoutAndRouteProfile(record)} / {record.Score}점 / {record.Distance:0.0}m / 콤보 {record.MaxCombo} / {usesText}";
         }
 
         private static string FormatSaveSlotCompact(GreedLastRunRecord record, int usesRemaining)
@@ -1815,10 +7759,9 @@ namespace GreedLast
                 return "비어 있음";
             }
 
-            string usesText = usesRemaining > 0
-                ? usesRemaining + "회 남음"
-                : "사용 완료";
-            return record.LoadoutName + $" / {BuildRunGrade(record)} / {record.Score}점 / {usesText}";
+            string usesText = BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: false);
+            return record.LoadoutName + $" / {BuildRunGrade(record)} / {BuildLoadoutAndRouteProfileCompact(record)} / {record.Score}점 / {usesText}"
+                + " / " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(record);
         }
 
         private static string BuildSaveSlotStatusLine(GreedLastRunRecord record, int usesRemaining)
@@ -1828,9 +7771,7 @@ namespace GreedLast
                 return "상태: 빈 슬롯";
             }
 
-            return usesRemaining > 0
-                ? "상태: 사용 가능 " + usesRemaining + "회"
-                : "상태: 사용 완료";
+            return "상태: " + BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: true);
         }
 
         private static string BuildSaveSlotActionLine(bool hasCandidate, GreedLastRunRecord record)
@@ -1838,13 +7779,42 @@ namespace GreedLast
             if (hasCandidate)
             {
                 return record.IsValid
-                    ? "작업: 후보 비교 / 덮어쓰기 / 이름 변경 / 삭제"
-                    : "작업: 바로 저장";
+                    ? "작업: 후보 비교 / 저장·포기 / 이름 변경 / 삭제"
+                    : "작업: 빈 슬롯 저장 / 후보 포기 가능";
             }
 
             return record.IsValid
                 ? "작업: 상세 보기 / 이름 변경 / 삭제"
                 : "작업: 새 저장 후보 필요";
+        }
+
+        private static string BuildSaveCandidateHandlingLine(GreedLastRunRecord record)
+        {
+            return record.IsValid
+                ? "후보 처리: 저장/포기 후 소모 / 비교: 후보와 기존 슬롯 차이"
+                : "후보 처리: 저장/포기 후 소모 / 빈 슬롯에 새 조합 저장";
+        }
+
+        private static string BuildSaveLoadoutNextActionText(bool hasCandidate, GreedLastRunRecord record, int usesRemaining)
+        {
+            if (hasCandidate)
+            {
+                if (!record.IsValid || usesRemaining <= 0)
+                {
+                    return "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모";
+                }
+
+                return "저장 버튼: 덮어쓰기 확인 / 포기 버튼: 후보 소모";
+            }
+
+            if (!record.IsValid)
+            {
+                return "일반 런 클리어로 새 저장 후보 만들기";
+            }
+
+            return usesRemaining <= 0
+                ? "새 후보가 생기면 이 슬롯에 교체 저장"
+                : "상세 보기 / 이름 변경 / 삭제 확인";
         }
 
         private static string FormatSaveCandidateSummary(GreedLastRunRecord record)
@@ -1855,8 +7825,9 @@ namespace GreedLast
             }
 
             return record.LoadoutName
-                + $" / {BuildRunGrade(record)} / {record.Score}점 / {record.Distance:0.0}m"
-                + "\n" + FormatLoadoutCombo(record);
+                + $" / {BuildRunGrade(record)} / {BuildLoadoutAndRouteProfileCompact(record)} / {record.Score}점 / {record.Distance:0.0}m"
+                + "\n" + CompactText(BuildSaveLoadoutQualitySummary(record), 88)
+                + " / 조합 " + CompactText(FormatLoadoutCombo(record), 28);
         }
 
         private static string FormatLoadoutCombo(GreedLastRunRecord record)
@@ -1866,7 +7837,21 @@ namespace GreedLast
                 return "조합 없음";
             }
 
-            return record.StartGift + " + " + record.PrimaryGift + " + " + record.Relic;
+            string text = string.Empty;
+            AppendLoadoutPart(ref text, record.StartGift);
+            AppendLoadoutPart(ref text, BuildStoredGiftStackSummary(record));
+            AppendLoadoutPart(ref text, record.Relic);
+            return string.IsNullOrEmpty(text) ? "조합 없음" : text;
+        }
+
+        private static void AppendLoadoutPart(ref string text, string part)
+        {
+            if (string.IsNullOrWhiteSpace(part))
+            {
+                return;
+            }
+
+            text = string.IsNullOrEmpty(text) ? part : text + " + " + part;
         }
 
         private static string CompactText(string value, int maxLength)
@@ -1894,15 +7879,15 @@ namespace GreedLast
         {
             if (!record.IsValid)
             {
-                return "\n빈 슬롯이라 바로 저장됩니다.";
+                return "\n빈 슬롯입니다. 저장하면 후보가 이 슬롯에 들어가고 후보는 소모됩니다.";
             }
 
             if (usesRemaining <= 0)
             {
-                return "\n사용 완료된 조합입니다. 저장하면 새 후보로 교체됩니다.";
+                return "\n사용 완료된 조합입니다. 저장하면 새 후보로 교체되고 후보는 소모됩니다.";
             }
 
-            return "\n기존 저장 조합이 있습니다. 저장하려면 한 번 더 확정해야 합니다.";
+            return "\n기존 저장 조합이 있습니다. 첫 저장 클릭은 비교 확인, 두 번째 클릭이 덮어쓰기 확정입니다.";
         }
 
         private static string FormatSaveSlotLabel(GreedLastRunRecord record, int usesRemaining)
@@ -1913,7 +7898,9 @@ namespace GreedLast
             }
 
             return usesRemaining > 0
-                ? usesRemaining + "회"
+                ? BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: false)
+                    + " / " + BuildLoadoutProfile(record)
+                    + " / " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(record)
                 : "사용 완료";
         }
 
@@ -1923,15 +7910,94 @@ namespace GreedLast
             int usesRemaining = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             if (!record.IsValid)
             {
-                return "비어 있음 - 무한모드 시작 불가";
+                return HasAnyUsableSaveLoadoutSlot()
+                    ? "비어 있음 - 다른 슬롯 선택"
+                    : "비어 있음 - 보충 런 필요";
             }
 
             if (usesRemaining <= 0)
             {
-                return "사용 완료 - 새 저장 조합으로 교체 필요";
+                return HasAnyUsableSaveLoadoutSlot()
+                    ? "사용 완료 - 다른 슬롯 선택"
+                    : "사용 완료 - 보충 런 필요";
             }
 
-            return "시작 가능 - 남은 사용 " + usesRemaining + "회";
+            if (usesRemaining == 1)
+            {
+                return "마지막 사용 - 시작 후 자동 비움";
+            }
+
+            return "시작 가능 - " + BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: false);
+        }
+
+        private static string BuildSaveUseStatusText(int usesRemaining, bool includeAutoClearHint)
+        {
+            if (usesRemaining <= 0)
+            {
+                return "사용 완료";
+            }
+
+            if (usesRemaining == 1)
+            {
+                return includeAutoClearHint
+                    ? "마지막 1회 (1/2) - 시작 후 자동 비움"
+                    : "마지막 1회 (1/2)";
+            }
+
+            return Mathf.Min(usesRemaining, MaxSaveLoadoutUses) + "/" + MaxSaveLoadoutUses
+                + " · " + usesRemaining + "회 남음";
+        }
+
+        private static string BuildSaveLoadoutUsePreviewLine(int usesRemaining)
+        {
+            if (usesRemaining <= 0)
+            {
+                return "사용 흐름: 사용 완료";
+            }
+
+            int remainingAfterUse = Mathf.Max(0, usesRemaining - 1);
+            string afterUseText = remainingAfterUse <= 0
+                ? "자동 비움"
+                : BuildSaveUseStatusText(remainingAfterUse, includeAutoClearHint: false);
+            return "사용 흐름: "
+                + BuildSaveUseStatusText(usesRemaining, includeAutoClearHint: false)
+                + " -> "
+                + afterUseText;
+        }
+
+        private static string BuildSaveLoadoutUseConsumptionLine(int usesBeforeUse, int usesAfterUse)
+        {
+            string beforeText = BuildSaveUseStatusText(usesBeforeUse, includeAutoClearHint: false);
+            string afterText = usesAfterUse <= 0
+                ? "자동 비움"
+                : BuildSaveUseStatusText(usesAfterUse, includeAutoClearHint: false);
+            return "사용 결과: "
+                + beforeText
+                + " -> "
+                + afterText;
+        }
+
+        private static string BuildInfiniteSlotNextActionText(bool usable, int usesRemaining, bool hasAnyUsableSlot = true)
+        {
+            if (!usable)
+            {
+                return hasAnyUsableSlot
+                    ? "다음: 좌 / 중 / 우로 사용 가능한 슬롯 선택"
+                    : "다음: 보충 런 클리어 후 새 조합 저장";
+            }
+
+            return usesRemaining <= 1
+                ? "다음: 마지막 시작 - 시작 후 슬롯 자동 비움"
+                : "다음: 무한 시작 - 사용 횟수 1회 차감";
+        }
+
+        private string BuildInfiniteLoadoutStartStatePreview(GreedLastRunRecord record)
+        {
+            return GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(
+                record,
+                growthSurvivalLevel,
+                growthFocusLevel,
+                growthTimingLevel);
         }
 
         private static string BuildSaveLoadoutNameForStep(int slotIndex, int step)
@@ -1983,8 +8049,16 @@ namespace GreedLast
             lastRunRecord = FromData(data.lastRunRecord);
             lastRunAttemptRecord = FromData(data.lastRunAttemptRecord);
             bestRunRecord = FromData(data.bestRunRecord);
+            previousBestBeforeLastRun = FromData(data.previousBestBeforeLastRun);
+            lastRunWasNewBest = data.lastRunWasNewBest
+                && lastRunRecord.IsValid
+                && IsSameRunRecord(lastRunRecord, bestRunRecord);
             lastInfiniteRunRecord = FromData(data.lastInfiniteRunRecord);
             bestInfiniteRunRecord = FromData(data.bestInfiniteRunRecord);
+            previousBestBeforeLastInfiniteRun = FromData(data.previousBestBeforeLastInfiniteRun);
+            lastInfiniteRunWasNewBest = data.lastInfiniteRunWasNewBest
+                && lastInfiniteRunRecord.IsValid
+                && IsSameInfiniteRecord(lastInfiniteRunRecord, bestInfiniteRunRecord);
             normalClearCount = Mathf.Max(0, data.normalClearCount);
             normalFailCount = Mathf.Max(0, data.normalFailCount);
             normalAbandonCount = Mathf.Max(0, data.normalAbandonCount);
@@ -1993,6 +8067,26 @@ namespace GreedLast
             growthSurvivalLevel = Mathf.Clamp(data.growthSurvivalLevel, 0, GrowthMaxLevel);
             growthFocusLevel = Mathf.Clamp(data.growthFocusLevel, 0, GrowthMaxLevel);
             growthTimingLevel = Mathf.Clamp(data.growthTimingLevel, 0, GrowthMaxLevel);
+            lastProgressEvent = (ProgressEventKind)Mathf.Clamp(data.lastProgressEvent, 0, (int)ProgressEventKind.InfiniteRun);
+            profileNoticePending = data.profileNoticePending;
+            sampleSaveLoadoutSequence = Mathf.Max(0, data.sampleSaveLoadoutSequence);
+            if (string.IsNullOrEmpty(data.lastConsumedSaveSlotName))
+            {
+                lastConsumedSaveSlotIndex = -1;
+                lastConsumedSaveSlotName = string.Empty;
+                lastConsumedSaveSlotProfile = string.Empty;
+                lastConsumedSaveSlotRemainingAfterUse = -1;
+                lastConsumedSaveSlotAutoCleared = false;
+            }
+            else
+            {
+                lastConsumedSaveSlotIndex = Mathf.Clamp(data.lastConsumedSaveSlotIndex, 0, SaveSlotCount - 1);
+                lastConsumedSaveSlotName = data.lastConsumedSaveSlotName;
+                lastConsumedSaveSlotProfile = data.lastConsumedSaveSlotProfile ?? string.Empty;
+                lastConsumedSaveSlotRemainingAfterUse = Mathf.Clamp(data.lastConsumedSaveSlotRemainingAfterUse, 0, MaxSaveLoadoutUses);
+                lastConsumedSaveSlotAutoCleared = data.lastConsumedSaveSlotAutoCleared;
+            }
+
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
                 normalRunRankings[i] = GreedLastRunRecord.Empty;
@@ -2015,12 +8109,15 @@ namespace GreedLast
                 saveLoadoutRenameSteps[i] = 0;
             }
 
+            bool sanitizedStoredSaveLoadouts = false;
             if (data.saveLoadoutSlots != null)
             {
                 int count = Mathf.Min(saveLoadoutSlots.Length, data.saveLoadoutSlots.Length);
                 for (int i = 0; i < count; i += 1)
                 {
-                    saveLoadoutSlots[i] = FromData(data.saveLoadoutSlots[i]);
+                    GreedLastRunRecord loadedSaveLoadout = FromData(data.saveLoadoutSlots[i]);
+                    sanitizedStoredSaveLoadouts |= SaveLoadoutRecordNeedsSanitizing(loadedSaveLoadout);
+                    saveLoadoutSlots[i] = BuildSaveLoadoutRecord(loadedSaveLoadout);
                     saveLoadoutUsesRemaining[i] = saveLoadoutSlots[i].IsValid ? MaxSaveLoadoutUses : 0;
                 }
             }
@@ -2046,6 +8143,14 @@ namespace GreedLast
             }
 
             bool prunedExhaustedSaveLoadouts = ClearExhaustedSaveLoadoutSlots();
+            bool clearedDuplicateCandidate = false;
+            if (saveLoadoutCandidateAvailable && IsLastRunRecordAlreadySaved())
+            {
+                saveLoadoutCandidateAvailable = false;
+                clearedDuplicateCandidate = true;
+            }
+
+            bool repairedProgressFlags = RepairProgressUnlockFlags();
             savedLoadoutConfirmed = savedLoadoutConfirmed && HasAnySaveLoadoutSlot();
             EnsureSelectedSaveLoadoutSlotForLobby();
 
@@ -2112,7 +8217,12 @@ namespace GreedLast
                 infiniteRunRankings[0] = bestInfiniteRunRecord;
             }
 
-            if (prunedExhaustedSaveLoadouts)
+            bool prunedDuplicateRankings = PruneDuplicateRankings();
+            if (prunedExhaustedSaveLoadouts
+                || clearedDuplicateCandidate
+                || repairedProgressFlags
+                || prunedDuplicateRankings
+                || sanitizedStoredSaveLoadouts)
             {
                 SavePersistedData();
             }
@@ -2131,6 +8241,8 @@ namespace GreedLast
                 lastRunRecord = ToData(lastRunRecord),
                 lastRunAttemptRecord = ToData(lastRunAttemptRecord),
                 bestRunRecord = ToData(bestRunRecord),
+                previousBestBeforeLastRun = ToData(previousBestBeforeLastRun),
+                lastRunWasNewBest = lastRunWasNewBest,
                 normalRunRankings = new RunRecordSaveData[NormalRankingCount],
                 normalAttemptHistory = new RunAttemptRecordSaveData[NormalAttemptHistoryCount],
                 normalClearCount = normalClearCount,
@@ -2141,12 +8253,22 @@ namespace GreedLast
                 saveLoadoutRenameSteps = new int[SaveSlotCount],
                 lastInfiniteRunRecord = ToData(lastInfiniteRunRecord),
                 bestInfiniteRunRecord = ToData(bestInfiniteRunRecord),
+                previousBestBeforeLastInfiniteRun = ToData(previousBestBeforeLastInfiniteRun),
+                lastInfiniteRunWasNewBest = lastInfiniteRunWasNewBest,
                 infiniteRunRankings = new InfiniteRecordSaveData[InfiniteRankingCount],
                 infiniteRunCount = infiniteRunCount,
                 growthPoints = Mathf.Max(0, growthPoints),
                 growthSurvivalLevel = Mathf.Clamp(growthSurvivalLevel, 0, GrowthMaxLevel),
                 growthFocusLevel = Mathf.Clamp(growthFocusLevel, 0, GrowthMaxLevel),
                 growthTimingLevel = Mathf.Clamp(growthTimingLevel, 0, GrowthMaxLevel),
+                lastProgressEvent = (int)lastProgressEvent,
+                profileNoticePending = profileNoticePending,
+                lastConsumedSaveSlotIndex = lastConsumedSaveSlotIndex,
+                lastConsumedSaveSlotName = lastConsumedSaveSlotName,
+                lastConsumedSaveSlotProfile = lastConsumedSaveSlotProfile,
+                lastConsumedSaveSlotRemainingAfterUse = lastConsumedSaveSlotRemainingAfterUse,
+                lastConsumedSaveSlotAutoCleared = lastConsumedSaveSlotAutoCleared,
+                sampleSaveLoadoutSequence = sampleSaveLoadoutSequence,
             };
 
             for (int i = 0; i < data.normalRunRankings.Length; i += 1)
@@ -2184,6 +8306,10 @@ namespace GreedLast
                 health = record.Health,
                 combo = record.Combo,
                 focus = record.Focus,
+                maxCombo = record.MaxCombo,
+                successCount = record.SuccessCount,
+                goodCount = record.GoodCount,
+                missCount = record.MissCount,
                 distance = record.Distance,
                 loadoutName = record.LoadoutName,
                 startGift = record.StartGift,
@@ -2207,6 +8333,10 @@ namespace GreedLast
                 data.health,
                 data.combo,
                 data.focus,
+                Mathf.Max(data.maxCombo, data.combo),
+                Mathf.Max(0, data.successCount),
+                Mathf.Max(0, data.goodCount),
+                Mathf.Max(0, data.missCount),
                 data.distance,
                 data.loadoutName,
                 data.startGift,
@@ -2287,10 +8417,12 @@ namespace GreedLast
                 sectionsCleared = record.SectionsCleared,
                 maxThreatLevel = record.MaxThreatLevel,
                 loadoutName = record.LoadoutName,
+                loadoutProfile = record.LoadoutProfile,
                 successCount = record.SuccessCount,
                 goodCount = record.GoodCount,
                 missCount = record.MissCount,
                 maxCombo = record.MaxCombo,
+                missReason = record.MissReason,
                 timingProfile = record.TimingProfile,
             };
         }
@@ -2309,10 +8441,12 @@ namespace GreedLast
                 data.sectionsCleared,
                 Mathf.Max(1, data.maxThreatLevel),
                 string.IsNullOrEmpty(data.loadoutName) ? "기록 조합" : data.loadoutName,
+                data.loadoutProfile,
                 data.successCount,
                 data.goodCount,
                 data.missCount,
                 data.maxCombo,
+                data.missReason,
                 data.timingProfile);
         }
 
@@ -2328,6 +8462,8 @@ namespace GreedLast
             public RunRecordSaveData lastRunRecord;
             public RunAttemptRecordSaveData lastRunAttemptRecord;
             public RunRecordSaveData bestRunRecord;
+            public RunRecordSaveData previousBestBeforeLastRun;
+            public bool lastRunWasNewBest;
             public RunRecordSaveData[] normalRunRankings;
             public RunAttemptRecordSaveData[] normalAttemptHistory;
             public int normalClearCount;
@@ -2338,12 +8474,22 @@ namespace GreedLast
             public int[] saveLoadoutRenameSteps;
             public InfiniteRecordSaveData lastInfiniteRunRecord;
             public InfiniteRecordSaveData bestInfiniteRunRecord;
+            public InfiniteRecordSaveData previousBestBeforeLastInfiniteRun;
+            public bool lastInfiniteRunWasNewBest;
             public InfiniteRecordSaveData[] infiniteRunRankings;
             public int infiniteRunCount;
             public int growthPoints;
             public int growthSurvivalLevel;
             public int growthFocusLevel;
             public int growthTimingLevel;
+            public int lastProgressEvent;
+            public bool profileNoticePending;
+            public int lastConsumedSaveSlotIndex;
+            public string lastConsumedSaveSlotName;
+            public string lastConsumedSaveSlotProfile;
+            public int lastConsumedSaveSlotRemainingAfterUse;
+            public bool lastConsumedSaveSlotAutoCleared;
+            public int sampleSaveLoadoutSequence;
         }
 
         [Serializable]
@@ -2354,6 +8500,10 @@ namespace GreedLast
             public int health;
             public int combo;
             public int focus;
+            public int maxCombo;
+            public int successCount;
+            public int goodCount;
+            public int missCount;
             public float distance;
             public string loadoutName;
             public string startGift;
@@ -2395,10 +8545,12 @@ namespace GreedLast
             public int sectionsCleared;
             public int maxThreatLevel;
             public string loadoutName;
+            public string loadoutProfile;
             public int successCount;
             public int goodCount;
             public int missCount;
             public int maxCombo;
+            public string missReason;
             public string timingProfile;
         }
     }
@@ -2406,6 +8558,7 @@ namespace GreedLast
     public sealed class GreedLastStateMachine
     {
         private const int RecordBoardPageCount = 4;
+        private const int ProfileBoardPageCount = 4;
         private readonly GreedLastRequestGate requestGate;
         private GreedLastLobbySnapshot lobbySnapshot;
         private string currentDetail = string.Empty;
@@ -2521,6 +8674,7 @@ namespace GreedLast
             string detail,
             bool saveSlotChoiceRequired = false,
             bool saveSlotOverwriteConfirmationPending = false,
+            bool saveLoadoutSkipConfirmationPending = false,
             bool saveSlotDeleteConfirmationPending = false,
             bool saveSlotDetailViewActive = false,
             bool saveSlotRenameConfirmationPending = false,
@@ -2533,6 +8687,7 @@ namespace GreedLast
                 BuildSaveLoadoutHeadline(
                     saveLoadoutCandidateAvailable,
                     saveSlotOverwriteConfirmationPending,
+                    saveLoadoutSkipConfirmationPending,
                     saveSlotDeleteConfirmationPending,
                     saveSlotDetailViewActive,
                     saveSlotRenameConfirmationPending),
@@ -2541,6 +8696,7 @@ namespace GreedLast
                 retryVisible: false,
                 saveSlotChoiceRequired: saveSlotChoiceRequired,
                 saveSlotOverwriteConfirmationPending: saveSlotOverwriteConfirmationPending,
+                saveLoadoutSkipConfirmationPending: saveLoadoutSkipConfirmationPending,
                 saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending,
                 saveSlotDetailViewActive: saveSlotDetailViewActive,
                 saveSlotRenameConfirmationPending: saveSlotRenameConfirmationPending,
@@ -2564,13 +8720,28 @@ namespace GreedLast
             Publish("성장 보정", detail, coreActionsEnabled: true, retryVisible: false);
         }
 
+        public void SetProfileBoard(GreedLastLobbySnapshot snapshot, string detail, int pageIndex)
+        {
+            lobbySnapshot = snapshot;
+            recordBoardPageIndex = pageIndex;
+            CurrentState = GreedLastScreenState.ProfileBoard;
+            BlockReason = GreedLastConnectBlockReason.None;
+            Publish(BuildProfileBoardHeadline(pageIndex), detail, coreActionsEnabled: true, retryVisible: false);
+        }
+
         private static string BuildSaveLoadoutHeadline(
             bool saveLoadoutCandidateAvailable,
             bool saveSlotOverwriteConfirmationPending,
+            bool saveLoadoutSkipConfirmationPending,
             bool saveSlotDeleteConfirmationPending,
             bool saveSlotDetailViewActive,
             bool saveSlotRenameConfirmationPending)
         {
+            if (saveLoadoutSkipConfirmationPending)
+            {
+                return "저장 후보 포기";
+            }
+
             if (saveSlotDeleteConfirmationPending)
             {
                 return "저장 조합 삭제";
@@ -2614,7 +8785,39 @@ namespace GreedLast
 
         private static string BuildRecordBoardHeadline(int pageIndex)
         {
-            return "기록 보드";
+            int page = ((pageIndex % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
+            switch (page)
+            {
+                case 1:
+                    return FormatBoardHeadlinePage("일반 기록", page, RecordBoardPageCount);
+                case 2:
+                    return FormatBoardHeadlinePage("무한 기록", page, RecordBoardPageCount);
+                case 3:
+                    return FormatBoardHeadlinePage("무한 랭킹", page, RecordBoardPageCount);
+                default:
+                    return FormatBoardHeadlinePage("기록 요약", page, RecordBoardPageCount);
+            }
+        }
+
+        private static string BuildProfileBoardHeadline(int pageIndex)
+        {
+            int page = ((pageIndex % ProfileBoardPageCount) + ProfileBoardPageCount) % ProfileBoardPageCount;
+            switch (page)
+            {
+                case 1:
+                    return FormatBoardHeadlinePage("흔적 저장", page, ProfileBoardPageCount);
+                case 2:
+                    return FormatBoardHeadlinePage("흔적 장식", page, ProfileBoardPageCount);
+                case 3:
+                    return FormatBoardHeadlinePage("흔적 검증", page, ProfileBoardPageCount);
+                default:
+                    return FormatBoardHeadlinePage("흔적 요약", page, ProfileBoardPageCount);
+            }
+        }
+
+        private static string FormatBoardHeadlinePage(string title, int page, int pageCount)
+        {
+            return title + " " + (page + 1) + "/" + pageCount;
         }
 
         private void Publish(
@@ -2624,12 +8827,15 @@ namespace GreedLast
             bool retryVisible,
             bool saveSlotChoiceRequired = false,
             bool saveSlotOverwriteConfirmationPending = false,
+            bool saveLoadoutSkipConfirmationPending = false,
             bool saveSlotDeleteConfirmationPending = false,
             bool saveSlotDetailViewActive = false,
             bool saveSlotRenameConfirmationPending = false,
             bool saveLoadoutCandidateAvailable = false)
         {
             currentDetail = detail ?? string.Empty;
+            bool effectiveSaveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable
+                || lobbySnapshot.SaveLoadoutCandidateAvailable;
             StateChanged?.Invoke(new GreedLastStateSnapshot(
                 CurrentState,
                 requestGate.ActiveRequestId,
@@ -2641,17 +8847,23 @@ namespace GreedLast
                 lobbySnapshot.SaveLoadoutUnlocked,
                 lobbySnapshot.InfiniteUnlocked,
                 lobbySnapshot.GrowthPoints,
+                lobbySnapshot.GrowthSurvivalLevel,
+                lobbySnapshot.GrowthFocusLevel,
+                lobbySnapshot.GrowthTimingLevel,
+                lobbySnapshot.RecommendedGrowthTrackIndex,
+                lobbySnapshot.ProfileButtonSummary,
                 lobbySnapshot.SelectedSaveSlotIndex,
                 lobbySnapshot.SaveSlotLabels,
                 lobbySnapshot.SaveSlotUsable,
                 lobbySnapshot.SaveSlotOccupied,
                 saveSlotChoiceRequired,
                 saveSlotOverwriteConfirmationPending,
+                saveLoadoutSkipConfirmationPending,
                 saveSlotDeleteConfirmationPending,
                 saveSlotDetailViewActive,
                 saveSlotRenameConfirmationPending,
-                saveLoadoutCandidateAvailable,
-                CurrentState == GreedLastScreenState.InfiniteRecordBoard ? recordBoardPageIndex : -1,
+                effectiveSaveLoadoutCandidateAvailable,
+                CurrentState == GreedLastScreenState.InfiniteRecordBoard || CurrentState == GreedLastScreenState.ProfileBoard ? recordBoardPageIndex : -1,
                 retryVisible && !requestGate.Busy,
                 BlockReason));
         }
@@ -2659,18 +8871,42 @@ namespace GreedLast
 
     public sealed class GreedLastApp : MonoBehaviour
     {
+        internal const string PracticeCompletedPrefsKey = "GreedLast.Onboarding.PracticeCompleted";
+        private const float GrowthUpgradeRepeatBlockSeconds = 0.35f;
+        private const float RunLaneGlobalInputRepeatBlockSeconds = 0.035f;
+        private const float RunLaneInputRepeatBlockSeconds = 0.075f;
+        private const int GrowthUiMaxLevel = 3;
+        private static readonly string[] InfinitePreparationGifts = { "생존 축", "집중 축", "연쇄 축" };
+        private static readonly string[] InfinitePreparationRelics = { "사막의 잔상", "황금 박동", "파라오의 각인" };
+
         private GreedLastRequestGate requestGate;
         private GreedLastMockBackend backend;
         private GreedLastStateMachine stateMachine;
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
         private int recordBoardPageIndex;
+        private int profileBoardPageIndex;
         private int preferredRecordBoardPageIndex;
         private bool saveDraftRequiresExplicitSlotChoice;
         private bool saveDraftOverwriteConfirmPending;
+        private bool saveDraftSkipConfirmPending;
         private bool saveSlotDeleteConfirmPending;
         private bool saveSlotDetailViewActive;
         private bool saveSlotRenameConfirmPending;
+        private bool saveDraftFromRefillRun;
+        private bool activeNormalRunWasRefill;
+        private GreedLastRunChannel lastGrowthUpgradeChannel;
+        private float lastGrowthUpgradeAt;
+        private GreedLastRunChannel lastRunLaneInputChannel;
+        private float lastRunAnyLaneInputAt;
+        private float lastRunLaneInputAt;
+        private int infinitePreparationStep;
+        private string infinitePreparationGift = string.Empty;
+        private string infinitePreparationRelic = string.Empty;
+        private string pendingInfinitePreparationReviewContext = string.Empty;
+        private string pendingInfinitePreparationEntryNotice = string.Empty;
+
+        private static bool DevToolsEnabled => Application.isEditor || Debug.isDebugBuild;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
@@ -2693,11 +8929,13 @@ namespace GreedLast
 
             runtimeUi = gameObject.AddComponent<GreedLastRuntimeUi>();
             runtimeUi.Initialize(
+                RequestPracticeRun,
                 RequestNormalRun,
                 RequestSaveLoadout,
                 RequestInfiniteRun,
                 RequestInfiniteRecordBoard,
                 RequestGrowthBoard,
+                RequestProfileBoard,
                 RequestRetrySync,
                 ToggleOfflineForEditorCheck,
                 RequestNextRunPattern,
@@ -2747,7 +8985,7 @@ namespace GreedLast
             if (IsRunState())
             {
                 runCore.Tick(Time.realtimeSinceStartup);
-                if (Input.GetKeyDown(KeyCode.Escape))
+                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
                 {
                     RequestToggleRunPause();
                     return;
@@ -2758,20 +8996,249 @@ namespace GreedLast
                 return;
             }
 
+            if (TryHandleDevKeyboardInput())
+            {
+                return;
+            }
+
+            if (TryHandlePrimaryKeyboardInput())
+            {
+                return;
+            }
+
             if (TryHandleLaneKeyboardInput())
             {
                 return;
             }
         }
 
+        private bool TryHandlePrimaryKeyboardInput()
+        {
+            if (!Input.GetKeyDown(KeyCode.Return) && !Input.GetKeyDown(KeyCode.KeypadEnter))
+            {
+                return false;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
+                || stateMachine.CurrentState == GreedLastScreenState.ProfileBoard
+                || IsRunState())
+            {
+                RequestNextRunPattern();
+                return true;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                UpgradeRecommendedGrowthTrack();
+                return true;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
+            {
+                HandleLobbyPrimaryKeyboardInput();
+                return true;
+            }
+
+            return false;
+        }
+
+        private void HandleLobbyPrimaryKeyboardInput()
+        {
+            GreedLastLobbySnapshot snapshot = stateMachine.LobbySnapshot;
+            string detail = stateMachine.CurrentDetail ?? string.Empty;
+            if (PlayerPrefs.GetInt(PracticeCompletedPrefsKey, 0) != 1
+                && !snapshot.FirstSaveCompleted
+                && !snapshot.SaveLoadoutUnlocked)
+            {
+                RequestPracticeRun();
+                return;
+            }
+
+            if (snapshot.SaveLoadoutCandidateAvailable)
+            {
+                RequestSaveLoadout();
+                return;
+            }
+
+            switch (ResolveLobbyPrimaryActionTarget(
+                snapshot.SaveLoadoutCandidateAvailable,
+                snapshot.SaveLoadoutUnlocked,
+                snapshot.FirstSaveCompleted,
+                HasAnyUsableSaveSlot(snapshot),
+                detail))
+            {
+                case "무한":
+                    RequestInfiniteRun();
+                    return;
+                case "연습":
+                    RequestPracticeRun();
+                    return;
+                case "일반":
+                    RequestNormalRun();
+                    return;
+                case "저장":
+                    RequestSaveLoadout();
+                    return;
+                case "성장":
+                    RequestGrowthBoard();
+                    return;
+                case "흔적":
+                    RequestProfileBoard();
+                    return;
+                case "기록":
+                    RequestInfiniteRecordBoard();
+                    return;
+            }
+
+            if (CanUpgradeAnyGrowthTrack(snapshot))
+            {
+                RequestGrowthBoard();
+                return;
+            }
+
+            if (snapshot.ProfileButtonSummary.Contains("NEW", StringComparison.Ordinal))
+            {
+                RequestProfileBoard();
+                return;
+            }
+
+            RequestNormalRun();
+        }
+
+        private static string ResolveLobbyPrimaryActionTarget(
+            bool saveLoadoutCandidateAvailable,
+            bool saveLoadoutUnlocked,
+            bool firstSaveCompleted,
+            bool hasAnyUsableSaveLoadoutSlot,
+            string detail)
+        {
+            if (saveLoadoutCandidateAvailable)
+            {
+                return "저장";
+            }
+
+            if ((saveLoadoutUnlocked || firstSaveCompleted) && !hasAnyUsableSaveLoadoutSlot)
+            {
+                return "무한";
+            }
+
+            string nextActionTarget = ResolveLobbyNextActionTarget(detail);
+            if (!string.IsNullOrEmpty(nextActionTarget))
+            {
+                return nextActionTarget;
+            }
+
+            return IsNormalRecordResultDetail(detail) || IsInfiniteRecordResultDetail(detail)
+                ? "기록"
+                : string.Empty;
+        }
+
+        internal static string ResolveLobbyNextActionTarget(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return string.Empty;
+            }
+
+            if (detail.Contains("다음 확인: 저장 후보", StringComparison.Ordinal))
+            {
+                return "저장";
+            }
+
+            if (detail.Contains("다음 확인: 일반 런", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 클리어 후", StringComparison.Ordinal))
+            {
+                return "일반";
+            }
+
+            if (detail.Contains("다음 확인: 복기 연습", StringComparison.Ordinal))
+            {
+                return "연습";
+            }
+
+            if (detail.Contains("다음 확인: 무한 복기 전", StringComparison.Ordinal)
+                || detail.Contains("다음: 무한 복기 전", StringComparison.Ordinal))
+            {
+                return "연습";
+            }
+
+            if (detail.Contains("다음 확인: 복기 재도전", StringComparison.Ordinal))
+            {
+                return "일반";
+            }
+
+            if (detail.Contains("다음: 무한 복기 재도전", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 무한 복기 재도전", StringComparison.Ordinal)
+                || detail.Contains("다음: 저장 조합으로 무한모드", StringComparison.Ordinal)
+                || detail.Contains("다음: 정산 종료 확인 후 무한모드", StringComparison.Ordinal)
+                || detail.Contains("다음: 무한 버튼으로 보충 런", StringComparison.Ordinal)
+                || detail.Contains("다음: 무한 조합 보충", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 저장 조합으로 무한", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 저장 조합 2회 소진", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 무한 조합 보충", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 무한 위협", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 무한 기록", StringComparison.Ordinal)
+                || detail.Contains("다음: 보충 후 무한 재진입", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 보충 후 무한 재진입", StringComparison.Ordinal)
+                || detail.Contains("다음: 보충 런", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 보충 런", StringComparison.Ordinal))
+            {
+                return "무한";
+            }
+
+            if (detail.Contains("다음: 복기 연습", StringComparison.Ordinal))
+            {
+                return "연습";
+            }
+
+            if (detail.Contains("다음: 복기 재도전", StringComparison.Ordinal)
+                || detail.Contains("다음: 일반 런", StringComparison.Ordinal))
+            {
+                return "일반";
+            }
+
+            if (detail.Contains("다음: 저장 조합", StringComparison.Ordinal))
+            {
+                return "저장";
+            }
+
+            if (detail.Contains("다음: 성장 보정", StringComparison.Ordinal))
+            {
+                return "성장";
+            }
+
+            if (detail.Contains("다음: 흔적", StringComparison.Ordinal))
+            {
+                return "흔적";
+            }
+
+            return detail.Contains("다음: 기록 보기", StringComparison.Ordinal)
+                || detail.Contains("다음: 기록 보드", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 완성 루프 기록", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 기록 보드", StringComparison.Ordinal)
+                || detail.Contains("다음 확인: 기록 보기", StringComparison.Ordinal)
+                ? "기록"
+                : string.Empty;
+        }
+
         private bool TryHandleLaneKeyboardInput()
         {
-            if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow))
+            if (Input.GetKeyDown(KeyCode.A)
+                || Input.GetKeyDown(KeyCode.J)
+                || Input.GetKeyDown(KeyCode.Alpha1)
+                || Input.GetKeyDown(KeyCode.Keypad1)
+                || Input.GetKeyDown(KeyCode.LeftArrow))
             {
                 HandleRunChannelInput(GreedLastRunChannel.Left);
                 return true;
             }
             else if (Input.GetKeyDown(KeyCode.S)
+                || Input.GetKeyDown(KeyCode.K)
+                || Input.GetKeyDown(KeyCode.Alpha2)
+                || Input.GetKeyDown(KeyCode.Keypad2)
                 || Input.GetKeyDown(KeyCode.W)
                 || Input.GetKeyDown(KeyCode.Space)
                 || Input.GetKeyDown(KeyCode.UpArrow)
@@ -2780,9 +9247,103 @@ namespace GreedLast
                 HandleRunChannelInput(GreedLastRunChannel.Center);
                 return true;
             }
-            else if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
+            else if (Input.GetKeyDown(KeyCode.D)
+                || Input.GetKeyDown(KeyCode.L)
+                || Input.GetKeyDown(KeyCode.Alpha3)
+                || Input.GetKeyDown(KeyCode.Keypad3)
+                || Input.GetKeyDown(KeyCode.RightArrow))
             {
                 HandleRunChannelInput(GreedLastRunChannel.Right);
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryHandleDevKeyboardInput()
+        {
+            if (!DevToolsEnabled)
+            {
+                return false;
+            }
+
+            bool runState = IsRunState();
+            bool stateDevTools = stateMachine.CurrentState == GreedLastScreenState.LobbyReady
+                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard;
+            if (!runState && !stateDevTools)
+            {
+                return false;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F1))
+            {
+                ToggleRunInvincible();
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F2))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.GiftChoice);
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F3))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.RelicChoice);
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F4))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.AfterCore);
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F5))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.BeforeClear);
+                return true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.F6))
+            {
+                RequestFocusMaxForTest();
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F7))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.ReviewTargetCheck);
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F8))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.RouteCycle);
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.F9))
+            {
+                RequestRunDevShortcut(GreedLastDevShortcut.AvoidanceCycle);
+                return true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.PageUp))
+            {
+                RequestThreatUpForTest();
+                return true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.PageDown))
+            {
+                RequestThreatDownForTest();
+                return true;
+            }
+
+            if (runState && Input.GetKeyDown(KeyCode.End))
+            {
+                RequestInfiniteTestStop();
                 return true;
             }
 
@@ -2795,7 +9356,8 @@ namespace GreedLast
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
-                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard
+                || stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
             {
                 RequestReturnToLobby();
                 return true;
@@ -2806,9 +9368,8 @@ namespace GreedLast
 
         private void OnApplicationPause(bool pauseStatus)
         {
-            if (pauseStatus && stateMachine != null && runCore != null && IsRunState())
+            if (pauseStatus && PauseRunForAppBackground())
             {
-                runCore.PauseForAppBackground(Time.realtimeSinceStartup);
                 return;
             }
 
@@ -2818,6 +9379,25 @@ namespace GreedLast
             {
                 stateMachine.SetReSyncPending("앱 복귀 후 최신 로비 상태를 다시 확인해야 합니다.", coreActionsEnabled: false);
             }
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+            {
+                PauseRunForAppBackground();
+            }
+        }
+
+        private bool PauseRunForAppBackground()
+        {
+            if (stateMachine == null || runCore == null || !IsRunState())
+            {
+                return false;
+            }
+
+            runCore.PauseForAppBackground(Time.realtimeSinceStartup);
+            return true;
         }
 
         private IEnumerator BootThenConnect()
@@ -2938,15 +9518,50 @@ namespace GreedLast
 
         private void RequestNormalRun()
         {
+            if (backend.HasSaveLoadoutCandidate)
+            {
+                RequestSaveLoadout();
+                return;
+            }
+
             if (!TryBeginLobbyAction(out GreedLastRequestToken token))
             {
                 return;
             }
 
             requestGate.Complete(token);
+            GreedLastLobbySnapshot snapshot = backend.LoadLobby();
+            bool refillRun = ShouldStartLobbyNormalAsRefillRun(snapshot);
+            string openingContext = refillRun
+                ? BuildRefillRunOpeningContext()
+                : BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail);
+            StartNormalRunCore(openingContext, refillRun);
+        }
+
+        private void RequestPracticeRun()
+        {
+            if (!TryBeginLobbyAction(out GreedLastRequestToken token))
+            {
+                return;
+            }
+
+            requestGate.Complete(token);
+            activeNormalRunWasRefill = false;
+            ClearInfinitePreparationContext();
+            stateMachine.SetRunCoreTest();
+            runCore.ConfigureGrowth(0, 0, 0);
+            ResetRunLaneInputGuard();
+            runCore.EnterPractice(BuildPracticeOpeningContextFromLobbyDetail(stateMachine.CurrentDetail));
+        }
+
+        private void StartNormalRunCore(string openingContext, bool refillRun)
+        {
+            activeNormalRunWasRefill = refillRun;
+            ClearInfinitePreparationContext();
             stateMachine.SetRunCoreTest();
             ApplyGrowthToRunCore();
-            runCore.Enter();
+            ResetRunLaneInputGuard();
+            runCore.Enter(openingContext, refillRun);
         }
 
         private void RequestSaveLoadout()
@@ -2970,12 +9585,16 @@ namespace GreedLast
 
             if (snapshot.SaveLoadoutUnlocked)
             {
+                string noCandidateNotice = HasAnyUsableSaveSlot(snapshot)
+                    ? "저장할 새 클리어 후보는 없습니다.\n기존 저장 슬롯은 여기서 관리할 수 있습니다."
+                    : "저장 조합이 비어 있습니다.\n무한 조합 보충 또는 보충 런으로 새 후보를 만든 뒤 저장하세요.";
                 OpenSaveLoadoutDraft(
                     snapshot,
                     requireExplicitSlotChoice: false,
                     backend.HasSaveLoadoutCandidate
                         ? null
-                        : "저장할 새 클리어 후보는 없습니다.\n기존 저장 슬롯은 여기서 관리할 수 있습니다.");
+                        : noCandidateNotice,
+                    refillRunCandidate: false);
             }
             else
             {
@@ -2993,31 +9612,164 @@ namespace GreedLast
             GreedLastLobbySnapshot snapshot = stateMachine.LobbySnapshot;
             requestGate.Complete(token);
 
-            if (!snapshot.InfiniteUnlocked)
+            if (snapshot.SaveLoadoutCandidateAvailable)
             {
-                stateMachine.ShowLocalNotice(snapshot.SaveLoadoutUnlocked
-                    ? "사용 가능한 저장 조합이 없습니다. 일반 런 클리어 뒤 저장 조합을 다시 확정하세요."
-                    : "무한모드는 저장 조합 확정 뒤 열립니다.");
+                RequestSaveLoadout();
                 return;
             }
 
-            stateMachine.SetInfiniteStartReady(backend.LoadLobby(), backend.BuildInfiniteStartReadyText());
+            if (!snapshot.InfiniteUnlocked)
+            {
+                if (snapshot.SaveLoadoutUnlocked || snapshot.FirstSaveCompleted)
+                {
+                    OpenInfinitePreparation();
+                    return;
+                }
+
+                stateMachine.ShowLocalNotice("무한모드는 저장 조합 확정 뒤 열립니다.");
+                return;
+            }
+
+            OpenInfinitePreparation();
         }
 
-        private void StartInfiniteRunFromSelectedLoadout()
+        private void OpenInfinitePreparation(string notice = null, bool resetPreparation = true)
+        {
+            GreedLastLobbySnapshot lobby = backend.LoadLobby();
+            if (resetPreparation)
+            {
+                ResetInfinitePreparation();
+                pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(stateMachine.CurrentDetail);
+                pendingInfinitePreparationEntryNotice = BuildInfinitePreparationEntryNoticeFromLobbyDetail(stateMachine.CurrentDetail);
+            }
+
+            string detail = backend.BuildInfiniteStartReadyText();
+            string entryNotice = pendingInfinitePreparationEntryNotice;
+            if (!string.IsNullOrEmpty(entryNotice))
+            {
+                detail = entryNotice + "\n\n" + detail;
+            }
+
+            string reviewContext = pendingInfinitePreparationReviewContext;
+            if (!string.IsNullOrEmpty(reviewContext))
+            {
+                detail = reviewContext + "\n\n" + detail;
+            }
+
+            if (IsSelectedSaveSlotUsable(lobby))
+            {
+                detail += BuildInfinitePreparationDetail();
+            }
+
+            if (!string.IsNullOrEmpty(notice))
+            {
+                detail = notice + "\n\n" + detail;
+            }
+
+            stateMachine.SetInfiniteStartReady(lobby, detail);
+        }
+
+        private string BuildInfinitePreparationDetail()
+        {
+            switch (infinitePreparationStep)
+            {
+                case 0:
+                    return "\n\n시작 정비 1/2 · 기프트 정비 선택"
+                        + "\n좌 생존 축 / 중 집중 축 / 우 연쇄 축"
+                        + "\n선택 전에는 사용 횟수가 차감되지 않습니다.";
+                case 1:
+                    return "\n\n시작 정비 2/2 · 유물 정비 선택"
+                        + "\n기프트 정비: " + infinitePreparationGift
+                        + "\n좌 사막의 잔상 / 중 황금 박동 / 우 파라오의 각인";
+                default:
+                    return "\n\n시작 정비 완료"
+                        + "\n기프트: " + infinitePreparationGift
+                        + " / 유물: " + infinitePreparationRelic
+                        + "\n이제 시작 확정 시에만 사용 횟수 1회가 차감됩니다."
+                        + "\n좌 기프트 다시 / 중 유물 다시 / 우 선택 유지";
+            }
+        }
+
+        private void SelectInfinitePreparation(GreedLastRunChannel channel)
+        {
+            GreedLastLobbySnapshot lobby = backend.LoadLobby();
+            if (!IsSelectedSaveSlotUsable(lobby))
+            {
+                OpenInfinitePreparation("사용 가능한 저장 조합을 먼저 준비하세요.", resetPreparation: false);
+                return;
+            }
+
+            int choiceIndex = Mathf.Clamp((int)channel - 1, 0, 2);
+            if (infinitePreparationStep <= 0)
+            {
+                infinitePreparationGift = InfinitePreparationGifts[choiceIndex];
+                infinitePreparationStep = 1;
+                OpenInfinitePreparation(infinitePreparationGift + " 정비 선택 완료", resetPreparation: false);
+                return;
+            }
+
+            if (infinitePreparationStep == 1)
+            {
+                infinitePreparationRelic = InfinitePreparationRelics[choiceIndex];
+                infinitePreparationStep = 2;
+                OpenInfinitePreparation(infinitePreparationRelic + " 정비 선택 완료", resetPreparation: false);
+                return;
+            }
+
+            if (channel == GreedLastRunChannel.Left)
+            {
+                ResetInfinitePreparation();
+                OpenInfinitePreparation("기프트 정비부터 다시 선택합니다.", resetPreparation: false);
+            }
+            else if (channel == GreedLastRunChannel.Center)
+            {
+                infinitePreparationRelic = string.Empty;
+                infinitePreparationStep = 1;
+                OpenInfinitePreparation("유물 정비를 다시 선택합니다.", resetPreparation: false);
+            }
+        }
+
+        private void ResetInfinitePreparation()
+        {
+            infinitePreparationStep = 0;
+            infinitePreparationGift = string.Empty;
+            infinitePreparationRelic = string.Empty;
+        }
+
+        private void ClearInfinitePreparationContext()
+        {
+            pendingInfinitePreparationReviewContext = string.Empty;
+            pendingInfinitePreparationEntryNotice = string.Empty;
+        }
+
+        private void StartInfiniteRunFromSelectedLoadout(string failedNotice = null)
         {
             if (!backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord selectedLoadout, out string runDetail, out string errorMessage))
             {
                 runCore.Exit();
-                stateMachine.SetInfiniteStartReady(
-                    backend.LoadLobby(),
-                    errorMessage + "\n\n" + backend.BuildInfiniteStartReadyText());
+                string detail = errorMessage;
+                if (!string.IsNullOrEmpty(failedNotice))
+                {
+                    detail = failedNotice + "\n" + detail;
+                }
+
+                OpenInfinitePreparation(detail, resetPreparation: false);
                 return;
             }
 
+            GreedLastRunRecord preparedLoadout = GreedLastRunCore.CreatePreparedInfiniteLoadout(
+                selectedLoadout,
+                infinitePreparationGift,
+                infinitePreparationRelic);
+            runDetail += "\n시작 정비: " + infinitePreparationGift + " / " + infinitePreparationRelic;
+            string reviewContext = pendingInfinitePreparationReviewContext;
             stateMachine.SetInfiniteRun(runDetail);
+            activeNormalRunWasRefill = false;
             ApplyGrowthToRunCore();
-            runCore.EnterInfiniteRun(selectedLoadout);
+            ResetRunLaneInputGuard();
+            runCore.EnterInfiniteRun(preparedLoadout, reviewContext);
+            ResetInfinitePreparation();
+            ClearInfinitePreparationContext();
         }
 
         private void RequestGrowthBoard()
@@ -3028,7 +9780,37 @@ namespace GreedLast
             }
 
             requestGate.Complete(token);
+            lastGrowthUpgradeChannel = GreedLastRunChannel.None;
+            lastGrowthUpgradeAt = 0f;
             stateMachine.SetGrowthBoard(backend.LoadLobby(), backend.BuildGrowthBoardText());
+        }
+
+        private void RequestProfileBoard()
+        {
+            if (!TryBeginLobbyAction(out GreedLastRequestToken token))
+            {
+                return;
+            }
+
+            requestGate.Complete(token);
+            GreedLastLobbySnapshot snapshot = backend.LoadLobby();
+            OpenProfileBoard(ResolveProfileBoardOpeningPage(snapshot), markSeen: true);
+        }
+
+        private static int ResolveProfileBoardOpeningPage(GreedLastLobbySnapshot snapshot)
+        {
+            if (snapshot.SaveLoadoutCandidateAvailable
+                || ((snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked) && !HasAnyUsableSaveSlot(snapshot)))
+            {
+                return 1;
+            }
+
+            if (snapshot.ProfileButtonSummary.Contains("성장", StringComparison.Ordinal))
+            {
+                return 1;
+            }
+
+            return 0;
         }
 
         private void ApplyGrowthToRunCore()
@@ -3047,10 +9829,37 @@ namespace GreedLast
             }
 
             requestGate.Complete(token);
-            int targetPage = BuildLobbyRecordButtonLabel(stateMachine.CurrentDetail) == "기록 보기"
-                ? 0
-                : preferredRecordBoardPageIndex;
-            OpenRecordBoard(targetPage);
+            int targetPage = ResolveRecordBoardPageForCurrentLobby();
+            OpenRecordBoard(
+                targetPage,
+                markProfileSeen: ShouldMarkProfileSeenFromRecordRequest(stateMachine.CurrentDetail));
+        }
+
+        private int ResolveRecordBoardPageForCurrentLobby()
+        {
+            string detail = stateMachine.CurrentDetail ?? string.Empty;
+            if (detail.Contains("다음 확인: 완성 루프 기록", StringComparison.Ordinal))
+            {
+                return 0;
+            }
+
+            if (IsNormalRecordResultDetail(detail))
+            {
+                return 1;
+            }
+
+            if (IsInfiniteRecordResultDetail(detail))
+            {
+                return 2;
+            }
+
+            return Mathf.Clamp(preferredRecordBoardPageIndex, 0, backend.RecordBoardPages - 1);
+        }
+
+        private static bool ShouldMarkProfileSeenFromRecordRequest(string detail)
+        {
+            return !string.IsNullOrEmpty(detail)
+                && detail.Contains("다음 확인: 완성 루프 기록", StringComparison.Ordinal);
         }
 
         private static string BuildLobbyRecordButtonLabel(string detail)
@@ -3060,25 +9869,35 @@ namespace GreedLast
                 return "기록 보기";
             }
 
-            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
+            if (detail.StartsWith("보충 런", StringComparison.Ordinal))
             {
-                return "클리어 기록";
+                return "보충 기록";
             }
 
-            if (detail.StartsWith("저장 조합 저장은 건너뛰었습니다.", StringComparison.Ordinal))
+            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
             {
-                return "클리어 기록";
+                return "클리어 복기";
+            }
+
+            if (detail.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal))
+            {
+                return "클리어 복기";
             }
 
             if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
                 || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
             {
-                return "실패 기록";
+                return "복기 기록";
             }
 
-            if (detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal))
+            if (IsInfiniteRecordResultDetail(detail))
             {
-                return "무한 기록";
+                return "무한 복기";
+            }
+
+            if (detail.Contains("다음 확인: 완성 루프 기록", StringComparison.Ordinal))
+            {
+                return "완성 기록";
             }
 
             return "기록 보기";
@@ -3117,13 +9936,43 @@ namespace GreedLast
                 return;
             }
 
+            if (stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
+            {
+                MoveProfileBoardPage(1);
+                return;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                UpgradeRecommendedGrowthTrack();
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
-                if (!IsSelectedSaveSlotUsable(stateMachine.LobbySnapshot))
+                GreedLastLobbySnapshot lobbySnapshot = backend.LoadLobby();
+                if (!IsSelectedSaveSlotUsable(lobbySnapshot))
                 {
-                    stateMachine.SetInfiniteStartReady(
-                        backend.LoadLobby(),
-                        "무한모드에 사용할 슬롯을 먼저 선택하세요.\n\n" + backend.BuildInfiniteStartReadyText());
+                    if (!HasAnyUsableSaveSlot(lobbySnapshot))
+                    {
+                        StartNormalRunCore(
+                            BuildRefillRunOpeningContext(),
+                            refillRun: true);
+                        return;
+                    }
+
+                    stateMachine.SetInfiniteLoadoutSelect(
+                        lobbySnapshot,
+                        "무한모드에 사용할 슬롯을 먼저 선택하세요.\n\n" + backend.BuildInfiniteLoadoutSelectText());
+                    return;
+                }
+
+                if (infinitePreparationStep < 2)
+                {
+                    string notice = infinitePreparationStep <= 0
+                        ? "좌 · 중 · 우에서 기프트 정비를 먼저 선택하세요."
+                        : "좌 · 중 · 우에서 유물 정비를 선택하세요.";
+                    OpenInfinitePreparation(notice, resetPreparation: false);
                     return;
                 }
 
@@ -3146,16 +9995,35 @@ namespace GreedLast
                 saveSlotRenameConfirmPending = false;
                 if (!IsSelectedSaveSlotUsable(stateMachine.LobbySnapshot))
                 {
+                    if (!HasAnyUsableSaveSlot(stateMachine.LobbySnapshot))
+                    {
+                        StartNormalRunCore(
+                            GreedLastApp.BuildRefillRunOpeningContext(),
+                            refillRun: true);
+                        return;
+                    }
+
                     RefreshInfiniteLoadoutSelect("사용 가능한 저장 조합을 먼저 선택하세요.");
                     return;
                 }
 
-                stateMachine.SetInfiniteStartReady(backend.LoadLobby(), backend.BuildInfiniteStartReadyText());
+                OpenInfinitePreparation(resetPreparation: false);
                 return;
             }
 
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
+                GreedLastLobbySnapshot lobbySnapshot = stateMachine.LobbySnapshot;
+                if (!backend.HasSaveLoadoutCandidate
+                    && (lobbySnapshot.FirstSaveCompleted || lobbySnapshot.SaveLoadoutUnlocked)
+                    && !HasAnyUsableSaveSlot(lobbySnapshot))
+                {
+                    StartNormalRunCore(
+                        GreedLastApp.BuildRefillRunOpeningContext(),
+                        refillRun: true);
+                    return;
+                }
+
                 ConfirmSaveLoadoutAndReturn();
                 return;
             }
@@ -3174,16 +10042,36 @@ namespace GreedLast
                     return;
                 }
 
+                if (runCore.CanExitAfterPractice)
+                {
+                    MarkPracticeCompletedIfNeeded();
+                    runCore.RestartPractice(Time.realtimeSinceStartup);
+                    return;
+                }
+
                 if (runCore.IsStoppedInfiniteRun)
                 {
-                    backend.RegisterInfiniteRun(runCore.CreateInfiniteRunRecord());
-                    StartInfiniteRunFromSelectedLoadout();
+                    GreedLastInfiniteRunRecord record = runCore.CreateInfiniteRunRecord();
+                    bool registered = backend.RegisterInfiniteRun(record);
+                    if (registered)
+                    {
+                        preferredRecordBoardPageIndex = 2;
+                    }
+
+                    runCore.Exit();
+                    string detail = registered
+                        ? backend.BuildInfiniteRunSavedPrepMessage(record)
+                        : backend.BuildInfiniteRunNoRecordMessage();
+                    OpenInfinitePreparation(detail);
                     return;
                 }
 
                 if (runCore.IsStoppedNormalRun)
                 {
-                    RegisterNormalAttempt(GreedLastRunAttemptOutcome.Failed);
+                    string restartPrefix = BuildRestartPrefixFromResultMessage(
+                        RegisterNormalAttempt(GreedLastRunAttemptOutcome.Failed, activeNormalRunWasRefill));
+                    runCore.RestartStoppedNormalRun(Time.realtimeSinceStartup, restartPrefix);
+                    return;
                 }
 
                 runCore.ToggleAutoFlow(Time.realtimeSinceStartup);
@@ -3192,6 +10080,12 @@ namespace GreedLast
 
         private void HandleRunChannelInput(GreedLastRunChannel channel)
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
+            {
+                SelectInfinitePreparation(channel);
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
@@ -3205,6 +10099,12 @@ namespace GreedLast
                 return;
             }
 
+            if (stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
+            {
+                SelectProfileBoardPage(channel);
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
             {
                 UpgradeGrowth(channel);
@@ -3213,9 +10113,52 @@ namespace GreedLast
 
             if (IsRunState())
             {
+                if (runCore.IsPaused)
+                {
+                    if (channel == GreedLastRunChannel.Center)
+                    {
+                        RequestToggleRunPause();
+                    }
+
+                    return;
+                }
+
+                float now = Time.realtimeSinceStartup;
+                if (ShouldBlockRapidRunLaneInput(channel, now))
+                {
+                    return;
+                }
+
                 runtimeUi.RecordLaneInput(channel);
-                runCore.HandleInput(channel, Time.realtimeSinceStartup);
+                runCore.HandleInput(channel, now);
             }
+        }
+
+        private bool ShouldBlockRapidRunLaneInput(GreedLastRunChannel channel, float now)
+        {
+            if (lastRunAnyLaneInputAt > 0f
+                && now - lastRunAnyLaneInputAt < RunLaneGlobalInputRepeatBlockSeconds)
+            {
+                return true;
+            }
+
+            if (channel == lastRunLaneInputChannel
+                && now - lastRunLaneInputAt < RunLaneInputRepeatBlockSeconds)
+            {
+                return true;
+            }
+
+            lastRunAnyLaneInputAt = now;
+            lastRunLaneInputChannel = channel;
+            lastRunLaneInputAt = now;
+            return false;
+        }
+
+        private void ResetRunLaneInputGuard()
+        {
+            lastRunLaneInputChannel = GreedLastRunChannel.None;
+            lastRunAnyLaneInputAt = 0f;
+            lastRunLaneInputAt = 0f;
         }
 
         private void SelectSaveSlot(GreedLastRunChannel channel)
@@ -3231,28 +10174,49 @@ namespace GreedLast
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
-                stateMachine.SetInfiniteLoadoutSelect(snapshot, backend.BuildInfiniteLoadoutSelectText());
+                stateMachine.SetInfiniteLoadoutSelect(
+                    snapshot,
+                    BuildInfiniteLoadoutSlotSelectionNotice(snapshot, slotIndex)
+                        + "\n\n" + backend.BuildInfiniteLoadoutSelectText());
                 return;
             }
 
-            OpenSaveLoadoutDraft(snapshot, requireExplicitSlotChoice: false);
+            OpenSaveLoadoutDraft(
+                snapshot,
+                requireExplicitSlotChoice: false,
+                BuildSaveDraftSlotSelectionNotice(snapshot, backend.HasSaveLoadoutCandidate, slotIndex));
         }
 
         private void OpenSaveLoadoutDraft(
             GreedLastLobbySnapshot snapshot,
             bool requireExplicitSlotChoice,
-            string notice = null)
+            string notice = null,
+            bool? refillRunCandidate = null,
+            bool preserveSkipConfirmation = false)
         {
+            if (refillRunCandidate.HasValue)
+            {
+                saveDraftFromRefillRun = refillRunCandidate.Value;
+            }
+            else if (!backend.HasSaveLoadoutCandidate)
+            {
+                saveDraftFromRefillRun = false;
+            }
+
             saveDraftRequiresExplicitSlotChoice = requireExplicitSlotChoice;
             saveDraftOverwriteConfirmPending = false;
+            if (!preserveSkipConfirmation)
+            {
+                saveDraftSkipConfirmPending = false;
+            }
+
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
             string detail = backend.BuildSaveLoadoutDraftText(!requireExplicitSlotChoice);
             if (requireExplicitSlotChoice)
             {
-                detail += "\n\n저장할 슬롯을 좌 / 중 / 우 중에서 먼저 고르세요.";
-                detail += "\n선택 전에는 저장 확정이 잠겨 있습니다.";
+                detail += "\n선택 전 저장 잠김 / 저장 포기는 후보 소모";
             }
 
             if (!string.IsNullOrEmpty(notice))
@@ -3264,6 +10228,7 @@ namespace GreedLast
                 snapshot,
                 detail,
                 requireExplicitSlotChoice,
+                saveLoadoutSkipConfirmationPending: saveDraftSkipConfirmPending,
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
         }
 
@@ -3271,6 +10236,7 @@ namespace GreedLast
         {
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = true;
+            saveDraftSkipConfirmPending = false;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
@@ -3292,6 +10258,7 @@ namespace GreedLast
         {
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
+            saveDraftSkipConfirmPending = false;
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
@@ -3322,6 +10289,7 @@ namespace GreedLast
         {
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
+            saveDraftSkipConfirmPending = false;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = true;
@@ -3374,8 +10342,35 @@ namespace GreedLast
             MoveRecordBoardPage(1);
         }
 
+        private void SelectProfileBoardPage(GreedLastRunChannel channel)
+        {
+            runtimeUi.RecordLaneInput(channel);
+            if (channel == GreedLastRunChannel.Left)
+            {
+                MoveProfileBoardPage(-1);
+                return;
+            }
+
+            if (channel == GreedLastRunChannel.Right)
+            {
+                MoveProfileBoardPage(1);
+                return;
+            }
+
+            OpenRecordBoard(backend.ResolveProfileRecordBoardShortcutPageIndex());
+        }
+
         private void UpgradeGrowth(GreedLastRunChannel channel)
         {
+            float now = Time.realtimeSinceStartup;
+            if (channel == lastGrowthUpgradeChannel
+                && now - lastGrowthUpgradeAt < GrowthUpgradeRepeatBlockSeconds)
+            {
+                return;
+            }
+
+            lastGrowthUpgradeChannel = channel;
+            lastGrowthUpgradeAt = now;
             runtimeUi.RecordLaneInput(channel);
             GreedLastLobbySnapshot snapshot = backend.UpgradeGrowth(channel, out string notice);
             stateMachine.SetGrowthBoard(
@@ -3383,6 +10378,18 @@ namespace GreedLast
                 string.IsNullOrEmpty(notice)
                     ? backend.BuildGrowthBoardText()
                     : notice + "\n\n" + backend.BuildGrowthBoardText());
+        }
+
+        private void UpgradeRecommendedGrowthTrack()
+        {
+            int recommendedTrackIndex = stateMachine.LobbySnapshot.RecommendedGrowthTrackIndex;
+            if (recommendedTrackIndex < 0)
+            {
+                RefreshGrowthBoard(backend.LoadLobby(), "모든 성장 보정이 이미 MAX입니다.");
+                return;
+            }
+
+            UpgradeGrowth((GreedLastRunChannel)(recommendedTrackIndex + 1));
         }
 
         private void MoveRecordBoardPage(int delta)
@@ -3394,13 +10401,14 @@ namespace GreedLast
                 recordBoardPageIndex += pageCount;
             }
 
+            preferredRecordBoardPageIndex = recordBoardPageIndex;
             stateMachine.SetInfiniteRecordBoard(
                 backend.LoadLobby(),
                 backend.BuildRecordBoardText(recordBoardPageIndex),
                 recordBoardPageIndex);
         }
 
-        private void OpenRecordBoard(int pageIndex)
+        private void OpenRecordBoard(int pageIndex, bool markProfileSeen = false)
         {
             int pageCount = Mathf.Max(1, backend.RecordBoardPages);
             recordBoardPageIndex = pageIndex % pageCount;
@@ -3409,14 +10417,53 @@ namespace GreedLast
                 recordBoardPageIndex += pageCount;
             }
 
+            preferredRecordBoardPageIndex = recordBoardPageIndex;
+            GreedLastLobbySnapshot snapshot = markProfileSeen ? backend.MarkProfileSeen() : backend.LoadLobby();
             stateMachine.SetInfiniteRecordBoard(
-                backend.LoadLobby(),
+                snapshot,
                 backend.BuildRecordBoardText(recordBoardPageIndex),
                 recordBoardPageIndex);
         }
 
+        private void MoveProfileBoardPage(int delta)
+        {
+            int pageCount = Mathf.Max(1, backend.ProfileBoardPages);
+            profileBoardPageIndex = (profileBoardPageIndex + delta) % pageCount;
+            if (profileBoardPageIndex < 0)
+            {
+                profileBoardPageIndex += pageCount;
+            }
+
+            stateMachine.SetProfileBoard(
+                backend.LoadLobby(),
+                backend.BuildProfileBoardText(profileBoardPageIndex),
+                profileBoardPageIndex);
+        }
+
+        private void OpenProfileBoard(int pageIndex, bool markSeen = false)
+        {
+            int pageCount = Mathf.Max(1, backend.ProfileBoardPages);
+            profileBoardPageIndex = pageIndex % pageCount;
+            if (profileBoardPageIndex < 0)
+            {
+                profileBoardPageIndex += pageCount;
+            }
+
+            GreedLastLobbySnapshot snapshot = markSeen ? backend.MarkProfileSeen() : backend.LoadLobby();
+            stateMachine.SetProfileBoard(
+                snapshot,
+                backend.BuildProfileBoardText(profileBoardPageIndex),
+                profileBoardPageIndex);
+        }
+
         private void RequestShowSaveLoadoutDetail()
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
+            {
+                MoveProfileBoardPage(-1);
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard)
             {
                 MoveRecordBoardPage(-1);
@@ -3433,16 +10480,26 @@ namespace GreedLast
                     return;
                 }
 
+                GreedLastLobbySnapshot lobbySnapshot = backend.LoadLobby();
+                if (!HasAnyUsableSaveSlot(lobbySnapshot))
+                {
+                    saveSlotDetailViewActive = false;
+                    stateMachine.SetInfiniteLoadoutSelect(
+                        lobbySnapshot,
+                        "보충 안내\n기본 버튼으로 보충 런에 들어갈 수 있습니다.\n\n" + backend.BuildInfiniteLoadoutSelectText());
+                    return;
+                }
+
                 if (saveSlotDetailViewActive)
                 {
                     saveSlotDetailViewActive = false;
-                    stateMachine.SetInfiniteLoadoutSelect(backend.LoadLobby(), backend.BuildInfiniteLoadoutSelectText());
+                    stateMachine.SetInfiniteLoadoutSelect(lobbySnapshot, backend.BuildInfiniteLoadoutSelectText());
                     return;
                 }
 
                 saveSlotDetailViewActive = true;
                 stateMachine.SetInfiniteLoadoutSelect(
-                    backend.LoadLobby(),
+                    lobbySnapshot,
                     backend.BuildSelectedInfiniteLoadoutDetailText(),
                     saveSlotDetailViewActive: true);
                 return;
@@ -3453,6 +10510,7 @@ namespace GreedLast
                 return;
             }
 
+            saveDraftSkipConfirmPending = false;
             if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
             {
                 saveSlotDeleteConfirmPending = false;
@@ -3467,13 +10525,24 @@ namespace GreedLast
                 return;
             }
 
+            GreedLastLobbySnapshot saveDraftSnapshot = backend.LoadLobby();
+            if (!backend.HasSaveLoadoutCandidate && !HasAnyUsableSaveSlot(saveDraftSnapshot))
+            {
+                saveSlotDetailViewActive = false;
+                OpenSaveLoadoutDraft(
+                    saveDraftSnapshot,
+                    requireExplicitSlotChoice: false,
+                    notice: "보충 안내\n기본 버튼으로 보충 런에 들어갈 수 있습니다.");
+                return;
+            }
+
             if (saveSlotDetailViewActive)
             {
                 saveSlotDetailViewActive = false;
                 if (saveDraftOverwriteConfirmPending)
                 {
                     stateMachine.SetSaveLoadoutDraft(
-                        backend.LoadLobby(),
+                        saveDraftSnapshot,
                         backend.BuildSaveLoadoutDraftText(showSelectedSlot: true),
                         saveSlotChoiceRequired: false,
                         saveSlotOverwriteConfirmationPending: true,
@@ -3487,7 +10556,7 @@ namespace GreedLast
 
             saveSlotDetailViewActive = true;
             stateMachine.SetSaveLoadoutDraft(
-                backend.LoadLobby(),
+                saveDraftSnapshot,
                 backend.BuildSelectedSaveLoadoutComparisonText(),
                 saveSlotOverwriteConfirmationPending: saveDraftOverwriteConfirmPending,
                 saveSlotDetailViewActive: true,
@@ -3524,6 +10593,7 @@ namespace GreedLast
                 return;
             }
 
+            saveDraftSkipConfirmPending = false;
             if (saveDraftRequiresExplicitSlotChoice)
             {
                 saveSlotRenameConfirmPending = false;
@@ -3579,6 +10649,7 @@ namespace GreedLast
                 return;
             }
 
+            saveDraftSkipConfirmPending = false;
             if (saveDraftRequiresExplicitSlotChoice)
             {
                 saveSlotDeleteConfirmPending = false;
@@ -3686,6 +10757,20 @@ namespace GreedLast
 
         private void RequestFocusMaxForTest()
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
+            {
+                GreedLastLobbySnapshot snapshot = backend.AddSampleSaveLoadoutForTest(out string notice);
+                stateMachine.SetLobbyReady(snapshot);
+                stateMachine.ShowLocalNotice(notice + "\nPgUp 저장 소모로 자동 비움 흐름을 바로 확인할 수 있습니다.");
+                return;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                RefreshGrowthBoard(backend.AddGrowthPointsForTest(3), "테스트 포인트 +3");
+                return;
+            }
+
             if (IsRunState())
             {
                 runCore.FillFocusForTest();
@@ -3694,6 +10779,27 @@ namespace GreedLast
 
         private void RequestThreatUpForTest()
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
+            {
+                GreedLastLobbySnapshot snapshot = backend.ConsumeSelectedSaveLoadoutUseForTest(out string notice);
+                if ((snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+                    && !HasAnyUsableSaveSlot(snapshot))
+                {
+                    OpenInfinitePreparation(notice + "\n\n보충 확인 - 다음 버튼으로 보충 런에 들어갈 수 있습니다.");
+                    return;
+                }
+
+                stateMachine.SetLobbyReady(snapshot);
+                stateMachine.ShowLocalNotice(notice + "\n흔적에서 최근 소모 기록도 확인할 수 있습니다.");
+                return;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                RefreshGrowthBoard(backend.MaxGrowthForTest(), "테스트 성장 MAX 적용");
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun)
             {
                 runCore.RaiseInfiniteThreatForTest();
@@ -3702,6 +10808,20 @@ namespace GreedLast
 
         private void RequestThreatDownForTest()
         {
+            if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
+            {
+                GreedLastLobbySnapshot snapshot = backend.AddSampleClearCandidateForTest(out string notice);
+                stateMachine.SetLobbyReady(snapshot);
+                stateMachine.ShowLocalNotice(notice + "\n저장 조합에서 추천 슬롯과 저장 후보 소모 흐름을 확인할 수 있습니다.");
+                return;
+            }
+
+            if (stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)
+            {
+                RefreshGrowthBoard(backend.ResetGrowthForTest(), "테스트 성장 초기화");
+                return;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun)
             {
                 runCore.LowerInfiniteThreatForTest();
@@ -3726,10 +10846,21 @@ namespace GreedLast
 
         private void RequestRunDevShortcut(GreedLastDevShortcut shortcut)
         {
-            if (stateMachine.CurrentState == GreedLastScreenState.RunCoreTest)
+            if (stateMachine.CurrentState == GreedLastScreenState.RunCoreTest
+                || (shortcut == GreedLastDevShortcut.ReviewTargetCheck
+                    && stateMachine.CurrentState == GreedLastScreenState.InfiniteRun))
             {
                 runCore.JumpToDevShortcut(shortcut, Time.realtimeSinceStartup);
             }
+        }
+
+        private void RefreshGrowthBoard(GreedLastLobbySnapshot snapshot, string notice)
+        {
+            stateMachine.SetGrowthBoard(
+                snapshot,
+                string.IsNullOrEmpty(notice)
+                    ? backend.BuildGrowthBoardText()
+                    : notice + "\n\n" + backend.BuildGrowthBoardText());
         }
 
         private void RequestReturnToLobby()
@@ -3737,20 +10868,46 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
                 bool skippedClearSave = backend.HasSaveLoadoutCandidate;
+                if (skippedClearSave && !saveDraftSkipConfirmPending)
+                {
+                    saveDraftSkipConfirmPending = true;
+                    string skipNotice = saveDraftFromRefillRun
+                        ? "보충 런 저장 후보를 버릴까요?"
+                        : "저장 후보를 버릴까요?";
+                    OpenSaveLoadoutDraft(
+                        backend.LoadLobby(),
+                        saveDraftRequiresExplicitSlotChoice,
+                        skipNotice
+                            + "\n다시 포기: 후보 소모 / 저장: 좌·중·우 선택 후 저장",
+                        preserveSkipConfirmation: true);
+                    return;
+                }
+
+                bool skippedRefillSave = skippedClearSave && saveDraftFromRefillRun;
                 saveDraftRequiresExplicitSlotChoice = false;
                 saveDraftOverwriteConfirmPending = false;
+                saveDraftSkipConfirmPending = false;
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
+                saveDraftFromRefillRun = false;
                 if (skippedClearSave)
                 {
                     backend.DiscardSaveLoadoutCandidate();
                 }
 
+                string skippedClearMessage = skippedClearSave
+                    ? backend.BuildLastRunClearSkipSaveMessage()
+                    : string.Empty;
+                if (skippedRefillSave)
+                {
+                    skippedClearMessage = BuildRefillClearSkipSaveMessage(skippedClearMessage);
+                }
+
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 if (skippedClearSave)
                 {
-                    stateMachine.ShowLocalNotice("저장 조합 저장은 건너뛰었습니다.\n일반 런 클리어 기록은 기록 보드에 남아 있습니다.");
+                    stateMachine.ShowLocalNotice(skippedClearMessage);
                 }
 
                 return;
@@ -3761,6 +10918,7 @@ namespace GreedLast
                 saveSlotDeleteConfirmPending = false;
                 saveSlotDetailViewActive = false;
                 saveSlotRenameConfirmPending = false;
+                ClearInfinitePreparationContext();
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 return;
             }
@@ -3774,7 +10932,15 @@ namespace GreedLast
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
+                bool hasSavedInfinitePrep = IsInfiniteRecordResultDetail(stateMachine.CurrentDetail ?? string.Empty);
+                ResetInfinitePreparation();
+                ClearInfinitePreparationContext();
                 stateMachine.SetLobbyReady(backend.LoadLobby());
+                if (hasSavedInfinitePrep)
+                {
+                    stateMachine.ShowLocalNotice("무한 기록 저장 완료\n기록 보드에서 이번 무한 기록을 확인할 수 있습니다.");
+                }
+
                 return;
             }
 
@@ -3784,8 +10950,27 @@ namespace GreedLast
                 return;
             }
 
+            if (stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
+            {
+                profileBoardPageIndex = 0;
+                stateMachine.SetLobbyReady(backend.LoadLobby());
+                return;
+            }
+
             if (!IsRunState())
             {
+                return;
+            }
+
+            if (runCore.IsPracticeRun)
+            {
+                bool completed = runCore.IsPracticeComplete;
+                MarkPracticeCompletedIfNeeded();
+                runCore.Exit();
+                stateMachine.SetLobbyReady(backend.LoadLobby());
+                stateMachine.ShowLocalNotice(completed
+                    ? "기초연습 완료\n일반 런에서 같은 좌·중·우 대응과 3축 타이밍을 사용합니다."
+                    : "기초연습을 종료했습니다.\n기록과 저장 기회에는 영향을 주지 않습니다.");
                 return;
             }
 
@@ -3806,7 +10991,7 @@ namespace GreedLast
 
                 string message = registered
                     ? backend.BuildInfiniteRunResultMessage(record)
-                    : "피라미드 입구로 돌아왔습니다.";
+                    : backend.BuildInfiniteRunNoRecordMessage();
                 ReturnToLobby(message);
                 return;
             }
@@ -3814,11 +10999,23 @@ namespace GreedLast
             GreedLastRunAttemptOutcome outcome = runCore.IsStoppedNormalRun
                 ? GreedLastRunAttemptOutcome.Failed
                 : GreedLastRunAttemptOutcome.Abandoned;
-            string normalMessage = RegisterNormalAttempt(outcome);
+            string normalMessage = RegisterNormalAttempt(outcome, activeNormalRunWasRefill);
             ReturnToLobby(normalMessage);
         }
 
-        private string RegisterNormalAttempt(GreedLastRunAttemptOutcome outcome)
+        private void MarkPracticeCompletedIfNeeded()
+        {
+            if (!runCore.IsPracticeComplete
+                || PlayerPrefs.GetInt(PracticeCompletedPrefsKey, 0) == 1)
+            {
+                return;
+            }
+
+            PlayerPrefs.SetInt(PracticeCompletedPrefsKey, 1);
+            PlayerPrefs.Save();
+        }
+
+        private string RegisterNormalAttempt(GreedLastRunAttemptOutcome outcome, bool wasRefillRun = false)
         {
             GreedLastRunAttemptRecord record = runCore.CreateNormalAttemptRecord(outcome);
             bool registered = backend.RegisterNormalAttempt(record);
@@ -3827,42 +11024,460 @@ namespace GreedLast
                 preferredRecordBoardPageIndex = 1;
             }
 
-            return registered ? backend.BuildRunAttemptResultMessage(record) : "피라미드 입구로 돌아왔습니다.";
+            string message = registered ? backend.BuildRunAttemptResultMessage(record) : "피라미드 입구로 돌아왔습니다.";
+            return wasRefillRun ? BuildRefillAttemptResultMessage(message, outcome) : message;
+        }
+
+        private static string BuildRefillAttemptResultMessage(string message, GreedLastRunAttemptOutcome outcome)
+        {
+            string title = outcome == GreedLastRunAttemptOutcome.Abandoned
+                ? "보충 런 중단"
+                : "보충 런 실패";
+            string safeMessage = string.IsNullOrWhiteSpace(message)
+                ? "저장 조합 보충이 완료되지 않았습니다."
+                : message;
+            string nextAction = safeMessage.Contains("무한 버튼으로 보충 런", StringComparison.Ordinal)
+                ? string.Empty
+                : "\n다음: 무한 버튼으로 보충 런 재시도";
+            return title + "\n" + safeMessage + nextAction;
+        }
+
+        private static string BuildRestartPrefixFromResultMessage(string resultMessage)
+        {
+            if (string.IsNullOrWhiteSpace(resultMessage))
+            {
+                return "이전 시도 기록 저장 완료";
+            }
+
+            string[] lines = resultMessage.Split('\n');
+            string title = lines.Length > 0 ? lines[0] : "이전 시도 기록 저장 완료";
+            string review = FindResultLine(lines, "복기:");
+            string reviewTargetResult = FindResultLine(lines, "복기 목표:");
+            string advancedReviewTarget = BuildAdvancedReviewTargetFromResultLine(reviewTargetResult, infinite: false);
+            string target = FindResultLine(lines, "재도전 목표:");
+            if (string.IsNullOrEmpty(target))
+            {
+                target = FindResultLine(lines, "훈련 힌트:");
+            }
+
+            if (!string.IsNullOrEmpty(advancedReviewTarget))
+            {
+                target = "재도전 목표: " + advancedReviewTarget;
+            }
+
+            string context = title;
+            if (!string.IsNullOrEmpty(review))
+            {
+                context += "\n" + review;
+            }
+
+            if (!string.IsNullOrEmpty(reviewTargetResult))
+            {
+                context += "\n" + reviewTargetResult;
+            }
+
+            if (!string.IsNullOrEmpty(target))
+            {
+                context += "\n" + target;
+            }
+
+            return context;
+        }
+
+        public static string BuildNormalRunOpeningContextFromLobbyDetail(string detail)
+        {
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                return string.Empty;
+            }
+
+            string normalized = detail.Replace("\r", string.Empty).Trim();
+            bool normalAttemptResult = normalized.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || normalized.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal);
+            bool refillAttemptResult = normalized.StartsWith("보충 런 실패", StringComparison.Ordinal)
+                || normalized.StartsWith("보충 런 중단", StringComparison.Ordinal);
+            if (!normalAttemptResult && !refillAttemptResult)
+            {
+                return string.Empty;
+            }
+
+            string prefix = refillAttemptResult ? "보충 복기 재도전" : "복기 재도전";
+            return prefix + "\n" + BuildRestartPrefixFromResultMessage(normalized);
+        }
+
+        internal static string BuildRefillRunOpeningContext()
+        {
+            return "보충 런 - 저장 조합을 다시 만들기 위한 일반 런입니다.";
+        }
+
+        private static bool ShouldStartLobbyNormalAsRefillRun(GreedLastLobbySnapshot snapshot)
+        {
+            return (snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+                && !HasAnyUsableSaveSlot(snapshot);
+        }
+
+        public static string BuildPracticeOpeningContextFromLobbyDetail(string detail)
+        {
+            string context = BuildNormalRunOpeningContextFromLobbyDetail(detail);
+            if (string.IsNullOrEmpty(context))
+            {
+                string infiniteContext = BuildInfinitePreparationReviewContextFromLobbyDetail(detail);
+                return infiniteContext.StartsWith("무한 복기 재도전", StringComparison.Ordinal)
+                    ? "무한 복기 연습" + infiniteContext.Substring("무한 복기 재도전".Length)
+                    : infiniteContext;
+            }
+
+            if (context.StartsWith("보충 복기 재도전", StringComparison.Ordinal))
+            {
+                return "보충 복기 연습" + context.Substring("보충 복기 재도전".Length);
+            }
+
+            return context.StartsWith("복기 재도전", StringComparison.Ordinal)
+                ? "복기 연습" + context.Substring("복기 재도전".Length)
+                : context;
+        }
+
+        public static string BuildInfinitePreparationReviewContextFromLobbyDetail(string detail)
+        {
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                return string.Empty;
+            }
+
+            string normalized = detail.Replace("\r", string.Empty).Trim();
+            if (normalized.StartsWith("무한 복기 재도전", StringComparison.Ordinal))
+            {
+                int preparationDetailIndex = normalized.IndexOf("\n\n", StringComparison.Ordinal);
+                return preparationDetailIndex >= 0
+                    ? normalized.Substring(0, preparationDetailIndex).Trim()
+                    : normalized;
+            }
+
+            bool infiniteResult = normalized.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal)
+                || normalized.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                || normalized.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal);
+            if (!infiniteResult)
+            {
+                return string.Empty;
+            }
+
+            string[] lines = normalized.Split('\n');
+            string review = FindResultLine(lines, "복기:");
+            string reviewTargetResult = FindResultLine(lines, "복기 목표:");
+            string advancedReviewTarget = BuildAdvancedReviewTargetFromResultLine(reviewTargetResult, infinite: true);
+            bool forcedSettlementRealReentry = normalized.Contains("다음: 정산 종료 확인 후 무한모드 실전 재개", StringComparison.Ordinal);
+            if (forcedSettlementRealReentry && string.IsNullOrEmpty(advancedReviewTarget))
+            {
+                return string.Empty;
+            }
+
+            string hint = FindResultLine(lines, "힌트:");
+            string target = FindResultLine(lines, "목표:");
+
+            if (!string.IsNullOrEmpty(advancedReviewTarget))
+            {
+                target = "목표: " + advancedReviewTarget;
+            }
+
+            string text = "무한 복기 재도전";
+            if (!string.IsNullOrEmpty(review))
+            {
+                text += "\n" + review;
+            }
+
+            if (!string.IsNullOrEmpty(reviewTargetResult))
+            {
+                text += "\n" + reviewTargetResult;
+            }
+
+            if (!string.IsNullOrEmpty(hint))
+            {
+                text += "\n" + hint;
+            }
+
+            if (!string.IsNullOrEmpty(target)
+                && !string.Equals(target, hint, StringComparison.Ordinal))
+            {
+                text += "\n" + target;
+            }
+
+            return text;
+        }
+
+        internal static string BuildInfinitePreparationEntryNoticeFromLobbyDetail(string detail)
+        {
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                return string.Empty;
+            }
+
+            string normalized = detail.Replace("\r", string.Empty).Trim();
+            bool infiniteResult = normalized.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal)
+                || normalized.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                || normalized.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal);
+            if (!infiniteResult
+                || !normalized.Contains("다음: 정산 종료 확인 후 무한모드 실전 재개", StringComparison.Ordinal))
+            {
+                return string.Empty;
+            }
+
+            string[] lines = normalized.Split('\n');
+            string reviewTargetResult = FindResultLine(lines, "복기 목표:");
+            if (!string.IsNullOrEmpty(BuildAdvancedReviewTargetFromResultLine(reviewTargetResult, infinite: true)))
+            {
+                return string.Empty;
+            }
+
+            return "정산 종료 확인 완료\n이번 입장은 복기 목표 없이 실제 무한 런 흐름을 확인합니다.";
+        }
+
+        private static string FindResultLine(string[] lines, string prefix)
+        {
+            if (lines == null)
+            {
+                return string.Empty;
+            }
+
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i] ?? string.Empty;
+                if (line.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return line;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildAdvancedReviewTargetFromResultLine(string reviewTargetResultLine, bool infinite)
+        {
+            const string prefix = "복기 목표:";
+            if (string.IsNullOrWhiteSpace(reviewTargetResultLine)
+                || !reviewTargetResultLine.StartsWith(prefix, StringComparison.Ordinal)
+                || !reviewTargetResultLine.Contains(" / 달성 ", StringComparison.Ordinal))
+            {
+                return string.Empty;
+            }
+
+            return BuildAdvancedReviewTargetTextForContext(reviewTargetResultLine.Substring(prefix.Length).Trim(), infinite);
+        }
+
+        private static string BuildAdvancedReviewTargetTextForContext(string summary, bool infinite)
+        {
+            string target = ExtractReviewTargetSummaryTargetForContext(summary);
+            if (string.IsNullOrEmpty(target))
+            {
+                return string.Empty;
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                string scope = ExtractReviewTargetScopeForContext(target, "무실수");
+                return string.IsNullOrEmpty(scope)
+                    ? "보정 0회"
+                    : scope + " 보정 0회";
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                return "정박 3연속";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "무실수";
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 보정 0회" : "보정 0회";
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal)
+                || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "최대 콤보 6";
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                return infinite ? "다음 구간 무실수" : "800점 탈출";
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int nextScore = Mathf.Max(800, ExtractNumberBeforeMarkerForContext(target, "점") + 200);
+                return nextScore + (infinite ? "점 갱신" : "점 탈출");
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int nextSections = Mathf.Max(1, ExtractNumberBeforeMarkerForContext(target, "구간") + 1);
+                return nextSections + "구간 생존";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int currentThreat = ExtractNumberBeforeMarkerForContext(target, "진입");
+                return currentThreat >= 5
+                    ? "3구간 생존"
+                    : "위협 " + Mathf.Clamp(currentThreat + 1, 2, 5) + " 진입";
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int currentMisses = ExtractNumberBeforeMarkerForContext(target, "이하");
+                if (currentMisses <= 0)
+                {
+                    return infinite ? "다음 구간 무실수" : "정박 3연속";
+                }
+
+                return "실수 " + (currentMisses - 1) + " 이하";
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal)
+                || target.Contains("생존", StringComparison.Ordinal)
+                || target.Contains("집중", StringComparison.Ordinal))
+            {
+                return "정박 3연속";
+            }
+
+            return string.Empty;
+        }
+
+        private static string ExtractReviewTargetSummaryTargetForContext(string summary)
+        {
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                return string.Empty;
+            }
+
+            string[] markers =
+            {
+                " / 실패 ",
+                " / 달성 ",
+                " / 진행 ",
+                " / 기록됨",
+            };
+            for (int i = 0; i < markers.Length; i += 1)
+            {
+                int markerIndex = summary.IndexOf(markers[i], StringComparison.Ordinal);
+                if (markerIndex > 0)
+                {
+                    return summary.Substring(0, markerIndex).Trim();
+                }
+            }
+
+            return summary.Trim();
+        }
+
+        private static string ExtractReviewTargetScopeForContext(string target, string keyword)
+        {
+            int detailIndex = target.IndexOf(" / ", StringComparison.Ordinal);
+            string compactTarget = detailIndex >= 0 ? target.Substring(0, detailIndex).Trim() : target.Trim();
+            int keywordIndex = compactTarget.IndexOf(keyword, StringComparison.Ordinal);
+            if (keywordIndex <= 0)
+            {
+                return string.Empty;
+            }
+
+            return compactTarget.Substring(0, keywordIndex).Trim();
+        }
+
+        private static int ExtractNumberBeforeMarkerForContext(string text, string marker)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(marker))
+            {
+                return 0;
+            }
+
+            int markerIndex = text.IndexOf(marker, StringComparison.Ordinal);
+            if (markerIndex <= 0)
+            {
+                return 0;
+            }
+
+            int end = markerIndex - 1;
+            while (end >= 0 && char.IsWhiteSpace(text[end]))
+            {
+                end -= 1;
+            }
+
+            int start = end;
+            while (start >= 0 && char.IsDigit(text[start]))
+            {
+                start -= 1;
+            }
+
+            if (start == end)
+            {
+                return 0;
+            }
+
+            string value = text.Substring(start + 1, end - start);
+            return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
         }
 
         private void CompleteClearAndReturnToLobby()
         {
+            bool wasRefillRun = activeNormalRunWasRefill;
             GreedLastRunRecord record = runCore.CreateRunRecord();
             backend.RegisterClear(record);
             if (record.IsValid)
             {
-                preferredRecordBoardPageIndex = 0;
+                preferredRecordBoardPageIndex = 1;
                 backend.DiscardSaveLoadoutCandidate();
             }
 
+            activeNormalRunWasRefill = false;
             runCore.Exit();
             stateMachine.SetLobbyReady(backend.LoadLobby());
-            stateMachine.ShowLocalNotice(backend.BuildRunClearSkipSaveMessage(record));
+            string message = backend.BuildRunClearSkipSaveMessage(record);
+            stateMachine.ShowLocalNotice(wasRefillRun ? BuildRefillClearSkipSaveMessage(message) : message);
+        }
+
+        private static string BuildRefillClearSkipSaveMessage(string message)
+        {
+            string safeMessage = string.IsNullOrWhiteSpace(message)
+                ? "저장 조합 보충이 완료되지 않았습니다."
+                : message;
+            string recordLine = GreedLastMockBackend.CompactRecordBoardLine(safeMessage);
+            string text = "보충 런 저장 안 함"
+                + "\n저장 조합은 갱신되지 않았습니다.";
+            if (recordLine != "기록 없음")
+            {
+                text += "\n기록: " + recordLine;
+            }
+
+            return text + "\n다음: 무한 버튼으로 보충 런 재시도";
         }
 
         private void CompleteClearAndOpenSaveDraft()
         {
+            bool wasRefillRun = activeNormalRunWasRefill;
             GreedLastRunRecord record = runCore.CreateRunRecord();
             GreedLastLobbySnapshot snapshot = backend.RegisterClear(record);
             if (!record.IsValid)
             {
+                activeNormalRunWasRefill = false;
                 runCore.Exit();
                 stateMachine.SetLobbyReady(snapshot);
                 stateMachine.ShowLocalNotice(backend.BuildRunClearResultMessage(record));
                 return;
             }
 
-            preferredRecordBoardPageIndex = 0;
+            preferredRecordBoardPageIndex = 1;
+            activeNormalRunWasRefill = false;
             runCore.Exit();
             OpenSaveLoadoutDraft(
                 snapshot,
                 requireExplicitSlotChoice: true,
-                notice: "일반 런 클리어. 저장할 슬롯을 고른 뒤 확정하세요.\n성장 포인트 +3 / 성장에서 보정 가능");
+                notice: wasRefillRun
+                    ? "보충 런 클리어. 무한모드에 쓸 저장 슬롯을 고른 뒤 저장하세요.\n성장 포인트 +3 / 새 저장 조합으로 무한모드 재개 가능"
+                    : "일반 런 클리어. 저장할 슬롯을 고른 뒤 저장하세요.\n성장 포인트 +3 / 성장에서 보정 가능",
+                refillRunCandidate: wasRefillRun);
         }
 
         private void ConfirmSaveLoadoutAndReturn()
@@ -3876,37 +11491,68 @@ namespace GreedLast
             }
 
             saveSlotRenameConfirmPending = false;
+            saveDraftSkipConfirmPending = false;
             if (!backend.HasSaveLoadoutCandidate)
             {
-                RefreshSaveLoadoutDraft("저장할 새 클리어 후보가 없습니다.\n기존 저장 슬롯만 관리할 수 있습니다.");
+                RefreshSaveLoadoutDraft("저장할 새 클리어 후보가 없습니다.\n기존 저장 슬롯만 관리할 수 있습니다.\n새 저장은 다음 클리어 후 가능합니다.");
                 return;
             }
 
             if (saveDraftRequiresExplicitSlotChoice)
             {
-                RefreshSaveLoadoutDraft("저장할 슬롯을 먼저 선택하세요.");
+                RefreshSaveLoadoutDraft("좌 / 중 / 우 중 저장할 슬롯을 먼저 선택하세요.\n저장 포기는 후보를 버립니다.");
                 return;
             }
 
             if (backend.SelectedSaveSlotHasRecord() && !saveDraftOverwriteConfirmPending)
             {
                 OpenSaveLoadoutOverwriteConfirmation(
-                    "선택한 슬롯에 기존 저장 조합이 있습니다.\n다시 저장을 누르면 이 후보로 덮어씁니다.");
+                    "선택한 슬롯에 기존 저장 조합이 있습니다.\n다시 저장을 누르면 기존 슬롯을 후보로 덮어쓰고 후보를 소모합니다.");
                 return;
             }
 
+            bool wasRefillCandidate = saveDraftFromRefillRun;
             GreedLastLobbySnapshot snapshot = backend.ConfirmSaveLoadout();
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
+            saveDraftFromRefillRun = false;
+            string confirmMessage = backend.BuildSaveConfirmMessage();
+            if (wasRefillCandidate && IsSelectedSaveSlotUsable(snapshot))
+            {
+                OpenInfinitePreparation(BuildRefillResumeNotice(snapshot));
+                return;
+            }
+
             stateMachine.SetLobbyReady(snapshot);
-            stateMachine.ShowLocalNotice(backend.BuildSaveConfirmMessage());
+            stateMachine.ShowLocalNotice(confirmMessage);
+        }
+
+        private static string BuildRefillResumeNotice(GreedLastLobbySnapshot snapshot)
+        {
+            int slotCount = snapshot.SaveSlotLabels == null || snapshot.SaveSlotLabels.Length <= 0
+                ? 3
+                : snapshot.SaveSlotLabels.Length;
+            int slotIndex = Mathf.Clamp(snapshot.SelectedSaveSlotIndex, 0, slotCount - 1);
+            string label = snapshot.SaveSlotLabels != null
+                && slotIndex >= 0
+                && slotIndex < snapshot.SaveSlotLabels.Length
+                ? snapshot.SaveSlotLabels[slotIndex]
+                : string.Empty;
+            string useText = label.Contains("2회 남음", StringComparison.Ordinal)
+                ? "2회 사용 가능"
+                : label.Contains("마지막 1회", StringComparison.Ordinal)
+                    ? "마지막 1회"
+                    : "사용 가능";
+            return "보충 완료 - S" + (slotIndex + 1) + " " + useText
+                + "\n시작 정비 뒤 무한모드를 재개합니다.";
         }
 
         private void ReturnToLobby(string message)
         {
+            activeNormalRunWasRefill = false;
             runCore.Exit();
             stateMachine.SetLobbyReady(backend.LoadLobby());
             stateMachine.ShowLocalNotice(message);
@@ -3920,6 +11566,101 @@ namespace GreedLast
                 && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
         }
 
+        private static string BuildInfiniteLoadoutSlotSelectionNotice(GreedLastLobbySnapshot snapshot, int slotIndex)
+        {
+            int slotNumber = Mathf.Max(1, slotIndex + 1);
+            if (IsSelectedSaveSlotUsable(snapshot))
+            {
+                return "슬롯 " + slotNumber + " 선택됨.\n선택 완료를 누르면 무한모드 준비로 이동합니다.";
+            }
+
+            if (HasAnyUsableSaveSlot(snapshot))
+            {
+                return "슬롯 " + slotNumber + "은 현재 사용할 수 없습니다.\n사용 가능한 슬롯을 고르세요.";
+            }
+
+            return "저장 조합이 비어 있습니다.\n기본 버튼으로 보충 런에 들어갈 수 있습니다.";
+        }
+
+        private static string BuildSaveDraftSlotSelectionNotice(
+            GreedLastLobbySnapshot snapshot,
+            bool hasSaveLoadoutCandidate,
+            int slotIndex)
+        {
+            int slotNumber = Mathf.Max(1, slotIndex + 1);
+            if (hasSaveLoadoutCandidate)
+            {
+                return "슬롯 " + slotNumber + " 선택됨.\n저장을 누르면 이 슬롯으로 저장 절차를 진행하고 후보를 소모합니다.";
+            }
+
+            return HasAnyUsableSaveSlot(snapshot)
+                ? "슬롯 " + slotNumber + " 선택됨.\n상세 보기 / 이름 변경 / 삭제를 확인할 수 있습니다."
+                : "저장 조합이 비어 있습니다.\n기본 버튼으로 보충 런에 들어갈 수 있습니다.";
+        }
+
+        private static bool HasAnyUsableSaveSlot(GreedLastLobbySnapshot snapshot)
+        {
+            if (snapshot.SaveSlotUsable == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < snapshot.SaveSlotUsable.Length; i += 1)
+            {
+                if (snapshot.SaveSlotUsable[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool CanUpgradeAnyGrowthTrack(GreedLastLobbySnapshot snapshot)
+        {
+            return CanUpgradeGrowthTrack(snapshot.GrowthSurvivalLevel, snapshot.GrowthPoints)
+                || CanUpgradeGrowthTrack(snapshot.GrowthFocusLevel, snapshot.GrowthPoints)
+                || CanUpgradeGrowthTrack(snapshot.GrowthTimingLevel, snapshot.GrowthPoints);
+        }
+
+        private static bool CanUpgradeGrowthTrack(int level, int points)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthUiMaxLevel);
+            if (safeLevel >= GrowthUiMaxLevel)
+            {
+                return false;
+            }
+
+            int cost = Mathf.Clamp(safeLevel + 1, 1, GrowthUiMaxLevel);
+            return points >= cost;
+        }
+
+        private static bool IsNormalRecordResultDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return false;
+            }
+
+            return detail.StartsWith("보충 런", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal)
+                || detail.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal);
+        }
+
+        private static bool IsInfiniteRecordResultDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return false;
+            }
+
+            return detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal);
+        }
+
         private bool IsRunState()
         {
             return stateMachine.CurrentState == GreedLastScreenState.RunCoreTest
@@ -3929,20 +11670,35 @@ namespace GreedLast
 
     public sealed class GreedLastRuntimeUi : MonoBehaviour
     {
+        private enum RunnerResponseType
+        {
+            None = 0,
+            Jump = 1,
+            Slide = 2,
+            Twist = 3,
+        }
+
         private const float DesignWidth = 1080f;
         private const float DesignHeight = 1920f;
         private const int RecordBoardPageCount = 4;
+        private const int ProfileBoardPageCount = 4;
+        private const int GrowthUiMaxLevel = 3;
+        private const int InfiniteThreatUiMinLevel = 1;
+        private const int InfiniteThreatUiMaxLevel = 5;
+        private const int PrecisionFocusStepUi = 3;
         private const float TargetCueLeadSeconds = 0.14f;
         private const float ActiveBeatVolume = 0.075f;
         private const float IdleBeatVolume = 0.14f;
         private const float LaneCueVolume = 0.24f;
         private const float TargetCueVolume = 0.25f;
+        private const float TargetActionCueVolume = 0.10f;
         private const float JudgementLinePulseDuration = 0.28f;
         private const float JudgementFeedbackPopDuration = 0.22f;
         private const float RunGaugePulseDuration = 0.26f;
         private const float ComboBreakBadgeDuration = 0.85f;
         private const float ComboTierBadgeDuration = 0.72f;
         private const float ThreatProgressPulseDuration = 0.78f;
+        private const float RunProgressStagePulseDuration = 0.52f;
         private const float TrapEntryPulseDuration = 0.34f;
         private const float LaneMissShakeDuration = 0.22f;
         private const float LaneMissShakePixels = 16f;
@@ -3953,6 +11709,22 @@ namespace GreedLast
         private const float BeatMarkerGoodPulseDuration = 0.18f;
         private const float BeatMarkerComboBreakPulseDuration = 0.34f;
         private const float BeatMarkerComboTierPulseDuration = 0.42f;
+        private const float BeatMarkerProfilePulseDuration = 0.34f;
+        private const float InputTimingTraceDuration = 0.58f;
+        private const float RunnerSuccessResponseDuration = 0.44f;
+        private const float RunnerGoodResponseDuration = 0.34f;
+        private const float RunnerMissResponseDuration = 0.52f;
+        private const float ResolvedTrapSuccessDuration = 0.46f;
+        private const float ResolvedTrapGoodDuration = 0.38f;
+        private const float ResolvedTrapMissDuration = 0.54f;
+        private const float FocusStateUiDurationSeconds = 5f;
+        private const float FocusStateActivationPulseDuration = 0.48f;
+        private const float StageTransitionBannerDuration = 1.35f;
+        private const int JudgementHistoryCapacity = 5;
+        private const float JudgementHistoryPulseDuration = 0.28f;
+        private const float StaggerRecoveryVisualSeconds = 0.55f;
+        private const float CenterHitWindowScale = 0.45f;
+        private const float MinHapticInterval = 0.045f;
         private const float MinSfxVolume = 0f;
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
@@ -3971,6 +11743,11 @@ namespace GreedLast
         private static bool DevToolsEnabled => Application.isEditor || Debug.isDebugBuild;
 
         private GameObject rootPanel;
+        private RectTransform rootPanelRect;
+        private Image rootBackground;
+        private Rect lastSafeArea;
+        private int lastSafeAreaScreenWidth = -1;
+        private int lastSafeAreaScreenHeight = -1;
         private GameObject lanePreviewRoot;
         private Text titleText;
         private Text subtitleText;
@@ -3986,20 +11763,29 @@ namespace GreedLast
         private GameObject runProgressRoot;
         private Image runProgressFill;
         private Text runProgressText;
+        private GameObject routeCadencePipsRoot;
+        private Image[] routeCadencePips;
+        private Text[] routeCadenceActionTexts;
         private GameObject comboBadgeRoot;
         private Image comboBadgeBack;
         private Image comboBadgeAccent;
         private Text comboBadgeText;
+        private GameObject judgementHistoryRoot;
+        private Image[] judgementHistoryDots;
+        private Text[] judgementHistoryActionLabels;
         private GameObject pauseMenuOverlay;
         private Image pauseMenuBackdrop;
+        private Image[] pauseMenuSoftBlurBands;
         private Image pauseMenuPanel;
         private Text pauseMenuTitleText;
         private Text pauseMenuBodyText;
+        private Button practiceRunButton;
         private Button normalRunButton;
         private Button saveLoadoutButton;
         private Button infiniteButton;
         private Button infiniteRecordButton;
         private Button growthButton;
+        private Button profileButton;
         private Button retryButton;
         private Button debugConnectionButton;
         private Button nextPatternButton;
@@ -4021,42 +11807,75 @@ namespace GreedLast
         private Button[] laneHitButtons;
         private Text[] laneLabelTexts;
         private Image[] laneImages;
+        private bool[] laneHoldActive;
         private float[] lanePressPulseUntil;
         private float[] laneJudgementPulseUntil;
         private float[] laneMissShakeUntil;
         private Color32[] laneJudgementPulseColors;
         private Image[] runMotionLines;
+        private Image[] runTunnelLines;
+        private Image[] runSceneryPillars;
+        private Image runTunnelHorizon;
+        private GameObject runnerAvatarRoot;
+        private Image runnerShadow;
+        private Image runnerCoreGlow;
+        private Image runnerHead;
+        private Image runnerTorso;
+        private Image runnerLeftArm;
+        private Image runnerRightArm;
+        private Image runnerLeftLeg;
+        private Image runnerRightLeg;
         private Image beatMarker;
         private Image goodTimingBand;
         private Image successTimingBand;
+        private Image centerTimingBand;
         private Image judgementLine;
+        private Image inputTimingTraceMarker;
         private Image laneDangerBand;
         private Image trapGlow;
         private Image trapMarker;
         private Image trapStrike;
+        private Image resolvedTrapAfterimage;
+        private Image resolvedTrapImpact;
+        private Text activeActionCueText;
         private Text timingGuideText;
         private Text judgementFeedbackText;
+        private Text stageTransitionText;
+        private Image stageTransitionLine;
         private Image feedbackFlash;
         private AudioSource rhythmAudio;
         private AudioClip beatClip;
+        private AudioClip downbeatClip;
+        private AudioClip focusBeatClip;
+        private AudioClip stageTransitionClip;
         private AudioClip perfectCueClip;
         private AudioClip clutchCueClip;
         private AudioClip offbeatCueClip;
+        private AudioClip jumpActionCueClip;
+        private AudioClip slideActionCueClip;
+        private AudioClip twistActionCueClip;
         private AudioClip[] laneCueClips;
         private AudioClip successClip;
         private AudioClip goodClip;
         private AudioClip focusGuardClip;
         private AudioClip missClip;
         private AudioClip chainClip;
+        private AudioClip recoveryClip;
+        private AudioClip bundleCompleteClip;
         private AudioClip comboTierClip;
         private AudioClip comboBreakClip;
         private AudioClip threatUpClip;
         private AudioClip threatDownClip;
+        private AudioClip variationTensionClip;
+        private AudioClip variationPrecisionClip;
+        private AudioClip variationBreatherClip;
+        private Action practiceRunRequested;
         private Action normalRunRequested;
         private Action saveLoadoutRequested;
         private Action infiniteRunRequested;
         private Action infiniteRecordRequested;
         private Action growthRequested;
+        private Action profileRequested;
         private Action retryRequested;
         private Action debugConnectionRequested;
         private Action nextPatternRequested;
@@ -4078,14 +11897,17 @@ namespace GreedLast
         private float feedbackFlashUntil;
         private float judgementFeedbackUntil;
         private float judgementFeedbackPopUntil;
+        private float judgementFeedbackPopScale = 0.18f;
         private float judgementLinePulseUntil;
         private Color32 judgementLinePulseColor;
         private float comboBadgePulseUntil;
         private float comboBreakBadgeUntil;
         private float comboTierBadgeUntil;
+        private float judgementHistoryPulseUntil;
         private float healthGaugePulseUntil;
         private float focusGaugePulseUntil;
         private float threatProgressPulseUntil;
+        private float runProgressStagePulseUntil;
         private float trapEntryPulseUntil;
         private float beatMarkerMissImpactUntil;
         private float beatMarkerFocusGuardUntil;
@@ -4093,6 +11915,31 @@ namespace GreedLast
         private float beatMarkerGoodPulseUntil;
         private float beatMarkerComboBreakPulseUntil;
         private float beatMarkerComboTierPulseUntil;
+        private float beatMarkerProfilePulseUntil;
+        private float inputTimingTraceUntil;
+        private float inputTimingTraceX = 0.5f;
+        private float inputTimingTraceY = 0.22f;
+        private Color32 inputTimingTraceColor;
+        private float stageTransitionStartedAt;
+        private float stageTransitionUntil;
+        private Color32 stageTransitionColor;
+        private string lastStagePresentationKey = string.Empty;
+        private bool lastPresentedRunWasStopped;
+        private int rhythmBeatIndex;
+        private float focusStateActivationPulseUntil;
+        private bool lastFocusStateActive;
+        private float runnerResponseStartedAt;
+        private float runnerResponseUntil;
+        private RunnerResponseType runnerResponseType;
+        private GreedLastRunChannel runnerResponseChannel;
+        private GreedLastJudgementResult runnerResponseResult;
+        private Color32 runnerResponseColor = new Color32(255, 238, 181, 255);
+        private float resolvedTrapStartedAt;
+        private float resolvedTrapUntil;
+        private GreedLastPatternModel resolvedTrapPattern = GreedLastPatternModel.Empty;
+        private GreedLastJudgementResult resolvedTrapResult;
+        private Color32 resolvedTrapColor = new Color32(255, 238, 181, 255);
+        private float lastHapticAt = -1f;
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool comboTierFeedbackPending;
@@ -4100,25 +11947,40 @@ namespace GreedLast
         private int lastGaugeFocus = int.MinValue;
         private int lastProgressThreatLevel = int.MinValue;
         private int threatProgressDirection;
+        private string lastRunProgressStageKey = string.Empty;
         private int lastComboForBadge = int.MinValue;
         private int comboBreakBadgeCombo;
         private int comboTierBadgeLevel;
         private int lastFeedbackScore;
         private int lastFeedbackHealth = -1;
         private string lastJudgementText = string.Empty;
+        private bool lastTimingRecommendationReady;
+        private bool reviewTargetAchievementAnnounced;
+        private string lastPresentedReviewTargetText = string.Empty;
         private bool lastActivePatternVisual;
         private bool targetCuePlayed;
+        private readonly GreedLastJudgementResult[] judgementHistoryResults = new GreedLastJudgementResult[JudgementHistoryCapacity];
+        private readonly bool[] judgementHistoryFocusGuards = new bool[JudgementHistoryCapacity];
+        private readonly bool[] judgementHistoryCenterHits = new bool[JudgementHistoryCapacity];
+        private readonly RunnerResponseType[] judgementHistoryResponses = new RunnerResponseType[JudgementHistoryCapacity];
+        private int judgementHistoryCount;
         private bool runModeActive;
         private bool saveSlotModeActive;
+        private bool growthBoardModeActive;
+        private readonly int[] growthLaneLevels = new int[3];
+        private int growthBoardPoints;
+        private int recommendedGrowthLaneIndex = -1;
         private GreedLastRunSnapshot latestRunSnapshot;
         private bool hasRunSnapshot;
 
         public void Initialize(
+            Action onPracticeRunRequested,
             Action onNormalRunRequested,
             Action onSaveLoadoutRequested,
             Action onInfiniteRunRequested,
             Action onInfiniteRecordRequested,
             Action onGrowthRequested,
+            Action onProfileRequested,
             Action onRetryRequested,
             Action onDebugConnectionRequested,
             Action onNextPatternRequested,
@@ -4136,11 +11998,13 @@ namespace GreedLast
             Action<GreedLastDevShortcut> onDevShortcutRequested,
             Action<GreedLastRunChannel> onRunChannelRequested)
         {
+            practiceRunRequested = onPracticeRunRequested;
             normalRunRequested = onNormalRunRequested;
             saveLoadoutRequested = onSaveLoadoutRequested;
             infiniteRunRequested = onInfiniteRunRequested;
             infiniteRecordRequested = onInfiniteRecordRequested;
             growthRequested = onGrowthRequested;
+            profileRequested = onProfileRequested;
             retryRequested = onRetryRequested;
             debugConnectionRequested = onDebugConnectionRequested;
             nextPatternRequested = onNextPatternRequested;
@@ -4176,6 +12040,7 @@ namespace GreedLast
             float goodImpact = BuildBeatMarkerGoodPulse();
             float comboBreakImpact = BuildBeatMarkerComboBreakPulse();
             float comboTierImpact = BuildBeatMarkerComboTierPulse();
+            float profileImpact = BuildBeatMarkerProfilePulse();
             Color32 markerColor = Color32.Lerp(new Color32(240, 197, 89, 140), new Color32(255, 238, 181, 255), pulse);
             if (successImpact > 0f)
             {
@@ -4185,6 +12050,11 @@ namespace GreedLast
             if (comboTierImpact > 0f)
             {
                 markerColor = Color32.Lerp(markerColor, new Color32(255, 214, 105, 255), comboTierImpact * 0.86f);
+            }
+
+            if (profileImpact > 0f)
+            {
+                markerColor = Color32.Lerp(markerColor, GetChoiceProfilePulseColor(latestRunSnapshot.ActiveChoiceProfile), profileImpact * 0.78f);
             }
 
             if (goodImpact > 0f)
@@ -4208,20 +12078,25 @@ namespace GreedLast
             }
 
             beatMarker.color = markerColor;
-            beatMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.86f, 1.18f, pulse) + successImpact * 0.13f + goodImpact * 0.075f + comboTierImpact * 0.18f + missImpact * 0.16f + focusGuardImpact * 0.22f - comboBreakImpact * 0.075f);
+            beatMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.86f, 1.18f, pulse) + successImpact * 0.13f + goodImpact * 0.075f + comboTierImpact * 0.18f + profileImpact * 0.13f + missImpact * 0.16f + focusGuardImpact * 0.22f - comboBreakImpact * 0.075f);
             beatMarker.rectTransform.anchoredPosition = new Vector2(BuildBeatMarkerMissShake(), 0f);
+            UpdateRunAtmosphere();
 
             if (runModeActive
                 && (latestRunSnapshot.ResumeCountdownActive || (latestRunSnapshot.StartCountdownActive && !latestRunSnapshot.Paused))
                 && Time.unscaledTime >= nextBeatSoundAt)
             {
                 nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
-                PlayClip(beatClip, IdleBeatVolume * 1.35f);
+                PlayRhythmPulse(latestRunSnapshot, IdleBeatVolume * 1.35f);
             }
-            else if (runModeActive && !latestRunSnapshot.Paused && Time.unscaledTime >= nextBeatSoundAt)
+            else if (runModeActive
+                && !latestRunSnapshot.Paused
+                && !latestRunSnapshot.Stopped
+                && !latestRunSnapshot.ChoiceActive
+                && Time.unscaledTime >= nextBeatSoundAt)
             {
                 nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
-                PlayClip(beatClip, latestRunSnapshot.ActivePattern ? ActiveBeatVolume : IdleBeatVolume);
+                PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot));
             }
 
             if (!saveSlotModeActive)
@@ -4229,18 +12104,25 @@ namespace GreedLast
                 for (int i = 0; i < laneImages.Length; i += 1)
                 {
                     float lanePulse = Mathf.Repeat(beatPhase + i * 0.2f, 1f);
-                    Color32 baseColor = Color32.Lerp(
-                        new Color32(32, 42, 49, 255),
-                        new Color32(69, 88, 92, 255),
-                        lanePulse * 0.35f);
+                    Color32 baseColor = growthBoardModeActive
+                        ? BuildGrowthLaneColumnColor(i, lanePulse)
+                        : hasRunSnapshot && latestRunSnapshot.ChoiceActive
+                            ? BuildChoiceLaneColumnColor(latestRunSnapshot, i, lanePulse)
+                            : BuildRunLaneBaseColor(i, lanePulse);
                     GreedLastRunChannel laneChannel = (GreedLastRunChannel)(i + 1);
                     float trapEntryPulse = 0f;
-                    if (hasRunSnapshot
+                    if (!growthBoardModeActive
+                        && hasRunSnapshot
                         && latestRunSnapshot.ActivePattern
                         && latestRunSnapshot.Pattern.Channel == laneChannel)
                     {
                         trapEntryPulse = BuildTrapEntryPulse();
                         baseColor = Color32.Lerp(baseColor, new Color32(154, 84, 63, 255), 0.72f);
+                        if (TryGetPatternVariationAccent(latestRunSnapshot.Pattern, out Color32 variationColor, out float variationStrength))
+                        {
+                            baseColor = Color32.Lerp(baseColor, variationColor, variationStrength);
+                        }
+
                         if (trapEntryPulse > 0f)
                         {
                             baseColor = Color32.Lerp(baseColor, new Color32(255, 207, 126, 255), trapEntryPulse * 0.46f);
@@ -4248,6 +12130,12 @@ namespace GreedLast
                     }
 
                     float pressPulse = BuildLanePressPulse(i);
+                    float holdAmount = BuildLaneHoldAmount(i);
+                    if (holdAmount > 0f)
+                    {
+                        baseColor = Color32.Lerp(baseColor, new Color32(255, 238, 181, 255), holdAmount * 0.24f);
+                    }
+
                     if (pressPulse > 0f)
                     {
                         baseColor = Color32.Lerp(baseColor, new Color32(255, 238, 181, 255), pressPulse * 0.72f);
@@ -4262,7 +12150,8 @@ namespace GreedLast
                     float missShake = BuildLaneMissShake(i);
                     laneImages[i].color = baseColor;
                     laneImages[i].rectTransform.anchoredPosition = new Vector2(missShake, 0f);
-                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + pressPulse * 0.055f + judgementPulse * 0.075f + trapEntryPulse * 0.045f);
+                    float growthScale = growthBoardModeActive ? GetGrowthLaneLevel(i) * 0.018f : 0f;
+                    laneImages[i].rectTransform.localScale = Vector3.one * (1f + growthScale + holdAmount * 0.025f + pressPulse * 0.055f + judgementPulse * 0.075f + trapEntryPulse * 0.045f);
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
                         int targetIndex = hasRunSnapshot
@@ -4272,10 +12161,12 @@ namespace GreedLast
                             && !latestRunSnapshot.Stopped
                             ? Mathf.Clamp((int)latestRunSnapshot.Pattern.Channel - 1, 0, 2)
                             : -1;
-                        Color32 labelColor = Color32.Lerp(
-                            BuildRunLaneLabelColor(i, targetIndex, latestRunSnapshot),
-                            new Color32(255, 238, 181, 255),
-                            pressPulse);
+                        Color32 labelColor = latestRunSnapshot.ChoiceActive
+                            ? BuildChoiceLaneTextColor(latestRunSnapshot, i)
+                            : Color32.Lerp(
+                                BuildRunLaneLabelColor(i, targetIndex, latestRunSnapshot),
+                                new Color32(255, 238, 181, 255),
+                                Mathf.Max(pressPulse, holdAmount * 0.46f));
                         float exactLanePulse = i == targetIndex ? BuildExactTimingPulse() : 0f;
                         if (exactLanePulse > 0f)
                         {
@@ -4288,14 +12179,19 @@ namespace GreedLast
                         }
 
                         laneLabelTexts[i].color = labelColor;
-                        laneLabelTexts[i].rectTransform.localScale = Vector3.one * (1f + exactLanePulse * 0.10f + pressPulse * 0.04f + judgementPulse * 0.06f);
+                        laneLabelTexts[i].rectTransform.localScale = Vector3.one * (1f + exactLanePulse * 0.10f + holdAmount * 0.025f + pressPulse * 0.04f + judgementPulse * 0.06f);
                     }
                 }
             }
 
+            UpdateTempleDepthBackdrop();
             UpdateForwardMotionLines();
+            UpdateRunnerAvatar();
+            UpdateStageTransitionBanner();
             UpdateRunTimingVisuals();
-            ApplyFocusGuardShieldBand();
+            UpdateResolvedTrapAfterimage();
+            UpdateJudgementHistoryDots();
+            ApplyFocusStateAuraBand();
             UpdateFeedbackFlash();
         }
 
@@ -4318,6 +12214,7 @@ namespace GreedLast
         public void Render(GreedLastStateSnapshot snapshot)
         {
             EnsureUi();
+            ApplySafeArea();
             if (pauseMenuOverlay != null)
             {
                 pauseMenuOverlay.SetActive(false);
@@ -4327,7 +12224,7 @@ namespace GreedLast
             ResetSaveSlotUtilityButtonLayout();
 
             titleText.text = snapshot.Headline;
-            subtitleText.text = "모바일 리듬 탈출 / 좌 · 중 · 우 대응";
+            subtitleText.text = string.Empty;
             string detail = BuildDetail(snapshot);
             detailText.text = detail;
 
@@ -4343,8 +12240,18 @@ namespace GreedLast
             bool recordBoardLike = snapshot.State == GreedLastScreenState.InfiniteRecordBoard;
             bool infinitePrepLike = snapshot.State == GreedLastScreenState.InfiniteStartReady;
             bool growthBoardLike = snapshot.State == GreedLastScreenState.GrowthBoard;
+            bool profileBoardLike = snapshot.State == GreedLastScreenState.ProfileBoard;
+            bool showDevTools = DevToolsEnabled;
+            subtitleText.text = recordBoardLike
+                ? string.Empty
+                : "모바일 리듬 탈출 / 좌 · 중 · 우 대응";
+            bool growthDevLike = showDevTools && growthBoardLike;
+            bool lobbyDevLike = showDevTools && snapshot.State == GreedLastScreenState.LobbyReady;
+            bool onboardingComplete = IsCoreOnboardingComplete(snapshot);
             runModeActive = runLike;
             saveSlotModeActive = saveDraftLike;
+            growthBoardModeActive = growthBoardLike;
+            SetGrowthBoardVisualState(snapshot);
             UpdateDebugText(snapshot);
             bool lobbyNoticeLike = snapshot.State == GreedLastScreenState.LobbyReady
                 && !string.IsNullOrEmpty(detail);
@@ -4363,14 +12270,31 @@ namespace GreedLast
                 comboBadgeRoot.SetActive(false);
             }
 
-            detailText.fontSize = recordBoardLike ? BuildRecordBoardFontSize(detail) : growthBoardLike ? 28 : lobbyNoticeLike ? 31 : saveDraftLike || infinitePrepLike ? 27 : 33;
-            if (recordBoardLike || growthBoardLike)
+            if (!runLike)
+            {
+                ClearJudgementHistory();
+            }
+
+            detailText.fontSize = recordBoardLike
+                ? BuildRecordBoardFontSize(detail)
+                : growthBoardLike
+                    ? BuildGrowthBoardFontSize(detail)
+                    : profileBoardLike
+                        ? BuildProfileBoardFontSize(detail)
+                        : lobbyNoticeLike
+                            ? BuildLobbyNoticeFontSize(detail)
+                            : saveDraftLike || infinitePrepLike ? BuildManagementDetailFontSize(detail) : 33;
+            if (recordBoardLike || growthBoardLike || profileBoardLike)
             {
                 SetAnchored(detailText.rectTransform, 0.5f, 0.55f, 920f, 640f);
             }
             else if (lobbyNoticeLike)
             {
-                SetAnchored(detailText.rectTransform, 0.5f, 0.585f, 900f, 190f);
+                SetAnchored(detailText.rectTransform, 0.5f, 0.57f, 920f, BuildLobbyNoticeHeight(detail));
+            }
+            else if (saveDraftLike || infinitePrepLike)
+            {
+                SetAnchored(detailText.rectTransform, 0.5f, 0.565f, 900f, BuildManagementDetailHeight(detail));
             }
             else
             {
@@ -4379,40 +12303,65 @@ namespace GreedLast
 
             if (lanePreviewRoot != null)
             {
-                lanePreviewRoot.SetActive(!recordBoardLike);
+                lanePreviewRoot.SetActive(!recordBoardLike && !profileBoardLike);
             }
 
             if (judgementFeedbackText != null && !runLike)
             {
                 judgementFeedbackText.text = string.Empty;
                 judgementFeedbackText.color = new Color32(255, 238, 181, 0);
+                lastTimingRecommendationReady = false;
             }
 
-            normalRunButton.gameObject.SetActive(lobbyLike);
-            saveLoadoutButton.gameObject.SetActive(lobbyLike || infinitePrepLike);
+            if (!runLike)
+            {
+                lastStagePresentationKey = string.Empty;
+                lastPresentedRunWasStopped = false;
+                rhythmBeatIndex = 0;
+                lastFocusStateActive = false;
+                if (stageTransitionText != null)
+                {
+                    stageTransitionText.text = string.Empty;
+                    stageTransitionText.color = new Color32(255, 238, 181, 0);
+                }
+
+                if (stageTransitionLine != null)
+                {
+                    stageTransitionLine.color = new Color32(255, 238, 181, 0);
+                }
+            }
+
+            practiceRunButton.gameObject.SetActive(lobbyLike);
+            normalRunButton.gameObject.SetActive(lobbyLike && onboardingComplete);
+            saveLoadoutButton.gameObject.SetActive(
+                infinitePrepLike
+                || (lobbyLike && (snapshot.SaveLoadoutUnlocked || snapshot.FirstSaveCompleted || snapshot.SaveLoadoutCandidateAvailable)));
             infiniteButton.gameObject.SetActive(lobbyLike && snapshot.FirstSaveCompleted);
-            infiniteRecordButton.gameObject.SetActive(lobbyLike);
-            growthButton.gameObject.SetActive(lobbyLike);
+            infiniteRecordButton.gameObject.SetActive(lobbyLike && (snapshot.FirstSaveCompleted || snapshot.InfiniteUnlocked));
+            growthButton.gameObject.SetActive(lobbyLike && onboardingComplete);
+            profileButton.gameObject.SetActive(lobbyLike && onboardingComplete);
             retryButton.gameObject.SetActive(snapshot.RetryVisible || snapshot.State == GreedLastScreenState.ConnectBlocked);
-            nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike);
-            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike);
-            saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike);
+            nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
+            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
+            saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike || profileBoardLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
             saveSlotModeText.gameObject.SetActive(saveDraftLike);
             runHudText.gameObject.SetActive(runLike);
             pauseButton.gameObject.SetActive(runLike);
-            bool showDevTools = DevToolsEnabled;
-            debugConnectionButton.gameObject.SetActive(showDevTools && !runLike && !saveDraftLike && !recordBoardLike && !infinitePrepLike && !growthBoardLike);
+            debugConnectionButton.gameObject.SetActive(showDevTools && !runLike && !saveDraftLike && !recordBoardLike && !infinitePrepLike && !growthBoardLike && !profileBoardLike);
             devInvincibleButton.gameObject.SetActive(showDevTools && runLike);
             infiniteTestStopButton.gameObject.SetActive(showDevTools && infiniteRunLike);
-            focusMaxButton.gameObject.SetActive(showDevTools && runLike);
-            threatUpButton.gameObject.SetActive(showDevTools && infiniteRunLike);
-            threatDownButton.gameObject.SetActive(showDevTools && infiniteRunLike);
+            focusMaxButton.gameObject.SetActive((showDevTools && (runLike || growthBoardLike)) || lobbyDevLike);
+            threatUpButton.gameObject.SetActive((showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike);
+            threatDownButton.gameObject.SetActive((showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike);
             hapticsButton.gameObject.SetActive(showDevTools && runLike);
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
-                devShortcutButtons[i].gameObject.SetActive(showDevTools && normalRunLike);
+                devShortcutButtons[i].gameObject.SetActive(
+                    showDevTools
+                    && normalRunLike
+                    && i != (int)GreedLastDevShortcut.ReviewTargetCheck);
             }
 
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
@@ -4425,31 +12374,36 @@ namespace GreedLast
                 sfxVolumeButtons[i].gameObject.SetActive(showDevTools && runLike);
             }
 
+            practiceRunButton.interactable = snapshot.CoreActionsEnabled;
             normalRunButton.interactable = snapshot.CoreActionsEnabled;
             saveLoadoutButton.interactable = lobbyLike
                 ? snapshot.CoreActionsEnabled && snapshot.SaveLoadoutUnlocked
                 : infinitePrepLike && snapshot.SaveLoadoutUnlocked;
-            infiniteButton.interactable = snapshot.CoreActionsEnabled && snapshot.InfiniteUnlocked;
+            infiniteButton.interactable = snapshot.CoreActionsEnabled
+                && (snapshot.InfiniteUnlocked || snapshot.SaveLoadoutUnlocked || snapshot.FirstSaveCompleted);
             infiniteRecordButton.interactable = snapshot.CoreActionsEnabled;
             growthButton.interactable = snapshot.CoreActionsEnabled;
+            profileButton.interactable = snapshot.CoreActionsEnabled;
             retryButton.interactable = !snapshot.Busy;
             debugConnectionButton.interactable = showDevTools && !snapshot.Busy;
             bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
-            nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike;
-            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike;
-            saveSlotDetailButton.interactable = recordBoardLike || (saveDraftLike && !snapshot.SaveSlotChoiceRequired);
+            nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
+            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
+            saveSlotDetailButton.interactable = recordBoardLike || profileBoardLike || (saveDraftLike && !snapshot.SaveSlotChoiceRequired);
             saveSlotRenameButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             saveSlotDeleteButton.interactable = saveDraftLike && !snapshot.SaveSlotChoiceRequired && selectedSaveSlotOccupied;
             pauseButton.interactable = runLike;
             devInvincibleButton.interactable = showDevTools && runLike;
             infiniteTestStopButton.interactable = showDevTools && infiniteRunLike;
-            focusMaxButton.interactable = showDevTools && runLike;
-            threatUpButton.interactable = showDevTools && infiniteRunLike;
-            threatDownButton.interactable = showDevTools && infiniteRunLike;
+            focusMaxButton.interactable = (showDevTools && (runLike || growthBoardLike)) || lobbyDevLike;
+            threatUpButton.interactable = (showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike;
+            threatDownButton.interactable = (showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike;
             hapticsButton.interactable = showDevTools && runLike;
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
-                devShortcutButtons[i].interactable = showDevTools && normalRunLike;
+                devShortcutButtons[i].interactable = showDevTools
+                    && normalRunLike
+                    && i != (int)GreedLastDevShortcut.ReviewTargetCheck;
             }
 
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
@@ -4466,6 +12420,10 @@ namespace GreedLast
             {
                 bool canSaveCandidate = !infiniteLoadoutSelectLike && snapshot.SaveLoadoutCandidateAvailable;
                 bool selectedSaveSlotUsable = IsSelectedSaveSlotUsable(snapshot);
+                bool saveDraftRefillAvailable = ShouldSaveDraftOfferRefill(
+                    snapshot,
+                    infiniteLoadoutSelectLike,
+                    canSaveCandidate);
                 UpdateSaveSlotModeText(snapshot, infiniteLoadoutSelectLike, selectedSaveSlotOccupied, canSaveCandidate);
                 UpdateSaveSlotLabels(
                     snapshot.SaveSlotChoiceRequired ? -1 : snapshot.SelectedSaveSlotIndex,
@@ -4475,41 +12433,39 @@ namespace GreedLast
                     infiniteLoadoutSelectLike,
                     canSaveCandidate);
                 SetButtonLabel(nextPatternButton, infiniteLoadoutSelectLike
-                    ? snapshot.SaveSlotDeleteConfirmationPending
-                        ? "삭제 확인 중"
-                        : snapshot.SaveSlotRenameConfirmationPending
-                            ? "이름 확인 중"
-                            : selectedSaveSlotUsable ? "선택 완료" : "선택 불가"
-                    : snapshot.SaveSlotChoiceRequired
-                        ? "슬롯 선택 필요"
-                        : snapshot.SaveSlotDeleteConfirmationPending
+                        ? snapshot.SaveSlotDeleteConfirmationPending
                             ? "삭제 확인 중"
                             : snapshot.SaveSlotRenameConfirmationPending
                                 ? "이름 확인 중"
+                                : BuildInfiniteLoadoutSelectActionLabel(snapshot, selectedSaveSlotUsable)
+                    : snapshot.SaveSlotChoiceRequired
+                        ? "좌·중·우 선택"
+                        : snapshot.SaveSlotDeleteConfirmationPending
+                            ? "삭제 확인 중"
+                        : snapshot.SaveSlotRenameConfirmationPending
+                                ? "이름 확인 중"
                         : !canSaveCandidate
-                            ? "저장 후보 없음"
+                            ? (saveDraftRefillAvailable ? "보충 런" : "저장 후보 없음")
                             : snapshot.SaveSlotOverwriteConfirmationPending
                                 ? "덮어쓰기 확정"
                                 : "슬롯 " + (snapshot.SelectedSaveSlotIndex + 1) + "에 저장");
                 nextPatternButton.interactable = infiniteLoadoutSelectLike
-                    ? selectedSaveSlotUsable
+                    ? (selectedSaveSlotUsable || !HasAnyUsableSaveSlot(snapshot))
                         && !snapshot.SaveSlotDeleteConfirmationPending
                         && !snapshot.SaveSlotRenameConfirmationPending
                     : (!snapshot.SaveSlotChoiceRequired
-                        && canSaveCandidate
+                        && (canSaveCandidate || saveDraftRefillAvailable)
                         && !snapshot.SaveSlotDeleteConfirmationPending
                         && !snapshot.SaveSlotRenameConfirmationPending);
                 SetButtonLabel(returnLobbyButton, infiniteLoadoutSelectLike
                     ? "로비로"
+                    : snapshot.SaveLoadoutSkipConfirmationPending
+                        ? "포기 확정"
                     : snapshot.SaveSlotChoiceRequired
-                        ? "저장 안 함"
-                        : canSaveCandidate ? "저장 안 함" : "로비로");
+                        ? "저장 포기"
+                        : canSaveCandidate ? "저장 포기" : "로비로");
                 SetButtonLabel(saveSlotDetailButton,
-                    snapshot.SaveSlotDeleteConfirmationPending || snapshot.SaveSlotRenameConfirmationPending
-                        ? "확인 취소"
-                        : snapshot.SaveSlotDetailViewActive
-                            ? "목록 보기"
-                            : infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교");
+                    BuildSaveSlotDetailButtonLabel(snapshot, infiniteLoadoutSelectLike, canSaveCandidate));
                 SetButtonLabel(saveSlotRenameButton, snapshot.SaveSlotRenameConfirmationPending ? "이름 확정" : "이름 변경");
                 SetButtonLabel(saveSlotDeleteButton, snapshot.SaveSlotDeleteConfirmationPending ? "삭제 확정" : "슬롯 삭제");
                 if (!selectedSaveSlotOccupied)
@@ -4527,9 +12483,17 @@ namespace GreedLast
             {
                 UpdateRecordBoardLaneLabels(snapshot.RecordBoardPageIndex);
             }
+            else if (profileBoardLike)
+            {
+                UpdateProfileBoardLaneLabels(snapshot.RecordBoardPageIndex);
+            }
             else if (growthBoardLike)
             {
-                UpdateGrowthLaneLabels();
+                UpdateGrowthLaneLabels(snapshot);
+            }
+            else if (infinitePrepLike)
+            {
+                UpdateInfinitePreparationLaneLabels(snapshot.Detail);
             }
             else if (!runLike)
             {
@@ -4539,33 +12503,63 @@ namespace GreedLast
             SetButtonLabel(retryButton, "동기화 재시도");
             if (lobbyLike)
             {
+                SetAnchored(
+                    practiceRunButton.GetComponent<RectTransform>(),
+                    0.5f,
+                    onboardingComplete ? 0.41f : 0.35f,
+                    690f,
+                    onboardingComplete ? 82f : 92f);
                 string selectedSlotSummary = BuildSelectedSaveSlotButtonSummary(snapshot);
-                SetButtonLabel(normalRunButton, "일반 런");
-                SetButtonLabel(saveLoadoutButton, snapshot.SaveLoadoutUnlocked
-                    ? "저장 조합 " + selectedSlotSummary
-                    : "저장 조합");
+                SetButtonLabel(practiceRunButton, BuildLobbyPracticeButtonLabel(snapshot));
+                SetButtonLabel(normalRunButton, BuildLobbyNormalRunButtonLabel(snapshot));
+                SetButtonLabel(saveLoadoutButton, BuildLobbySaveLoadoutButtonLabel(snapshot, selectedSlotSummary));
                 SetButtonLabel(infiniteButton, BuildLobbyInfiniteButtonLabel(snapshot, selectedSlotSummary));
                 SetButtonLabel(infiniteRecordButton, BuildLobbyRecordButtonLabel(detail));
-                SetButtonLabel(growthButton, snapshot.GrowthPoints > 0 ? "성장 " + snapshot.GrowthPoints + "pt" : "성장");
+                SetButtonLabel(growthButton, BuildLobbyGrowthButtonLabel(snapshot));
+                SetButtonLabel(profileButton, snapshot.ProfileButtonSummary);
+                if (lobbyDevLike)
+                {
+                    SetButtonLabel(focusMaxButton, PrefixDevShortcut("F6", BuildLobbyFocusTestButtonLabel(snapshot)));
+                    SetButtonLabel(threatUpButton, PrefixDevShortcut("PgUp", BuildLobbySaveUseTestButtonLabel(snapshot)));
+                    SetButtonLabel(threatDownButton, PrefixDevShortcut("PgDn", BuildLobbyCandidateTestButtonLabel()));
+                }
             }
             else if (recordBoardLike)
             {
                 SetRecordBoardButtonLayout();
-                SetButtonLabel(nextPatternButton, "다음: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex + 1).Replace("\n", " "));
-                SetButtonLabel(saveSlotDetailButton, "이전: " + GetRecordBoardPageLabel(snapshot.RecordBoardPageIndex - 1).Replace("\n", " "));
+                SetButtonLabel(nextPatternButton, "다음: " + GetRecordBoardPageButtonLabel(snapshot.RecordBoardPageIndex + 1));
+                SetButtonLabel(saveSlotDetailButton, "이전: " + GetRecordBoardPageButtonLabel(snapshot.RecordBoardPageIndex - 1));
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (growthBoardLike)
             {
+                if (growthDevLike)
+                {
+                    SetGrowthDevButtonLayout();
+                    SetButtonLabel(focusMaxButton, PrefixDevShortcut("F6", BuildGrowthPointTestButtonLabel()));
+                    SetButtonLabel(threatUpButton, PrefixDevShortcut("PgUp", BuildGrowthMaxTestButtonLabel()));
+                    SetButtonLabel(threatDownButton, PrefixDevShortcut("PgDn", BuildGrowthResetTestButtonLabel()));
+                }
+
+                SetButtonLabel(nextPatternButton, snapshot.RecommendedGrowthTrackIndex >= 0 ? "추천 강화" : "성장 MAX");
+                nextPatternButton.interactable = snapshot.RecommendedGrowthTrackIndex >= 0;
+                SetButtonLabel(returnLobbyButton, "로비로");
+            }
+            else if (profileBoardLike)
+            {
+                SetRecordBoardButtonLayout();
+                SetButtonLabel(saveSlotDetailButton, "이전: " + GetProfileBoardPageButtonLabel(snapshot.RecordBoardPageIndex - 1));
+                SetButtonLabel(nextPatternButton, "다음: " + GetProfileBoardPageButtonLabel(snapshot.RecordBoardPageIndex + 1));
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (infinitePrepLike)
             {
                 bool selectedSlotUsable = IsSelectedSaveSlotUsable(snapshot);
-                SetButtonLabel(saveLoadoutButton, "저장 조합 변경");
-                SetButtonLabel(nextPatternButton, selectedSlotUsable ? "무한 시작" : "슬롯 선택 필요");
+                bool canStartRefillRun = !HasAnyUsableSaveSlot(snapshot);
+                SetButtonLabel(saveLoadoutButton, BuildInfinitePrepSaveLoadoutButtonLabel(snapshot));
+                SetButtonLabel(nextPatternButton, BuildInfiniteStartActionLabel(snapshot, selectedSlotUsable));
                 SetButtonLabel(returnLobbyButton, "로비로");
-                nextPatternButton.interactable = selectedSlotUsable;
+                nextPatternButton.interactable = selectedSlotUsable || canStartRefillRun;
             }
 
             ApplyButtonTones(snapshot, saveDraftLike);
@@ -4574,14 +12568,18 @@ namespace GreedLast
         public void RenderRun(GreedLastRunSnapshot snapshot)
         {
             EnsureUi();
+            ApplySafeArea();
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
+            TrackStagePresentation(snapshot);
             HideDebugText();
             RenderRunHeader(snapshot);
-            bool showDevTools = DevToolsEnabled;
+            bool showDevTools = DevToolsEnabled && !snapshot.PracticeMode;
 
             string runState = snapshot.Stopped
-                ? snapshot.InfiniteMode ? "상태: 무한 종료" : snapshot.SaveEligible ? "상태: 탈출 성공" : "상태: 탈출 실패"
+                ? snapshot.PracticeMode
+                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "상태: 연습 완료" : "상태: 연습 중단"
+                    : snapshot.InfiniteMode ? "상태: 무한 종료" : snapshot.SaveEligible ? "상태: 탈출 성공" : "상태: 탈출 실패"
                 : snapshot.ResumeCountdownActive
                     ? "상태: 재개 준비"
                     : snapshot.Paused
@@ -4594,7 +12592,9 @@ namespace GreedLast
                                     ? "상태: 자동 진행"
                                     : "상태: 대기";
 
-            string chapterText = snapshot.Phase == GreedLastRunPhase.EscapeRunning
+            string chapterText = snapshot.PracticeMode
+                ? $"기초연습 {snapshot.ChapterProgress}/{snapshot.ChapterTarget}"
+                : snapshot.Phase == GreedLastRunPhase.EscapeRunning
                 ? "챕터 4 탈출"
                 : snapshot.Phase == GreedLastRunPhase.ClearResolving
                     ? "결과 준비"
@@ -4607,11 +12607,14 @@ namespace GreedLast
             runHudText.text = snapshot.InfiniteMode
                 ? BuildInfiniteRunHud(snapshot, runState)
                 : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
-            runHudText.fontSize = snapshot.InfiniteMode && snapshot.Stopped ? 30 : 26;
+            runHudText.fontSize = BuildRunHudFontSize(snapshot, runHudText.text);
+            UpdateRunHudLayout(runHudText.text);
             UpdateRunGauges(snapshot);
             UpdateRunProgress(snapshot);
             UpdateComboBadge(snapshot);
-            if (snapshot.ResumeCountdownActive || (snapshot.StartCountdownActive && !snapshot.Paused))
+            ResetJudgementHistoryForFreshRun(snapshot);
+            UpdateJudgementHistoryVisibility(snapshot);
+            if (snapshot.ResumeCountdownActive || snapshot.StartCountdownActive)
             {
                 ShowResumeCountdownFeedback(snapshot);
             }
@@ -4622,7 +12625,9 @@ namespace GreedLast
 
             bool normalClearReady = snapshot.Stopped && snapshot.SaveEligible && !snapshot.InfiniteMode;
             string nextButtonLabel = snapshot.Stopped
-                ? normalClearReady ? "저장하기" : snapshot.InfiniteMode ? "무한 재시작" : "다시 시작"
+                ? snapshot.PracticeMode
+                    ? BuildPracticeRestartButtonLabel(snapshot)
+                    : normalClearReady ? "저장 슬롯 선택" : snapshot.InfiniteMode ? "기록 정산" : snapshot.RefillRun ? "보충 재시작" : "다시 시작"
                 : snapshot.Paused
                     ? "재개"
                     : snapshot.ChoiceActive
@@ -4631,22 +12636,59 @@ namespace GreedLast
                             ? "자동 정지"
                             : "자동 시작";
             SetButtonLabel(nextPatternButton, nextButtonLabel);
-            SetButtonLabel(returnLobbyButton, normalClearReady ? "저장 안 함" : snapshot.InfiniteMode || snapshot.Paused ? "로비로" : snapshot.Stopped ? "로비로" : "탈출 포기");
-            SetButtonLabel(pauseButton, snapshot.ResumeCountdownActive ? "재개 준비" : snapshot.StartCountdownActive ? "시작 준비" : snapshot.Paused ? "재개" : "일시정지");
-            SetButtonLabel(devInvincibleButton, snapshot.DevInvincible ? "무적 ON" : "무적 OFF");
-            SetButtonLabel(infiniteTestStopButton, "종료 테스트");
-            SetButtonLabel(focusMaxButton, "집중 MAX");
-            SetButtonLabel(threatUpButton, "위협 +1");
-            SetButtonLabel(threatDownButton, "위협 -1");
+            SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
+            SetButtonLabel(pauseButton, snapshot.ResumeCountdownActive ? "재개 준비" : snapshot.Paused ? "재개" : "일시정지");
+            SetButtonLabel(devInvincibleButton, PrefixDevShortcut("F1", snapshot.DevInvincible ? "무적 ON" : "무적 OFF"));
+            SetButtonLabel(infiniteTestStopButton, PrefixDevShortcut("End", "정산 종료"));
+            SetButtonLabel(focusMaxButton, PrefixDevShortcut("F6", BuildRunFocusTestButtonLabel(snapshot)));
+            SetButtonLabel(threatUpButton, PrefixDevShortcut("PgUp", BuildRunThreatUpTestButtonLabel(snapshot)));
+            SetButtonLabel(threatDownButton, PrefixDevShortcut("PgDn", BuildRunThreatDownTestButtonLabel(snapshot)));
+            if (devShortcutButtons != null
+                && devShortcutButtons.Length > (int)GreedLastDevShortcut.BeforeClear)
+            {
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.GiftChoice],
+                    PrefixDevShortcut("F2", BuildDevSectionShortcutLabel(GreedLastDevShortcut.GiftChoice)));
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.RelicChoice],
+                    PrefixDevShortcut("F3", BuildDevSectionShortcutLabel(GreedLastDevShortcut.RelicChoice)));
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.AfterCore],
+                    PrefixDevShortcut("F4", BuildDevSectionShortcutLabel(GreedLastDevShortcut.AfterCore)));
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.BeforeClear],
+                    PrefixDevShortcut("F5", BuildDevSectionShortcutLabel(GreedLastDevShortcut.BeforeClear)));
+            }
+            if (devShortcutButtons != null
+                && devShortcutButtons.Length > (int)GreedLastDevShortcut.ReviewTargetCheck)
+            {
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.ReviewTargetCheck],
+                    PrefixDevShortcut("F7", BuildReviewTargetShortcutLabel(snapshot)));
+            }
+            if (devShortcutButtons != null
+                && devShortcutButtons.Length > (int)GreedLastDevShortcut.RouteCycle)
+            {
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.RouteCycle],
+                    PrefixDevShortcut("F8", BuildRouteTestShortcutLabel(snapshot)));
+            }
+            if (devShortcutButtons != null
+                && devShortcutButtons.Length > (int)GreedLastDevShortcut.AvoidanceCycle)
+            {
+                SetButtonLabel(
+                    devShortcutButtons[(int)GreedLastDevShortcut.AvoidanceCycle],
+                    PrefixDevShortcut("F9", BuildAvoidanceTestShortcutLabel(snapshot)));
+            }
             UpdateHapticsButtonLabel();
-            SetButtonLabel(timingOffsetButtons[0], "빠름 +20");
+            SetButtonLabel(timingOffsetButtons[0], "빠름 +20ms");
             SetButtonLabel(timingOffsetButtons[1], BuildTimingRecommendationButtonLabel(snapshot));
-            SetButtonLabel(timingOffsetButtons[2], "늦음 -20");
+            SetButtonLabel(timingOffsetButtons[2], "늦음 -20ms");
             SetButtonLabel(sfxVolumeButtons[0], "소리 -");
             UpdateSfxVolumeButtonLabel();
             SetButtonLabel(sfxVolumeButtons[2], "소리 +");
             nextPatternButton.interactable = snapshot.Paused || (!snapshot.CountdownActive && (!snapshot.ChoiceActive || snapshot.Stopped));
-            pauseButton.interactable = !snapshot.Stopped && !snapshot.ChoiceActive && !snapshot.CountdownActive;
+            pauseButton.interactable = !snapshot.Stopped && !snapshot.ChoiceActive && !snapshot.ResumeCountdownActive;
             infiniteTestStopButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
             focusMaxButton.interactable = showDevTools && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
             threatUpButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
@@ -4656,6 +12698,8 @@ namespace GreedLast
             {
                 timingOffsetButtons[i].interactable = !snapshot.Stopped;
             }
+
+            timingOffsetButtons[1].interactable = CanUseTimingRecommendationButton(snapshot);
 
             for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
             {
@@ -4667,9 +12711,170 @@ namespace GreedLast
                 SetLaneInputInteractable(i, snapshot.ChoiceActive || (!snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive));
             }
 
+            ApplyRunButtonTones(snapshot, normalClearReady);
+            if (snapshot.Paused)
+            {
+                BringPauseControlsToFront();
+            }
+
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
+        }
+
+        private static string PrefixDevShortcut(string shortcut, string label)
+        {
+            return string.IsNullOrEmpty(shortcut) ? label : shortcut + " " + label;
+        }
+
+        private static string BuildDevSectionShortcutLabel(GreedLastDevShortcut shortcut)
+        {
+            switch (shortcut)
+            {
+                case GreedLastDevShortcut.GiftChoice:
+                    return "기프트 선택";
+                case GreedLastDevShortcut.RelicChoice:
+                    return "유물 선택";
+                case GreedLastDevShortcut.AfterCore:
+                    return "핵 직후";
+                case GreedLastDevShortcut.BeforeClear:
+                    return "탈출 직전";
+                default:
+                    return "구간";
+            }
+        }
+
+        private static string BuildReviewTargetShortcutLabel(GreedLastRunSnapshot snapshot)
+        {
+            string target = snapshot.ReviewTargetText ?? string.Empty;
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return "목표 보정";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal)
+                || target.Contains("위협", StringComparison.Ordinal))
+            {
+                return "목표 구간";
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal)
+                || target.Contains("보정 0회", StringComparison.Ordinal)
+                || target.Contains("입력 없음", StringComparison.Ordinal)
+                || (target.Contains("실수", StringComparison.Ordinal)
+                    && target.Contains("이하", StringComparison.Ordinal)))
+            {
+                return "목표 정산";
+            }
+
+            return "목표 직전";
+        }
+
+        private static string BuildRunFocusTestButtonLabel(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.FocusStateActive ? "집중 리필" : "집중 발동";
+        }
+
+        private static string BuildRunThreatUpTestButtonLabel(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.InfiniteThreatLevel >= InfiniteThreatUiMaxLevel ? "위협 MAX" : "위협 +1";
+        }
+
+        private static string BuildRunThreatDownTestButtonLabel(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.InfiniteThreatLevel <= InfiniteThreatUiMinLevel ? "위협 MIN" : "위협 -1";
+        }
+
+        private static string BuildRouteTestShortcutLabel(GreedLastRunSnapshot snapshot)
+        {
+            return "경로 " + FormatRouteShortcutLabel(BuildNextRouteTestProfile(snapshot.ActiveRouteProfile));
+        }
+
+        private static string BuildNextRouteTestProfile(string activeRouteProfile)
+        {
+            switch (activeRouteProfile)
+            {
+                case "안정 루트":
+                    return "변주 루트";
+                case "변주 루트":
+                    return "압박 루트";
+                default:
+                    return "안정 루트";
+            }
+        }
+
+        private static string FormatRouteShortcutLabel(string routeProfile)
+        {
+            switch (routeProfile)
+            {
+                case "변주 루트":
+                    return "변주 ↔↓↑";
+                case "압박 루트":
+                    return "압박 ↓↔↑";
+                default:
+                    return "안정 ↑↓↔";
+            }
+        }
+
+        private static string BuildAvoidanceTestShortcutLabel(GreedLastRunSnapshot snapshot)
+        {
+            RunnerResponseType current = ExtractActiveAvoidanceTestType(snapshot);
+            RunnerResponseType next = current == RunnerResponseType.None
+                ? RunnerResponseType.Jump
+                : BuildNextAvoidanceTestType(current);
+            string prefix = current == RunnerResponseType.None ? "동작 " : "다음 ";
+            return prefix + FormatRunnerResponseShortcutLabel(next);
+        }
+
+        private static string FormatRunnerResponseShortcutLabel(RunnerResponseType response)
+        {
+            string symbol = FormatRunnerResponseSymbol(response);
+            string label = FormatRunnerResponseLabel(response);
+            return string.IsNullOrEmpty(symbol) ? label : symbol + " " + label;
+        }
+
+        private static RunnerResponseType ExtractActiveAvoidanceTestType(GreedLastRunSnapshot snapshot)
+        {
+            string judgementText = snapshot.JudgementText ?? string.Empty;
+            if (judgementText.Contains("테스트 동작 확인 - 점프", StringComparison.Ordinal))
+            {
+                return RunnerResponseType.Jump;
+            }
+
+            if (judgementText.Contains("테스트 동작 확인 - 숙이기", StringComparison.Ordinal))
+            {
+                return RunnerResponseType.Slide;
+            }
+
+            if (judgementText.Contains("테스트 동작 확인 - 비틀기", StringComparison.Ordinal))
+            {
+                return RunnerResponseType.Twist;
+            }
+
+            if (snapshot.ActivePattern
+                && snapshot.ChapterIndex == 1
+                && snapshot.Score == 0
+                && snapshot.SuccessCount == 0
+                && snapshot.GoodCount == 0
+                && snapshot.MissCount == 0)
+            {
+                return BuildRunnerResponseType(snapshot.Pattern);
+            }
+
+            return RunnerResponseType.None;
+        }
+
+        private static RunnerResponseType BuildNextAvoidanceTestType(RunnerResponseType current)
+        {
+            switch (current)
+            {
+                case RunnerResponseType.Jump:
+                    return RunnerResponseType.Slide;
+                case RunnerResponseType.Slide:
+                    return RunnerResponseType.Twist;
+                default:
+                    return RunnerResponseType.Jump;
+            }
         }
 
         private void UpdatePauseMenuOverlay(GreedLastRunSnapshot snapshot)
@@ -4685,44 +12890,266 @@ namespace GreedLast
                 return;
             }
 
+            pauseMenuOverlay.transform.SetAsLastSibling();
+            UpdatePauseSoftBlurBands(snapshot);
+
             if (pauseMenuTitleText != null)
             {
                 pauseMenuTitleText.text = snapshot.ResumeCountdownActive
                     ? "재개 준비"
+                    : snapshot.StartCountdownActive ? "시작 대기"
                     : snapshot.InfiniteMode ? "무한모드 메뉴" : "일시정지 메뉴";
             }
 
             if (pauseMenuBodyText != null)
             {
                 string settingsLine = BuildPauseSettingsLine(snapshot);
+                string coachLine = BuildPauseCoachLine(snapshot);
+                string coachBlock = string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine;
                 if (snapshot.ResumeCountdownActive)
                 {
-                    pauseMenuBodyText.text = "카운트 후 함정이 다시 내려옵니다.\n입력은 재개 직후부터 받습니다.\n" + settingsLine;
+                    pauseMenuBodyText.text = "카운트 후 앞 박자 여유를 두고 이어집니다.\n입력은 다시 보이는 판정선에 맞춰 받습니다."
+                        + coachBlock
+                        + "\n" + settingsLine;
                 }
                 else if (snapshot.StartCountdownActive)
                 {
-                    pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다.\n" + settingsLine;
+                    pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다."
+                        + coachBlock
+                        + "\n" + settingsLine;
                 }
                 else
                 {
-                    pauseMenuBodyText.text = "ESC 또는 재개로 이어가기\n로비로 돌아가면 현재 런은 중단됩니다.\n" + settingsLine;
+                    pauseMenuBodyText.text = "ESC 또는 재개로 이어가기"
+                        + coachBlock
+                        + "\n" + BuildPauseExitHintLine(snapshot)
+                        + "\n" + settingsLine;
                 }
             }
         }
 
+        public static string BuildPauseCoachLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped)
+            {
+                return string.Empty;
+            }
+
+            if (snapshot.ActivePattern && snapshot.Pattern.IsValid)
+            {
+                string coachLine = BuildLiveRunCoachLine(snapshot);
+                if (string.IsNullOrEmpty(coachLine))
+                {
+                    coachLine = BuildActivePatternCoach(snapshot);
+                }
+
+                string target = (snapshot.ResumeCountdownActive ? "첫 함정 기준선 / " : string.Empty)
+                    + FormatChannel(snapshot.Pattern.Channel)
+                    + " · " + FormatTimingType(snapshot.Pattern.TimingType);
+                string reviewTarget = BuildPauseReviewTargetSuffix(snapshot);
+                if (!string.IsNullOrEmpty(reviewTarget))
+                {
+                    target += " / " + reviewTarget;
+                }
+
+                return string.IsNullOrEmpty(coachLine)
+                    ? "재개 목표: " + target
+                    : "재개 목표: " + CompactUiText(target + " / " + coachLine, 82);
+            }
+
+            if (snapshot.StartCountdownActive || snapshot.ResumeCountdownActive)
+            {
+                string reviewTarget = BuildPauseReviewTargetSuffix(snapshot);
+                return string.IsNullOrEmpty(reviewTarget)
+                    ? "재개 목표: 카운트 뒤 첫 함정 기준선 확인"
+                    : "재개 목표: " + CompactUiText("카운트 뒤 첫 함정 기준선 확인 / " + reviewTarget, 82);
+            }
+
+            return snapshot.ChoiceActive
+                ? "재개 목표: " + CompactUiText("선택지 확인 후 좌 · 중 · 우 입력" + BuildChoicePauseReviewTargetSuffix(snapshot), 82)
+                : string.Empty;
+        }
+
+        private static string BuildPauseReviewTargetSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string reviewTarget = BuildReviewTargetHudLine(snapshot);
+            return string.IsNullOrEmpty(reviewTarget) ? string.Empty : reviewTarget;
+        }
+
+        private static string BuildChoicePauseReviewTargetSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string reviewTarget = BuildPauseReviewTargetSuffix(snapshot);
+            return string.IsNullOrEmpty(reviewTarget) ? string.Empty : " / " + reviewTarget;
+        }
+
+        private static string BuildPauseExitHintLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return "로비로 돌아가도 일반 런 기록과 저장 기회는 변하지 않습니다.";
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return "로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다.";
+            }
+
+            return snapshot.RefillRun
+                ? "로비로 돌아가면 보충 런 중단 기록으로 남습니다."
+                : "로비로 돌아가면 중단 기록으로 남습니다.";
+        }
+
+        private static string BuildRunReturnButtonLabel(GreedLastRunSnapshot snapshot, bool normalClearReady)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return snapshot.Stopped ? "연습 마치기" : "연습 그만두기";
+            }
+
+            if (normalClearReady)
+            {
+                return "저장 없이 로비";
+            }
+
+            if (snapshot.Stopped)
+            {
+                return "로비로";
+            }
+
+            if (snapshot.Paused)
+            {
+                return snapshot.InfiniteMode ? "정산 후 로비" : snapshot.RefillRun ? "보충 중단" : "중단하고 로비";
+            }
+
+            return snapshot.InfiniteMode ? "정산 후 로비" : snapshot.RefillRun ? "보충 포기" : "탈출 포기";
+        }
+
+        private void UpdatePauseSoftBlurBands(GreedLastRunSnapshot snapshot)
+        {
+            if (pauseMenuSoftBlurBands == null || pauseMenuSoftBlurBands.Length < 5)
+            {
+                return;
+            }
+
+            byte edgeAlpha = snapshot.ResumeCountdownActive ? (byte)132 : (byte)118;
+            byte sideAlpha = snapshot.ResumeCountdownActive ? (byte)108 : (byte)96;
+            byte focusAlpha = snapshot.ResumeCountdownActive ? (byte)28 : (byte)18;
+            SetImageAlpha(pauseMenuSoftBlurBands[0], edgeAlpha);
+            SetImageAlpha(pauseMenuSoftBlurBands[1], edgeAlpha);
+            SetImageAlpha(pauseMenuSoftBlurBands[2], sideAlpha);
+            SetImageAlpha(pauseMenuSoftBlurBands[3], sideAlpha);
+            SetImageAlpha(pauseMenuSoftBlurBands[4], focusAlpha);
+        }
+
+        private static void SetImageAlpha(Image image, byte alpha)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            Color32 color = image.color;
+            color.a = alpha;
+            image.color = color;
+        }
+
+        private void BringPauseControlsToFront()
+        {
+            BringButtonToFront(nextPatternButton);
+            BringButtonToFront(returnLobbyButton);
+            BringButtonToFront(hapticsButton);
+            BringButtonArrayToFront(sfxVolumeButtons);
+            BringButtonArrayToFront(timingOffsetButtons);
+        }
+
+        private static void BringButtonArrayToFront(Button[] buttons)
+        {
+            if (buttons == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < buttons.Length; i += 1)
+            {
+                BringButtonToFront(buttons[i]);
+            }
+        }
+
+        private static void BringButtonToFront(Button button)
+        {
+            if (button == null || !button.gameObject.activeSelf)
+            {
+                return;
+            }
+
+            button.transform.SetAsLastSibling();
+        }
+
         private string BuildPauseSettingsLine(GreedLastRunSnapshot snapshot)
         {
-            int volumePercent = Mathf.RoundToInt(sfxVolume * 100f);
-            string hapticsText = hapticsEnabled ? "ON" : "OFF";
-            string recommendationText = " / 추천 " + FormatTimingRecommendationStatus(snapshot);
-            return "설정: 소리 " + volumePercent + " / 보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds) + recommendationText + " / 진동 " + hapticsText;
+            return BuildPauseSettingsLineText(snapshot, sfxVolume, hapticsEnabled);
+        }
+
+        private static string BuildPauseSettingsLineText(
+            GreedLastRunSnapshot snapshot,
+            float volume,
+            bool hapticsOn)
+        {
+            int volumePercent = Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f);
+            string hapticsText = hapticsOn ? "ON" : "OFF";
+            string recommendationText = " / " + FormatTimingRecommendationStatus(snapshot);
+            string countdownText = string.Empty;
+            if (snapshot.ResumeCountdownActive)
+            {
+                countdownText = " / 재개 " + snapshot.ResumeCountdownRemainingSeconds.ToString("0.0") + "s";
+            }
+
+            if (snapshot.StartCountdownActive)
+            {
+                countdownText += " / 시작 " + snapshot.StartCountdownRemainingSeconds.ToString("0.0") + "s";
+            }
+
+            return "설정: 소리 " + volumePercent + "% / 보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds) + recommendationText + countdownText + " / 진동 " + hapticsText;
         }
 
         private static string BuildTimingRecommendationButtonLabel(GreedLastRunSnapshot snapshot)
         {
-            return snapshot.HasTimingRecommendation
-                ? "추천 " + FormatTimingRecommendation(snapshot)
-                : "추천 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+            if (snapshot.TimingRecommendationApplied)
+            {
+                return "적용 완료 "
+                    + FormatTimingOffset(snapshot.AppliedTimingRecommendationMilliseconds / 1000f);
+            }
+
+            if (snapshot.HasTimingRecommendation)
+            {
+                return HasActionableTimingRecommendationButton(snapshot)
+                    ? "추천 적용 " + FormatTimingRecommendation(snapshot)
+                    : "보정 안정";
+            }
+
+            if (Mathf.Abs(snapshot.InputTimingOffsetSeconds) >= 0.001f)
+            {
+                return "0ms 복귀";
+            }
+
+            return "추천 대기 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+        }
+
+        private static bool HasActionableTimingRecommendationButton(GreedLastRunSnapshot snapshot)
+        {
+            int currentMilliseconds = Mathf.RoundToInt(snapshot.InputTimingOffsetSeconds * 1000f);
+            if (!snapshot.HasTimingRecommendation)
+            {
+                return currentMilliseconds != 0;
+            }
+
+            return Mathf.Abs(currentMilliseconds - snapshot.TimingRecommendationMilliseconds) >= 25;
+        }
+
+        private static bool CanUseTimingRecommendationButton(GreedLastRunSnapshot snapshot)
+        {
+            return (!snapshot.Stopped || snapshot.PracticeMode)
+                && HasActionableTimingRecommendationButton(snapshot);
         }
 
         private static string FormatTimingRecommendation(GreedLastRunSnapshot snapshot)
@@ -4732,9 +13159,20 @@ namespace GreedLast
 
         private static string FormatTimingRecommendationStatus(GreedLastRunSnapshot snapshot)
         {
-            return snapshot.HasTimingRecommendation
-                ? FormatTimingRecommendation(snapshot)
-                : snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+            if (!snapshot.HasTimingRecommendation)
+            {
+                return "추천 대기 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+            }
+
+            int currentMilliseconds = Mathf.RoundToInt(snapshot.InputTimingOffsetSeconds * 1000f);
+            int recommendationDelta = snapshot.TimingRecommendationMilliseconds - currentMilliseconds;
+            if (Mathf.Abs(recommendationDelta) < 25)
+            {
+                return "추천 보정 안정";
+            }
+
+            string trend = recommendationDelta < 0 ? "입력 늦음" : "입력 빠름";
+            return "추천 " + trend + " -> " + FormatTimingRecommendation(snapshot);
         }
 
         private void UpdateRunSideToolsForPause(GreedLastRunSnapshot snapshot, bool showDevTools)
@@ -4751,7 +13189,13 @@ namespace GreedLast
 
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
-                devShortcutButtons[i].gameObject.SetActive(showDevTools && showSideTools && !snapshot.InfiniteMode);
+                bool targetShortcut = i == (int)GreedLastDevShortcut.ReviewTargetCheck;
+                bool shortcutVisible = showDevTools
+                    && showSideTools
+                    && (targetShortcut || !snapshot.InfiniteMode)
+                    && (!targetShortcut || !string.IsNullOrWhiteSpace(snapshot.ReviewTargetText));
+                devShortcutButtons[i].gameObject.SetActive(shortcutVisible);
+                devShortcutButtons[i].interactable = shortcutVisible;
             }
 
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
@@ -4784,6 +13228,9 @@ namespace GreedLast
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(hapticsButton.GetComponent<RectTransform>(), 0.91f, 0.06f, 180f, 54f);
+            SetAnchored(focusMaxButton.GetComponent<RectTransform>(), 0.91f, 0.33f, 180f, 54f);
+            SetAnchored(threatUpButton.GetComponent<RectTransform>(), 0.91f, 0.285f, 180f, 54f);
+            SetAnchored(threatDownButton.GetComponent<RectTransform>(), 0.91f, 0.24f, 180f, 54f);
             SetAnchored(timingOffsetButtons[0].GetComponent<RectTransform>(), 0.91f, 0.465f, 180f, 54f);
             SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.91f, 0.42f, 180f, 54f);
             SetAnchored(timingOffsetButtons[2].GetComponent<RectTransform>(), 0.91f, 0.375f, 180f, 54f);
@@ -4804,6 +13251,13 @@ namespace GreedLast
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
         }
 
+        private void SetGrowthDevButtonLayout()
+        {
+            SetAnchored(focusMaxButton.GetComponent<RectTransform>(), 0.91f, 0.47f, 180f, 54f);
+            SetAnchored(threatUpButton.GetComponent<RectTransform>(), 0.91f, 0.425f, 180f, 54f);
+            SetAnchored(threatDownButton.GetComponent<RectTransform>(), 0.91f, 0.38f, 180f, 54f);
+        }
+
         private void UpdateRunGauges(GreedLastRunSnapshot snapshot)
         {
             if (runGaugeRoot == null)
@@ -4815,7 +13269,9 @@ namespace GreedLast
             TrackRunGaugeValueChanges(snapshot);
             int healthMax = Mathf.Max(1, snapshot.MaxHealth);
             float healthRatio = healthMax <= 0 ? 0f : Mathf.Clamp01(snapshot.Health / (float)healthMax);
-            float focusRatio = snapshot.MaxFocus <= 0 ? 0f : Mathf.Clamp01(snapshot.Focus / (float)snapshot.MaxFocus);
+            float focusRatio = snapshot.FocusStateActive
+                ? Mathf.Clamp01(snapshot.FocusStateRemainingSeconds / FocusStateUiDurationSeconds)
+                : snapshot.MaxFocus <= 0 ? 0f : Mathf.Clamp01(snapshot.Focus / (float)snapshot.MaxFocus);
             SetGaugeFill(healthGaugeFill, healthRatio);
             SetGaugeFill(focusGaugeFill, focusRatio);
 
@@ -4829,8 +13285,8 @@ namespace GreedLast
 
             if (focusGaugeFill != null)
             {
-                focusGaugeFill.color = snapshot.Focus >= snapshot.MaxFocus
-                    ? new Color32(255, 238, 181, 230)
+                focusGaugeFill.color = snapshot.FocusStateActive
+                    ? new Color32(255, 196, 74, 235)
                     : new Color32(86, 158, 184, 220);
                 ApplyRunGaugePulse(focusGaugeFill, focusGaugeText, BuildRunGaugePulse(focusGaugePulseUntil), new Color32(145, 231, 199, 255));
             }
@@ -4842,10 +13298,12 @@ namespace GreedLast
 
             if (focusGaugeText != null)
             {
-                focusGaugeText.text = "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
+                focusGaugeText.text = snapshot.FocusStateActive
+                    ? "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s"
+                    : "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
             }
 
-            ApplyFocusGuardGaugePulse(snapshot, focusRatio);
+            ApplyFocusStateGaugePulse(snapshot, focusRatio);
         }
 
         private void TrackRunGaugeValueChanges(GreedLastRunSnapshot snapshot)
@@ -4860,8 +13318,18 @@ namespace GreedLast
                 focusGaugePulseUntil = Time.unscaledTime + RunGaugePulseDuration;
             }
 
+            if (snapshot.FocusStateActive && !lastFocusStateActive)
+            {
+                focusStateActivationPulseUntil = Time.unscaledTime + FocusStateActivationPulseDuration;
+                focusGaugePulseUntil = Time.unscaledTime + FocusStateActivationPulseDuration;
+                beatMarkerFocusGuardUntil = Time.unscaledTime + BeatMarkerFocusGuardDuration;
+                PlayClip(focusGuardClip, 0.50f);
+                PlayHaptic(0.045f);
+            }
+
             lastGaugeHealth = snapshot.Health;
             lastGaugeFocus = snapshot.Focus;
+            lastFocusStateActive = snapshot.FocusStateActive;
         }
 
         private static float BuildRunGaugePulse(float pulseUntil)
@@ -4911,25 +13379,36 @@ namespace GreedLast
             }
         }
 
-        private void ApplyFocusGuardGaugePulse(GreedLastRunSnapshot snapshot, float focusRatio)
+        private void ApplyFocusStateGaugePulse(GreedLastRunSnapshot snapshot, float focusRatio)
         {
-            float guardPulse = BuildBeatMarkerFocusGuardImpact();
-            if (!IsFocusGuardSnapshot(snapshot) || guardPulse <= 0f)
+            if (!snapshot.FocusStateActive)
             {
                 return;
             }
 
+            float activationRemaining = focusStateActivationPulseUntil - Time.unscaledTime;
+            float activationPulse = activationRemaining > 0f
+                ? Mathf.Sin(Mathf.Clamp01(activationRemaining / FocusStateActivationPulseDuration) * Mathf.PI)
+                : 0f;
+            float livePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+
             if (focusGaugeFill != null)
             {
-                SetGaugeFill(focusGaugeFill, Mathf.Max(focusRatio, guardPulse * 0.22f));
-                focusGaugeFill.color = new Color32(145, 231, 199, (byte)Mathf.RoundToInt(Mathf.Lerp(160f, 245f, guardPulse)));
+                SetGaugeFill(focusGaugeFill, focusRatio);
+                focusGaugeFill.color = Color32.Lerp(
+                    new Color32(255, 174, 66, 225),
+                    new Color32(255, 238, 181, 250),
+                    Mathf.Max(livePulse * 0.55f, activationPulse));
             }
 
             if (focusGaugeText != null)
             {
-                focusGaugeText.text = "집중 보호 소모";
-                focusGaugeText.color = new Color32(145, 231, 199, 255);
-                focusGaugeText.rectTransform.localScale = Vector3.one * (1f + guardPulse * 0.11f);
+                focusGaugeText.text = "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s";
+                focusGaugeText.color = Color32.Lerp(
+                    new Color32(255, 214, 105, 255),
+                    new Color32(255, 248, 210, 255),
+                    livePulse);
+                focusGaugeText.rectTransform.localScale = Vector3.one * (1f + activationPulse * 0.12f + livePulse * 0.025f);
             }
         }
 
@@ -4944,26 +13423,49 @@ namespace GreedLast
             int target = Mathf.Max(1, snapshot.ChapterTarget);
             float ratio = Mathf.Clamp01(snapshot.ChapterProgress / (float)target);
             string label;
+            TrackRunProgressStageState(snapshot);
             TrackThreatProgressState(snapshot);
             float threatPulse = BuildThreatProgressPulse(snapshot);
+            float stagePulse = BuildRunProgressStagePulse();
             bool threatAlert = threatPulse > 0f;
 
-            if (snapshot.Stopped)
+            if (snapshot.PracticeMode)
             {
-                ratio = snapshot.SaveEligible || snapshot.InfiniteMode ? 1f : ratio;
-                label = snapshot.InfiniteMode
-                    ? $"무한 종료  {snapshot.InfiniteSectionsCleared}구간 / 위협 {snapshot.InfiniteThreatLevel}"
-                    : snapshot.SaveEligible
-                        ? "탈출 완료"
-                        : "런 중단";
+                if (snapshot.Stopped)
+                {
+                    bool completed = snapshot.Phase == GreedLastRunPhase.ClearResolving;
+                    ratio = completed ? 1f : ratio;
+                    label = completed ? BuildPracticeCompletionProgressLabel(snapshot) : "기초연습 중단";
+                }
+                else
+                {
+                    label = BuildPracticeProgressLabel(snapshot, target);
+                }
+            }
+            else if (snapshot.Stopped)
+            {
+                if (snapshot.InfiniteMode)
+                {
+                    int resolvedCurrentSegment = snapshot.CurrentSegmentExactCount
+                        + snapshot.CurrentSegmentGoodCount
+                        + snapshot.CurrentSegmentMissCount;
+                    ratio = Mathf.Clamp01(Mathf.Max(snapshot.ChapterProgress, resolvedCurrentSegment) / (float)target);
+                    label = $"무한 종료  {snapshot.InfiniteSectionsCleared}구간 / 위협 {snapshot.InfiniteThreatLevel}"
+                        + BuildStoppedInfiniteSegmentPerformance(snapshot);
+                }
+                else
+                {
+                    ratio = snapshot.SaveEligible ? 1f : ratio;
+                    label = snapshot.SaveEligible ? "탈출 완료" : "런 중단";
+                }
             }
             else if (snapshot.InfiniteMode)
             {
-                label = $"무한 구간 {snapshot.ChapterProgress}/{target}  위협 {snapshot.InfiniteThreatLevel}";
+                label = BuildInfiniteProgressLabel(snapshot, target);
             }
             else if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
             {
-                label = $"탈출 검증 {snapshot.ChapterProgress}/{target}";
+                label = BuildEscapeProgressLabel(snapshot, target);
             }
             else if (snapshot.Phase == GreedLastRunPhase.ClearResolving)
             {
@@ -4972,7 +13474,7 @@ namespace GreedLast
             }
             else
             {
-                label = $"챕터 {snapshot.ChapterIndex}  {snapshot.ChapterProgress}/{target}";
+                label = BuildNormalProgressLabel(snapshot, target);
             }
 
             if (threatAlert)
@@ -4984,7 +13486,9 @@ namespace GreedLast
 
             SetGaugeFill(runProgressFill, ratio);
             Color32 progressColor = snapshot.InfiniteMode
-                ? new Color32(205, 166, 70, 225)
+                ? snapshot.Stopped && snapshot.Health <= 0
+                    ? new Color32(207, 87, 65, 230)
+                    : new Color32(205, 166, 70, 225)
                 : snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.Phase == GreedLastRunPhase.ClearResolving
                     ? new Color32(255, 238, 181, 230)
                     : new Color32(104, 151, 142, 220);
@@ -4997,6 +13501,10 @@ namespace GreedLast
                         : new Color32(85, 171, 190, 232);
                     progressColor = Color32.Lerp(progressColor, alertColor, threatPulse * 0.85f);
                 }
+                else if (stagePulse > 0f)
+                {
+                    progressColor = Color32.Lerp(progressColor, new Color32(255, 238, 181, 238), stagePulse * 0.58f);
+                }
 
                 runProgressFill.color = progressColor;
             }
@@ -5004,6 +13512,7 @@ namespace GreedLast
             if (runProgressText != null)
             {
                 runProgressText.text = label;
+                runProgressText.fontSize = BuildRunProgressFontSize(label);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);
                 runProgressText.color = threatAlert
                     ? Color32.Lerp(
@@ -5012,11 +13521,347 @@ namespace GreedLast
                             ? new Color32(255, 211, 154, 255)
                             : new Color32(178, 232, 238, 255),
                         threatPulse)
-                    : baseTextColor;
+                    : stagePulse > 0f
+                        ? Color32.Lerp(baseTextColor, new Color32(255, 248, 210, 255), stagePulse * 0.72f)
+                        : baseTextColor;
             }
 
-            float scale = threatAlert ? 1f + threatPulse * 0.055f : 1f;
+            UpdateRouteCadencePips(snapshot, stagePulse);
+
+            float scale = 1f + Mathf.Max(threatPulse * 0.055f, stagePulse * 0.045f);
             runProgressRoot.transform.localScale = Vector3.one * scale;
+        }
+
+        private void UpdateRouteCadencePips(GreedLastRunSnapshot snapshot, float stagePulse)
+        {
+            if (routeCadencePipsRoot == null || routeCadencePips == null)
+            {
+                return;
+            }
+
+            bool visible = BuildRouteCadencePipState(snapshot, 0) != "hidden";
+            routeCadencePipsRoot.SetActive(visible);
+            if (!visible || !TryBuildHudCadence(snapshot, out GreedLastTimingType[] timings))
+            {
+                return;
+            }
+
+            for (int i = 0; i < routeCadencePips.Length; i += 1)
+            {
+                Image pip = routeCadencePips[i];
+                if (pip == null)
+                {
+                    continue;
+                }
+
+                string state = BuildRouteCadencePipState(snapshot, i);
+                Color32 timingColor = BuildRouteCadencePipTimingColor(timings[i]);
+                Text actionText = routeCadenceActionTexts != null && i < routeCadenceActionTexts.Length
+                    ? routeCadenceActionTexts[i]
+                    : null;
+                if (actionText != null)
+                {
+                    actionText.text = BuildRouteCadencePipActionSymbol(snapshot, i);
+                }
+                switch (state)
+                {
+                    case "done":
+                        pip.color = WithAlpha(timingColor, 238);
+                        pip.rectTransform.localScale = Vector3.one;
+                        SetRouteCadenceActionStyle(actionText, new Color32(16, 24, 26, 245), 1f);
+                        break;
+                    case "broken":
+                        pip.color = new Color32(207, 87, 65, 242);
+                        pip.rectTransform.localScale = Vector3.one;
+                        SetRouteCadenceActionStyle(actionText, new Color32(255, 238, 231, 245), 1f);
+                        break;
+                    case "active":
+                        pip.color = Color32.Lerp(timingColor, new Color32(255, 248, 210, 255), 0.42f);
+                        pip.rectTransform.localScale = Vector3.one * (1.24f + stagePulse * 0.10f);
+                        SetRouteCadenceActionStyle(actionText, new Color32(20, 28, 30, 255), 1.18f + stagePulse * 0.06f);
+                        break;
+                    default:
+                        pip.color = WithAlpha(timingColor, 76);
+                        pip.rectTransform.localScale = Vector3.one * 0.78f;
+                        SetRouteCadenceActionStyle(actionText, WithAlpha(new Color32(218, 226, 218, 255), 118), 0.82f);
+                        break;
+                }
+            }
+        }
+
+        private static void SetRouteCadenceActionStyle(Text actionText, Color32 color, float scale)
+        {
+            if (actionText == null)
+            {
+                return;
+            }
+
+            actionText.color = color;
+            actionText.rectTransform.localScale = Vector3.one * scale;
+        }
+
+        private static string BuildRouteCadencePipState(GreedLastRunSnapshot snapshot, int index)
+        {
+            if (index < 0
+                || index >= 3
+                || snapshot.InfiniteMode
+                || snapshot.ChoiceActive
+                || snapshot.Stopped
+                || !TryBuildHudCadence(snapshot, out _))
+            {
+                return "hidden";
+            }
+
+            int progress = Mathf.Clamp(snapshot.ChapterProgress, 0, 3);
+            if (index < progress)
+            {
+                return snapshot.PracticeMode || snapshot.PerfectBundleIntact ? "done" : "broken";
+            }
+
+            return index == progress ? "active" : "pending";
+        }
+
+        private static bool TryBuildHudCadence(
+            GreedLastRunSnapshot snapshot,
+            out GreedLastTimingType[] timings)
+        {
+            if (snapshot.PracticeMode || !snapshot.InfiniteMode && snapshot.ChapterIndex == 1)
+            {
+                timings = new[]
+                {
+                    GreedLastTimingType.Perfect,
+                    GreedLastTimingType.Clutch,
+                    GreedLastTimingType.Offbeat,
+                };
+                return true;
+            }
+
+            return TryBuildRouteCadence(snapshot, out _, out timings);
+        }
+
+        private static string BuildRouteCadencePipActionSymbol(GreedLastRunSnapshot snapshot, int index)
+        {
+            if (index < 0 || index >= 3 || !TryBuildHudAvoidanceCadence(snapshot, out GreedLastAvoidanceType[] actions))
+            {
+                return string.Empty;
+            }
+
+            switch (actions[index])
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return "↑";
+                case GreedLastAvoidanceType.Slide:
+                    return "↓";
+                case GreedLastAvoidanceType.Twist:
+                    return "↔";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static bool TryBuildHudAvoidanceCadence(
+            GreedLastRunSnapshot snapshot,
+            out GreedLastAvoidanceType[] actions)
+        {
+            actions = null;
+            if (!TryBuildHudCadence(snapshot, out _))
+            {
+                return false;
+            }
+
+            bool finalValidation = snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4;
+            int authoredChapter = snapshot.PracticeMode || snapshot.ChapterIndex <= 1
+                ? 1
+                : finalValidation ? 4 : snapshot.ChapterIndex;
+            actions = new GreedLastAvoidanceType[3];
+            for (int i = 0; i < actions.Length; i += 1)
+            {
+                actions[i] = GreedLastRunCore.GetAuthoredAvoidanceType(
+                    authoredChapter,
+                    i,
+                    snapshot.PracticeMode,
+                    false,
+                    finalValidation,
+                    snapshot.ActiveRouteProfile);
+            }
+
+            return true;
+        }
+
+        private static Color32 BuildRouteCadencePipTimingColor(GreedLastTimingType timingType)
+        {
+            switch (timingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return new Color32(105, 188, 174, 255);
+                case GreedLastTimingType.Clutch:
+                    return new Color32(232, 143, 83, 255);
+                case GreedLastTimingType.Offbeat:
+                    return new Color32(170, 132, 209, 255);
+                default:
+                    return new Color32(125, 139, 143, 255);
+            }
+        }
+
+        private static string BuildNormalProgressLabel(GreedLastRunSnapshot snapshot, int target)
+        {
+            if (snapshot.ChoiceActive)
+            {
+                return "루트 선택  챕터 " + snapshot.ChapterIndex;
+            }
+
+            if (snapshot.CoreRetrieved)
+            {
+                return "탈출 준비  공명핵 회수";
+            }
+
+            int remaining = Mathf.Max(0, target - snapshot.ChapterProgress);
+            string rolePrefix = BuildChapterProgressRolePrefix(snapshot.ChapterIndex) + " · ";
+            if (remaining <= 1)
+            {
+                return rolePrefix
+                    + (snapshot.ChapterIndex >= 4 ? "공명핵 직전 " : "선택지 직전 ")
+                    + snapshot.ChapterProgress + "/" + target
+                    + "  다음 통과";
+            }
+
+            return rolePrefix + "공명핵 준비 "
+                + snapshot.ChapterProgress + "/" + target
+                + "  남은 함정 " + remaining;
+        }
+
+        private static string BuildChapterProgressRolePrefix(int chapterIndex)
+        {
+            switch (Mathf.Clamp(chapterIndex, 1, 4))
+            {
+                case 1:
+                    return "학습";
+                case 2:
+                    return "방향 형성";
+                case 3:
+                    return "변주 정점";
+                default:
+                    return "공명핵 검증";
+            }
+        }
+
+        private static string BuildEscapeProgressLabel(GreedLastRunSnapshot snapshot, int target)
+        {
+            int remaining = Mathf.Max(0, target - snapshot.ChapterProgress);
+            string prefix = remaining <= 1 ? "탈출 직전 " : "진행 ";
+            return "탈출 검증 · " + prefix + snapshot.ChapterProgress + "/" + target + "  공명핵 회수";
+        }
+
+        private static string BuildInfiniteProgressLabel(GreedLastRunSnapshot snapshot, int target)
+        {
+            int remaining = Mathf.Max(0, target - snapshot.ChapterProgress);
+            string prefix = remaining <= 1 ? "무한 정산 직전 " : "무한 생존 ";
+            int threatLevel = Mathf.Clamp(snapshot.InfiniteThreatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel);
+            return prefix + snapshot.ChapterProgress + "/" + target
+                + "  위협 " + threatLevel + "/5 " + BuildInfiniteThreatReadPressureLabel(threatLevel)
+                + " 폭" + BuildInfiniteThreatDangerWidthLabel(threatLevel)
+                + " " + BuildInfiniteThreatRewardPreview(threatLevel)
+                + BuildCurrentInfiniteSegmentPerformance(snapshot)
+                + BuildInfiniteThreatProgressPreview(snapshot);
+        }
+
+        private static int BuildRunProgressFontSize(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return 24;
+            }
+
+            return label.Length >= 20 ? 20 : label.Length >= 16 ? 22 : 24;
+        }
+
+        private void TrackRunProgressStageState(GreedLastRunSnapshot snapshot)
+        {
+            string stageKey = BuildRunProgressStageKey(snapshot);
+            if (string.IsNullOrEmpty(lastRunProgressStageKey))
+            {
+                lastRunProgressStageKey = stageKey;
+                return;
+            }
+
+            if (string.Equals(lastRunProgressStageKey, stageKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            bool pauseTransition = string.Equals(lastRunProgressStageKey, "paused", StringComparison.Ordinal)
+                || string.Equals(stageKey, "paused", StringComparison.Ordinal);
+            lastRunProgressStageKey = stageKey;
+            if (pauseTransition)
+            {
+                targetCuePlayed = false;
+                return;
+            }
+
+            runProgressStagePulseUntil = Time.unscaledTime + RunProgressStagePulseDuration;
+            if (!snapshot.Paused && !snapshot.CountdownActive)
+            {
+                PlayHaptic(0.018f);
+            }
+        }
+
+        private static string BuildRunProgressStageKey(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return snapshot.Stopped ? "practice_stopped" : "practice";
+            }
+
+            if (snapshot.Stopped)
+            {
+                return snapshot.InfiniteMode
+                    ? "infinite_stopped"
+                    : snapshot.SaveEligible ? "normal_clear" : "normal_stopped";
+            }
+
+            if (snapshot.Paused)
+            {
+                return "paused";
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return "infinite_section_" + snapshot.InfiniteSectionsCleared;
+            }
+
+            if (snapshot.ChoiceActive)
+            {
+                return "choice_" + snapshot.ChoiceKind;
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "escape";
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.ClearResolving)
+            {
+                return "clear";
+            }
+
+            if (snapshot.CoreRetrieved)
+            {
+                return "core_ready";
+            }
+
+            return "chapter_" + snapshot.ChapterIndex;
+        }
+
+        private float BuildRunProgressStagePulse()
+        {
+            float remaining = runProgressStagePulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / RunProgressStagePulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
         }
 
         private void TrackThreatProgressState(GreedLastRunSnapshot snapshot)
@@ -5076,7 +13921,18 @@ namespace GreedLast
             TrackComboBadgeState(snapshot);
             bool showBreak = !snapshot.Stopped && snapshot.Combo == 0 && Time.unscaledTime < comboBreakBadgeUntil;
             bool showTier = !showBreak && !snapshot.Stopped && snapshot.Combo > 0 && Time.unscaledTime < comboTierBadgeUntil;
-            bool showBadge = showBreak || showTier || snapshot.Combo > 0 || snapshot.Stopped && snapshot.MaxCombo > 0;
+            bool precisionActive = !snapshot.Stopped && snapshot.PrecisionStreak >= 2;
+            bool stoppedPrecision = snapshot.Stopped && snapshot.MaxPrecisionStreak > 0;
+            bool profileBonusActive = !snapshot.Stopped
+                && IsVisibleChoiceProfile(snapshot.ActiveChoiceProfile)
+                && Time.unscaledTime < beatMarkerProfilePulseUntil;
+            bool showBadge = showBreak
+                || showTier
+                || profileBonusActive
+                || snapshot.Combo > 0
+                || precisionActive
+                || snapshot.Stopped && snapshot.MaxCombo > 0
+                || stoppedPrecision;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
             {
@@ -5085,10 +13941,14 @@ namespace GreedLast
 
             bool chainActive = snapshot.Combo >= 3;
             string text = snapshot.Stopped
-                ? "최대 콤보 " + snapshot.MaxCombo
+                ? "최대 콤보 " + snapshot.MaxCombo + (snapshot.MaxPrecisionStreak > 0 ? " / 정박 " + snapshot.MaxPrecisionStreak : string.Empty)
                 : chainActive
-                    ? "콤보 " + snapshot.Combo + "  연쇄 " + BuildRhythmChainLabel(snapshot)
-                    : "콤보 " + snapshot.Combo;
+                    ? "콤보 " + snapshot.Combo + "  연쇄 " + BuildRhythmChainLabel(snapshot) + BuildPrecisionBadgeSuffix(snapshot)
+                    : snapshot.Combo > 0
+                        ? "콤보 " + snapshot.Combo + BuildPrecisionBadgeSuffix(snapshot)
+                        : precisionActive
+                            ? "정박 " + snapshot.PrecisionStreak
+                            : "조합 " + snapshot.ActiveChoiceProfile;
 
             if (comboBadgeText != null)
             {
@@ -5102,6 +13962,10 @@ namespace GreedLast
                 {
                     text = "연쇄 상승  x" + comboTierBadgeLevel;
                 }
+                else if (profileBonusActive && snapshot.Combo > 0)
+                {
+                    text += " / 조합 " + snapshot.ActiveChoiceProfile;
+                }
 
                 comboBadgeText.text = text;
             }
@@ -5112,7 +13976,9 @@ namespace GreedLast
                     ? new Color32(24, 33, 36, 218)
                     : chainActive
                         ? new Color32(178, 123, 36, 228)
-                        : new Color32(35, 65, 75, 218);
+                        : precisionActive
+                            ? new Color32(165, 128, 52, 228)
+                            : new Color32(35, 65, 75, 218);
                 if (showBreak)
                 {
                     comboBadgeBack.color = new Color32(120, 46, 42, 226);
@@ -5120,6 +13986,10 @@ namespace GreedLast
                 else if (showTier)
                 {
                     comboBadgeBack.color = new Color32(207, 151, 46, 236);
+                }
+                else if (profileBonusActive)
+                {
+                    comboBadgeBack.color = Color32.Lerp(comboBadgeBack.color, GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), 0.42f);
                 }
             }
 
@@ -5129,7 +13999,9 @@ namespace GreedLast
                     ? new Color32(125, 139, 143, 220)
                     : chainActive
                         ? new Color32(255, 214, 105, 245)
-                        : new Color32(105, 168, 190, 230);
+                        : precisionActive
+                            ? new Color32(255, 238, 181, 252)
+                            : new Color32(105, 168, 190, 230);
                 if (showBreak)
                 {
                     comboBadgeAccent.color = new Color32(231, 91, 77, 245);
@@ -5138,12 +14010,241 @@ namespace GreedLast
                 {
                     comboBadgeAccent.color = new Color32(255, 238, 181, 255);
                 }
+                else if (profileBonusActive)
+                {
+                    comboBadgeAccent.color = GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile);
+                }
             }
 
+            float profilePulse = profileBonusActive ? BuildBeatMarkerProfilePulse() : 0f;
             float pulse = Time.unscaledTime < comboBadgePulseUntil
                 ? 1.06f + Mathf.Sin(Time.unscaledTime * 48f) * 0.035f
                 : 1f;
-            comboBadgeRoot.transform.localScale = Vector3.one * pulse;
+            comboBadgeRoot.transform.localScale = Vector3.one * (pulse + profilePulse * 0.08f);
+        }
+
+        private static string BuildPrecisionBadgeSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string suffix = snapshot.PrecisionStreak >= 2 ? " / 정박 " + snapshot.PrecisionStreak : string.Empty;
+            return suffix + BuildComboBadgeRewardSuffix(snapshot);
+        }
+
+        private static string BuildComboBadgeRewardSuffix(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.CountdownActive)
+            {
+                return string.Empty;
+            }
+
+            int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
+            if (precisionRewardRemaining == 0)
+            {
+                return " / 집중 +1";
+            }
+
+            if (precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
+            {
+                return " / 집중 " + precisionRewardRemaining + "회";
+            }
+
+            int chainRewardRemaining = BuildNextChainRemaining(snapshot);
+            if (chainRewardRemaining > 0 && chainRewardRemaining <= 2)
+            {
+                return " / 연쇄 " + chainRewardRemaining + "회";
+            }
+
+            return string.Empty;
+        }
+
+        private void ResetJudgementHistoryForFreshRun(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.ResumeCountdownActive)
+            {
+                return;
+            }
+
+            bool freshStart = snapshot.StartCountdownActive
+                && snapshot.Score == 0
+                && snapshot.Distance <= 0.1f
+                && snapshot.Combo == 0
+                && snapshot.LastResult == GreedLastJudgementResult.None;
+            bool targetChanged = !string.Equals(
+                lastPresentedReviewTargetText,
+                snapshot.ReviewTargetText,
+                StringComparison.Ordinal);
+            bool targetShortcutStart = snapshot.StartCountdownActive
+                && snapshot.LastResult == GreedLastJudgementResult.None
+                && snapshot.JudgementText.Contains("목표 직전", StringComparison.Ordinal);
+            bool resetReviewPresentation = freshStart || targetChanged || targetShortcutStart;
+            if (resetReviewPresentation && judgementHistoryCount > 0)
+            {
+                ClearJudgementHistory();
+            }
+
+            if (resetReviewPresentation)
+            {
+                reviewTargetAchievementAnnounced = false;
+            }
+
+            lastPresentedReviewTargetText = snapshot.ReviewTargetText ?? string.Empty;
+        }
+
+        private void UpdateJudgementHistoryVisibility(GreedLastRunSnapshot snapshot)
+        {
+            if (judgementHistoryRoot == null)
+            {
+                return;
+            }
+
+            bool showHistory = judgementHistoryCount > 0 && !snapshot.StartCountdownActive;
+            judgementHistoryRoot.SetActive(showHistory);
+        }
+
+        private void RecordJudgementHistory(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastResult == GreedLastJudgementResult.None)
+            {
+                return;
+            }
+
+            if (judgementHistoryCount < JudgementHistoryCapacity)
+            {
+                judgementHistoryResults[judgementHistoryCount] = snapshot.LastResult;
+                judgementHistoryFocusGuards[judgementHistoryCount] = snapshot.FocusStateActive
+                    && snapshot.LastResult != GreedLastJudgementResult.Miss;
+                judgementHistoryCenterHits[judgementHistoryCount] = snapshot.LastCenterHit;
+                judgementHistoryResponses[judgementHistoryCount] = BuildRunnerResponseType(snapshot.Pattern);
+                judgementHistoryCount += 1;
+            }
+            else
+            {
+                for (int i = 1; i < JudgementHistoryCapacity; i += 1)
+                {
+                    judgementHistoryResults[i - 1] = judgementHistoryResults[i];
+                    judgementHistoryFocusGuards[i - 1] = judgementHistoryFocusGuards[i];
+                    judgementHistoryCenterHits[i - 1] = judgementHistoryCenterHits[i];
+                    judgementHistoryResponses[i - 1] = judgementHistoryResponses[i];
+                }
+
+                judgementHistoryResults[JudgementHistoryCapacity - 1] = snapshot.LastResult;
+                judgementHistoryFocusGuards[JudgementHistoryCapacity - 1] = snapshot.FocusStateActive
+                    && snapshot.LastResult != GreedLastJudgementResult.Miss;
+                judgementHistoryCenterHits[JudgementHistoryCapacity - 1] = snapshot.LastCenterHit;
+                judgementHistoryResponses[JudgementHistoryCapacity - 1] = BuildRunnerResponseType(snapshot.Pattern);
+            }
+
+            judgementHistoryPulseUntil = Time.unscaledTime + JudgementHistoryPulseDuration;
+            if (judgementHistoryRoot != null)
+            {
+                judgementHistoryRoot.SetActive(true);
+            }
+        }
+
+        private void ClearJudgementHistory()
+        {
+            judgementHistoryCount = 0;
+            judgementHistoryPulseUntil = 0f;
+            for (int i = 0; i < JudgementHistoryCapacity; i += 1)
+            {
+                judgementHistoryResults[i] = GreedLastJudgementResult.None;
+                judgementHistoryFocusGuards[i] = false;
+                judgementHistoryCenterHits[i] = false;
+                judgementHistoryResponses[i] = RunnerResponseType.None;
+            }
+
+            if (judgementHistoryRoot != null)
+            {
+                judgementHistoryRoot.SetActive(false);
+            }
+        }
+
+        private void UpdateJudgementHistoryDots()
+        {
+            if (judgementHistoryDots == null || judgementHistoryRoot == null || !judgementHistoryRoot.activeSelf)
+            {
+                return;
+            }
+
+            float pulse = BuildJudgementHistoryPulse();
+            int emptyCount = JudgementHistoryCapacity - judgementHistoryCount;
+            for (int i = 0; i < judgementHistoryDots.Length; i += 1)
+            {
+                Image dot = judgementHistoryDots[i];
+                if (dot == null)
+                {
+                    continue;
+                }
+
+                int historyIndex = i - emptyCount;
+                bool hasEntry = historyIndex >= 0 && historyIndex < judgementHistoryCount;
+                bool newest = hasEntry && historyIndex == judgementHistoryCount - 1;
+                GreedLastJudgementResult result = hasEntry
+                    ? judgementHistoryResults[historyIndex]
+                    : GreedLastJudgementResult.None;
+                bool focusGuard = hasEntry && judgementHistoryFocusGuards[historyIndex];
+                bool centerHit = hasEntry && judgementHistoryCenterHits[historyIndex];
+                RunnerResponseType response = hasEntry
+                    ? judgementHistoryResponses[historyIndex]
+                    : RunnerResponseType.None;
+                Color32 color = BuildJudgementHistoryColor(result, focusGuard, centerHit, hasEntry);
+                if (newest && pulse > 0f)
+                {
+                    color = Color32.Lerp(color, new Color32(255, 248, 210, 255), pulse * 0.72f);
+                }
+
+                dot.color = color;
+                dot.rectTransform.localScale = Vector3.one * (newest ? 1f + pulse * 0.20f : 1f);
+                if (judgementHistoryActionLabels != null && i < judgementHistoryActionLabels.Length)
+                {
+                    Text actionLabel = judgementHistoryActionLabels[i];
+                    actionLabel.text = hasEntry ? FormatRunnerResponseSymbol(response) : string.Empty;
+                    actionLabel.color = hasEntry
+                        ? new Color32(18, 27, 30, 238)
+                        : new Color32(18, 27, 30, 0);
+                    actionLabel.rectTransform.localScale = Vector3.one;
+                }
+            }
+        }
+
+        private float BuildJudgementHistoryPulse()
+        {
+            float remaining = judgementHistoryPulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / JudgementHistoryPulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private static Color32 BuildJudgementHistoryColor(GreedLastJudgementResult result, bool focusGuard, bool centerHit, bool hasEntry)
+        {
+            if (!hasEntry)
+            {
+                return new Color32(63, 78, 82, 92);
+            }
+
+            if (focusGuard && result != GreedLastJudgementResult.Miss)
+            {
+                return centerHit
+                    ? new Color32(255, 248, 210, 252)
+                    : new Color32(255, 196, 74, 242);
+            }
+
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    return centerHit
+                        ? new Color32(255, 248, 210, 248)
+                        : new Color32(255, 218, 105, 235);
+                case GreedLastJudgementResult.Good:
+                    return new Color32(132, 190, 208, 226);
+                case GreedLastJudgementResult.Miss:
+                    return new Color32(231, 91, 77, 232);
+                default:
+                    return new Color32(63, 78, 82, 92);
+            }
         }
 
         private void TrackComboBadgeState(GreedLastRunSnapshot snapshot)
@@ -5192,14 +14293,54 @@ namespace GreedLast
             string chapterText,
             string choiceText)
         {
-            string protectionText = BuildFocusGuardHudLine(snapshot);
-            return $"{runState}  {chapterText}  핵:{FormatBool(snapshot.CoreRetrieved)}  저장:{FormatBool(snapshot.SaveEligible)}\n"
-                + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
-                + $"판정 {BuildCompactJudgementText(snapshot)}\n"
-                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {FormatHealthValue(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
-                + protectionText
-                + BuildRunGuideLine(snapshot)
-                + choiceText;
+            string runTag = snapshot.RefillRun ? "보충 " : string.Empty;
+            if (snapshot.Stopped)
+            {
+                string relicText = string.IsNullOrEmpty(snapshot.ActiveRelic) ? "없음" : snapshot.ActiveRelic;
+                return $"{runState}  {runTag}{chapterText}\n"
+                    + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  최대 콤보 {snapshot.MaxCombo}\n"
+                    + $"정박 {snapshot.PerfectSuccessCount}  압박 {snapshot.ClutchSuccessCount}  엇박 {snapshot.OffbeatSuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}\n"
+                    + BuildSnapshotFocusPerformance(snapshot) + "\n"
+                    + BuildStoppedAvoidanceHudLine(snapshot)
+                    + BuildStoppedAvoidanceReviewHudLine(snapshot)
+                    + $"조합 {snapshot.ActiveChoiceProfile}  {BuildGiftStackSummary(snapshot)}\n"
+                    + BuildStoppedReviewTargetResultLine(snapshot)
+                    + BuildRoutePayoffSettlementLine(snapshot)
+                    + $"유물 {relicText}  최대 정박 {snapshot.MaxPrecisionStreak}{BuildRecoveryPrecisionHudSuffix(snapshot)}{BuildPerfectFocusChargeHudSuffix(snapshot)}{BuildClutchCounterHudSuffix(snapshot)}{BuildOffbeatFlowHudSuffix(snapshot)}{BuildThreeActionExactHudSuffix(snapshot)}";
+            }
+
+            if (snapshot.ChoiceActive)
+            {
+                string feedback = BuildChoiceFeedbackLine(snapshot.JudgementText);
+                string feedbackLine = string.IsNullOrEmpty(feedback)
+                    ? string.Empty
+                    : feedback + "\n";
+                string giftStackLine = snapshot.ChoiceKind == GreedLastChoiceKind.Gift
+                    || snapshot.ChoiceKind == GreedLastChoiceKind.Relic
+                        ? BuildGiftStackSummary(snapshot) + "\n"
+                        : string.Empty;
+                string reviewTargetLine = BuildReviewTargetHudLine(snapshot);
+                return $"{runTag}{chapterText}  점수 {snapshot.Score}  콤보 {snapshot.Combo}\n"
+                    + feedbackLine
+                    + giftStackLine
+                    + (string.IsNullOrEmpty(reviewTargetLine) ? string.Empty : reviewTargetLine + "\n")
+                    + $"체력 {FormatHealthValue(snapshot)}  {FormatFocusStatus(snapshot)}\n"
+                    + BuildChoiceInputHintLine(snapshot);
+            }
+
+            int total = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;
+            string flow = total > 0 ? BuildRunFlowTag(snapshot, total) : "시작";
+            string status = BuildRunPressureStatus(snapshot);
+            string statusLine = string.IsNullOrEmpty(status) ? string.Empty : "\n상태 " + status;
+            string coachLine = BuildLiveRunCoachLine(snapshot);
+            string coachHudLine = string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine;
+            string reviewTargetHudLine = BuildReviewTargetHudLine(snapshot);
+            return $"{runTag}{chapterText}  점수 {snapshot.Score}  콤보 {snapshot.Combo}{BuildPrecisionHudText(snapshot)}\n"
+                + $"체력 {FormatHealthValue(snapshot)}  {FormatFocusStatus(snapshot)}  거리 {snapshot.Distance:0.0}m\n"
+                + $"판정 {BuildCompactJudgementText(snapshot)}  흐름 {flow}"
+                + (string.IsNullOrEmpty(reviewTargetHudLine) ? string.Empty : "\n" + reviewTargetHudLine)
+                + statusLine
+                + coachHudLine;
         }
 
         private string BuildInfiniteRunHud(GreedLastRunSnapshot snapshot, string runState)
@@ -5211,42 +14352,1855 @@ namespace GreedLast
                     : "마지막 실수 " + FormatMissReason(snapshot.MissReason);
                 return $"{runState}\n"
                     + $"이번 기록: [{BuildInfiniteSnapshotGrade(snapshot)}] {snapshot.Score}점 / {snapshot.Distance:0.0}m / {snapshot.InfiniteSectionsCleared}구간 / 위협 {snapshot.InfiniteThreatLevel}\n"
-                    + $"판정: 정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}\n"
-                    + $"최대 콤보 {snapshot.MaxCombo}  {lastMissText}\n"
-                    + "무한 재시작 또는 로비로 돌아갈 수 있습니다.";
+                    + $"조합: {FormatActiveInfiniteLoadoutName(snapshot.ActiveInfiniteLoadoutName)}{FormatActiveInfiniteLoadoutProfileSuffix(snapshot)} / 유물 {(string.IsNullOrEmpty(snapshot.ActiveRelic) ? "없음" : snapshot.ActiveRelic)} / {BuildInfiniteStoppedHighlight(snapshot)}\n"
+                    + $"판정: 정박 {snapshot.PerfectSuccessCount}  압박 {snapshot.ClutchSuccessCount}  엇박 {snapshot.OffbeatSuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}\n"
+                    + BuildSnapshotFocusPerformance(snapshot) + "\n"
+                    + BuildStoppedAvoidanceHudLine(snapshot)
+                    + BuildStoppedAvoidanceReviewHudLine(snapshot)
+                    + $"최대 콤보 {snapshot.MaxCombo}{BuildMaxPrecisionHudText(snapshot)}{BuildRecoveryPrecisionHudSuffix(snapshot)}{BuildPerfectFocusChargeHudSuffix(snapshot)}{BuildClutchCounterHudSuffix(snapshot)}{BuildOffbeatFlowHudSuffix(snapshot)}  {lastMissText}\n"
+                    + BuildStoppedReviewTargetResultLine(snapshot)
+                    + BuildRoutePayoffSettlementLine(snapshot)
+                    + BuildThreeActionExactHudResultLine(snapshot)
+                    + "기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다.";
             }
 
             string sectionText = snapshot.Stopped
                 ? $"이번 기록: {snapshot.InfiniteSectionsCleared}구간 / {snapshot.Distance:0.0}m / {snapshot.Score}점"
                 : $"무한 구간 {snapshot.ChapterProgress}/{snapshot.ChapterTarget}  위협 {snapshot.InfiniteThreatLevel}";
-            string resultText = $"\n누적 {snapshot.InfiniteSectionsCleared}구간  정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}";
-            string protectionText = BuildFocusGuardHudLine(snapshot);
-
-            return $"{runState}  {sectionText}\n"
-                + $"함정 {FormatTrapPrompt(snapshot)} / {FormatChannel(snapshot.Pattern.Channel)} / {FormatTimingType(snapshot.Pattern.TimingType)}\n"
-                + $"판정 {BuildCompactJudgementText(snapshot)}\n"
-                + $"점수 {snapshot.Score}  거리 {snapshot.Distance:0.0}m  체력 {FormatHealthValue(snapshot)}  집중 {snapshot.Focus}/{snapshot.MaxFocus}  콤보 {snapshot.Combo}\n"
-                + protectionText
-                + BuildRunGuideLine(snapshot)
-                + resultText;
+            int total = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;
+            string flow = total > 0 ? BuildRunFlowTag(snapshot, total) : "시작";
+            string status = BuildRunPressureStatus(snapshot);
+            string statusLine = string.IsNullOrEmpty(status) ? string.Empty : "\n상태 " + status;
+            string coachLine = BuildLiveRunCoachLine(snapshot);
+            string coachHudLine = string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine;
+            string reviewTargetHudLine = BuildReviewTargetHudLine(snapshot);
+            return $"{sectionText}{FormatActiveInfiniteLoadoutProfileSuffix(snapshot)}  점수 {snapshot.Score}  콤보 {snapshot.Combo}{BuildPrecisionHudText(snapshot)}\n"
+                + $"체력 {FormatHealthValue(snapshot)}  {FormatFocusStatus(snapshot)}  거리 {snapshot.Distance:0.0}m\n"
+                + $"판정 {BuildCompactJudgementText(snapshot)}  흐름 {flow}"
+                + (string.IsNullOrEmpty(reviewTargetHudLine) ? string.Empty : "\n" + reviewTargetHudLine)
+                + statusLine
+                + coachHudLine;
         }
 
-        private string BuildFocusGuardHudLine(GreedLastRunSnapshot snapshot)
+        public static string BuildReviewTargetHudLine(GreedLastRunSnapshot snapshot)
         {
-            if (!IsFocusGuardSnapshot(snapshot) || BuildBeatMarkerFocusGuardImpact() <= 0f)
+            if (snapshot.Stopped || string.IsNullOrWhiteSpace(snapshot.ReviewTargetText))
             {
                 return string.Empty;
             }
 
-            return "보호 집중 보호 발동 - 체력 피해 없음\n";
+            string progress = BuildReviewTargetProgressSuffix(snapshot);
+            string text = snapshot.ReviewTargetText + progress;
+            return "목표 " + CompactUiText(text, 64);
+        }
+
+        public static string BuildStoppedReviewTargetResultLine(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.Stopped || string.IsNullOrWhiteSpace(snapshot.ReviewTargetText))
+            {
+                return string.Empty;
+            }
+
+            string result = BuildReviewTargetSettlementText(snapshot);
+            return string.IsNullOrEmpty(result)
+                ? string.Empty
+                : "복기 목표: " + CompactUiText(snapshot.ReviewTargetText + " / " + result, 78) + "\n";
+        }
+
+        private static string BuildReviewTargetProgressSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string target = snapshot.ReviewTargetText ?? string.Empty;
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.MissCount <= 0 ? " / 목표 유지" : " / 목표 실패 실수 " + snapshot.MissCount;
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                if (snapshot.GoodCount > 0)
+                {
+                    return " / 목표 실패 보정 " + snapshot.GoodCount;
+                }
+
+                return snapshot.MissCount > 0 ? " / 목표 실패 실수 " + snapshot.MissCount : " / 목표 유지";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                return snapshot.NoInputMissCount <= targetNoInput
+                    ? " / 목표 유지 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput
+                    : " / 목표 실패 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput;
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                if (snapshot.TimingRecommendationApplied)
+                {
+                    return " / 목표 달성 보정 "
+                        + FormatTimingOffset(snapshot.AppliedTimingRecommendationMilliseconds / 1000f);
+                }
+
+                return snapshot.HasTimingRecommendation
+                    ? " / 적용 대기 추천 " + FormatTimingRecommendation(snapshot)
+                    : " / 추천 대기 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int currentCombo = Mathf.Max(snapshot.Combo, snapshot.MaxCombo);
+                int targetCombo = ExtractTargetNumberAfterKeywordForUi(target, "콤보");
+                return targetCombo > 0 && currentCombo >= targetCombo
+                    ? " / 목표 달성 콤보 " + currentCombo
+                    : " / 진행 현재 " + currentCombo;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarkerForUi(target, "점");
+                return targetScore > 0 && snapshot.Score >= targetScore
+                    ? " / 목표 달성 " + snapshot.Score + "점"
+                    : " / 진행 현재 " + snapshot.Score + "점";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarkerForUi(target, "구간");
+                return targetSections > 0 && snapshot.InfiniteSectionsCleared >= targetSections
+                    ? " / 목표 달성 " + snapshot.InfiniteSectionsCleared + "구간"
+                    : " / 진행 " + snapshot.InfiniteSectionsCleared + "/" + targetSections + "구간";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeywordForUi(target, "위협");
+                return targetThreat > 0 && snapshot.MaxInfiniteThreatLevel >= targetThreat
+                    ? " / 목표 달성 위협 " + snapshot.MaxInfiniteThreatLevel
+                    : " / 진행 위협 " + snapshot.MaxInfiniteThreatLevel;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                return snapshot.MissCount <= targetMisses
+                    ? " / 목표 유지 실수 " + snapshot.MissCount + "/" + targetMisses
+                    : " / 목표 실패 실수 " + snapshot.MissCount + "/" + targetMisses;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeywordForUi(target, "체력")
+                    : ExtractTargetNumberAfterKeywordForUi(target, "생존");
+                return targetHealth > 0 && snapshot.Health >= targetHealth
+                    ? " / 목표 달성 체력 " + snapshot.Health
+                    : " / 진행 체력 " + snapshot.Health;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeywordForUi(target, "집중");
+                int currentFocus = BuildReviewTargetFocusProgress(snapshot, target);
+                string focusText = BuildReviewTargetFocusProgressText(target, currentFocus);
+                return targetFocus > 0 && currentFocus >= targetFocus
+                    ? " / 목표 달성 " + focusText
+                    : " / 진행 " + focusText;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetPrecisionNumberForUi(target);
+                int bestPrecision = Mathf.Max(snapshot.PrecisionStreak, snapshot.MaxPrecisionStreak);
+                return targetPrecision > 0 && bestPrecision >= targetPrecision
+                    ? " / 목표 달성 정박 " + bestPrecision
+                    : " / 진행 정박 " + bestPrecision;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildReviewTargetSettlementText(GreedLastRunSnapshot snapshot)
+        {
+            string target = snapshot.ReviewTargetText ?? string.Empty;
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.MissCount <= 0 ? "달성 무실수" : "실패 실수 " + snapshot.MissCount;
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                if (snapshot.GoodCount > 0)
+                {
+                    return "실패 보정 " + snapshot.GoodCount;
+                }
+
+                return snapshot.MissCount > 0 ? "실패 실수 " + snapshot.MissCount : "달성 보정 0";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                return snapshot.NoInputMissCount <= targetNoInput
+                    ? "달성 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput
+                    : "실패 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput;
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return snapshot.TimingRecommendationApplied
+                    ? "달성 추천 보정 " + snapshot.AppliedTimingRecommendationMilliseconds + "ms"
+                    : "진행 추천 보정 미적용";
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int currentCombo = Mathf.Max(snapshot.Combo, snapshot.MaxCombo);
+                int targetCombo = ExtractTargetNumberAfterKeywordForUi(target, "콤보");
+                return targetCombo > 0 && currentCombo >= targetCombo
+                    ? "달성 콤보 " + currentCombo
+                    : "진행 콤보 " + currentCombo;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarkerForUi(target, "점");
+                return targetScore > 0 && snapshot.Score >= targetScore
+                    ? "달성 " + snapshot.Score + "점"
+                    : "진행 " + snapshot.Score + "점";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarkerForUi(target, "구간");
+                return targetSections > 0 && snapshot.InfiniteSectionsCleared >= targetSections
+                    ? "달성 " + snapshot.InfiniteSectionsCleared + "구간 생존"
+                    : "진행 " + snapshot.InfiniteSectionsCleared + "/" + targetSections + "구간";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeywordForUi(target, "위협");
+                return targetThreat > 0 && snapshot.MaxInfiniteThreatLevel >= targetThreat
+                    ? "달성 위협 " + snapshot.MaxInfiniteThreatLevel
+                    : "진행 위협 " + snapshot.MaxInfiniteThreatLevel;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                return snapshot.MissCount <= targetMisses
+                    ? "달성 실수 " + snapshot.MissCount + "/" + targetMisses
+                    : "실패 실수 " + snapshot.MissCount + "/" + targetMisses;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeywordForUi(target, "체력")
+                    : ExtractTargetNumberAfterKeywordForUi(target, "생존");
+                return targetHealth > 0 && snapshot.Health >= targetHealth
+                    ? "달성 체력 " + snapshot.Health
+                    : "진행 체력 " + snapshot.Health;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeywordForUi(target, "집중");
+                int currentFocus = BuildReviewTargetFocusProgress(snapshot, target);
+                string focusText = BuildReviewTargetFocusProgressText(target, currentFocus);
+                return targetFocus > 0 && currentFocus >= targetFocus
+                    ? "달성 " + focusText
+                    : "진행 " + focusText;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetPrecisionNumberForUi(target);
+                return targetPrecision > 0 && snapshot.MaxPrecisionStreak >= targetPrecision
+                    ? "달성 정박 " + snapshot.MaxPrecisionStreak
+                    : "진행 정박 " + snapshot.MaxPrecisionStreak;
+            }
+
+            return string.Empty;
+        }
+
+        private static int ExtractTargetPrecisionNumberForUi(string target)
+        {
+            int targetPrecision = ExtractTargetNumberBeforeMarkerForUi(target, "연속");
+            if (targetPrecision > 0)
+            {
+                return targetPrecision;
+            }
+
+            return target.Contains("정박", StringComparison.Ordinal)
+                ? ExtractTargetNumberAfterKeywordForUi(target, "정박")
+                : ExtractTargetNumberAfterKeywordForUi(target, "정확권");
+        }
+
+        private static int BuildReviewTargetFocusProgress(GreedLastRunSnapshot snapshot, string target)
+        {
+            if (target.Contains("발동", StringComparison.Ordinal))
+            {
+                return snapshot.FocusStateActivationCount;
+            }
+
+            return snapshot.FocusStateActivationCount > 0
+                ? Mathf.Max(snapshot.Focus, snapshot.MaxFocus)
+                : snapshot.Focus;
+        }
+
+        private static string BuildReviewTargetFocusProgressText(string target, int progress)
+        {
+            return target.Contains("발동", StringComparison.Ordinal)
+                ? "집중 발동 " + progress + "회"
+                : "집중 " + progress;
+        }
+
+        private static int ExtractTargetNumberAfterKeywordForUi(string text, string keyword)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(keyword))
+            {
+                return 0;
+            }
+
+            int keywordIndex = text.IndexOf(keyword, StringComparison.Ordinal);
+            return keywordIndex < 0
+                ? 0
+                : ExtractFirstNumberForUi(text.Substring(keywordIndex + keyword.Length));
+        }
+
+        private static int ExtractTargetNumberBeforeMarkerForUi(string text, string marker)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(marker))
+            {
+                return 0;
+            }
+
+            int markerIndex = text.IndexOf(marker, StringComparison.Ordinal);
+            if (markerIndex <= 0)
+            {
+                return 0;
+            }
+
+            int end = markerIndex - 1;
+            while (end >= 0 && char.IsWhiteSpace(text[end]))
+            {
+                end -= 1;
+            }
+
+            int start = end;
+            while (start >= 0 && char.IsDigit(text[start]))
+            {
+                start -= 1;
+            }
+
+            if (start == end)
+            {
+                return 0;
+            }
+
+            string value = text.Substring(start + 1, end - start);
+            return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+        }
+
+        private static int ExtractFirstNumberForUi(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < text.Length; i += 1)
+            {
+                if (!char.IsDigit(text[i]))
+                {
+                    continue;
+                }
+
+                int start = i;
+                while (i < text.Length && char.IsDigit(text[i]))
+                {
+                    i += 1;
+                }
+
+                string value = text.Substring(start, i - start);
+                return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+            }
+
+            return 0;
+        }
+
+        public static string BuildReviewTargetFeedbackLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped
+                || string.IsNullOrWhiteSpace(snapshot.ReviewTargetText)
+                || snapshot.LastResult == GreedLastJudgementResult.None)
+            {
+                return string.Empty;
+            }
+
+            string target = snapshot.ReviewTargetText;
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0
+                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.MissCount)
+                    : "목표 유지: 무실수";
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                if (snapshot.LastResult == GreedLastJudgementResult.Good || snapshot.GoodCount > 0)
+                {
+                    return "목표 실패: 보정 " + Mathf.Max(1, snapshot.GoodCount);
+                }
+
+                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0
+                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.MissCount)
+                    : "목표 유지: 보정 0";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                return snapshot.NoInputMissCount <= targetNoInput
+                    ? "목표 유지: 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput
+                    : "목표 실패: 입력 없음 " + snapshot.NoInputMissCount + "/" + targetNoInput;
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                if (snapshot.TimingRecommendationApplied)
+                {
+                    return "목표 달성: 추천 보정 " + snapshot.AppliedTimingRecommendationMilliseconds + "ms";
+                }
+
+                return snapshot.HasTimingRecommendation
+                    ? "목표 진행: 추천 적용 대기"
+                    : "목표 진행: 추천 샘플 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget;
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int currentCombo = Mathf.Max(snapshot.Combo, snapshot.MaxCombo);
+                int targetCombo = ExtractTargetNumberAfterKeywordForUi(target, "콤보");
+                if (targetCombo > 0 && currentCombo >= targetCombo)
+                {
+                    return snapshot.Combo >= targetCombo
+                        ? "목표 달성: 콤보 " + currentCombo
+                        : "목표 달성 유지: 콤보 " + currentCombo;
+                }
+
+                return "목표 진행: 콤보 " + currentCombo;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarkerForUi(target, "점");
+                return targetScore > 0 && snapshot.Score >= targetScore
+                    ? "목표 달성: " + snapshot.Score + "점"
+                    : "목표 진행: " + snapshot.Score + "점";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarkerForUi(target, "구간");
+                return targetSections > 0 && snapshot.InfiniteSectionsCleared >= targetSections
+                    ? "목표 달성: " + snapshot.InfiniteSectionsCleared + "구간 생존"
+                    : "목표 진행: " + snapshot.InfiniteSectionsCleared + "/" + targetSections + "구간";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeywordForUi(target, "위협");
+                return targetThreat > 0 && snapshot.MaxInfiniteThreatLevel >= targetThreat
+                    ? "목표 달성: 위협 " + snapshot.MaxInfiniteThreatLevel
+                    : "목표 진행: 위협 " + snapshot.MaxInfiniteThreatLevel;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                return snapshot.MissCount <= targetMisses
+                    ? "목표 유지: 실수 " + snapshot.MissCount + "/" + targetMisses
+                    : "목표 실패: 실수 " + snapshot.MissCount + "/" + targetMisses;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeywordForUi(target, "체력")
+                    : ExtractTargetNumberAfterKeywordForUi(target, "생존");
+                return targetHealth > 0 && snapshot.Health >= targetHealth
+                    ? "목표 달성: 체력 " + snapshot.Health
+                    : "목표 진행: 체력 " + snapshot.Health;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeywordForUi(target, "집중");
+                int currentFocus = BuildReviewTargetFocusProgress(snapshot, target);
+                string focusText = BuildReviewTargetFocusProgressText(target, currentFocus);
+                return targetFocus > 0 && currentFocus >= targetFocus
+                    ? "목표 달성: " + focusText
+                    : "목표 진행: " + focusText;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetPrecisionNumberForUi(target);
+                int bestPrecision = Mathf.Max(snapshot.PrecisionStreak, snapshot.MaxPrecisionStreak);
+                if (targetPrecision > 0 && bestPrecision >= targetPrecision)
+                {
+                    return snapshot.PrecisionStreak >= targetPrecision
+                        ? "목표 달성: 정박 " + bestPrecision
+                        : "목표 달성 유지: 정박 " + bestPrecision;
+                }
+
+                return "목표 진행: 정박 " + bestPrecision;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildPrecisionHudText(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.PrecisionStreak > 0 ? "  정박 " + snapshot.PrecisionStreak : string.Empty;
+        }
+
+        private static string BuildMaxPrecisionHudText(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.MaxPrecisionStreak > 0 ? "  최대 정박 " + snapshot.MaxPrecisionStreak : string.Empty;
+        }
+
+        private static string BuildThreeActionExactHudSuffix(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.ThreeActionExactBundleCount > 0
+                ? "  3동작 " + snapshot.ThreeActionExactBundleCount
+                : string.Empty;
+        }
+
+        private static string BuildThreeActionExactHudResultLine(GreedLastRunSnapshot snapshot)
+        {
+            string suffix = BuildThreeActionExactHudSuffix(snapshot);
+            return string.IsNullOrEmpty(suffix) ? string.Empty : suffix.TrimStart() + "\n";
+        }
+
+        private static string BuildStoppedAvoidanceHudLine(GreedLastRunSnapshot snapshot)
+        {
+            int jumpExact = ExtractRunTimingProfileCount(snapshot.TimingProfile, "점프 정확 ");
+            int jumpGood = ExtractRunTimingProfileCount(snapshot.TimingProfile, "점프 보정 ");
+            int jumpMiss = ExtractRunTimingProfileCount(snapshot.TimingProfile, "점프 실수 ");
+            int slideExact = ExtractRunTimingProfileCount(snapshot.TimingProfile, "숙이기 정확 ");
+            int slideGood = ExtractRunTimingProfileCount(snapshot.TimingProfile, "숙이기 보정 ");
+            int slideMiss = ExtractRunTimingProfileCount(snapshot.TimingProfile, "숙이기 실수 ");
+            int twistExact = ExtractRunTimingProfileCount(snapshot.TimingProfile, "비틀기 정확 ");
+            int twistGood = ExtractRunTimingProfileCount(snapshot.TimingProfile, "비틀기 보정 ");
+            int twistMiss = ExtractRunTimingProfileCount(snapshot.TimingProfile, "비틀기 실수 ");
+            int total = jumpExact + jumpGood + jumpMiss
+                + slideExact + slideGood + slideMiss
+                + twistExact + twistGood + twistMiss;
+            if (total <= 0)
+            {
+                return string.Empty;
+            }
+
+            return "회피 점프 " + FormatRunAvoidanceCounts(jumpExact, jumpGood, jumpMiss)
+                + " · 숙 " + FormatRunAvoidanceCounts(slideExact, slideGood, slideMiss)
+                + " · 틀 " + FormatRunAvoidanceCounts(twistExact, twistGood, twistMiss)
+                + " (정/보/실)\n";
+        }
+
+        private static string FormatRunAvoidanceCounts(int exact, int good, int miss)
+        {
+            return exact + "/" + good + "/" + miss;
+        }
+
+        private static string BuildStoppedAvoidanceReviewHudLine(GreedLastRunSnapshot snapshot)
+        {
+            string bestLabel = string.Empty;
+            int bestGood = 0;
+            int bestMiss = 0;
+            int bestScore = 0;
+            SelectStoppedAvoidanceReviewCandidate(
+                "바닥→↑점프",
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "점프 보정 "),
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "점프 실수 "),
+                ref bestLabel,
+                ref bestGood,
+                ref bestMiss,
+                ref bestScore);
+            SelectStoppedAvoidanceReviewCandidate(
+                "상단→↓숙이기",
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "숙이기 보정 "),
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "숙이기 실수 "),
+                ref bestLabel,
+                ref bestGood,
+                ref bestMiss,
+                ref bestScore);
+            SelectStoppedAvoidanceReviewCandidate(
+                "측면→↔비틀기",
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "비틀기 보정 "),
+                ExtractRunTimingProfileCount(snapshot.TimingProfile, "비틀기 실수 "),
+                ref bestLabel,
+                ref bestGood,
+                ref bestMiss,
+                ref bestScore);
+
+            if (bestScore <= 0 || string.IsNullOrEmpty(bestLabel))
+            {
+                return string.Empty;
+            }
+
+            string result = bestMiss > 0
+                ? "실수 " + bestMiss + "회"
+                : "보정 " + bestGood + "회";
+            return "회피 복기 " + bestLabel + " " + result + "\n";
+        }
+
+        private static void SelectStoppedAvoidanceReviewCandidate(
+            string label,
+            int good,
+            int miss,
+            ref string bestLabel,
+            ref int bestGood,
+            ref int bestMiss,
+            ref int bestScore)
+        {
+            int clampedGood = Mathf.Max(0, good);
+            int clampedMiss = Mathf.Max(0, miss);
+            int score = clampedMiss * 3 + clampedGood;
+            if (score <= bestScore)
+            {
+                return;
+            }
+
+            bestLabel = label;
+            bestGood = clampedGood;
+            bestMiss = clampedMiss;
+            bestScore = score;
+        }
+
+        private static int ExtractRunTimingProfileCount(string timingProfile, string prefix)
+        {
+            if (string.IsNullOrEmpty(timingProfile) || string.IsNullOrEmpty(prefix))
+            {
+                return 0;
+            }
+
+            int start = timingProfile.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return 0;
+            }
+
+            start += prefix.Length;
+            int end = timingProfile.IndexOf("회", start, StringComparison.Ordinal);
+            if (end <= start)
+            {
+                return 0;
+            }
+
+            string value = timingProfile.Substring(start, end - start).Trim();
+            return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+        }
+
+        private static int BuildRunHudFontSize(GreedLastRunSnapshot snapshot, string hudText)
+        {
+            if (snapshot.InfiniteMode && snapshot.Stopped)
+            {
+                int stoppedLineCount = CountTextLines(hudText);
+                int stoppedLongLinePenalty = HasLongTextLine(hudText, 72) ? 2 : 0;
+                if (stoppedLineCount >= 7)
+                {
+                    return 23 - stoppedLongLinePenalty;
+                }
+
+                return stoppedLineCount >= 6 ? 25 - stoppedLongLinePenalty : 30 - stoppedLongLinePenalty;
+            }
+
+            int lineCount = CountTextLines(hudText);
+            int longLinePenalty = HasLongTextLine(hudText, 76) ? 1 : 0;
+            if (lineCount >= 7)
+            {
+                return 23 - longLinePenalty;
+            }
+
+            if (lineCount >= 6)
+            {
+                return 24 - longLinePenalty;
+            }
+
+            return lineCount <= 4 ? 30 - longLinePenalty : 26 - longLinePenalty;
+        }
+
+        private void UpdateRunHudLayout(string hudText)
+        {
+            if (runHudText == null)
+            {
+                return;
+            }
+
+            int lineCount = CountTextLines(hudText);
+            if (lineCount >= 8)
+            {
+                SetAnchored(runHudText.rectTransform, 0.5f, 0.292f, 930f, 330f);
+                return;
+            }
+
+            if (lineCount >= 7)
+            {
+                SetAnchored(runHudText.rectTransform, 0.5f, 0.282f, 930f, 305f);
+                return;
+            }
+
+            if (lineCount >= 6)
+            {
+                SetAnchored(runHudText.rectTransform, 0.5f, 0.268f, 910f, 275f);
+                return;
+            }
+
+            if (lineCount <= 4)
+            {
+                SetAnchored(runHudText.rectTransform, 0.5f, 0.252f, 920f, 220f);
+                return;
+            }
+
+            SetAnchored(runHudText.rectTransform, 0.5f, 0.255f, 900f, 245f);
+        }
+
+        private static string BuildRunObjectiveLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped)
+            {
+                return string.Empty;
+            }
+
+            if (snapshot.Paused)
+            {
+                return "목표: 재개 후 같은 박자에서 이어가기\n";
+            }
+
+            if (snapshot.ChoiceActive)
+            {
+                return "목표: 루트 선택으로 다음 보정 결정\n";
+            }
+
+            if (snapshot.PracticeMode)
+            {
+                return BuildPracticeObjectiveLine(snapshot);
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return "목표: 위협 " + snapshot.InfiniteThreatLevel + " 생존 / 무한 기록 갱신"
+                    + BuildRunMicroObjectiveSuffix(snapshot) + "\n";
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "목표: 공명핵 들고 탈출 검증 통과"
+                    + BuildRunMicroObjectiveSuffix(snapshot) + "\n";
+            }
+
+            if (snapshot.CoreRetrieved)
+            {
+                return "목표: 탈출 구간 진입 준비"
+                    + BuildRunMicroObjectiveSuffix(snapshot) + "\n";
+            }
+
+            return "목표: 챕터 돌파로 공명핵 회수"
+                + BuildRunMicroObjectiveSuffix(snapshot) + "\n";
+        }
+
+        private static string BuildRunMicroObjectiveSuffix(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.CountdownActive || snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            if (snapshot.Health <= 1)
+            {
+                return " / 생존 우선";
+            }
+
+            string transitionObjective = BuildStageTransitionObjectiveSuffix(snapshot);
+            string patternObjective = BuildPatternObjectiveSuffix(snapshot.Pattern);
+            if (!string.IsNullOrEmpty(transitionObjective)
+                && !string.IsNullOrEmpty(patternObjective))
+            {
+                return patternObjective + transitionObjective;
+            }
+
+            if (!string.IsNullOrEmpty(transitionObjective))
+            {
+                return transitionObjective;
+            }
+
+            if (!string.IsNullOrEmpty(patternObjective))
+            {
+                return patternObjective;
+            }
+
+            if (snapshot.FocusStateActive)
+            {
+                return " / 집중 고점 유지";
+            }
+
+            if (snapshot.InfiniteMode && WillInfiniteThreatRiseAfterSection(snapshot))
+            {
+                return " / 위협 상승 임박";
+            }
+
+            int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
+            if (precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
+            {
+                return " / 정박 보상까지 " + precisionRewardRemaining;
+            }
+
+            int chainRewardRemaining = BuildNextChainRemaining(snapshot);
+            if (chainRewardRemaining > 0 && chainRewardRemaining <= 2)
+            {
+                return " / 연쇄 보너스까지 " + chainRewardRemaining;
+            }
+
+            string profileObjective = BuildChoiceProfileObjectiveSuffix(snapshot);
+            if (!string.IsNullOrEmpty(profileObjective))
+            {
+                return profileObjective;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildStageTransitionObjectiveSuffix(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.CountdownActive || snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            int target = Mathf.Max(1, snapshot.ChapterTarget);
+            int remaining = target - snapshot.ChapterProgress;
+            if (remaining != 1)
+            {
+                return string.Empty;
+            }
+
+            string routeFinish = snapshot.PerfectBundleIntact
+                ? BuildRouteBundleObjectiveSuffix(snapshot.ActiveRouteProfile)
+                : string.Empty;
+
+            if (snapshot.InfiniteMode)
+            {
+                string infiniteTransition = WillInfiniteThreatRiseAfterSection(snapshot)
+                    ? " / 다음 통과로 위협 상승"
+                    : " / 다음 통과로 구간 정산";
+                return routeFinish + infiniteTransition;
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return routeFinish + " / 다음 통과로 탈출";
+            }
+
+            if (!snapshot.CoreRetrieved && snapshot.ChapterIndex >= 4)
+            {
+                return routeFinish + " / 다음 통과로 공명핵";
+            }
+
+            return routeFinish + " / 다음 통과로 선택지";
+        }
+
+        private static string BuildRouteBundleObjectiveSuffix(string routeProfile)
+        {
+            switch (routeProfile)
+            {
+                case "안정 루트":
+                    return " / 안정 완주 회복";
+                case "변주 루트":
+                    return " / 변주 완주 집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus;
+                case "압박 루트":
+                    return " / 압박 완주 +" + GreedLastRunCore.PressureRouteBundleScoreBonus;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        public static string BuildLiveRunCoachLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.CountdownActive || snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            string coach = BuildImmediateJudgementCoach(snapshot);
+            if (string.IsNullOrEmpty(coach))
+            {
+                coach = BuildActivePatternCoach(snapshot);
+            }
+
+            string routeStepCoach = BuildRouteStepCoach(snapshot);
+            if (!string.IsNullOrEmpty(routeStepCoach))
+            {
+                coach = string.IsNullOrEmpty(coach) ? routeStepCoach : coach + " / " + routeStepCoach;
+            }
+
+            string pressure = BuildPressureCoachSuffix(snapshot);
+            if (!string.IsNullOrEmpty(pressure))
+            {
+                coach = string.IsNullOrEmpty(coach) ? pressure : coach + " / " + pressure;
+            }
+
+            return string.IsNullOrEmpty(coach) ? string.Empty : "코칭 " + CompactUiText(coach, 66);
+        }
+
+        private static string BuildRouteStepCoach(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastResult == GreedLastJudgementResult.None
+                || !TryGetNextRouteCadenceStep(snapshot, out string routeLabel, out string nextTiming, out string nextAction))
+            {
+                return string.Empty;
+            }
+
+            return snapshot.PerfectBundleIntact
+                ? routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget
+                    + " / 다음 " + nextTiming + " · " + nextAction
+                : "다음 " + nextTiming + " 연습 · " + nextAction + " / " + routeLabel + " 완주 중단";
+        }
+
+        private static string BuildImmediateJudgementCoach(GreedLastRunSnapshot snapshot)
+        {
+            switch (snapshot.LastResult)
+            {
+                case GreedLastJudgementResult.Miss:
+                    switch (snapshot.MissReason)
+                    {
+                        case "wrong_channel":
+                            return "채널 먼저 확인";
+                        case "no_input":
+                            return "다음 함정 입력 준비";
+                        case "too_early":
+                            return "살짝 늦게 / 판정선 가까이";
+                        case "too_late":
+                            return "살짝 빠르게 / 소리 앞박";
+                        default:
+                            return "회복 우선";
+                    }
+                case GreedLastJudgementResult.Good:
+                    if (IsRecoveryPattern(snapshot.Pattern))
+                    {
+                        return "복구 성공 / 다음 정박으로 연쇄 재시동";
+                    }
+
+                    return "보정권 생존 / 판정선 안쪽으로";
+                case GreedLastJudgementResult.Success:
+                    string reviewTargetCoach = BuildReviewTargetCoach(snapshot);
+                    if (!string.IsNullOrEmpty(reviewTargetCoach))
+                    {
+                        return reviewTargetCoach;
+                    }
+
+                    if (IsRecoveryPattern(snapshot.Pattern))
+                    {
+                        string recoveryCoach = snapshot.LastCenterHit
+                            ? "흐름 회복 완료 / 연쇄 재시동"
+                            : "흐름 복귀 / 다음은 판정선 중앙";
+                        return AppendImmediatePrecisionRewardCoach(snapshot, recoveryCoach);
+                    }
+
+                    if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
+                    {
+                        return AppendImmediatePrecisionRewardCoach(snapshot, "정박 충전 / 집중 가속");
+                    }
+
+                    if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+                    {
+                        return AppendImmediatePrecisionRewardCoach(snapshot, "압박 반격 성공 / 고점 확보");
+                    }
+
+                    if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+                    {
+                        return AppendImmediatePrecisionRewardCoach(snapshot, "엇박 포착 / 연쇄 가속");
+                    }
+
+                    int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
+                    if (precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
+                    {
+                        return "정박 보상까지 " + precisionRewardRemaining + "회";
+                    }
+
+                    return string.Empty;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string AppendImmediatePrecisionRewardCoach(
+            GreedLastRunSnapshot snapshot,
+            string coach)
+        {
+            int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
+            if (precisionRewardRemaining == 0)
+            {
+                return coach + " / 정박 보상 획득";
+            }
+
+            return precisionRewardRemaining > 0 && precisionRewardRemaining <= 2
+                ? coach + " / 정박 보상까지 " + precisionRewardRemaining + "회"
+                : coach;
+        }
+
+        private static string BuildReviewTargetCoach(GreedLastRunSnapshot snapshot)
+        {
+            string target = snapshot.ReviewTargetText ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                return string.Empty;
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.MissCount <= 0 ? "무실수 목표 유지" : string.Empty;
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                return snapshot.GoodCount <= 0 && snapshot.MissCount <= 0
+                    ? "보정 0회 목표 유지"
+                    : string.Empty;
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                int remaining = targetNoInput - snapshot.NoInputMissCount;
+                return remaining < 0 ? "입력 누락 목표 실패" : "입력 누락 허용 " + remaining + "회";
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                if (snapshot.TimingRecommendationApplied)
+                {
+                    return "추천 보정 목표 달성";
+                }
+
+                return snapshot.HasTimingRecommendation ? "가운데 추천 적용" : "추천 샘플 수집";
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int targetCombo = ExtractTargetNumberAfterKeywordForUi(target, "콤보");
+                int remaining = targetCombo - Mathf.Max(snapshot.Combo, snapshot.MaxCombo);
+                return targetCombo <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "콤보 목표 달성" : "목표까지 콤보 " + remaining;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarkerForUi(target, "점");
+                int remaining = targetScore - snapshot.Score;
+                return targetScore <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "점수 목표 달성" : "목표까지 " + remaining + "점";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarkerForUi(target, "구간");
+                int remaining = targetSections - snapshot.InfiniteSectionsCleared;
+                return targetSections <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "생존 구간 목표 달성" : "목표까지 " + remaining + "구간";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeywordForUi(target, "위협");
+                int remaining = targetThreat - snapshot.MaxInfiniteThreatLevel;
+                return targetThreat <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "위협 목표 달성" : "목표 위협까지 " + remaining;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                int remaining = targetMisses - snapshot.MissCount;
+                return remaining < 0 ? "허용 실수 초과" : "허용 실수 " + remaining + "회 남음";
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeywordForUi(target, "체력")
+                    : ExtractTargetNumberAfterKeywordForUi(target, "생존");
+                int remaining = targetHealth - snapshot.Health;
+                return targetHealth <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "목표 체력 유지" : "목표 체력까지 " + remaining;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeywordForUi(target, "집중");
+                int currentFocus = BuildReviewTargetFocusProgress(snapshot, target);
+                int remaining = targetFocus - currentFocus;
+                bool activationTarget = target.Contains("발동", StringComparison.Ordinal);
+                if (targetFocus <= 0)
+                {
+                    return string.Empty;
+                }
+
+                if (remaining <= 0)
+                {
+                    return activationTarget ? "집중 발동 목표 달성" : "집중 목표 달성";
+                }
+
+                return activationTarget
+                    ? "목표까지 집중 발동 " + remaining + "회"
+                    : "목표 집중까지 " + remaining;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetPrecisionNumberForUi(target);
+                int remaining = targetPrecision - Mathf.Max(snapshot.PrecisionStreak, snapshot.MaxPrecisionStreak);
+                return targetPrecision <= 0
+                    ? string.Empty
+                    : remaining <= 0 ? "정박 목표 달성" : "목표까지 정박 " + remaining + "회";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildActivePatternCoach(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern)
+            {
+                return string.Empty;
+            }
+
+            string beatCue = BuildActivePatternBeatCue(snapshot);
+            string prompt = snapshot.Pattern.Prompt ?? string.Empty;
+            string coach;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                coach = "복구 패턴 / 정확권 재진입";
+                string recoveryRoutePayoff = BuildActiveRoutePayoffCoach(snapshot.Pattern);
+                if (!string.IsNullOrEmpty(recoveryRoutePayoff))
+                {
+                    coach += " / " + recoveryRoutePayoff;
+                }
+            }
+            else
+            {
+                string variation = BuildActivePatternVariationCoachPrefix(prompt);
+                switch (snapshot.Pattern.TimingType)
+                {
+                    case GreedLastTimingType.Perfect:
+                        coach = "정박 타이밍 / 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+                        break;
+                    case GreedLastTimingType.Clutch:
+                        coach = "압박 타이밍 / 정박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus;
+                        break;
+                    case GreedLastTimingType.Offbeat:
+                        coach = "엇박 타이밍 / 정박 연쇄 +" + GreedLastRunCore.OffbeatFlowComboBonus;
+                        break;
+                    default:
+                        coach = string.Empty;
+                        break;
+                }
+
+                string routePayoff = BuildActiveRoutePayoffCoach(snapshot.Pattern);
+                if (!string.IsNullOrEmpty(routePayoff))
+                {
+                    coach = string.IsNullOrEmpty(coach) ? routePayoff : routePayoff + " / " + coach;
+                }
+                else if (!string.IsNullOrEmpty(variation))
+                {
+                    coach = string.IsNullOrEmpty(coach) ? variation : variation + " / " + coach;
+                }
+            }
+
+            string chapterRole = BuildChapterRoleCoachPrefix(snapshot);
+            if (!string.IsNullOrEmpty(chapterRole))
+            {
+                coach = string.IsNullOrEmpty(coach) ? chapterRole : chapterRole + " / " + coach;
+            }
+
+            string avoidance = BuildActiveAvoidanceCoach(snapshot.Pattern);
+            if (!string.IsNullOrEmpty(avoidance))
+            {
+                coach = string.IsNullOrEmpty(coach) ? avoidance : avoidance + " / " + coach;
+            }
+
+            return AppendCoachBeatCue(coach, beatCue);
+        }
+
+        private static string BuildActiveAvoidanceCoach(GreedLastPatternModel pattern)
+        {
+            if (!pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            return BuildTrapResponseCueLabel(pattern) + " 회피";
+        }
+
+        private static string BuildChapterRoleCoachPrefix(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.InfiniteMode || snapshot.PracticeMode)
+            {
+                return string.Empty;
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "탈출 검증";
+            }
+
+            if (snapshot.ChapterIndex >= 4)
+            {
+                return "공명핵 검증";
+            }
+
+            return snapshot.ChapterIndex == 3 ? "변주 정점" : string.Empty;
+        }
+
+        private static string BuildActiveRoutePayoffCoach(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return "안정 보험 / 보정 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus;
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal)
+                && pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                return "변주 공명 / 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal)
+                && pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                return "압박 증폭 / 반격 +" + GreedLastRunCore.PressureRouteClutchScoreBonus;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildActivePatternVariationCoachPrefix(string prompt)
+        {
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return "탈출 압박";
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return "위기 패턴";
+            }
+
+            if (prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return "유예 패턴";
+            }
+
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return "안정 패턴";
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                return "변주 패턴";
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal)
+                || prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                return "압박 패턴";
+            }
+
+            return string.Empty;
+        }
+
+        private static string AppendCoachBeatCue(string coach, string beatCue)
+        {
+            if (string.IsNullOrEmpty(beatCue))
+            {
+                return coach;
+            }
+
+            return string.IsNullOrEmpty(coach) ? beatCue : coach + " / " + beatCue;
+        }
+
+        private static string BuildPressureCoachSuffix(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Health <= 1)
+            {
+                return "생존 우선";
+            }
+
+            if (snapshot.InfiniteMode && snapshot.CurrentSegmentMissCount > 0)
+            {
+                return "현재 구간 실수 " + snapshot.CurrentSegmentMissCount;
+            }
+
+            if (snapshot.InfiniteMode && WillInfiniteThreatRiseAfterSection(snapshot))
+            {
+                return "위협 상승 전 정박";
+            }
+
+            if (!snapshot.FocusStateActive && snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
+            {
+                return "집중 1칸 남음";
+            }
+
+            if (snapshot.LastResult == GreedLastJudgementResult.Success)
+            {
+                return string.Empty;
+            }
+
+            return BuildRewardCoachSuffix(snapshot);
+        }
+
+        private static string BuildRewardCoachSuffix(GreedLastRunSnapshot snapshot)
+        {
+            int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
+            if (precisionRewardRemaining == 0)
+            {
+                return "정박 보상 획득";
+            }
+
+            if (precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
+            {
+                return "정박 보상 " + precisionRewardRemaining + "회";
+            }
+
+            int chainRewardRemaining = BuildNextChainRemaining(snapshot);
+            if (chainRewardRemaining > 0 && chainRewardRemaining <= 2)
+            {
+                return "연쇄 보너스 " + chainRewardRemaining + "회";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildChoiceProfileObjectiveSuffix(GreedLastRunSnapshot snapshot)
+        {
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    return snapshot.Health < snapshot.MaxHealth ? " / 안정 회복" : " / 안전 돌파";
+                case "집중형":
+                    return snapshot.FocusStateActive ? " / 집중 상태 연장" : " / 집중 채우기";
+                case "연쇄형":
+                    return snapshot.Combo <= 0 ? " / 연쇄 시동" : " / 연쇄 유지";
+                case "고점형":
+                    return snapshot.PrecisionStreak <= 0 ? " / 정박 고점" : " / 고점 유지";
+                case "균형형":
+                    return " / 균형 유지";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildPatternObjectiveSuffix(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            string objective;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                objective = " / 복구 정박 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus
+                    + " / 연쇄 +" + GreedLastRunCore.RecoveryPrecisionComboBonus;
+            }
+            else if (pattern.TimingType == GreedLastTimingType.Perfect)
+            {
+                objective = " / 정박 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+            }
+            else if (pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                objective = " / 압박 정박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus;
+            }
+            else if (pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                objective = " / 엇박 정박 연쇄 +" + GreedLastRunCore.OffbeatFlowComboBonus;
+            }
+            else if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                objective = " / 탈출 집중";
+            }
+            else if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                objective = " / 압박 정박";
+            }
+            else if (prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                objective = " / 심층 집중";
+            }
+            else if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                objective = " / 엇박 대응";
+            }
+            else if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                objective = " / 안정 돌파";
+            }
+            else
+            {
+                objective = string.Empty;
+            }
+
+            return BuildPatternAvoidanceObjectiveSuffix(pattern)
+                + objective
+                + BuildRoutePatternObjectiveSuffix(pattern);
+        }
+
+        private static string BuildPatternAvoidanceObjectiveSuffix(GreedLastPatternModel pattern)
+        {
+            if (!pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            return " / " + BuildTrapResponseCueLabel(pattern) + " 회피";
+        }
+
+        private static string BuildRoutePatternObjectiveSuffix(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return " / 보정 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus;
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal)
+                && pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                return " / 변주 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal)
+                && pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                return " / 압박 증폭 +" + GreedLastRunCore.PressureRouteClutchScoreBonus;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildRunFlowLine(GreedLastRunSnapshot snapshot)
+        {
+            int total = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;
+            if (total <= 0)
+            {
+                return string.Empty;
+            }
+
+            string tag = BuildRunFlowTag(snapshot, total);
+            string prefix = snapshot.InfiniteMode
+                ? "누적 " + snapshot.InfiniteSectionsCleared + "구간"
+                : "흐름";
+            return prefix
+                + $"  정확 {snapshot.SuccessCount}  보정 {snapshot.GoodCount}  실수 {snapshot.MissCount}"
+                + " / " + tag
+                + BuildRecentPatternFlowSuffix(snapshot)
+                + "\n";
+        }
+
+        private static string BuildRunFlowTag(GreedLastRunSnapshot snapshot, int total)
+        {
+            if (snapshot.Health <= 1 && snapshot.MissCount > 0)
+            {
+                return "위험";
+            }
+
+            if (snapshot.MissCount >= Mathf.Max(2, snapshot.SuccessCount + snapshot.GoodCount))
+            {
+                return "흔들림";
+            }
+
+            if (snapshot.ThreeActionExactBundleCount > 0 && snapshot.MissCount <= 0)
+            {
+                return "3동작 정확";
+            }
+
+            if (snapshot.Combo >= 6)
+            {
+                return "연쇄 좋음";
+            }
+
+            if (snapshot.PrecisionStreak >= 3)
+            {
+                return "정박 좋음";
+            }
+
+            if (snapshot.SuccessCount >= snapshot.GoodCount + snapshot.MissCount + 2)
+            {
+                return "정확 우세";
+            }
+
+            if (snapshot.GoodCount > snapshot.SuccessCount && snapshot.GoodCount >= Mathf.Max(2, total / 2))
+            {
+                return "보정 의존";
+            }
+
+            string timingAxisFlowTag = BuildDominantTimingAxisFlowTag(snapshot);
+            if (!string.IsNullOrEmpty(timingAxisFlowTag))
+            {
+                return timingAxisFlowTag;
+            }
+
+            string profileFlowTag = BuildChoiceProfileFlowTag(snapshot);
+            if (!string.IsNullOrEmpty(profileFlowTag))
+            {
+                return profileFlowTag;
+            }
+
+            return "균형";
+        }
+
+        private static string BuildDominantTimingAxisFlowTag(GreedLastRunSnapshot snapshot)
+        {
+            int total = snapshot.PerfectSuccessCount + snapshot.ClutchSuccessCount + snapshot.OffbeatSuccessCount;
+            if (total < 4)
+            {
+                return string.Empty;
+            }
+
+            int top = Mathf.Max(snapshot.PerfectSuccessCount, snapshot.ClutchSuccessCount, snapshot.OffbeatSuccessCount);
+            int second = snapshot.PerfectSuccessCount == top
+                ? Mathf.Max(snapshot.ClutchSuccessCount, snapshot.OffbeatSuccessCount)
+                : snapshot.ClutchSuccessCount == top
+                    ? Mathf.Max(snapshot.PerfectSuccessCount, snapshot.OffbeatSuccessCount)
+                    : Mathf.Max(snapshot.PerfectSuccessCount, snapshot.ClutchSuccessCount);
+            if (top < second + 2)
+            {
+                return string.Empty;
+            }
+
+            return snapshot.PerfectSuccessCount == top
+                ? "정박 우세"
+                : snapshot.ClutchSuccessCount == top ? "압박 우세" : "엇박 우세";
+        }
+
+        private static string BuildRecentPatternFlowSuffix(GreedLastRunSnapshot snapshot)
+        {
+            if (!DevToolsEnabled
+                || snapshot.Stopped
+                || snapshot.Paused
+                || snapshot.CountdownActive
+                || snapshot.ChoiceActive
+                || string.IsNullOrEmpty(snapshot.RecentPatternFlow))
+            {
+                return string.Empty;
+            }
+
+            return " / 최근 " + snapshot.RecentPatternFlow;
+        }
+
+        private static string BuildChoiceProfileFlowTag(GreedLastRunSnapshot snapshot)
+        {
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    return snapshot.Health >= Mathf.Max(2, snapshot.MaxHealth - 1) ? "안정 유지" : string.Empty;
+                case "집중형":
+                    return snapshot.Focus >= snapshot.MaxFocus - 1 ? "집중 흐름" : string.Empty;
+                case "연쇄형":
+                    return snapshot.MaxCombo >= 3 ? "연쇄 축적" : string.Empty;
+                case "고점형":
+                    return snapshot.Score >= 300 ? "고점 축적" : string.Empty;
+                case "균형형":
+                    return "균형 유지";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildChoiceHeaderPreview(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            string leftHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceLeft);
+            string centerHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceCenter);
+            string rightHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceRight);
+            if (string.IsNullOrEmpty(leftHint)
+                && string.IsNullOrEmpty(centerHint)
+                && string.IsNullOrEmpty(rightHint))
+            {
+                return string.Empty;
+            }
+
+            return "좌 " + leftHint + " / 중 " + centerHint + " / 우 " + rightHint;
+        }
+
+        private static string BuildChoiceHeaderPreviewPart(GreedLastChoiceKind kind, string choiceName)
+        {
+            if (kind == GreedLastChoiceKind.Node && IsRouteChoiceName(choiceName))
+            {
+                return BuildRouteChoiceShortName(choiceName)
+                    + " " + BuildRouteCadenceText(choiceName)
+                    + "/" + BuildAvoidanceCadenceText(choiceName, false, -1);
+            }
+
+            return BuildChoiceEffectHint(kind, choiceName);
+        }
+
+        private static bool IsRouteChoiceName(string choiceName)
+        {
+            return choiceName == "안정 루트"
+                || choiceName == "변주 루트"
+                || choiceName == "압박 루트";
+        }
+
+        private static string BuildRouteChoiceShortName(string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "안정 루트":
+                    return "안정";
+                case "변주 루트":
+                    return "변주";
+                case "압박 루트":
+                    return "압박";
+                default:
+                    return choiceName;
+            }
+        }
+
+        private static string BuildChoiceHeaderDetail(GreedLastRunSnapshot snapshot)
+        {
+            string text = snapshot.ChoicePrompt;
+            if (snapshot.ChoiceKind == GreedLastChoiceKind.Node)
+            {
+                string segmentReview = BuildCompletedSegmentReview(snapshot);
+                if (!string.IsNullOrEmpty(segmentReview))
+                {
+                    text += "\n" + segmentReview;
+                }
+
+                text += "\n박자 지도 · 안정 정-압-정 / 변주 엇-정-엇 / 압박 압-엇-압";
+                text += "\n동작 지도 · " + BuildAvoidanceRouteMapText();
+            }
+
+            string choicePreview = BuildChoiceHeaderPreview(snapshot);
+            if (!string.IsNullOrEmpty(choicePreview))
+            {
+                text += "\n" + choicePreview;
+            }
+
+            string openingContext = BuildChoiceOpeningContextLine(snapshot.JudgementText);
+            if (!string.IsNullOrEmpty(openingContext))
+            {
+                text += "\n" + openingContext;
+            }
+
+            string recommendationLine = BuildChoiceRecommendationLine(snapshot);
+            if (!string.IsNullOrEmpty(recommendationLine))
+            {
+                text += "\n" + recommendationLine;
+            }
+
+            string feedback = BuildChoiceFeedbackLine(snapshot.JudgementText);
+            if (!string.IsNullOrEmpty(feedback))
+            {
+                text += "\n" + feedback;
+            }
+
+            if (snapshot.ChoiceKind == GreedLastChoiceKind.Gift
+                || snapshot.ChoiceKind == GreedLastChoiceKind.Relic)
+            {
+                text += "\n현재 " + BuildGiftStackSummary(snapshot);
+            }
+
+            return text;
+        }
+
+        private static string BuildChoiceOpeningContextLine(string judgementText)
+        {
+            if (string.IsNullOrWhiteSpace(judgementText))
+            {
+                return string.Empty;
+            }
+
+            string normalized = judgementText.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            string reviewLine = string.Empty;
+            string reviewTargetResultLine = string.Empty;
+            string targetLine = string.Empty;
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(reviewLine)
+                    && (line.Contains("복기 재도전", StringComparison.Ordinal)
+                        || line.Contains("복기 연습", StringComparison.Ordinal)))
+                {
+                    reviewLine = line;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(reviewTargetResultLine)
+                    && line.StartsWith("복기 목표:", StringComparison.Ordinal))
+                {
+                    reviewTargetResultLine = line;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(targetLine)
+                    && (line.StartsWith("재도전 목표:", StringComparison.Ordinal)
+                        || line.StartsWith("훈련 힌트:", StringComparison.Ordinal)))
+                {
+                    targetLine = line;
+                }
+            }
+
+            if (string.IsNullOrEmpty(reviewLine)
+                && string.IsNullOrEmpty(reviewTargetResultLine)
+                && string.IsNullOrEmpty(targetLine))
+            {
+                return string.Empty;
+            }
+
+            string text = string.IsNullOrEmpty(reviewLine) ? "복기" : reviewLine;
+            if (!string.IsNullOrEmpty(reviewTargetResultLine))
+            {
+                text += " / " + reviewTargetResultLine;
+            }
+
+            if (!string.IsNullOrEmpty(targetLine))
+            {
+                text += " / " + targetLine;
+            }
+
+            return CompactUiText(text, 88);
+        }
+
+        private static string BuildCompletedSegmentReview(GreedLastRunSnapshot snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot.LastCompletedSegment))
+            {
+                return string.Empty;
+            }
+
+            string coaching = snapshot.LastCompletedSegmentMissCount > 0
+                ? "안정화 필요"
+                : snapshot.LastCompletedSegmentGoodCount > 0
+                    ? "정확권 전환"
+                    : snapshot.LastCompletedSegmentExactCount >= 3 ? "완전 정확" : "구간 통과";
+            return "직전 " + snapshot.LastCompletedSegment
+                + "  정확 " + snapshot.LastCompletedSegmentExactCount
+                + " · 보정 " + snapshot.LastCompletedSegmentGoodCount
+                + " · 실수 " + snapshot.LastCompletedSegmentMissCount
+                + " / " + coaching;
+        }
+
+        private static string BuildChoiceInputHintLine(GreedLastRunSnapshot snapshot)
+        {
+            string recommendationLine = BuildChoiceRecommendationLine(snapshot);
+            return string.IsNullOrEmpty(recommendationLine)
+                ? "선택 입력: 좌 / 중 / 우"
+                : "선택 입력: 좌 / 중 / 우  " + CompactUiText(recommendationLine, 42);
+        }
+
+        public static string BuildChoiceRecommendationLine(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            string recommendedChoice = BuildRecommendedChoiceName(snapshot);
+            if (string.IsNullOrEmpty(recommendedChoice))
+            {
+                return "추천: 현재 균형 유지";
+            }
+
+            string reason = BuildChoiceRecommendationReasonText(snapshot, recommendedChoice);
+            string effect = BuildChoiceEffectHint(snapshot.ChoiceKind, recommendedChoice);
+            string text = "추천: " + recommendedChoice;
+            if (!string.IsNullOrEmpty(reason))
+            {
+                text += " / " + reason;
+            }
+
+            return string.IsNullOrEmpty(effect)
+                ? text
+                : text + " / " + effect;
+        }
+
+        private static string BuildChoiceFeedbackLine(string judgementText)
+        {
+            if (string.IsNullOrEmpty(judgementText))
+            {
+                return string.Empty;
+            }
+
+            string normalized = judgementText.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            if (lines.Length == 0 || !lines[0].Contains(" 선택"))
+            {
+                return string.Empty;
+            }
+
+            string selected = lines[0].Split(new[] { " 선택" }, StringSplitOptions.None)[0];
+            string effect = string.Empty;
+            string profile = string.Empty;
+            for (int i = 1; i < lines.Length; i += 1)
+            {
+                if (lines[i].StartsWith("효과:", StringComparison.Ordinal))
+                {
+                    effect = lines[i].Substring(3).Trim();
+                    continue;
+                }
+
+                if (lines[i].StartsWith("조합 성향:", StringComparison.Ordinal))
+                {
+                    profile = lines[i].Substring(6).Trim();
+                }
+            }
+
+            string text = string.IsNullOrEmpty(effect)
+                ? "직전 " + selected
+                : "직전 " + selected + " / " + effect;
+            string result = string.IsNullOrEmpty(profile)
+                ? text
+                : text + " / 조합 " + profile;
+            return CompactUiText(result, 76);
+        }
+
+        private static string BuildFocusStateHudLine(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.FocusStateActive)
+            {
+                return string.Empty;
+            }
+
+            return "집중 상태  점수 x1.20  연쇄 완충  " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s\n";
         }
 
         private static string BuildRunGuideLine(GreedLastRunSnapshot snapshot)
         {
             string line = $"가이드 {BuildTimingGuideLabel(snapshot)}  보정 {FormatTimingOffset(snapshot.InputTimingOffsetSeconds)}";
-            if (IsFocusGuardSnapshot(snapshot))
+            if (snapshot.FocusStateActive)
             {
-                line += "  보호 발동";
+                line += "  집중 상태";
             }
             else if (!string.IsNullOrEmpty(snapshot.MissReason))
             {
@@ -5258,7 +16212,892 @@ namespace GreedLast
                 line += "  테스트 무적 ON";
             }
 
-            return line;
+            string infiniteThreatLine = BuildInfiniteThreatReadLine(snapshot);
+            if (!string.IsNullOrEmpty(infiniteThreatLine))
+            {
+                line += "\n" + infiniteThreatLine;
+            }
+
+            string status = BuildRunPressureStatus(snapshot);
+            return string.IsNullOrEmpty(status)
+                ? line
+                : line + "\n상태 " + status;
+        }
+
+        private static string BuildInfiniteThreatReadLine(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode
+                || snapshot.Stopped
+                || snapshot.Paused
+                || snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            int threatLevel = Mathf.Clamp(snapshot.InfiniteThreatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel);
+            string nextStep = WillInfiniteThreatRiseAfterSection(snapshot) ? "다음 구간 상승" : "현재 압박 유지";
+            return "위협 " + threatLevel + "/5 " + BuildInfiniteThreatReadPressureLabel(threatLevel)
+                + "  위험폭 " + BuildInfiniteThreatDangerWidthLabel(threatLevel)
+                + "  보상 " + BuildInfiniteThreatRewardPreview(threatLevel)
+                + "  " + nextStep;
+        }
+
+        private static string BuildInfiniteThreatReadPressureLabel(int threatLevel)
+        {
+            switch (Mathf.Clamp(threatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel))
+            {
+                case 1:
+                    return "안정";
+                case 2:
+                    return "상승";
+                case 3:
+                    return "압박";
+                case 4:
+                    return "고압";
+                default:
+                    return "최고";
+            }
+        }
+
+        private static string BuildInfiniteThreatDangerWidthLabel(int threatLevel)
+        {
+            switch (Mathf.Clamp(threatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel))
+            {
+                case 1:
+                    return "좁음";
+                case 2:
+                    return "보통";
+                case 3:
+                    return "확대";
+                case 4:
+                    return "넓음";
+                default:
+                    return "최대";
+            }
+        }
+
+        private static string BuildInfiniteThreatRewardPreview(int threatLevel)
+        {
+            int perfectBonus = BuildInfiniteThreatPrecisionBonusPreview(threatLevel, GreedLastTimingType.Perfect);
+            int clutchBonus = BuildInfiniteThreatPrecisionBonusPreview(threatLevel, GreedLastTimingType.Clutch);
+            int offbeatBonus = BuildInfiniteThreatPrecisionBonusPreview(threatLevel, GreedLastTimingType.Offbeat);
+            int minBonus = Mathf.Min(perfectBonus, Mathf.Min(clutchBonus, offbeatBonus));
+            int maxBonus = Mathf.Max(perfectBonus, Mathf.Max(clutchBonus, offbeatBonus));
+            return minBonus == maxBonus ? "정확+" + minBonus : "정확+" + minBonus + "~" + maxBonus;
+        }
+
+        private static int BuildInfiniteThreatPrecisionBonusPreview(int threatLevel, GreedLastTimingType timingType)
+        {
+            int safeThreatLevel = Mathf.Clamp(threatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel);
+            int bonus = Mathf.Max(0, safeThreatLevel - 1) * 12;
+            if (timingType == GreedLastTimingType.Clutch)
+            {
+                bonus += safeThreatLevel >= 3 ? 10 : 0;
+            }
+            else if (timingType == GreedLastTimingType.Offbeat)
+            {
+                bonus += safeThreatLevel >= 3 ? 8 : 0;
+            }
+
+            return bonus;
+        }
+
+        private static string BuildRunPressureStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.Paused || snapshot.CountdownActive)
+            {
+                return string.Empty;
+            }
+
+            string status = string.Empty;
+            if (snapshot.Staggered || snapshot.StaggerRemainingSeconds > 0.01f)
+            {
+                AppendCompactStatus(ref status, "복구 " + snapshot.StaggerRemainingSeconds.ToString("0.0") + "s");
+            }
+
+            if (!snapshot.InfiniteMode && snapshot.ChapterProgress > 0)
+            {
+                AppendCompactStatus(
+                    ref status,
+                    snapshot.PerfectBundleIntact
+                        ? BuildRouteBundleProgressLabel(snapshot)
+                        : BuildRouteBundleBrokenLabel(snapshot));
+            }
+
+            AppendCompactStatus(ref status, BuildThreeActionBundleStatus(snapshot));
+
+            if (snapshot.InfiniteMode
+                && snapshot.ChapterProgress == 0
+                && snapshot.LastCompletedSegment.StartsWith("무한 ", StringComparison.Ordinal))
+            {
+                AppendCompactStatus(
+                    ref status,
+                    "직전 정" + snapshot.LastCompletedSegmentExactCount
+                        + " 보" + snapshot.LastCompletedSegmentGoodCount
+                        + " 실" + snapshot.LastCompletedSegmentMissCount);
+            }
+
+            AppendCompactStatus(ref status, BuildActiveChoiceProfileStatus(snapshot));
+            AppendCompactStatus(ref status, BuildActiveRouteStatus(snapshot));
+            if (!snapshot.InfiniteMode
+                && snapshot.FocusGiftStacks + snapshot.SurvivalGiftStacks + snapshot.ChainGiftStacks > 0)
+            {
+                AppendCompactStatus(ref status, BuildGiftStackSummary(snapshot));
+            }
+
+            AppendCompactStatus(ref status, BuildActiveScoringPreviewStatus(snapshot));
+
+            if (snapshot.Combo >= 3)
+            {
+                AppendCompactStatus(ref status, "연쇄 " + BuildRhythmChainLabel(snapshot));
+            }
+
+            if (snapshot.PrecisionStreak >= 2)
+            {
+                AppendCompactStatus(ref status, "정박 " + snapshot.PrecisionStreak);
+            }
+
+            AppendCompactStatus(ref status, BuildPrecisionRewardStatus(snapshot));
+            AppendCompactStatus(ref status, BuildNextChainStatus(snapshot));
+            AppendCompactStatus(ref status, BuildPatternVariationStatus(snapshot.Pattern));
+
+            if (snapshot.FocusStateActive)
+            {
+                AppendCompactStatus(ref status, "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s");
+            }
+            else if (snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
+            {
+                AppendCompactStatus(ref status, "집중 1칸 남음");
+            }
+
+            if (snapshot.Health <= 1)
+            {
+                AppendCompactStatus(ref status, "체력 위험");
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                if (!string.IsNullOrEmpty(snapshot.ActiveRelic))
+                {
+                    AppendCompactStatus(ref status, "유물 " + snapshot.ActiveRelic);
+                }
+
+                AppendCompactStatus(ref status, BuildInfiniteThreatPreviewStatus(snapshot));
+            }
+
+            AppendCompactStatus(ref status, BuildTimingRecommendationStatus(snapshot));
+            return CompactUiText(status, 64);
+        }
+
+        private static string BuildRouteBundleProgressLabel(GreedLastRunSnapshot snapshot)
+        {
+            string routeLabel;
+            switch (snapshot.ActiveRouteProfile)
+            {
+                case "안정 루트":
+                    routeLabel = "안정 완주";
+                    break;
+                case "변주 루트":
+                    routeLabel = "변주 완주";
+                    break;
+                case "압박 루트":
+                    routeLabel = "압박 완주";
+                    break;
+                default:
+                    routeLabel = "묶음 정확";
+                    break;
+            }
+
+            return routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget;
+        }
+
+        private static string BuildThreeActionBundleStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped
+                || snapshot.Paused
+                || snapshot.CountdownActive
+                || snapshot.ChoiceActive
+                || snapshot.ChapterProgress <= 0)
+            {
+                return string.Empty;
+            }
+
+            if (!snapshot.PerfectBundleIntact)
+            {
+                return "동작 완주 중단";
+            }
+
+            string symbols = BuildThreeActionBundleSymbols(snapshot.CurrentBundleAvoidanceMask);
+            int count = CountThreeActionBundleActions(snapshot.CurrentBundleAvoidanceMask);
+            if (count <= 0)
+            {
+                return string.Empty;
+            }
+
+            string nextSymbol = BuildThreeActionBundleNextSymbol(snapshot.CurrentBundleAvoidanceMask);
+            string nextText = string.IsNullOrEmpty(nextSymbol) ? string.Empty : "→" + nextSymbol;
+            return "동작 " + symbols + " " + count + "/3" + nextText;
+        }
+
+        private static string BuildThreeActionBundleSymbols(int avoidanceMask)
+        {
+            string text = string.Empty;
+            if (HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Jump))
+            {
+                text += "↑";
+            }
+
+            if (HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Slide))
+            {
+                text += "↓";
+            }
+
+            if (HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Twist))
+            {
+                text += "↔";
+            }
+
+            return text;
+        }
+
+        private static string BuildThreeActionBundleNextSymbol(int avoidanceMask)
+        {
+            if (!HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Jump))
+            {
+                return FormatRunnerResponseSymbol(RunnerResponseType.Jump);
+            }
+
+            if (!HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Slide))
+            {
+                return FormatRunnerResponseSymbol(RunnerResponseType.Slide);
+            }
+
+            return !HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Twist)
+                ? FormatRunnerResponseSymbol(RunnerResponseType.Twist)
+                : string.Empty;
+        }
+
+        private static int CountThreeActionBundleActions(int avoidanceMask)
+        {
+            int count = 0;
+            count += HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Jump) ? 1 : 0;
+            count += HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Slide) ? 1 : 0;
+            count += HasAvoidanceMask(avoidanceMask, GreedLastAvoidanceType.Twist) ? 1 : 0;
+            return count;
+        }
+
+        private static bool HasAvoidanceMask(int avoidanceMask, GreedLastAvoidanceType avoidanceType)
+        {
+            return (avoidanceMask & (1 << (int)avoidanceType)) != 0;
+        }
+
+        private static string BuildRouteBundleBrokenLabel(GreedLastRunSnapshot snapshot)
+        {
+            string routeLabel;
+            switch (snapshot.ActiveRouteProfile)
+            {
+                case "안정 루트":
+                    routeLabel = "안정 완주 중단";
+                    break;
+                case "변주 루트":
+                    routeLabel = "변주 완주 중단";
+                    break;
+                case "압박 루트":
+                    routeLabel = "압박 완주 중단";
+                    break;
+                default:
+                    routeLabel = "묶음 보정";
+                    break;
+            }
+
+            return routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget;
+        }
+
+        private static string BuildActiveChoiceProfileStatus(GreedLastRunSnapshot snapshot)
+        {
+            string profile = snapshot.InfiniteMode && IsVisibleChoiceProfile(snapshot.ActiveInfiniteLoadoutProfile)
+                ? snapshot.ActiveInfiniteLoadoutProfile
+                : snapshot.ActiveChoiceProfile;
+            if (snapshot.Stopped
+                || snapshot.ChoiceActive
+                || !IsVisibleChoiceProfile(profile))
+            {
+                return string.Empty;
+            }
+
+            return "조합 " + CompactActiveInfiniteLoadoutProfileText(profile);
+        }
+
+        private static string BuildActiveRouteStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped || snapshot.ChoiceActive || snapshot.InfiniteMode)
+            {
+                return string.Empty;
+            }
+
+            switch (snapshot.ActiveRouteProfile)
+            {
+                case "안정 루트":
+                    return "경로 안정 보험" + BuildRouteCadenceCompact(snapshot);
+                case "변주 루트":
+                    return "경로 변주 공명" + BuildRouteCadenceCompact(snapshot);
+                case "압박 루트":
+                    return "경로 압박 고점" + BuildRouteCadenceCompact(snapshot);
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildRouteCadenceCompact(GreedLastRunSnapshot snapshot)
+        {
+            if (!TryBuildRouteCadence(snapshot, out _, out GreedLastTimingType[] timings))
+            {
+                return string.Empty;
+            }
+
+            return " " + BuildCadenceToken(timings[0])
+                + ">" + BuildCadenceToken(timings[1])
+                + ">" + BuildCadenceToken(timings[2]);
+        }
+
+        private static string BuildGiftStackSummary(GreedLastRunSnapshot snapshot)
+        {
+            string summary = string.Empty;
+            if (snapshot.FocusGiftStacks > 0)
+            {
+                AppendCompactStatus(ref summary, "집중 x" + snapshot.FocusGiftStacks);
+            }
+
+            if (snapshot.SurvivalGiftStacks > 0)
+            {
+                AppendCompactStatus(ref summary, "생존 x" + snapshot.SurvivalGiftStacks);
+            }
+
+            if (snapshot.ChainGiftStacks > 0)
+            {
+                AppendCompactStatus(ref summary, "연쇄 x" + snapshot.ChainGiftStacks);
+            }
+
+            return string.IsNullOrEmpty(summary) ? "기프트 미선택" : "기프트 " + summary;
+        }
+
+        private static string BuildActiveScoringPreviewStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern || !snapshot.Pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            int exactScore = BuildActiveExactScorePreview(snapshot);
+            int goodScore = BuildActiveGoodScorePreview(snapshot);
+            if (exactScore <= 0 || goodScore <= 0)
+            {
+                return string.Empty;
+            }
+
+            return BuildTrapResponseCueLabel(snapshot.Pattern) + " 정확 +" + exactScore + " / 보정 +" + goodScore;
+        }
+
+        private static int BuildActiveExactScorePreview(GreedLastRunSnapshot snapshot)
+        {
+            int comboGain = BuildActiveComboGainPreview(snapshot);
+            int nextCombo = Mathf.Max(0, snapshot.Combo + comboGain);
+            int score = 100 + nextCombo * 10;
+            if (snapshot.ActiveRelic == "황금 박동")
+            {
+                score += 40;
+            }
+            else if (snapshot.ActiveRelic == "파라오의 각인")
+            {
+                score += 30;
+            }
+
+            score += BuildThreatPrecisionBonusPreview(snapshot);
+            score += BuildPatternVariationPrecisionBonusPreview(snapshot.Pattern);
+            score += BuildActiveChoiceProfileSuccessBonusPreview(snapshot, nextCombo);
+            score += BuildActiveCenterHitScoreBonusPreview(snapshot);
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                score += GreedLastRunCore.RecoveryPrecisionScoreBonus;
+            }
+
+            if (snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                score += GreedLastRunCore.ClutchCounterScoreBonus;
+                if (PatternHasRoute(snapshot.Pattern, "압박"))
+                {
+                    score += GreedLastRunCore.PressureRouteClutchScoreBonus;
+                }
+            }
+
+            return ApplyFocusStateScorePreview(score, snapshot.FocusStateActive);
+        }
+
+        private static int BuildActiveGoodScorePreview(GreedLastRunSnapshot snapshot)
+        {
+            int score = 25 + BuildActiveChoiceProfileGoodBonusPreview(snapshot);
+            return ApplyFocusStateScorePreview(score, snapshot.FocusStateActive);
+        }
+
+        private static int BuildActiveComboGainPreview(GreedLastRunSnapshot snapshot)
+        {
+            int comboGain = 1 + Mathf.Min(2, snapshot.ChainGiftStacks);
+            if (snapshot.ChainGiftStacks > 0 && snapshot.ActiveRelic == "파라오의 각인")
+            {
+                comboGain += 1;
+            }
+
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                comboGain += GreedLastRunCore.RecoveryPrecisionComboBonus;
+            }
+
+            if (snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                comboGain += GreedLastRunCore.OffbeatFlowComboBonus;
+            }
+
+            return comboGain;
+        }
+
+        private static int BuildActiveCenterHitScoreBonusPreview(GreedLastRunSnapshot snapshot)
+        {
+            int nextPrecisionStreak = Mathf.Clamp(snapshot.PrecisionStreak + 1, 1, 9);
+            int threatBonus = snapshot.InfiniteMode ? Mathf.Max(1, snapshot.InfiniteThreatLevel) * 4 : 0;
+            return 25 + nextPrecisionStreak * 5 + threatBonus;
+        }
+
+        private static int BuildActiveChoiceProfileSuccessBonusPreview(GreedLastRunSnapshot snapshot, int nextCombo)
+        {
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    return snapshot.Health >= Mathf.Max(2, snapshot.MaxHealth - 1) ? 12 : 8;
+                case "집중형":
+                    return 18;
+                case "연쇄형":
+                    return nextCombo >= 3 ? 20 : 10;
+                case "고점형":
+                    return 28;
+                case "균형형":
+                    return 10;
+                default:
+                    return 0;
+            }
+        }
+
+        private static int BuildActiveChoiceProfileGoodBonusPreview(GreedLastRunSnapshot snapshot)
+        {
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    return 12;
+                case "집중형":
+                case "고점형":
+                case "균형형":
+                    return 8;
+                case "연쇄형":
+                    return 6;
+                default:
+                    return 0;
+            }
+        }
+
+        private static int ApplyFocusStateScorePreview(int score, bool focusStateActive)
+        {
+            if (!focusStateActive || score <= 0)
+            {
+                return score;
+            }
+
+            return score + Mathf.Max(1, Mathf.RoundToInt(score * 0.20f));
+        }
+
+        private static bool IsVisibleChoiceProfile(string profile)
+        {
+            return !string.IsNullOrEmpty(profile)
+                && profile != "루트 미정"
+                && profile != "저장 조합";
+        }
+
+        private static string BuildPrecisionRewardStatus(GreedLastRunSnapshot snapshot)
+        {
+            int remaining = BuildPrecisionRewardRemaining(snapshot);
+            if (remaining < 0)
+            {
+                return string.Empty;
+            }
+
+            if (remaining == 0)
+            {
+                return "정박 보상 +집중";
+            }
+
+            return remaining <= 2 ? "정박 보상까지 " + remaining : string.Empty;
+        }
+
+        private static int BuildPrecisionRewardRemaining(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PrecisionStreak <= 0)
+            {
+                return -1;
+            }
+
+            int remainder = snapshot.PrecisionStreak % PrecisionFocusStepUi;
+            return remainder == 0 ? 0 : PrecisionFocusStepUi - remainder;
+        }
+
+        private static string BuildInfiniteThreatProgressPreview(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode || snapshot.Stopped)
+            {
+                return string.Empty;
+            }
+
+            return WillInfiniteThreatRiseAfterSection(snapshot)
+                ? "  다음 위협↑"
+                : string.Empty;
+        }
+
+        private static string BuildCurrentInfiniteSegmentPerformance(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode || snapshot.Stopped)
+            {
+                return string.Empty;
+            }
+
+            return "  정" + snapshot.CurrentSegmentExactCount
+                + " 보" + snapshot.CurrentSegmentGoodCount
+                + " 실" + snapshot.CurrentSegmentMissCount;
+        }
+
+        private static string BuildStoppedInfiniteSegmentPerformance(GreedLastRunSnapshot snapshot)
+        {
+            int resolved = snapshot.CurrentSegmentExactCount
+                + snapshot.CurrentSegmentGoodCount
+                + snapshot.CurrentSegmentMissCount;
+            if (!snapshot.InfiniteMode || !snapshot.Stopped || resolved <= 0 || snapshot.MissReason == "test_stop")
+            {
+                return string.Empty;
+            }
+
+            return "  종료 정" + snapshot.CurrentSegmentExactCount
+                + " 보" + snapshot.CurrentSegmentGoodCount
+                + " 실" + snapshot.CurrentSegmentMissCount;
+        }
+
+        private static string BuildInfiniteThreatPreviewStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode || snapshot.Stopped)
+            {
+                return string.Empty;
+            }
+
+            int remaining = Mathf.Max(0, snapshot.ChapterTarget - snapshot.ChapterProgress);
+            if (remaining > 1)
+            {
+                return string.Empty;
+            }
+
+            return WillInfiniteThreatRiseAfterSection(snapshot)
+                ? "위협 상승 예고"
+                : "구간 보너스 임박";
+        }
+
+        private static bool WillInfiniteThreatRiseAfterSection(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode)
+            {
+                return false;
+            }
+
+            int currentThreat = Mathf.Clamp(snapshot.InfiniteThreatLevel, 1, 5);
+            int nextSectionsCleared = snapshot.InfiniteSectionsCleared + 1;
+            int nextThreat = Mathf.Clamp(1 + nextSectionsCleared / 2, 1, 5);
+            return nextThreat > currentThreat;
+        }
+
+        private static string BuildNextChainStatus(GreedLastRunSnapshot snapshot)
+        {
+            int remaining = BuildNextChainRemaining(snapshot);
+            if (remaining < 0)
+            {
+                return string.Empty;
+            }
+
+            int currentTier = Mathf.Clamp(snapshot.Combo / 3, 0, 5);
+            return remaining <= 2
+                ? "연쇄 보너스 x" + (currentTier + 1) + "까지 " + remaining
+                : string.Empty;
+        }
+
+        private static int BuildNextChainRemaining(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Combo <= 0)
+            {
+                return -1;
+            }
+
+            int currentTier = Mathf.Clamp(snapshot.Combo / 3, 0, 5);
+            if (currentTier >= 5)
+            {
+                return -1;
+            }
+
+            int nextTierCombo = (currentTier + 1) * 3;
+            return nextTierCombo - snapshot.Combo;
+        }
+
+        private static string BuildTimingRecommendationStatus(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.HasTimingRecommendation)
+            {
+                return snapshot.TimingRecommendationSampleCount > 0
+                    ? "보정 샘플 " + snapshot.TimingRecommendationSampleCount + "/" + snapshot.TimingRecommendationSampleTarget
+                    : string.Empty;
+            }
+
+            int currentMilliseconds = Mathf.RoundToInt(snapshot.InputTimingOffsetSeconds * 1000f);
+            int recommendationDelta = snapshot.TimingRecommendationMilliseconds - currentMilliseconds;
+            if (Mathf.Abs(recommendationDelta) < 25f)
+            {
+                return "보정 안정";
+            }
+
+            string trend = recommendationDelta < 0 ? "입력 늦음" : "입력 빠름";
+            return trend + " / 추천 " + FormatTimingOffset(snapshot.TimingRecommendationMilliseconds / 1000f);
+        }
+
+        private static string BuildPatternVariationStatus(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                return "복구: 넓은 판정";
+            }
+
+            if (prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return "유예: 조금 대기";
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return "탈출: 마지막 압박";
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return "위기: 조기 준비";
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                return "압박: 좁은 호흡";
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return "급박: 빠른 준비";
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal))
+            {
+                return "정밀: 정박 노림";
+            }
+
+            if (prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return "연쇄: 흐름 유지";
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                return "변주: 엇박 주의";
+            }
+
+            if (prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                return "심층: 판정 압박";
+            }
+
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return "안정: 여유 있음";
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsRecoveryPattern(GreedLastPatternModel pattern)
+        {
+            return !string.IsNullOrEmpty(pattern.Prompt)
+                && pattern.Prompt.Contains("[복구]", StringComparison.Ordinal);
+        }
+
+        private static string BuildRecoveryPrecisionHudSuffix(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.RecoveryPrecisionCount > 0
+                ? "  복구 정박 " + snapshot.RecoveryPrecisionCount
+                : string.Empty;
+        }
+
+        private static string BuildPerfectFocusChargeHudSuffix(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.PerfectFocusChargeCount > 0
+                ? "  정박 충전 " + snapshot.PerfectFocusChargeCount
+                : string.Empty;
+        }
+
+        private static string BuildClutchCounterHudSuffix(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.ClutchCounterCount > 0
+                ? "  압박 반격 " + snapshot.ClutchCounterCount
+                : string.Empty;
+        }
+
+        private static string BuildOffbeatFlowHudSuffix(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.OffbeatFlowCount > 0
+                ? "  엇박 연쇄 " + snapshot.OffbeatFlowCount
+                : string.Empty;
+        }
+
+        private static string BuildRoutePayoffSettlementLine(GreedLastRunSnapshot snapshot)
+        {
+            string payoffSettlement = string.Empty;
+            if (snapshot.StableRouteRecoveryCount > 0)
+            {
+                AppendCompactStatus(ref payoffSettlement, "안정 " + snapshot.StableRouteRecoveryCount);
+            }
+
+            if (snapshot.VariationRouteFlowCount > 0)
+            {
+                AppendCompactStatus(ref payoffSettlement, "변주 " + snapshot.VariationRouteFlowCount);
+            }
+
+            if (snapshot.PressureRouteCounterCount > 0)
+            {
+                AppendCompactStatus(ref payoffSettlement, "압박 " + snapshot.PressureRouteCounterCount);
+            }
+
+            string bundleSettlement = string.Empty;
+            if (snapshot.StableRouteBundleCount > 0)
+            {
+                AppendCompactStatus(ref bundleSettlement, "안정 " + snapshot.StableRouteBundleCount);
+            }
+
+            if (snapshot.VariationRouteBundleCount > 0)
+            {
+                AppendCompactStatus(ref bundleSettlement, "변주 " + snapshot.VariationRouteBundleCount);
+            }
+
+            if (snapshot.PressureRouteBundleCount > 0)
+            {
+                AppendCompactStatus(ref bundleSettlement, "압박 " + snapshot.PressureRouteBundleCount);
+            }
+
+            string text = string.IsNullOrEmpty(payoffSettlement)
+                ? string.Empty
+                : "경로 보상  " + payoffSettlement + "\n";
+            return string.IsNullOrEmpty(bundleSettlement)
+                ? text
+                : text + "경로 완주  " + bundleSettlement + "\n";
+        }
+
+        private static bool TryGetPatternVariationAccent(GreedLastPatternModel pattern, out Color32 color, out float strength)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                color = new Color32(145, 231, 199, 255);
+                strength = 0.24f;
+                return true;
+            }
+
+            if (prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                color = new Color32(105, 168, 190, 255);
+                strength = 0.22f;
+                return true;
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                color = new Color32(232, 96, 75, 255);
+                strength = 0.30f;
+                return true;
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                color = new Color32(232, 96, 75, 255);
+                strength = 0.34f;
+                return true;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                color = new Color32(226, 137, 70, 255);
+                strength = 0.30f;
+                return true;
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                color = new Color32(226, 137, 70, 255);
+                strength = 0.28f;
+                return true;
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal))
+            {
+                color = new Color32(255, 238, 181, 255);
+                strength = 0.26f;
+                return true;
+            }
+
+            if (prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                color = new Color32(222, 192, 82, 255);
+                strength = 0.24f;
+                return true;
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                color = new Color32(181, 146, 226, 255);
+                strength = 0.22f;
+                return true;
+            }
+
+            if (prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                color = new Color32(255, 190, 105, 255);
+                strength = 0.20f;
+                return true;
+            }
+
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                color = new Color32(145, 231, 199, 255);
+                strength = 0.18f;
+                return true;
+            }
+
+            color = default;
+            strength = 0f;
+            return false;
+        }
+
+        private static void AppendCompactStatus(ref string status, string token)
+        {
+            if (string.IsNullOrEmpty(token))
+            {
+                return;
+            }
+
+            status = string.IsNullOrEmpty(status) ? token : status + " / " + token;
         }
 
         private static string FormatTrapPrompt(GreedLastRunSnapshot snapshot)
@@ -5268,7 +17107,7 @@ namespace GreedLast
                 return "대기";
             }
 
-            return snapshot.Pattern.Prompt;
+            return CompactUiText(snapshot.Pattern.Prompt, 34);
         }
 
         private static string BuildCompactJudgementText(GreedLastRunSnapshot snapshot)
@@ -5278,12 +17117,77 @@ namespace GreedLast
                 return "-";
             }
 
-            string compactText = snapshot.JudgementText
+            string resultLine = ExtractJudgementResultLine(snapshot.JudgementText);
+            string[] lines = snapshot.JudgementText
                 .Replace("\r", string.Empty)
-                .Replace("\n", " / ");
-            return compactText.Length <= 54
+                .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string compactText = lines.Length > 0 ? lines[0] : "-";
+            AppendCompactJudgementPart(ref compactText, resultLine);
+            AppendCompactJudgementPart(ref compactText, ExtractRecoveryCueLine(snapshot.JudgementText));
+            AppendCompactJudgementPart(ref compactText, BuildJudgementEffectLine(snapshot));
+
+            return compactText.Length <= 72
                 ? compactText
-                : compactText.Substring(0, 51) + "...";
+                : compactText.Substring(0, 69) + "...";
+        }
+
+        private static void AppendCompactJudgementPart(ref string text, string part)
+        {
+            if (string.IsNullOrEmpty(part)
+                || string.Equals(text, part, StringComparison.Ordinal)
+                || text.IndexOf(part, StringComparison.Ordinal) >= 0)
+            {
+                return;
+            }
+
+            text += " / " + part;
+        }
+
+        private static string ExtractJudgementResultLine(string judgementText)
+        {
+            if (string.IsNullOrEmpty(judgementText))
+            {
+                return string.Empty;
+            }
+
+            string normalized = judgementText.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                if (lines[i].StartsWith("결과:", StringComparison.Ordinal))
+                {
+                    return lines[i];
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string ExtractRecoveryCueLine(string judgementText)
+        {
+            if (string.IsNullOrEmpty(judgementText))
+            {
+                return string.Empty;
+            }
+
+            string normalized = judgementText.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                if (lines[i].StartsWith("복구 예고:", StringComparison.Ordinal))
+                {
+                    string compact = lines[i].Substring("복구 예고:".Length).Trim();
+                    int targetIndex = compact.IndexOf(" / 다음 ", StringComparison.Ordinal);
+                    if (targetIndex >= 0)
+                    {
+                        return "복구: " + compact.Substring(targetIndex + 3).Trim();
+                    }
+
+                    return "복구: " + compact;
+                }
+            }
+
+            return string.Empty;
         }
 
         private void RenderRunHeader(GreedLastRunSnapshot snapshot)
@@ -5298,16 +17202,44 @@ namespace GreedLast
 
             if (snapshot.Paused)
             {
-                titleText.text = snapshot.InfiniteMode ? "무한모드 메뉴" : "일시정지 메뉴";
-                detailText.text = "ESC 또는 재개를 누르면 카운트 뒤에 이어집니다.\n로비로 돌아가면 현재 런은 중단됩니다.";
+                titleText.text = snapshot.StartCountdownActive
+                    ? "시작 대기"
+                    : snapshot.InfiniteMode ? "무한모드 메뉴" : snapshot.RefillRun ? "보충 런 메뉴" : "일시정지 메뉴";
+                detailText.text = snapshot.StartCountdownActive
+                    ? "시작 카운트가 멈춰 있습니다.\n재개하면 카운트 뒤 첫 함정이 내려옵니다."
+                    : BuildRunPauseHeaderDetail(snapshot);
                 return;
             }
 
             if (snapshot.StartCountdownActive)
             {
                 titleText.text = "박자 준비";
+                string countdownContext = BuildStartCountdownContext(snapshot);
                 detailText.text = "카운트 " + Mathf.CeilToInt(snapshot.StartCountdownRemainingSeconds)
-                    + "\n카운트 뒤 함정이 내려옵니다.";
+                    + "\n" + (string.IsNullOrEmpty(countdownContext)
+                        ? "카운트 뒤 함정이 내려옵니다."
+                        : countdownContext)
+                    + (snapshot.CoreRetrieved && snapshot.LastCompletedSegment == "4장"
+                        ? "\n" + BuildCompletedSegmentReview(snapshot)
+                        : string.Empty);
+                return;
+            }
+
+            if (snapshot.PracticeMode)
+            {
+                titleText.text = snapshot.Stopped
+                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "기초연습 완료" : "기초연습 중단"
+                    : BuildPracticeStepTitle(snapshot);
+                detailText.text = snapshot.Stopped
+                    ? snapshot.JudgementText
+                    : snapshot.ActivePattern && snapshot.Pattern.IsValid
+                        ? FormatTrapPrompt(snapshot)
+                            + "\n" + FormatChannel(snapshot.Pattern.Channel)
+                            + " · " + BuildRunnerResponseLabel(snapshot.Pattern)
+                            + " · " + FormatTimingType(snapshot.Pattern.TimingType)
+                            + "\n" + BuildPracticeTimingLesson(snapshot.Pattern)
+                            + "\n" + BuildLiveRunCoachLine(snapshot)
+                        : "좌·중·우는 이동이 아니라 위험 대응 채널입니다.";
                 return;
             }
 
@@ -5317,41 +17249,493 @@ namespace GreedLast
                 detailText.text = snapshot.Stopped
                     ? "무한모드 종료\n"
                         + $"등급 {BuildInfiniteSnapshotGrade(snapshot)}  점수 {snapshot.Score}  구간 {snapshot.InfiniteSectionsCleared}  거리 {snapshot.Distance:0.0}m\n"
-                        + "무한 재시작 또는 로비로 돌아갈 수 있습니다."
+                        + "기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다."
                     : "저장 조합으로 함정을 계속 돌파합니다.";
                 return;
             }
 
             if (snapshot.Phase == GreedLastRunPhase.ClearResolving)
             {
-                titleText.text = "피라미드 탈출";
-                detailText.text = "공명핵 회수 완료\n저장하기를 누르면 슬롯 선택 화면으로 이동합니다.\n저장하지 않으면 바로 로비로 돌아갑니다.";
+                titleText.text = snapshot.RefillRun ? "보충 런 완료" : "피라미드 탈출";
+                detailText.text = snapshot.RefillRun
+                    ? "공명핵 회수 완료\n저장하기를 누르면 새 저장 조합 슬롯을 고릅니다.\n확정 후 무한모드 준비로 이어집니다."
+                        + "\n" + BuildCompletedSegmentReview(snapshot)
+                    : "공명핵 회수 완료\n저장하기를 누르면 슬롯 선택 화면으로 이동합니다.\n저장하지 않으면 바로 로비로 돌아갑니다."
+                        + "\n" + BuildCompletedSegmentReview(snapshot);
                 return;
             }
 
             if (snapshot.Phase == GreedLastRunPhase.FailResolving)
             {
-                titleText.text = "탈출 실패";
+                titleText.text = snapshot.RefillRun ? "보충 실패" : "탈출 실패";
                 detailText.text = "체력이 0이 되어 탈출이 중단되었습니다.\n다시 시작하거나 로비로 돌아갈 수 있습니다.";
                 return;
             }
 
             if (snapshot.ChoiceActive)
             {
-                titleText.text = "방향 선택";
-                detailText.text = snapshot.ChoicePrompt;
+                titleText.text = snapshot.RefillRun ? "보충 방향 선택" : "방향 선택";
+                detailText.text = BuildChoiceHeaderDetail(snapshot);
                 return;
             }
 
             if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
             {
-                titleText.text = "탈출 검증";
-                detailText.text = "공명핵을 들고 마지막 함정 구간을 빠져나갑니다.";
+                titleText.text = snapshot.RefillRun ? "보충 탈출 검증" : "탈출 검증";
+                detailText.text = snapshot.RefillRun
+                    ? "새 저장 조합을 만들기 위해 마지막 함정 구간을 빠져나갑니다."
+                    : "공명핵을 들고 마지막 함정 구간을 빠져나갑니다.";
                 return;
             }
 
-            titleText.text = "함정 대응 검증";
-            detailText.text = "좌 / 중 / 우 채널과 타이밍 판정을 확인합니다.";
+            titleText.text = BuildChapterExperienceTitle(snapshot);
+            detailText.text = BuildChapterExperienceDetail(snapshot);
+        }
+
+        private static string BuildChapterExperienceTitle(GreedLastRunSnapshot snapshot)
+        {
+            string prefix = snapshot.RefillRun ? "보충 · " : string.Empty;
+            prefix += BuildRouteExperienceTitlePrefix(snapshot.ActiveRouteProfile);
+            switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+            {
+                case 1:
+                    return prefix + "신호의 회랑";
+                case 2:
+                    return prefix + "압박의 축";
+                case 3:
+                    return prefix + "연쇄의 심부";
+                default:
+                    return prefix + "왕의 핵실";
+            }
+        }
+
+        private static string BuildRouteExperienceTitlePrefix(string routeProfile)
+        {
+            switch (routeProfile)
+            {
+                case "안정 루트":
+                    return "안정 · ";
+                case "변주 루트":
+                    return "변주 · ";
+                case "압박 루트":
+                    return "압박 · ";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildChapterExperienceDetail(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.ActivePattern && snapshot.Pattern.IsValid)
+            {
+                return FormatTrapPrompt(snapshot)
+                    + "\n"
+                    + FormatChannel(snapshot.Pattern.Channel)
+                    + " · " + BuildRunnerResponseLabel(snapshot.Pattern)
+                    + " · " + FormatTimingType(snapshot.Pattern.TimingType)
+                    + "\n" + BuildChapterReadCue(snapshot)
+                    + "\n" + BuildLiveRunCoachLine(snapshot);
+            }
+
+            return BuildChapterReadCue(snapshot);
+        }
+
+        private static string BuildChapterReadCue(GreedLastRunSnapshot snapshot)
+        {
+            switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+            {
+                case 1:
+                    return "읽기 순서 · 정박 → 압박 → 엇박 / " + BuildAvoidanceCadenceCue(snapshot);
+                case 2:
+                    return BuildRouteCadenceCue(snapshot);
+                case 3:
+                    return BuildRouteCadenceCue(snapshot);
+                default:
+                    return BuildRouteCadenceCue(snapshot);
+            }
+        }
+
+        private static string BuildRouteCadenceCue(GreedLastRunSnapshot snapshot)
+        {
+            if (!TryBuildRouteCadence(snapshot, out string routeLabel, out GreedLastTimingType[] timings))
+            {
+                return snapshot.ChapterIndex == 3 && !string.IsNullOrEmpty(snapshot.ActiveRelic)
+                    ? "유물 증폭 · " + snapshot.ActiveRelic
+                    : "읽기 변화 · 선택한 루트가 다음 함정을 바꿉니다.";
+            }
+
+            int activeStep = Mathf.Clamp(snapshot.ChapterProgress, 0, timings.Length - 1);
+            string cadence = string.Empty;
+            for (int i = 0; i < timings.Length; i += 1)
+            {
+                string token = BuildCadenceToken(timings[i]);
+                if (i == activeStep)
+                {
+                    token = "[" + token + "]";
+                }
+
+                cadence += (i == 0 ? string.Empty : " → ") + token;
+            }
+
+            string cueLabel = snapshot.Phase == GreedLastRunPhase.EscapeRunning
+                ? "탈출 박자"
+                : snapshot.ChapterIndex >= 4
+                    ? "공명핵 박자"
+                    : snapshot.ChapterIndex == 3 ? "변주 정점" : "경로 박자";
+            string text = cueLabel + " · " + routeLabel + " " + cadence;
+            if (snapshot.ChapterIndex == 3 && !string.IsNullOrEmpty(snapshot.ActiveRelic))
+            {
+                text += " · 유물 변주 " + snapshot.ActiveRelic;
+            }
+
+            text += " / " + BuildAvoidanceCadenceCue(snapshot);
+
+            return text;
+        }
+
+        private static string BuildAvoidanceRouteMapText()
+        {
+            return "안정 " + BuildAvoidanceCadenceText("안정 루트", finalValidation: false, activeStep: -1)
+                + " / 변주 " + BuildAvoidanceCadenceText("변주 루트", finalValidation: false, activeStep: -1)
+                + " / 압박 " + BuildAvoidanceCadenceText("압박 루트", finalValidation: false, activeStep: -1);
+        }
+
+        private static string BuildAvoidanceCadenceCue(GreedLastRunSnapshot snapshot)
+        {
+            bool finalValidation = snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4;
+            return "동작 " + BuildAvoidanceCadenceText(
+                snapshot.ActiveRouteProfile,
+                finalValidation,
+                Mathf.Clamp(snapshot.ChapterProgress, 0, 2));
+        }
+
+        private static string BuildAvoidanceCadenceText(string routeProfile, bool finalValidation, int activeStep)
+        {
+            string text = string.Empty;
+            for (int i = 0; i < 3; i += 1)
+            {
+                GreedLastAvoidanceType avoidance = GreedLastRunCore.GetAuthoredAvoidanceType(
+                    finalValidation ? 4 : 2,
+                    i,
+                    practiceMode: false,
+                    infiniteMode: false,
+                    finalValidation: finalValidation,
+                    activeRouteProfile: routeProfile);
+                string token = BuildAvoidanceToken(avoidance);
+                if (i == activeStep)
+                {
+                    token = "[" + token + "]";
+                }
+
+                text += (i == 0 ? string.Empty : "-") + token;
+            }
+
+            return text;
+        }
+
+        private static string BuildAvoidanceToken(GreedLastAvoidanceType avoidanceType)
+        {
+            switch (avoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return "점";
+                case GreedLastAvoidanceType.Slide:
+                    return "숙";
+                case GreedLastAvoidanceType.Twist:
+                    return "틀";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string BuildAvoidanceActionLabel(GreedLastAvoidanceType avoidanceType)
+        {
+            switch (avoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return "점프";
+                case GreedLastAvoidanceType.Slide:
+                    return "숙이기";
+                case GreedLastAvoidanceType.Twist:
+                    return "비틀기";
+                default:
+                    return "대응";
+            }
+        }
+
+        private static bool TryBuildRouteCadence(
+            GreedLastRunSnapshot snapshot,
+            out string routeLabel,
+            out GreedLastTimingType[] timings)
+        {
+            routeLabel = string.Empty;
+            timings = null;
+            if (snapshot.InfiniteMode || snapshot.ChapterIndex < 2)
+            {
+                return false;
+            }
+
+            switch (snapshot.ActiveRouteProfile)
+            {
+                case "안정 루트":
+                    routeLabel = "안정";
+                    timings = new[]
+                    {
+                        GreedLastTimingType.Perfect,
+                        GreedLastTimingType.Clutch,
+                        GreedLastTimingType.Perfect,
+                    };
+                    break;
+                case "변주 루트":
+                    routeLabel = "변주";
+                    timings = new[]
+                    {
+                        GreedLastTimingType.Offbeat,
+                        GreedLastTimingType.Perfect,
+                        GreedLastTimingType.Offbeat,
+                    };
+                    break;
+                case "압박 루트":
+                    routeLabel = "압박";
+                    timings = new[]
+                    {
+                        GreedLastTimingType.Clutch,
+                        GreedLastTimingType.Offbeat,
+                        GreedLastTimingType.Clutch,
+                    };
+                    break;
+                default:
+                    return false;
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4)
+            {
+                timings = new[]
+                {
+                    GreedLastTimingType.Clutch,
+                    GreedLastTimingType.Offbeat,
+                    GreedLastTimingType.Perfect,
+                };
+                return true;
+            }
+
+            if (snapshot.ChapterIndex == 3)
+            {
+                GreedLastTimingType relicTiming = BuildRelicCadenceTiming(snapshot.ActiveRelic);
+                if (relicTiming != GreedLastTimingType.None)
+                {
+                    timings[1] = relicTiming;
+                }
+            }
+
+            return true;
+        }
+
+        private static GreedLastTimingType BuildRelicCadenceTiming(string relic)
+        {
+            switch (relic)
+            {
+                case "황금 박동":
+                    return GreedLastTimingType.Perfect;
+                case "사막의 잔상":
+                    return GreedLastTimingType.Offbeat;
+                case "파라오의 각인":
+                    return GreedLastTimingType.Clutch;
+                default:
+                    return GreedLastTimingType.None;
+            }
+        }
+
+        private static string BuildCadenceToken(GreedLastTimingType timingType)
+        {
+            switch (timingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return "정";
+                case GreedLastTimingType.Clutch:
+                    return "압";
+                case GreedLastTimingType.Offbeat:
+                    return "엇";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string BuildStartCountdownContext(GreedLastRunSnapshot snapshot)
+        {
+            if (string.IsNullOrWhiteSpace(snapshot.JudgementText))
+            {
+                return string.Empty;
+            }
+
+            string normalized = snapshot.JudgementText.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            string context = string.Empty;
+            string reviewContext = string.Empty;
+            string targetContext = string.Empty;
+            string hintContext = string.Empty;
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(reviewContext)
+                    && line.StartsWith("복기:", StringComparison.Ordinal))
+                {
+                    reviewContext = line;
+                }
+
+                if (string.IsNullOrEmpty(hintContext)
+                    && line.StartsWith("힌트:", StringComparison.Ordinal))
+                {
+                    hintContext = line;
+                }
+
+                if (string.IsNullOrEmpty(targetContext)
+                    && (line.StartsWith("재도전 목표:", StringComparison.Ordinal)
+                        || line.StartsWith("목표:", StringComparison.Ordinal)
+                        || line.StartsWith("복기 목표:", StringComparison.Ordinal)))
+                {
+                    targetContext = line;
+                }
+
+                if (string.IsNullOrEmpty(context)
+                    || line.StartsWith("효과:", StringComparison.Ordinal)
+                    || line.StartsWith("조합 성향:", StringComparison.Ordinal))
+                {
+                    context = string.IsNullOrEmpty(context) ? line : context + " · " + line;
+                }
+
+                if (context.Length >= 70)
+                {
+                    break;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(reviewContext))
+            {
+                string reviewStartContext = reviewContext;
+                string preferredTargetContext = snapshot.PracticeMode && !string.IsNullOrEmpty(hintContext)
+                    ? hintContext
+                    : !string.IsNullOrEmpty(targetContext) ? targetContext : hintContext;
+                if (!string.IsNullOrEmpty(preferredTargetContext))
+                {
+                    reviewStartContext += " · " + preferredTargetContext;
+                }
+
+                return CompactUiText(reviewStartContext, 86);
+            }
+
+            if (snapshot.RefillRun && !context.Contains("보충 런", StringComparison.Ordinal))
+            {
+                context = string.IsNullOrEmpty(context)
+                    ? GreedLastApp.BuildRefillRunOpeningContext()
+                    : GreedLastApp.BuildRefillRunOpeningContext() + " · " + context;
+            }
+
+            return CompactUiText(context, 86);
+        }
+
+        private static string BuildPracticeTimingLesson(GreedLastPatternModel pattern)
+        {
+            string responseCue = BuildTrapResponseCueLabel(pattern);
+            switch (pattern.TimingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return responseCue + ": 밝은 기준선이 겹칠 때 입력";
+                case GreedLastTimingType.Clutch:
+                    return responseCue + ": 늦은 가속 뒤 기준선에서 입력";
+                case GreedLastTimingType.Offbeat:
+                    return responseCue + ": 흔들림보다 도착 순간에 입력";
+                default:
+                    return "같은 채널 신호를 기준선에 맞춰 입력";
+            }
+        }
+
+        private static string BuildPracticeStepTitle(GreedLastRunSnapshot snapshot)
+        {
+            switch (Mathf.Clamp(snapshot.ChapterProgress, 0, 2))
+            {
+                case 0:
+                    return "기초연습 1/3 · 정박 바닥→↑점프";
+                case 1:
+                    return "기초연습 2/3 · 클러치 상단→↓숙이기";
+                default:
+                    return "기초연습 3/3 · 엇박 측면→↔비틀기";
+            }
+        }
+
+        private static string BuildPracticeObjectiveLine(GreedLastRunSnapshot snapshot)
+        {
+            switch (Mathf.Clamp(snapshot.ChapterProgress, 0, 2))
+            {
+                case 0:
+                    return "목표: 바닥→↑점프 / 정박 중앙 회피\n";
+                case 1:
+                    return "목표: 상단→↓숙이기 / 클러치 안쪽 입력\n";
+                default:
+                    return "목표: 측면→↔비틀기 / 엇박 채널 입력\n";
+            }
+        }
+
+        private static string BuildPracticeProgressLabel(GreedLastRunSnapshot snapshot, int target)
+        {
+            int step = Mathf.Clamp(snapshot.ChapterProgress, 0, Mathf.Max(0, target - 1));
+            string lesson;
+            switch (step)
+            {
+                case 0:
+                    lesson = "정박 바닥→↑점프 정확권";
+                    break;
+                case 1:
+                    lesson = "클러치 상단→↓숙이기 생존";
+                    break;
+                default:
+                    lesson = "엇박 측면→↔비틀기 채널";
+                    break;
+            }
+
+            return "기초연습 단계 " + (step + 1) + "/" + target + " · " + lesson;
+        }
+
+        private static string BuildPracticeCompletionProgressLabel(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.MissCount > 0)
+            {
+                return "연습 완료 · 실수 복기";
+            }
+
+            return snapshot.GoodCount > 0
+                ? "연습 완료 · 정확권 복기"
+                : "연습 완료 · 일반 런 준비";
+        }
+
+        private static string BuildPracticeRestartButtonLabel(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.MissCount > 0)
+            {
+                return "실수 구간 다시";
+            }
+
+            return snapshot.GoodCount > 0 ? "정확권 다시" : "3축 다시 확인";
+        }
+
+        private static string BuildRunPauseHeaderDetail(GreedLastRunSnapshot snapshot)
+        {
+            string exitLine = snapshot.PracticeMode
+                ? "로비로 돌아가도 일반 런 기록에는 영향을 주지 않습니다."
+                : snapshot.InfiniteMode
+                ? "로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다."
+                : snapshot.RefillRun
+                    ? "로비로 돌아가면 현재 보충 런은 중단 기록으로 남습니다."
+                : "로비로 돌아가면 현재 런은 중단 기록으로 남습니다.";
+            string coachLine = BuildPauseCoachLine(snapshot);
+            return "ESC 또는 재개를 누르면 카운트 뒤에 이어집니다."
+                + (string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine)
+                + "\n" + exitLine;
         }
 
         private static string BuildDetail(GreedLastStateSnapshot snapshot)
@@ -5410,6 +17794,169 @@ namespace GreedLast
 
         private static int BuildRecordBoardFontSize(string detail)
         {
+            int lineCount = CountTextLines(detail);
+            int longLinePenalty = HasLongTextLine(detail, 64) ? 2 : 0;
+
+            if (lineCount <= 4)
+            {
+                return 34 - longLinePenalty;
+            }
+
+            if (lineCount <= 7)
+            {
+                return 31 - longLinePenalty;
+            }
+
+            if (lineCount <= 10)
+            {
+                return 25 - longLinePenalty;
+            }
+
+            return 22;
+        }
+
+        private static int BuildProfileBoardFontSize(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            int longLinePenalty = HasLongTextLine(detail, 62) ? 2 : 0;
+            if (lineCount <= 10)
+            {
+                return 30 - longLinePenalty;
+            }
+
+            if (lineCount <= 14)
+            {
+                return 27 - longLinePenalty;
+            }
+
+            if (lineCount <= 18)
+            {
+                return 23 - longLinePenalty;
+            }
+
+            return 21;
+        }
+
+        private static int BuildGrowthBoardFontSize(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            int longLinePenalty = HasLongTextLine(detail, 70) ? 2 : 0;
+            if (lineCount <= 9)
+            {
+                return 28 - longLinePenalty;
+            }
+
+            if (lineCount <= 13)
+            {
+                return 25 - longLinePenalty;
+            }
+
+            if (lineCount <= 17)
+            {
+                return 22 - longLinePenalty;
+            }
+
+            return 20;
+        }
+
+        private static int BuildLobbyNoticeFontSize(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            int longLinePenalty = HasLongTextLine(detail, 68) ? 2 : 0;
+            if (lineCount <= 3)
+            {
+                return 31 - longLinePenalty;
+            }
+
+            if (lineCount <= 6)
+            {
+                return 28 - longLinePenalty;
+            }
+
+            if (lineCount <= 9)
+            {
+                return 24 - longLinePenalty;
+            }
+
+            if (lineCount <= 13)
+            {
+                return 21 - longLinePenalty;
+            }
+
+            if (lineCount <= 16)
+            {
+                return Mathf.Max(17, 19 - longLinePenalty);
+            }
+
+            return 17;
+        }
+
+        private static float BuildLobbyNoticeHeight(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            float longLineAllowance = HasLongTextLine(detail, 68) ? 36f : 0f;
+            if (lineCount <= 3)
+            {
+                return 190f + longLineAllowance;
+            }
+
+            if (lineCount <= 6)
+            {
+                return 260f + longLineAllowance;
+            }
+
+            if (lineCount <= 9)
+            {
+                return 340f + longLineAllowance;
+            }
+
+            return (lineCount <= 16 ? 430f : 470f) + longLineAllowance;
+        }
+
+        private static int BuildManagementDetailFontSize(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            if (lineCount <= 7)
+            {
+                return 27;
+            }
+
+            if (lineCount <= 11)
+            {
+                return 24;
+            }
+
+            if (lineCount <= 15)
+            {
+                return 21;
+            }
+
+            return 19;
+        }
+
+        private static float BuildManagementDetailHeight(string detail)
+        {
+            int lineCount = CountTextLines(detail);
+            if (lineCount <= 7)
+            {
+                return 280f;
+            }
+
+            if (lineCount <= 11)
+            {
+                return 390f;
+            }
+
+            if (lineCount <= 15)
+            {
+                return 500f;
+            }
+
+            return 600f;
+        }
+
+        private static int CountTextLines(string detail)
+        {
             int lineCount = 1;
             if (!string.IsNullOrEmpty(detail))
             {
@@ -5422,22 +17969,34 @@ namespace GreedLast
                 }
             }
 
-            if (lineCount <= 4)
+            return lineCount;
+        }
+
+        private static bool HasLongTextLine(string detail, int maxLength)
+        {
+            if (string.IsNullOrEmpty(detail))
             {
-                return 31;
+                return false;
             }
 
-            if (lineCount <= 7)
+            int currentLength = 0;
+            for (int i = 0; i < detail.Length; i += 1)
             {
-                return 28;
+                if (detail[i] == '\n' || detail[i] == '\r')
+                {
+                    if (currentLength > maxLength)
+                    {
+                        return true;
+                    }
+
+                    currentLength = 0;
+                    continue;
+                }
+
+                currentLength += 1;
             }
 
-            if (lineCount <= 10)
-            {
-                return 25;
-            }
-
-            return 22;
+            return currentLength > maxLength;
         }
 
         private static string FormatDebugState(GreedLastScreenState state)
@@ -5470,6 +18029,8 @@ namespace GreedLast
                     return "무한 조합";
                 case GreedLastScreenState.GrowthBoard:
                     return "성장 보정";
+                case GreedLastScreenState.ProfileBoard:
+                    return "흔적";
                 default:
                     return "-";
             }
@@ -5499,35 +18060,206 @@ namespace GreedLast
                 return "기록 보기";
             }
 
-            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
+            if (detail.StartsWith("보충 런", StringComparison.Ordinal))
             {
-                return "클리어 기록";
+                return "보충 기록";
             }
 
-            if (detail.StartsWith("저장 조합 저장은 건너뛰었습니다.", StringComparison.Ordinal))
+            if (detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal))
             {
-                return "클리어 기록";
+                return "클리어 복기";
+            }
+
+            if (detail.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal))
+            {
+                return "클리어 복기";
             }
 
             if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
                 || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
             {
-                return "실패 기록";
+                return "복기 기록";
             }
 
-            if (detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal))
+            if (IsInfiniteRecordResultDetail(detail))
             {
-                return "무한 기록";
+                return "무한 복기";
+            }
+
+            if (detail.Contains("다음 확인: 완성 루프 기록", StringComparison.Ordinal))
+            {
+                return "완성 기록";
             }
 
             return "기록 보기";
+        }
+
+        private static bool IsNormalRecordResultDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return false;
+            }
+
+            return detail.StartsWith("보충 런", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 성공 / 기록 저장", StringComparison.Ordinal)
+                || detail.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal);
+        }
+
+        private static bool IsInfiniteRecordResultDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+            {
+                return false;
+            }
+
+            return detail.StartsWith("무한모드 종료 / 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal);
+        }
+
+        private static string BuildLobbyGrowthButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            bool allMax = snapshot.GrowthSurvivalLevel >= GrowthUiMaxLevel
+                && snapshot.GrowthFocusLevel >= GrowthUiMaxLevel
+                && snapshot.GrowthTimingLevel >= GrowthUiMaxLevel;
+            if (allMax)
+            {
+                return "성장 MAX";
+            }
+
+            if (CanUpgradeAnyGrowthTrack(snapshot))
+            {
+                return "성장 가능 " + snapshot.GrowthPoints + "pt";
+            }
+
+            return snapshot.GrowthPoints > 0
+                ? "성장 " + snapshot.GrowthPoints + "pt"
+                : "성장";
+        }
+
+        private static string BuildLobbyFocusTestButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            return snapshot.SaveLoadoutCandidateAvailable ? "추천 저장" : "저장 생성";
+        }
+
+        private static string BuildLobbySaveUseTestButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            if (HasAnyUsableSaveSlot(snapshot))
+            {
+                return "저장 소모";
+            }
+
+            return snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked || snapshot.InfiniteUnlocked
+                ? "보충 확인"
+                : "저장 없음";
+        }
+
+        private static string BuildLobbyCandidateTestButtonLabel()
+        {
+            return "후보 생성";
+        }
+
+        private static string BuildGrowthPointTestButtonLabel()
+        {
+            return "포인트 +3";
+        }
+
+        private static string BuildGrowthMaxTestButtonLabel()
+        {
+            return "성장 MAX";
+        }
+
+        private static string BuildGrowthResetTestButtonLabel()
+        {
+            return "초기화";
+        }
+
+        private static string BuildLobbyPracticeButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            string practiceContext = GreedLastApp.BuildPracticeOpeningContextFromLobbyDetail(snapshot.Detail);
+            if (!string.IsNullOrEmpty(practiceContext))
+            {
+                string avoidanceLabel = BuildLobbyAvoidancePracticeLabel(practiceContext);
+                if (!string.IsNullOrEmpty(avoidanceLabel))
+                {
+                    return avoidanceLabel;
+                }
+
+                if (HasAchievedReviewTargetResultDetail(snapshot.Detail))
+                {
+                    return "상향 목표 연습";
+                }
+
+                return HasReviewTargetResultDetail(snapshot.Detail) ? "목표 연습" : "복기 연습";
+            }
+
+            return PlayerPrefs.GetInt(GreedLastApp.PracticeCompletedPrefsKey, 0) == 1
+                ? "기초 연습 다시 하기"
+                : "기초 연습";
+        }
+
+        private static string BuildLobbyAvoidancePracticeLabel(string practiceContext)
+        {
+            if (string.IsNullOrEmpty(practiceContext))
+            {
+                return string.Empty;
+            }
+
+            if (practiceContext.Contains("기초연습 비틀기 단계", StringComparison.Ordinal)
+                || practiceContext.Contains("비틀기 실수", StringComparison.Ordinal)
+                || practiceContext.Contains("비틀기 보정", StringComparison.Ordinal))
+            {
+                return "비틀기 복기";
+            }
+
+            if (practiceContext.Contains("기초연습 숙이기 단계", StringComparison.Ordinal)
+                || practiceContext.Contains("숙이기 실수", StringComparison.Ordinal)
+                || practiceContext.Contains("숙이기 보정", StringComparison.Ordinal))
+            {
+                return "숙이기 복기";
+            }
+
+            if (practiceContext.Contains("기초연습 점프 단계", StringComparison.Ordinal)
+                || practiceContext.Contains("점프 실수", StringComparison.Ordinal)
+                || practiceContext.Contains("점프 보정", StringComparison.Ordinal))
+            {
+                return practiceContext.Contains("보정", StringComparison.Ordinal)
+                    ? "점프 정확권"
+                    : "점프 복기";
+            }
+
+            return string.Empty;
+        }
+
+        private static bool CanUpgradeAnyGrowthTrack(GreedLastStateSnapshot snapshot)
+        {
+            return CanUpgradeGrowthTrack(snapshot.GrowthSurvivalLevel, snapshot.GrowthPoints)
+                || CanUpgradeGrowthTrack(snapshot.GrowthFocusLevel, snapshot.GrowthPoints)
+                || CanUpgradeGrowthTrack(snapshot.GrowthTimingLevel, snapshot.GrowthPoints);
+        }
+
+        private static bool CanUpgradeGrowthTrack(int level, int points)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthUiMaxLevel);
+            if (safeLevel >= GrowthUiMaxLevel)
+            {
+                return false;
+            }
+
+            int cost = Mathf.Clamp(safeLevel + 1, 1, GrowthUiMaxLevel);
+            return points >= cost;
         }
 
         private static string BuildSelectedSaveSlotButtonSummary(GreedLastStateSnapshot snapshot)
         {
             if (!HasAnySaveSlotOccupied(snapshot))
             {
-                return "없음";
+                return snapshot.SaveLoadoutCandidateAvailable
+                    ? "추천 S" + (snapshot.SelectedSaveSlotIndex + 1)
+                    : "없음";
             }
 
             int slotNumber = snapshot.SelectedSaveSlotIndex + 1;
@@ -5536,35 +18268,348 @@ namespace GreedLast
                 && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotLabels.Length
                 ? snapshot.SaveSlotLabels[snapshot.SelectedSaveSlotIndex]
                 : string.Empty;
+            bool recommended = label.Contains("추천", StringComparison.Ordinal);
+            if (snapshot.SaveLoadoutCandidateAvailable && recommended)
+            {
+                return "추천 S" + slotNumber;
+            }
+
+            return "S" + slotNumber + " " + BuildCompactLobbySaveSlotLabel(label);
+        }
+
+        private static string BuildLobbySaveLoadoutButtonLabel(GreedLastStateSnapshot snapshot, string selectedSlotSummary)
+        {
+            if (snapshot.SaveLoadoutCandidateAvailable)
+            {
+                return "저장 슬롯 선택 " + selectedSlotSummary;
+            }
+
+            if (!snapshot.SaveLoadoutUnlocked)
+            {
+                return "저장 조합";
+            }
+
+            if (!HasAnyUsableSaveSlot(snapshot))
+            {
+                return "보충 안내";
+            }
+
+            return "저장 조합 " + selectedSlotSummary;
+        }
+
+        private static string BuildLobbyNormalRunButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            if (snapshot.SaveLoadoutCandidateAvailable)
+            {
+                return "후보 먼저 저장";
+            }
+
+            string detail = snapshot.Detail ?? string.Empty;
+            if (detail.StartsWith("탈출 실패 기록 저장", StringComparison.Ordinal)
+                || detail.StartsWith("탈출 중단 기록 저장", StringComparison.Ordinal))
+            {
+                if (HasAchievedReviewTargetResultDetail(detail))
+                {
+                    return "상향 재도전";
+                }
+
+                return HasReviewTargetResultDetail(detail) ? "목표 재도전" : "복기 재도전";
+            }
+
+            if (detail.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal))
+            {
+                return "새 일반 런";
+            }
+
+            if ((snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+                && !HasAnyUsableSaveSlot(snapshot))
+            {
+                return "보충 런";
+            }
+
+            return "일반 런";
+        }
+
+        private static string BuildCompactLobbySaveSlotLabel(string label)
+        {
             if (string.IsNullOrEmpty(label) || label == "빈 슬롯")
             {
-                label = "빈칸";
+                return "빈칸";
             }
-            else if (label == "사용 완료")
+
+            if (label == "사용 완료")
             {
-                label = "완료";
+                return "소진";
+            }
+
+            string status;
+            if (label.StartsWith("마지막", StringComparison.Ordinal))
+            {
+                status = "마지막";
             }
             else
             {
-                label = "남은 " + label;
+                int useTextEnd = label.IndexOf("회 남음", StringComparison.Ordinal);
+                status = useTextEnd >= 0
+                    ? label.Substring(0, useTextEnd + 1)
+                    : CompactUiText(ExtractFirstSlashPart(label), 8);
             }
 
-            return "S" + slotNumber + " " + label;
+            string grade = ExtractSaveSlotGrade(label);
+            return string.IsNullOrEmpty(grade) ? status : status + " " + grade;
+        }
+
+        private static string ExtractFirstSlashPart(string label)
+        {
+            int slashIndex = label.IndexOf("/", StringComparison.Ordinal);
+            return slashIndex < 0 ? label.Trim() : label.Substring(0, slashIndex).Trim();
+        }
+
+        private static string ExtractSaveSlotGrade(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = label.Split('/');
+            for (int i = 1; i < parts.Length; i += 1)
+            {
+                string part = parts[i].Trim();
+                if (string.IsNullOrEmpty(part)
+                    || part == "추천"
+                    || part.EndsWith("형", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (part.StartsWith("보너스", StringComparison.Ordinal))
+                {
+                    return CompactSaveSlotBonusGrade(part);
+                }
+
+                return CompactUiText(part, 4);
+            }
+
+            return string.Empty;
+        }
+
+        private static string CompactSaveSlotBonusGrade(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            if (value.EndsWith(" S", StringComparison.Ordinal))
+            {
+                return "S";
+            }
+
+            if (value.EndsWith(" A", StringComparison.Ordinal))
+            {
+                return "A";
+            }
+
+            if (value.EndsWith(" B", StringComparison.Ordinal))
+            {
+                return "B";
+            }
+
+            if (value.EndsWith(" C", StringComparison.Ordinal))
+            {
+                return "C";
+            }
+
+            return value.Contains("기본", StringComparison.Ordinal) ? "기본" : CompactUiText(value, 4);
         }
 
         private static string BuildLobbyInfiniteButtonLabel(GreedLastStateSnapshot snapshot, string selectedSlotSummary)
         {
+            if (snapshot.SaveLoadoutCandidateAvailable)
+            {
+                return "무한 후보 저장 필요";
+            }
+
+            string detail = snapshot.Detail ?? string.Empty;
+            if ((snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+                && !HasAnyUsableSaveSlot(snapshot))
+            {
+                return "무한 조합 보충";
+            }
+
             if (snapshot.InfiniteUnlocked)
             {
+                if (IsInfiniteRecordResultDetail(detail))
+                {
+                    if (detail.Contains("다음: 정산 종료 확인 후 무한모드 실전 재개", StringComparison.Ordinal))
+                    {
+                        return "무한 실전 재개 " + selectedSlotSummary;
+                    }
+
+                    if (HasAchievedReviewTargetResultDetail(detail))
+                    {
+                        return "무한 상향 재도전 " + selectedSlotSummary;
+                    }
+
+                    return HasReviewTargetResultDetail(detail)
+                        ? "무한 목표 재도전 " + selectedSlotSummary
+                        : "무한 재도전 " + selectedSlotSummary;
+                }
+
                 return "무한 " + selectedSlotSummary;
+            }
+
+            if (HasAnySaveSlotOccupied(snapshot))
+            {
+                return "무한 조합 소진";
             }
 
             if (snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
             {
-                return "무한 조합 필요";
+                return "무한 조합 보충";
             }
 
             return "무한모드";
+        }
+
+        private static bool HasReviewTargetResultDetail(string detail)
+        {
+            return !string.IsNullOrEmpty(detail)
+                && detail.Contains("복기 목표:", StringComparison.Ordinal);
+        }
+
+        private static bool HasAchievedReviewTargetResultDetail(string detail)
+        {
+            if (!HasReviewTargetResultDetail(detail))
+            {
+                return false;
+            }
+
+            string[] lines = detail.Replace("\r", string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("복기 목표:", StringComparison.Ordinal)
+                    && line.Contains("/ 달성", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string BuildInfiniteLoadoutSelectActionLabel(GreedLastStateSnapshot snapshot, bool selectedSaveSlotUsable)
+        {
+            if (!selectedSaveSlotUsable)
+            {
+                return HasAnyUsableSaveSlot(snapshot) ? "선택 불가" : "보충 런";
+            }
+
+            return IsSelectedSaveSlotLastUse(snapshot)
+                ? "마지막 선택"
+                : "선택 완료";
+        }
+
+        private static string BuildInfiniteStartActionLabel(GreedLastStateSnapshot snapshot, bool selectedSaveSlotUsable)
+        {
+            if (!selectedSaveSlotUsable)
+            {
+                return HasAnyUsableSaveSlot(snapshot) ? "슬롯 선택 필요" : "보충 런";
+            }
+
+            string detail = snapshot.Detail ?? string.Empty;
+            if (detail.Contains("시작 정비 1/2", StringComparison.Ordinal))
+            {
+                return "기프트 선택";
+            }
+
+            if (detail.Contains("시작 정비 2/2", StringComparison.Ordinal))
+            {
+                return "유물 선택";
+            }
+
+            return IsSelectedSaveSlotLastUse(snapshot)
+                ? "마지막 시작"
+                : "시작 -1회";
+        }
+
+        private static string BuildInfinitePrepSaveLoadoutButtonLabel(GreedLastStateSnapshot snapshot)
+        {
+            return HasAnyUsableSaveSlot(snapshot) ? "저장 조합 변경" : "보충 안내";
+        }
+
+        private static bool ShouldSaveDraftOfferRefill(
+            GreedLastStateSnapshot snapshot,
+            bool infiniteLoadoutSelectLike,
+            bool canSaveCandidate)
+        {
+            return !infiniteLoadoutSelectLike
+                && !canSaveCandidate
+                && (snapshot.FirstSaveCompleted || snapshot.SaveLoadoutUnlocked)
+                && !HasAnyUsableSaveSlot(snapshot);
+        }
+
+        private static string BuildSaveSlotDetailButtonLabel(
+            GreedLastStateSnapshot snapshot,
+            bool infiniteLoadoutSelectLike,
+            bool canSaveCandidate)
+        {
+            if (snapshot.SaveSlotDeleteConfirmationPending || snapshot.SaveSlotRenameConfirmationPending)
+            {
+                return "확인 취소";
+            }
+
+            if (snapshot.SaveSlotDetailViewActive)
+            {
+                return "목록 보기";
+            }
+
+            if (infiniteLoadoutSelectLike && !HasAnyUsableSaveSlot(snapshot))
+            {
+                return "보충 안내";
+            }
+
+            return infiniteLoadoutSelectLike || !canSaveCandidate ? "상세 보기" : "상세 비교";
+        }
+
+        private static bool IsSelectedSaveSlotLastUse(GreedLastStateSnapshot snapshot)
+        {
+            if (snapshot.SaveSlotLabels == null
+                || snapshot.SelectedSaveSlotIndex < 0
+                || snapshot.SelectedSaveSlotIndex >= snapshot.SaveSlotLabels.Length)
+            {
+                return false;
+            }
+
+            return (snapshot.SaveSlotLabels[snapshot.SelectedSaveSlotIndex] ?? string.Empty)
+                .StartsWith("마지막", StringComparison.Ordinal);
+        }
+
+        private static bool HasAnyUsableSaveSlot(GreedLastStateSnapshot snapshot)
+        {
+            if (snapshot.SaveSlotUsable == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < snapshot.SaveSlotUsable.Length; i += 1)
+            {
+                if (snapshot.SaveSlotUsable[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsCoreOnboardingComplete(GreedLastStateSnapshot snapshot)
+        {
+            return PlayerPrefs.GetInt(GreedLastApp.PracticeCompletedPrefsKey, 0) == 1
+                || snapshot.FirstSaveCompleted
+                || snapshot.SaveLoadoutUnlocked;
         }
 
         private static bool HasAnySaveSlotOccupied(GreedLastStateSnapshot snapshot)
@@ -5591,6 +18636,24 @@ namespace GreedLast
                 && snapshot.SelectedSaveSlotIndex >= 0
                 && snapshot.SelectedSaveSlotIndex < snapshot.SaveSlotUsable.Length
                 && snapshot.SaveSlotUsable[snapshot.SelectedSaveSlotIndex];
+        }
+
+        private static bool HasAnyUsableSaveSlot(GreedLastLobbySnapshot snapshot)
+        {
+            if (snapshot.SaveSlotUsable == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < snapshot.SaveSlotUsable.Length; i += 1)
+            {
+                if (snapshot.SaveSlotUsable[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool IsSelectedSaveSlotUsable(GreedLastStateSnapshot snapshot)
@@ -5669,6 +18732,11 @@ namespace GreedLast
                     : BuildSelectedSlotModePrefix(snapshot, "상세") + "\n목록 보기";
             }
 
+            if (!HasAnyUsableSaveSlot(snapshot) && (infiniteLoadoutSelectLike || !canSaveCandidate))
+            {
+                return "보충 안내\n보충 런";
+            }
+
             if (infiniteLoadoutSelectLike)
             {
                 return BuildSelectedSlotModePrefix(snapshot, "무한")
@@ -5678,8 +18746,8 @@ namespace GreedLast
             if (snapshot.SaveSlotChoiceRequired)
             {
                 return snapshot.SaveLoadoutCandidateAvailable
-                    ? "저장 작업\n슬롯 선택"
-                    : "관리 작업\n슬롯 선택";
+                    ? "저장 작업\n좌·중·우 선택"
+                    : "관리 작업\n좌·중·우 선택";
             }
 
             if (!canSaveCandidate)
@@ -5709,12 +18777,60 @@ namespace GreedLast
         private void ApplyButtonTones(GreedLastStateSnapshot snapshot, bool saveDraftLike)
         {
             ResetButtonTones();
+            ApplyLobbyNextActionTone(snapshot);
             if (!saveDraftLike)
             {
+                if (snapshot.State == GreedLastScreenState.InfiniteStartReady)
+                {
+                    if (IsSelectedSaveSlotUsable(snapshot))
+                    {
+                        if (IsSelectedSaveSlotLastUse(snapshot))
+                        {
+                            SetButtonTone(nextPatternButton, ButtonDangerColor, ButtonDangerHighlightedColor, ButtonDangerPressedColor);
+                        }
+                        else
+                        {
+                            SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                        }
+                    }
+                    else
+                    {
+                        SetButtonTone(saveLoadoutButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    }
+                }
+                else if (snapshot.State == GreedLastScreenState.GrowthBoard
+                    && snapshot.RecommendedGrowthTrackIndex >= 0)
+                {
+                    SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                }
+
                 return;
             }
 
             if (snapshot.SaveSlotOverwriteConfirmationPending)
+            {
+                SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+            else
+            {
+                bool infiniteLoadoutSelectLike = snapshot.State == GreedLastScreenState.InfiniteLoadoutSelect;
+                bool canSaveCandidate = !infiniteLoadoutSelectLike && snapshot.SaveLoadoutCandidateAvailable;
+                bool primaryControlUnlocked = !snapshot.SaveSlotChoiceRequired
+                    && !snapshot.SaveSlotRenameConfirmationPending
+                    && !snapshot.SaveSlotDeleteConfirmationPending;
+                bool refillPrimaryAvailable = primaryControlUnlocked
+                    && ((infiniteLoadoutSelectLike && !HasAnyUsableSaveSlot(snapshot))
+                        || ShouldSaveDraftOfferRefill(snapshot, infiniteLoadoutSelectLike, canSaveCandidate));
+                if (refillPrimaryAvailable)
+                {
+                    SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                }
+            }
+
+            if (snapshot.SaveLoadoutCandidateAvailable
+                && !snapshot.SaveSlotChoiceRequired
+                && !snapshot.SaveSlotRenameConfirmationPending
+                && !snapshot.SaveSlotDeleteConfirmationPending)
             {
                 SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
             }
@@ -5730,13 +18846,104 @@ namespace GreedLast
             }
         }
 
+        private void ApplyRunButtonTones(GreedLastRunSnapshot snapshot, bool normalClearReady)
+        {
+            ResetButtonTones();
+            if (normalClearReady || snapshot.Paused || snapshot.Stopped)
+            {
+                SetButtonTone(nextPatternButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+
+            if (!snapshot.Stopped && HasActionableTimingRecommendationButton(snapshot))
+            {
+                SetButtonTone(timingOffsetButtons[1], ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+        }
+
+        private void ApplyLobbyNextActionTone(GreedLastStateSnapshot snapshot)
+        {
+            if (snapshot.State != GreedLastScreenState.LobbyReady)
+            {
+                return;
+            }
+
+            if (!IsCoreOnboardingComplete(snapshot))
+            {
+                SetButtonTone(practiceRunButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                return;
+            }
+
+            if (snapshot.SaveLoadoutCandidateAvailable)
+            {
+                SetButtonTone(saveLoadoutButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                return;
+            }
+
+            if ((snapshot.SaveLoadoutUnlocked || snapshot.FirstSaveCompleted)
+                && !HasAnyUsableSaveSlot(snapshot))
+            {
+                SetButtonTone(infiniteButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                return;
+            }
+
+            string detail = snapshot.Detail;
+            switch (ResolveLobbyNextActionTarget(detail))
+            {
+                case "무한":
+                    SetButtonTone(infiniteButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "연습":
+                    SetButtonTone(practiceRunButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "일반":
+                    SetButtonTone(normalRunButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "저장":
+                    SetButtonTone(saveLoadoutButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "성장":
+                    SetButtonTone(growthButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "흔적":
+                    SetButtonTone(profileButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+                case "기록":
+                    SetButtonTone(infiniteRecordButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                    return;
+            }
+
+            if (IsNormalRecordResultDetail(detail) || IsInfiniteRecordResultDetail(detail))
+            {
+                SetButtonTone(infiniteRecordButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                return;
+            }
+
+            if (CanUpgradeAnyGrowthTrack(snapshot))
+            {
+                SetButtonTone(growthButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+                return;
+            }
+
+            if (snapshot.ProfileButtonSummary.Contains("NEW", StringComparison.Ordinal))
+            {
+                SetButtonTone(profileButton, ButtonConfirmColor, ButtonHighlightedColor, ButtonConfirmPressedColor);
+            }
+        }
+
+        private static string ResolveLobbyNextActionTarget(string detail)
+        {
+            return GreedLastApp.ResolveLobbyNextActionTarget(detail);
+        }
+
         private void ResetButtonTones()
         {
+            SetButtonTone(practiceRunButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(normalRunButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(saveLoadoutButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(infiniteButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(infiniteRecordButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(growthButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(profileButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(retryButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(debugConnectionButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(nextPatternButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
@@ -5801,7 +19008,7 @@ namespace GreedLast
             EnsureEventSystem();
 
             GameObject canvasObject = new GameObject("GreedLastCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            DontDestroyOnLoad(canvasObject);
+            PreserveDuringPlay(canvasObject);
 
             Canvas canvas = canvasObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -5811,9 +19018,15 @@ namespace GreedLast
             scaler.referenceResolution = new Vector2(DesignWidth, DesignHeight);
             scaler.matchWidthOrHeight = 1f;
 
+            Image canvasBackground = CreateRect("CanvasBackground", canvas.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
+            canvasBackground.color = new Color32(7, 11, 13, 255);
+            canvasBackground.raycastTarget = false;
+
             rootPanel = CreateRect("Root", canvas.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            Image background = rootPanel.AddComponent<Image>();
-            background.color = new Color32(11, 16, 18, 255);
+            rootPanelRect = rootPanel.GetComponent<RectTransform>();
+            ApplySafeArea(force: true);
+            rootBackground = rootPanel.AddComponent<Image>();
+            rootBackground.color = new Color32(11, 16, 18, 255);
 
             feedbackFlash = CreateRect("FeedbackFlash", rootPanel.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
             feedbackFlash.color = new Color32(255, 255, 255, 0);
@@ -5838,20 +19051,33 @@ namespace GreedLast
             SetAnchored(runHudText.rectTransform, 0.5f, 0.255f, 900f, 245f);
 
             judgementFeedbackText = CreateText(rootPanel.transform, "JudgementFeedback", string.Empty, 48, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 96f);
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 126f);
             judgementFeedbackText.color = new Color32(255, 238, 181, 0);
             judgementFeedbackText.raycastTarget = false;
+
+            stageTransitionText = CreateText(rootPanel.transform, "StageTransition", string.Empty, 50, TextAnchor.MiddleCenter, FontStyle.Bold);
+            SetAnchored(stageTransitionText.rectTransform, 0.5f, 0.565f, 880f, 104f);
+            stageTransitionText.color = new Color32(255, 238, 181, 0);
+            stageTransitionText.raycastTarget = false;
+
+            GameObject transitionLine = CreateRect("StageTransitionLine", rootPanel.transform, new Vector2(0.5f, 0.525f), new Vector2(0.5f, 0.525f), new Vector2(0.5f, 0.5f), new Vector2(420f, 6f));
+            stageTransitionLine = transitionLine.AddComponent<Image>();
+            stageTransitionLine.color = new Color32(255, 238, 181, 0);
+            stageTransitionLine.raycastTarget = false;
 
             CreateRunProgress(rootPanel.transform);
             CreateRunGauges(rootPanel.transform);
             CreateComboBadge(rootPanel.transform);
+            CreateJudgementHistory(rootPanel.transform);
             CreatePauseMenuOverlay(rootPanel.transform);
 
+            practiceRunButton = CreateButton(rootPanel.transform, "PracticeRunButton", "기초 연습");
             normalRunButton = CreateButton(rootPanel.transform, "NormalRunButton", "일반 런");
             saveLoadoutButton = CreateButton(rootPanel.transform, "SaveLoadoutButton", "저장 조합");
             infiniteButton = CreateButton(rootPanel.transform, "InfiniteButton", "무한모드");
             infiniteRecordButton = CreateButton(rootPanel.transform, "InfiniteRecordButton", "무한 기록");
             growthButton = CreateButton(rootPanel.transform, "GrowthButton", "성장");
+            profileButton = CreateButton(rootPanel.transform, "ProfileButton", "흔적");
             retryButton = CreateButton(rootPanel.transform, "RetryButton", "동기화 재시도");
             debugConnectionButton = CreateButton(rootPanel.transform, "DebugConnectionButton", "연결 전환");
             nextPatternButton = CreateButton(rootPanel.transform, "NextPatternButton", "자동 시작");
@@ -5860,29 +19086,46 @@ namespace GreedLast
             saveSlotRenameButton = CreateButton(rootPanel.transform, "SaveSlotRenameButton", "이름 변경");
             saveSlotDeleteButton = CreateButton(rootPanel.transform, "SaveSlotDeleteButton", "슬롯 삭제");
             pauseButton = CreateButton(rootPanel.transform, "PauseButton", "일시정지");
-            devInvincibleButton = CreateButton(rootPanel.transform, "DevInvincibleButton", "무적 OFF");
-            infiniteTestStopButton = CreateButton(rootPanel.transform, "InfiniteTestStopButton", "종료 테스트");
-            focusMaxButton = CreateButton(rootPanel.transform, "FocusMaxButton", "집중 MAX");
-            threatUpButton = CreateButton(rootPanel.transform, "ThreatUpButton", "위협 +1");
-            threatDownButton = CreateButton(rootPanel.transform, "ThreatDownButton", "위협 -1");
-            hapticsButton = CreateButton(rootPanel.transform, "HapticsButton", "진동 ON");
-            devShortcutButtons = new Button[4];
-            devShortcutButtons[0] = CreateButton(rootPanel.transform, "DevGiftButton", "기프트");
-            devShortcutButtons[1] = CreateButton(rootPanel.transform, "DevRelicButton", "유물");
-            devShortcutButtons[2] = CreateButton(rootPanel.transform, "DevAfterCoreButton", "핵 직후");
-            devShortcutButtons[3] = CreateButton(rootPanel.transform, "DevBeforeClearButton", "끝 직전");
+            devInvincibleButton = CreateButton(rootPanel.transform, "DevInvincibleButton", "F1 무적 OFF");
+            infiniteTestStopButton = CreateButton(rootPanel.transform, "InfiniteTestStopButton", "End 종료");
+            focusMaxButton = CreateButton(rootPanel.transform, "FocusMaxButton", "F6 집중");
+            threatUpButton = CreateButton(rootPanel.transform, "ThreatUpButton", "PgUp 위협");
+            threatDownButton = CreateButton(rootPanel.transform, "ThreatDownButton", "PgDn 위협");
+            hapticsButton = CreateButton(rootPanel.transform, "HapticsButton", BuildHapticsButtonLabel(true));
+            devShortcutButtons = new Button[7];
+            devShortcutButtons[0] = CreateButton(
+                rootPanel.transform,
+                "DevGiftButton",
+                PrefixDevShortcut("F2", BuildDevSectionShortcutLabel(GreedLastDevShortcut.GiftChoice)));
+            devShortcutButtons[1] = CreateButton(
+                rootPanel.transform,
+                "DevRelicButton",
+                PrefixDevShortcut("F3", BuildDevSectionShortcutLabel(GreedLastDevShortcut.RelicChoice)));
+            devShortcutButtons[2] = CreateButton(
+                rootPanel.transform,
+                "DevAfterCoreButton",
+                PrefixDevShortcut("F4", BuildDevSectionShortcutLabel(GreedLastDevShortcut.AfterCore)));
+            devShortcutButtons[3] = CreateButton(
+                rootPanel.transform,
+                "DevBeforeClearButton",
+                PrefixDevShortcut("F5", BuildDevSectionShortcutLabel(GreedLastDevShortcut.BeforeClear)));
+            devShortcutButtons[4] = CreateButton(rootPanel.transform, "DevReviewTargetButton", "F7 목표");
+            devShortcutButtons[5] = CreateButton(rootPanel.transform, "DevRouteCycleButton", "F8 경로");
+            devShortcutButtons[6] = CreateButton(rootPanel.transform, "DevAvoidanceCycleButton", "F9 동작");
             timingOffsetButtons = new Button[3];
-            timingOffsetButtons[0] = CreateButton(rootPanel.transform, "TimingOffsetPlusButton", "빠름 +20");
+            timingOffsetButtons[0] = CreateButton(rootPanel.transform, "TimingOffsetPlusButton", "빠름 +20ms");
             timingOffsetButtons[1] = CreateButton(rootPanel.transform, "TimingOffsetRecommendationButton", "추천/0");
-            timingOffsetButtons[2] = CreateButton(rootPanel.transform, "TimingOffsetMinusButton", "늦음 -20");
+            timingOffsetButtons[2] = CreateButton(rootPanel.transform, "TimingOffsetMinusButton", "늦음 -20ms");
             sfxVolumeButtons = new Button[3];
             sfxVolumeButtons[0] = CreateButton(rootPanel.transform, "SfxVolumeDownButton", "소리 -");
-            sfxVolumeButtons[1] = CreateButton(rootPanel.transform, "SfxVolumeResetButton", "소리 100");
+            sfxVolumeButtons[1] = CreateButton(rootPanel.transform, "SfxVolumeResetButton", BuildSfxVolumeButtonLabel(DefaultSfxVolume));
             sfxVolumeButtons[2] = CreateButton(rootPanel.transform, "SfxVolumeUpButton", "소리 +");
 
+            SetAnchored(practiceRunButton.GetComponent<RectTransform>(), 0.5f, 0.41f, 690f, 82f);
             SetAnchored(normalRunButton.GetComponent<RectTransform>(), 0.5f, 0.35f, 690f, 92f);
             SetAnchored(saveLoadoutButton.GetComponent<RectTransform>(), 0.5f, 0.29f, 690f, 92f);
             SetAnchored(infiniteButton.GetComponent<RectTransform>(), 0.5f, 0.23f, 690f, 92f);
+            SetAnchored(profileButton.GetComponent<RectTransform>(), 0.91f, 0.58f, 180f, 54f);
             SetAnchored(growthButton.GetComponent<RectTransform>(), 0.91f, 0.525f, 180f, 54f);
             SetAnchored(infiniteRecordButton.GetComponent<RectTransform>(), 0.91f, 0.47f, 180f, 54f);
             SetAnchored(retryButton.GetComponent<RectTransform>(), 0.5f, 0.17f, 690f, 92f);
@@ -5903,6 +19146,9 @@ namespace GreedLast
             SetAnchored(devShortcutButtons[1].GetComponent<RectTransform>(), 0.91f, 0.60f, 180f, 54f);
             SetAnchored(devShortcutButtons[2].GetComponent<RectTransform>(), 0.91f, 0.555f, 180f, 54f);
             SetAnchored(devShortcutButtons[3].GetComponent<RectTransform>(), 0.91f, 0.51f, 180f, 54f);
+            SetAnchored(devShortcutButtons[4].GetComponent<RectTransform>(), 0.79f, 0.69f, 180f, 54f);
+            SetAnchored(devShortcutButtons[5].GetComponent<RectTransform>(), 0.79f, 0.625f, 180f, 54f);
+            SetAnchored(devShortcutButtons[6].GetComponent<RectTransform>(), 0.79f, 0.56f, 180f, 54f);
             SetAnchored(timingOffsetButtons[0].GetComponent<RectTransform>(), 0.91f, 0.465f, 180f, 54f);
             SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.91f, 0.42f, 180f, 54f);
             SetAnchored(timingOffsetButtons[2].GetComponent<RectTransform>(), 0.91f, 0.375f, 180f, 54f);
@@ -5911,6 +19157,7 @@ namespace GreedLast
             SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.91f, 0.105f, 180f, 54f);
             SetButtonFontSize(infiniteRecordButton, 24);
             SetButtonFontSize(growthButton, 24);
+            SetButtonFontSize(profileButton, 24);
             SetButtonFontSize(saveSlotDetailButton, 24);
             SetButtonFontSize(saveSlotRenameButton, 24);
             SetButtonFontSize(saveSlotDeleteButton, 24);
@@ -5936,11 +19183,13 @@ namespace GreedLast
                 SetButtonFontSize(sfxVolumeButtons[i], 22);
             }
 
+            practiceRunButton.onClick.AddListener(() => practiceRunRequested?.Invoke());
             normalRunButton.onClick.AddListener(() => normalRunRequested?.Invoke());
             saveLoadoutButton.onClick.AddListener(() => saveLoadoutRequested?.Invoke());
             infiniteButton.onClick.AddListener(() => infiniteRunRequested?.Invoke());
             infiniteRecordButton.onClick.AddListener(() => infiniteRecordRequested?.Invoke());
             growthButton.onClick.AddListener(() => growthRequested?.Invoke());
+            profileButton.onClick.AddListener(() => profileRequested?.Invoke());
             retryButton.onClick.AddListener(() => retryRequested?.Invoke());
             debugConnectionButton.onClick.AddListener(() => debugConnectionRequested?.Invoke());
             nextPatternButton.onClick.AddListener(() => nextPatternRequested?.Invoke());
@@ -5959,6 +19208,9 @@ namespace GreedLast
             devShortcutButtons[1].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.RelicChoice));
             devShortcutButtons[2].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.AfterCore));
             devShortcutButtons[3].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.BeforeClear));
+            devShortcutButtons[4].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.ReviewTargetCheck));
+            devShortcutButtons[5].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.RouteCycle));
+            devShortcutButtons[6].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.AvoidanceCycle));
             timingOffsetButtons[0].onClick.AddListener(() => timingOffsetRequested?.Invoke(20));
             timingOffsetButtons[1].onClick.AddListener(() => timingOffsetRequested?.Invoke(0));
             timingOffsetButtons[2].onClick.AddListener(() => timingOffsetRequested?.Invoke(-20));
@@ -5977,8 +19229,15 @@ namespace GreedLast
             pauseMenuOverlay.SetActive(false);
 
             pauseMenuBackdrop = CreateRect("PauseMenuBackdrop", pauseMenuOverlay.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
-            pauseMenuBackdrop.color = new Color32(5, 8, 9, 178);
-            pauseMenuBackdrop.raycastTarget = false;
+            pauseMenuBackdrop.color = new Color32(5, 8, 9, 196);
+            pauseMenuBackdrop.raycastTarget = true;
+
+            pauseMenuSoftBlurBands = new Image[5];
+            pauseMenuSoftBlurBands[0] = CreatePauseSoftBlurBand("PauseMenuSoftBlurTop", new Vector2(0f, 0.78f), new Vector2(1f, 0.97f), new Color32(2, 5, 7, 118));
+            pauseMenuSoftBlurBands[1] = CreatePauseSoftBlurBand("PauseMenuSoftBlurBottom", new Vector2(0f, 0.03f), new Vector2(1f, 0.24f), new Color32(2, 5, 7, 118));
+            pauseMenuSoftBlurBands[2] = CreatePauseSoftBlurBand("PauseMenuSoftBlurLeft", new Vector2(0f, 0.12f), new Vector2(0.22f, 0.88f), new Color32(7, 14, 17, 96));
+            pauseMenuSoftBlurBands[3] = CreatePauseSoftBlurBand("PauseMenuSoftBlurRight", new Vector2(0.78f, 0.12f), new Vector2(1f, 0.88f), new Color32(7, 14, 17, 96));
+            pauseMenuSoftBlurBands[4] = CreatePauseSoftBlurBand("PauseMenuSoftFocusBand", new Vector2(0.12f, 0.34f), new Vector2(0.88f, 0.68f), new Color32(255, 238, 181, 18));
 
             GameObject panel = CreateRect("PauseMenuPanel", pauseMenuOverlay.transform, new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.5f), new Vector2(760f, 1120f));
             pauseMenuPanel = panel.AddComponent<Image>();
@@ -5998,6 +19257,14 @@ namespace GreedLast
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
         }
 
+        private Image CreatePauseSoftBlurBand(string name, Vector2 anchorMin, Vector2 anchorMax, Color32 color)
+        {
+            Image image = CreateRect(name, pauseMenuOverlay.transform, anchorMin, anchorMax, Vector2.zero, Vector2.zero).AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
+        }
+
         private void CreateRunProgress(Transform parent)
         {
             runProgressRoot = CreateRect("RunProgressRoot", parent, new Vector2(0.5f, 0.715f), new Vector2(0.5f, 0.715f), new Vector2(0.5f, 0.5f), new Vector2(760f, 64f));
@@ -6010,6 +19277,37 @@ namespace GreedLast
             runProgressFill = CreateRect("RunProgressFill", back.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
             runProgressFill.color = new Color32(104, 151, 142, 220);
             runProgressFill.raycastTarget = false;
+
+            routeCadencePipsRoot = CreateRect("RouteCadencePips", back.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            routeCadencePipsRoot.SetActive(false);
+            routeCadencePips = new Image[3];
+            routeCadenceActionTexts = new Text[3];
+            for (int i = 0; i < routeCadencePips.Length; i += 1)
+            {
+                float anchorX = (i + 0.5f) / routeCadencePips.Length;
+                Image pip = CreateRect(
+                    "RouteCadencePip_" + i,
+                    routeCadencePipsRoot.transform,
+                    new Vector2(anchorX, 0.5f),
+                    new Vector2(anchorX, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(24f, 24f)).AddComponent<Image>();
+                pip.color = new Color32(125, 139, 143, 76);
+                pip.raycastTarget = false;
+                routeCadencePips[i] = pip;
+
+                Text actionText = CreateText(
+                    routeCadencePipsRoot.transform,
+                    "RouteCadenceAction_" + i,
+                    string.Empty,
+                    17,
+                    TextAnchor.MiddleCenter,
+                    FontStyle.Bold);
+                SetAnchored(actionText.rectTransform, anchorX, 0.5f, 32f, 28f);
+                actionText.color = new Color32(218, 226, 218, 118);
+                actionText.raycastTarget = false;
+                routeCadenceActionTexts[i] = actionText;
+            }
 
             runProgressText = CreateText(runProgressRoot.transform, "RunProgressText", string.Empty, 24, TextAnchor.MiddleCenter, FontStyle.Bold);
             SetAnchored(runProgressText.rectTransform, 0.5f, 0.72f, 720f, 36f);
@@ -6037,6 +19335,133 @@ namespace GreedLast
             comboBadgeText.rectTransform.offsetMax = Vector2.zero;
             comboBadgeText.color = new Color32(237, 239, 231, 245);
             comboBadgeText.raycastTarget = false;
+        }
+
+        private void CreateJudgementHistory(Transform parent)
+        {
+            judgementHistoryRoot = CreateRect("JudgementHistoryRoot", parent, new Vector2(0.5f, 0.626f), new Vector2(0.5f, 0.626f), new Vector2(0.5f, 0.5f), new Vector2(258f, 34f));
+            judgementHistoryRoot.SetActive(false);
+            judgementHistoryDots = new Image[JudgementHistoryCapacity];
+            judgementHistoryActionLabels = new Text[JudgementHistoryCapacity];
+            for (int i = 0; i < judgementHistoryDots.Length; i += 1)
+            {
+                float anchorX = (i + 0.5f) / judgementHistoryDots.Length;
+                Image dot = CreateRect("JudgementHistoryDot_" + i, judgementHistoryRoot.transform, new Vector2(anchorX, 0.5f), new Vector2(anchorX, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(36f, 22f)).AddComponent<Image>();
+                dot.color = new Color32(63, 78, 82, 92);
+                dot.raycastTarget = false;
+                judgementHistoryDots[i] = dot;
+
+                Text actionLabel = CreateText(dot.transform, "Action", string.Empty, 17, TextAnchor.MiddleCenter, FontStyle.Bold);
+                actionLabel.rectTransform.anchorMin = Vector2.zero;
+                actionLabel.rectTransform.anchorMax = Vector2.one;
+                actionLabel.rectTransform.offsetMin = Vector2.zero;
+                actionLabel.rectTransform.offsetMax = Vector2.zero;
+                actionLabel.color = new Color32(18, 27, 30, 0);
+                actionLabel.raycastTarget = false;
+                judgementHistoryActionLabels[i] = actionLabel;
+            }
+        }
+
+        private void CreateTempleDepthBackdrop(Transform parent)
+        {
+            runTunnelLines = new Image[4];
+            runTunnelLines[0] = CreateTunnelLine(parent, "TunnelOuterLeft", 0.27f, 0.53f, 570f, 7f, 48f, new Color32(67, 105, 103, 82));
+            runTunnelLines[1] = CreateTunnelLine(parent, "TunnelOuterRight", 0.73f, 0.53f, 570f, 7f, -48f, new Color32(67, 105, 103, 82));
+            runTunnelLines[2] = CreateTunnelLine(parent, "TunnelInnerLeft", 0.41f, 0.53f, 455f, 4f, 73f, new Color32(205, 166, 70, 54));
+            runTunnelLines[3] = CreateTunnelLine(parent, "TunnelInnerRight", 0.59f, 0.53f, 455f, 4f, -73f, new Color32(205, 166, 70, 54));
+
+            GameObject horizon = CreateRect("TunnelHorizon", parent, new Vector2(0.5f, 0.875f), new Vector2(0.5f, 0.875f), new Vector2(0.5f, 0.5f), new Vector2(220f, 6f));
+            runTunnelHorizon = horizon.AddComponent<Image>();
+            runTunnelHorizon.color = new Color32(205, 166, 70, 66);
+            runTunnelHorizon.raycastTarget = false;
+
+            runSceneryPillars = new Image[8];
+            for (int i = 0; i < runSceneryPillars.Length; i += 1)
+            {
+                GameObject pillar = CreateRect(
+                    "TunnelPillar_" + i,
+                    parent,
+                    new Vector2(0.5f, 0.82f),
+                    new Vector2(0.5f, 0.82f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(18f, 54f));
+                Image image = pillar.AddComponent<Image>();
+                image.color = new Color32(67, 105, 103, 0);
+                image.raycastTarget = false;
+                runSceneryPillars[i] = image;
+            }
+        }
+
+        private static Image CreateTunnelLine(
+            Transform parent,
+            string name,
+            float anchorX,
+            float anchorY,
+            float width,
+            float height,
+            float angle,
+            Color32 color)
+        {
+            GameObject line = CreateRect(
+                name,
+                parent,
+                new Vector2(anchorX, anchorY),
+                new Vector2(anchorX, anchorY),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(width, height));
+            Image image = line.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            image.rectTransform.localEulerAngles = new Vector3(0f, 0f, angle);
+            return image;
+        }
+
+        private void CreateRunnerAvatar(Transform parent)
+        {
+            GameObject shadow = CreateRect("RunnerShadow", parent, new Vector2(0.5f, 0.125f), new Vector2(0.5f, 0.125f), new Vector2(0.5f, 0.5f), new Vector2(150f, 24f));
+            runnerShadow = shadow.AddComponent<Image>();
+            runnerShadow.color = new Color32(0, 0, 0, 112);
+            runnerShadow.raycastTarget = false;
+            shadow.SetActive(false);
+
+            GameObject coreGlow = CreateRect("RunnerCoreGlow", parent, new Vector2(0.5f, 0.205f), new Vector2(0.5f, 0.205f), new Vector2(0.5f, 0.5f), new Vector2(240f, 240f));
+            runnerCoreGlow = coreGlow.AddComponent<Image>();
+            runnerCoreGlow.color = new Color32(255, 214, 105, 0);
+            runnerCoreGlow.raycastTarget = false;
+            coreGlow.SetActive(false);
+
+            runnerAvatarRoot = CreateRect("RunnerAvatar", parent, new Vector2(0.5f, 0.155f), new Vector2(0.5f, 0.155f), new Vector2(0.5f, 0.12f), new Vector2(120f, 190f));
+            runnerAvatarRoot.SetActive(false);
+
+            Color32 bodyColor = new Color32(238, 211, 133, 255);
+            runnerHead = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerHead", 0.5f, 0.81f, 34f, 36f, bodyColor);
+            runnerTorso = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerTorso", 0.5f, 0.55f, 45f, 72f, bodyColor);
+            runnerLeftArm = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerLeftArm", 0.28f, 0.54f, 15f, 68f, bodyColor);
+            runnerRightArm = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerRightArm", 0.72f, 0.54f, 15f, 68f, bodyColor);
+            runnerLeftLeg = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerLeftLeg", 0.39f, 0.22f, 18f, 72f, bodyColor);
+            runnerRightLeg = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerRightLeg", 0.61f, 0.22f, 18f, 72f, bodyColor);
+        }
+
+        private static Image CreateRunnerPart(
+            Transform parent,
+            string name,
+            float anchorX,
+            float anchorY,
+            float width,
+            float height,
+            Color32 color)
+        {
+            GameObject part = CreateRect(
+                name,
+                parent,
+                new Vector2(anchorX, anchorY),
+                new Vector2(anchorX, anchorY),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(width, height));
+            Image image = part.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
         }
 
         private void CreateForwardMotionLines(Transform parent)
@@ -6090,8 +19515,10 @@ namespace GreedLast
             GameObject laneRoot = CreateRect("LanePreview", parent, new Vector2(0.14f, 0.44f), new Vector2(0.86f, 0.74f), Vector2.zero, Vector2.zero);
             lanePreviewRoot = laneRoot;
             laneRoot.AddComponent<CanvasGroup>().alpha = 0.95f;
+            CreateTempleDepthBackdrop(laneRoot.transform);
 
             laneImages = new Image[3];
+            laneHoldActive = new bool[3];
             lanePressPulseUntil = new float[3];
             laneJudgementPulseUntil = new float[3];
             laneMissShakeUntil = new float[3];
@@ -6104,12 +19531,12 @@ namespace GreedLast
                 float x = 0.2f + i * 0.3f;
                 int capturedIndex = i;
 
-                GameObject hitZone = CreateRect("LaneHitZone_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(360f, 580f));
+                GameObject hitZone = CreateRect("LaneHitZone_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(230f, 580f));
                 Image hitImage = hitZone.AddComponent<Image>();
                 hitImage.color = new Color32(255, 255, 255, 0);
                 Button hitButton = hitZone.AddComponent<Button>();
                 hitButton.transition = Selectable.Transition.None;
-                hitButton.onClick.AddListener(() => runChannelRequested?.Invoke((GreedLastRunChannel)(capturedIndex + 1)));
+                AddLanePointerDown(hitZone, hitButton, capturedIndex);
                 laneHitButtons[i] = hitButton;
 
                 GameObject lane = CreateRect("Lane_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(195f, 520f));
@@ -6123,7 +19550,7 @@ namespace GreedLast
                 laneColors.pressedColor = new Color32(205, 166, 70, 255);
                 laneColors.disabledColor = new Color32(66, 71, 72, 180);
                 laneButton.colors = laneColors;
-                laneButton.onClick.AddListener(() => runChannelRequested?.Invoke((GreedLastRunChannel)(capturedIndex + 1)));
+                AddLanePointerDown(lane, laneButton, capturedIndex);
                 laneButtons[i] = laneButton;
 
                 Text laneLabel = CreateText(lane.transform, "Label", i == 0 ? "좌" : i == 1 ? "중" : "우", 56, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -6134,6 +19561,7 @@ namespace GreedLast
                 laneLabel.rectTransform.anchorMax = Vector2.one;
                 laneLabel.rectTransform.offsetMin = Vector2.zero;
                 laneLabel.rectTransform.offsetMax = Vector2.zero;
+                laneLabel.raycastTarget = false;
                 laneLabelTexts[i] = laneLabel;
             }
 
@@ -6149,10 +19577,20 @@ namespace GreedLast
             successTimingBand.color = new Color32(255, 238, 181, 0);
             successTimingBand.raycastTarget = false;
 
+            GameObject centerBand = CreateRect("CenterTimingBand", laneRoot.transform, new Vector2(0.08f, 0.216f), new Vector2(0.92f, 0.224f), Vector2.zero, Vector2.zero);
+            centerTimingBand = centerBand.AddComponent<Image>();
+            centerTimingBand.color = new Color32(255, 248, 210, 0);
+            centerTimingBand.raycastTarget = false;
+
             GameObject line = CreateRect("JudgementLine", laneRoot.transform, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.22f), new Vector2(0.5f, 0.5f), new Vector2(0f, 18f));
             judgementLine = line.AddComponent<Image>();
             judgementLine.color = new Color32(255, 238, 181, 205);
             judgementLine.raycastTarget = false;
+
+            GameObject inputTrace = CreateRect("InputTimingTrace", laneRoot.transform, new Vector2(0.5f, 0.22f), new Vector2(0.5f, 0.22f), new Vector2(0.5f, 0.5f), new Vector2(88f, 18f));
+            inputTimingTraceMarker = inputTrace.AddComponent<Image>();
+            inputTimingTraceMarker.color = new Color32(255, 238, 181, 0);
+            inputTimingTraceMarker.raycastTarget = false;
 
             GameObject dangerBand = CreateRect("LaneDangerBand", laneRoot.transform, new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.88f), Vector2.zero, Vector2.zero);
             laneDangerBand = dangerBand.AddComponent<Image>();
@@ -6180,9 +19618,69 @@ namespace GreedLast
             trapStrike.color = new Color32(255, 238, 181, 0);
             trapStrike.raycastTarget = false;
 
+            GameObject resolvedTrap = CreateRect("ResolvedTrapAfterimage", laneRoot.transform, new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.18f), new Vector2(0.5f, 0.5f), new Vector2(128f, 128f));
+            resolvedTrapAfterimage = resolvedTrap.AddComponent<Image>();
+            resolvedTrapAfterimage.color = new Color32(255, 238, 181, 0);
+            resolvedTrapAfterimage.raycastTarget = false;
+
+            GameObject resolvedImpact = CreateRect("ResolvedTrapImpact", laneRoot.transform, new Vector2(0.5f, 0.155f), new Vector2(0.5f, 0.155f), new Vector2(0.5f, 0.5f), new Vector2(170f, 170f));
+            resolvedTrapImpact = resolvedImpact.AddComponent<Image>();
+            resolvedTrapImpact.color = new Color32(231, 91, 77, 0);
+            resolvedTrapImpact.raycastTarget = false;
+
+            CreateRunnerAvatar(laneRoot.transform);
+
+            activeActionCueText = CreateText(laneRoot.transform, "ActiveActionCue", string.Empty, 40, TextAnchor.MiddleCenter, FontStyle.Bold);
+            SetAnchored(activeActionCueText.rectTransform, 0.5f, 0.315f, 760f, 82f);
+            activeActionCueText.color = new Color32(255, 238, 181, 0);
+            activeActionCueText.raycastTarget = false;
+
             timingGuideText = CreateText(laneRoot.transform, "TimingGuide", string.Empty, 28, TextAnchor.MiddleCenter, FontStyle.Bold);
             SetAnchored(timingGuideText.rectTransform, 0.5f, 0.04f, 760f, 64f);
             timingGuideText.color = new Color32(218, 226, 218, 220);
+        }
+
+        private void AddLanePointerDown(GameObject target, Button gateButton, int laneIndex)
+        {
+            EventTrigger trigger = target.AddComponent<EventTrigger>();
+            EventTrigger.Entry entry = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerDown,
+            };
+            entry.callback.AddListener(_ =>
+            {
+                if (gateButton != null && !gateButton.interactable)
+                {
+                    return;
+                }
+
+                if (laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
+                {
+                    laneHoldActive[laneIndex] = true;
+                }
+
+                runChannelRequested?.Invoke((GreedLastRunChannel)(laneIndex + 1));
+            });
+            trigger.triggers.Add(entry);
+            AddLanePointerRelease(trigger, laneIndex, EventTriggerType.PointerUp);
+            AddLanePointerRelease(trigger, laneIndex, EventTriggerType.PointerExit);
+            AddLanePointerRelease(trigger, laneIndex, EventTriggerType.Cancel);
+        }
+
+        private void AddLanePointerRelease(EventTrigger trigger, int laneIndex, EventTriggerType eventType)
+        {
+            EventTrigger.Entry entry = new EventTrigger.Entry
+            {
+                eventID = eventType,
+            };
+            entry.callback.AddListener(_ =>
+            {
+                if (laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
+                {
+                    laneHoldActive[laneIndex] = false;
+                }
+            });
+            trigger.triggers.Add(entry);
         }
 
         private void CreateAudio()
@@ -6199,9 +19697,15 @@ namespace GreedLast
             rhythmAudio.volume = sfxVolume;
 
             beatClip = CreateTone("beat_tick", 760f, 0.045f, 0.18f);
+            downbeatClip = CreateDoubleTone("downbeat_pulse", 220f, 440f, 0.085f, 0.20f);
+            focusBeatClip = CreateTone("focus_beat", 1120f, 0.055f, 0.18f);
+            stageTransitionClip = CreateSweepTone("stage_transition", 360f, 920f, 0.16f, 0.24f);
             perfectCueClip = CreateTone("perfect_cue", 1240f, 0.055f, 0.26f);
             clutchCueClip = CreateSweepTone("clutch_cue", 920f, 420f, 0.085f, 0.28f);
             offbeatCueClip = CreateDoubleTone("offbeat_cue", 620f, 960f, 0.105f, 0.22f);
+            jumpActionCueClip = CreateSweepTone("jump_action_cue", 420f, 860f, 0.075f, 0.16f);
+            slideActionCueClip = CreateSweepTone("slide_action_cue", 760f, 320f, 0.085f, 0.16f);
+            twistActionCueClip = CreateDoubleTone("twist_action_cue", 520f, 700f, 0.085f, 0.14f);
             laneCueClips = new AudioClip[3];
             laneCueClips[0] = CreateTone("left_cue", 440f, 0.08f, 0.24f);
             laneCueClips[1] = CreateTone("center_cue", 660f, 0.08f, 0.24f);
@@ -6211,10 +19715,23 @@ namespace GreedLast
             focusGuardClip = CreateDoubleTone("focus_guard_tone", 520f, 920f, 0.14f, 0.30f);
             missClip = CreateTone("miss_tone", 180f, 0.15f, 0.35f);
             chainClip = CreateDoubleTone("chain_tone", 880f, 1320f, 0.12f, 0.28f);
+            recoveryClip = CreateDoubleTone("recovery_tone", 540f, 1080f, 0.14f, 0.30f);
+            bundleCompleteClip = CreateSweepTone("bundle_complete_tone", 720f, 1680f, 0.22f, 0.32f);
             comboTierClip = CreateDoubleTone("combo_tier_tone", 980f, 1560f, 0.13f, 0.30f);
             comboBreakClip = CreateSweepTone("combo_break_tone", 520f, 260f, 0.11f, 0.22f);
             threatUpClip = CreateSweepTone("threat_up_tone", 360f, 760f, 0.12f, 0.25f);
             threatDownClip = CreateSweepTone("threat_down_tone", 760f, 360f, 0.10f, 0.18f);
+            variationTensionClip = CreateSweepTone("variation_tension_tone", 520f, 1180f, 0.075f, 0.24f);
+            variationPrecisionClip = CreateDoubleTone("variation_precision_tone", 1040f, 1560f, 0.085f, 0.22f);
+            variationBreatherClip = CreateTone("variation_breather_tone", 540f, 0.06f, 0.16f);
+        }
+
+        private static void PreserveDuringPlay(GameObject gameObject)
+        {
+            if (Application.isPlaying && gameObject != null)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
         }
 
         private static void EnsureCamera()
@@ -6225,7 +19742,7 @@ namespace GreedLast
             }
 
             GameObject cameraObject = new GameObject("GreedLastCamera", typeof(Camera), typeof(AudioListener));
-            DontDestroyOnLoad(cameraObject);
+            PreserveDuringPlay(cameraObject);
 
             Camera camera = cameraObject.GetComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -6243,7 +19760,7 @@ namespace GreedLast
             }
 
             GameObject eventSystem = new GameObject("GreedLastEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            DontDestroyOnLoad(eventSystem);
+            PreserveDuringPlay(eventSystem);
         }
 
         private static Button CreateButton(Transform parent, string name, string label)
@@ -6301,6 +19818,41 @@ namespace GreedLast
             return obj;
         }
 
+        private void ApplySafeArea(bool force = false)
+        {
+            if (rootPanelRect == null || Screen.width <= 0 || Screen.height <= 0)
+            {
+                return;
+            }
+
+            Rect safeArea = Screen.safeArea;
+            bool sameSafeArea = Mathf.Approximately(safeArea.x, lastSafeArea.x)
+                && Mathf.Approximately(safeArea.y, lastSafeArea.y)
+                && Mathf.Approximately(safeArea.width, lastSafeArea.width)
+                && Mathf.Approximately(safeArea.height, lastSafeArea.height)
+                && lastSafeAreaScreenWidth == Screen.width
+                && lastSafeAreaScreenHeight == Screen.height;
+            if (!force && sameSafeArea)
+            {
+                return;
+            }
+
+            Vector2 anchorMin = safeArea.position;
+            Vector2 anchorMax = safeArea.position + safeArea.size;
+            anchorMin.x = Mathf.Clamp01(anchorMin.x / Screen.width);
+            anchorMin.y = Mathf.Clamp01(anchorMin.y / Screen.height);
+            anchorMax.x = Mathf.Clamp01(anchorMax.x / Screen.width);
+            anchorMax.y = Mathf.Clamp01(anchorMax.y / Screen.height);
+
+            rootPanelRect.anchorMin = anchorMin;
+            rootPanelRect.anchorMax = anchorMax;
+            rootPanelRect.offsetMin = Vector2.zero;
+            rootPanelRect.offsetMax = Vector2.zero;
+            lastSafeArea = safeArea;
+            lastSafeAreaScreenWidth = Screen.width;
+            lastSafeAreaScreenHeight = Screen.height;
+        }
+
         private static void SetAnchored(RectTransform rect, float x, float y, float width, float height)
         {
             rect.anchorMin = new Vector2(x, y);
@@ -6338,6 +19890,16 @@ namespace GreedLast
             }
 
             return Mathf.Clamp01(remaining / 0.16f);
+        }
+
+        private float BuildLaneHoldAmount(int index)
+        {
+            if (laneHoldActive == null || index < 0 || index >= laneHoldActive.Length || !laneHoldActive[index])
+            {
+                return 0f;
+            }
+
+            return 1f;
         }
 
         private float BuildLaneJudgementPulse(int index)
@@ -6459,27 +20021,45 @@ namespace GreedLast
             return Mathf.Sin(normalized * Mathf.PI);
         }
 
-        private void ApplyFocusGuardShieldBand()
+        private float BuildBeatMarkerProfilePulse()
         {
-            float focusGuardImpact = BuildBeatMarkerFocusGuardImpact();
-            if (focusGuardImpact <= 0f || goodTimingBand == null || judgementLine == null)
+            float remaining = beatMarkerProfilePulseUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                return 0f;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / BeatMarkerProfilePulseDuration);
+            return Mathf.Sin(normalized * Mathf.PI);
+        }
+
+        private void ApplyFocusStateAuraBand()
+        {
+            if (!hasRunSnapshot
+                || !latestRunSnapshot.FocusStateActive
+                || goodTimingBand == null
+                || judgementLine == null)
             {
                 return;
             }
 
+            float activationImpact = BuildBeatMarkerFocusGuardImpact();
+            float livePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float focusPulse = Mathf.Max(activationImpact, 0.32f + livePulse * 0.34f);
+
             float lineY = judgementLine.rectTransform.anchorMin.y;
-            float halfHeight = Mathf.Lerp(0.018f, 0.055f, focusGuardImpact);
+            float halfHeight = Mathf.Lerp(0.016f, 0.038f, focusPulse);
             RectTransform bandRect = goodTimingBand.rectTransform;
             bandRect.anchorMin = new Vector2(0.10f, Mathf.Clamp01(lineY - halfHeight));
             bandRect.anchorMax = new Vector2(0.90f, Mathf.Clamp01(lineY + halfHeight));
             bandRect.offsetMin = Vector2.zero;
             bandRect.offsetMax = Vector2.zero;
-            bandRect.localScale = Vector3.one * (1f + focusGuardImpact * 0.045f);
-            goodTimingBand.color = new Color32(145, 231, 199, (byte)Mathf.RoundToInt(Mathf.Lerp(32f, 132f, focusGuardImpact)));
+            bandRect.localScale = Vector3.one * (1f + activationImpact * 0.055f);
+            goodTimingBand.color = new Color32(255, 196, 74, (byte)Mathf.RoundToInt(Mathf.Lerp(24f, 92f, focusPulse)));
 
-            judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(145, 231, 199, 255), focusGuardImpact * 0.72f);
+            judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(255, 214, 105, 255), focusPulse * 0.44f);
             float currentLineScaleY = judgementLine.rectTransform.localScale.y;
-            judgementLine.rectTransform.localScale = new Vector3(1f, Mathf.Max(currentLineScaleY, 1f + focusGuardImpact * 0.56f), 1f);
+            judgementLine.rectTransform.localScale = new Vector3(1f, Mathf.Max(currentLineScaleY, 1f + activationImpact * 0.52f), 1f);
         }
 
         private Color32 GetLaneJudgementPulseColor(int index)
@@ -6521,10 +20101,23 @@ namespace GreedLast
             float threatStrength = latestRunSnapshot.InfiniteMode
                 ? Mathf.Clamp01((latestRunSnapshot.InfiniteThreatLevel - 1) / 4f)
                 : 0f;
+            float comboStrength = Mathf.Clamp01(latestRunSnapshot.Combo / 12f);
             float speedBias = latestRunSnapshot.CountdownActive ? 0.55f : latestRunSnapshot.ActivePattern ? 1.18f : 0.82f;
-            Color32 baseColor = latestRunSnapshot.InfiniteMode
-                ? new Color32(205, 166, 70, 255)
-                : new Color32(104, 151, 142, 255);
+            float stageMotionScale = BuildStageMotionScale(latestRunSnapshot);
+            float stageDepthScale = BuildStageDepthScale(latestRunSnapshot);
+            speedBias *= 1f + comboStrength * 0.16f;
+            if (latestRunSnapshot.FocusStateActive)
+            {
+                speedBias *= 1.22f;
+            }
+            Color32 baseColor = BuildRunAtmosphereAccent(latestRunSnapshot);
+            if (IsVisibleChoiceProfile(latestRunSnapshot.ActiveChoiceProfile))
+            {
+                baseColor = Color32.Lerp(
+                    baseColor,
+                    GetChoiceProfilePulseColor(latestRunSnapshot.ActiveChoiceProfile),
+                    0.20f);
+            }
 
             for (int i = 0; i < runMotionLines.Length; i += 1)
             {
@@ -6534,17 +20127,898 @@ namespace GreedLast
                     continue;
                 }
 
-                float phase = Mathf.Repeat(beatPhase * (0.46f + threatStrength * 0.2f) * speedBias + i / (float)runMotionLines.Length, 1f);
+                float phase = Mathf.Repeat(
+                    beatPhase * (0.46f + threatStrength * 0.2f) * speedBias * stageMotionScale
+                        + i / (float)runMotionLines.Length,
+                    1f);
                 float y = Mathf.Lerp(0.86f, 0.20f, phase);
-                float halfWidth = Mathf.Lerp(0.035f, 0.42f, phase);
+                float halfWidth = Mathf.Min(0.47f, Mathf.Lerp(0.035f, 0.42f, phase) * stageDepthScale);
                 RectTransform rect = line.rectTransform;
                 rect.anchorMin = new Vector2(Mathf.Clamp01(0.5f - halfWidth), y);
                 rect.anchorMax = new Vector2(Mathf.Clamp01(0.5f + halfWidth), y);
-                rect.sizeDelta = new Vector2(0f, Mathf.Lerp(3f, 15f, phase));
+                rect.sizeDelta = new Vector2(0f, Mathf.Lerp(3f, 15f + comboStrength * 6f, phase) * stageDepthScale);
                 rect.anchoredPosition = Vector2.zero;
 
                 int alpha = Mathf.RoundToInt(Mathf.Lerp(18f, 82f + threatStrength * 32f, phase) * Mathf.Lerp(0.72f, 1.08f, Mathf.Sin((beatPhase + phase) * Mathf.PI * 2f) * 0.5f + 0.5f));
-                line.color = WithAlpha(baseColor, alpha);
+                Color32 lineColor = baseColor;
+                if (latestRunSnapshot.FocusStateActive)
+                {
+                    alpha = Mathf.RoundToInt(alpha * 1.22f);
+                    lineColor = Color32.Lerp(lineColor, new Color32(255, 196, 74, 255), 0.18f);
+                }
+                if (comboStrength > 0f)
+                {
+                    alpha = Mathf.RoundToInt(alpha * Mathf.Lerp(1f, 1.28f, comboStrength));
+                    lineColor = Color32.Lerp(lineColor, new Color32(255, 214, 105, 255), comboStrength * 0.22f);
+                }
+                line.color = WithAlpha(lineColor, alpha);
+            }
+        }
+
+        private void TrackStagePresentation(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.Stopped)
+            {
+                lastPresentedRunWasStopped = true;
+                return;
+            }
+
+            if (lastPresentedRunWasStopped)
+            {
+                lastStagePresentationKey = string.Empty;
+                rhythmBeatIndex = 0;
+            }
+
+            lastPresentedRunWasStopped = false;
+            string stageKey = BuildStagePresentationKey(snapshot);
+            if (string.IsNullOrEmpty(stageKey)
+                || string.Equals(stageKey, lastStagePresentationKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            lastStagePresentationKey = stageKey;
+            string banner = BuildStagePresentationText(snapshot);
+            if (string.IsNullOrEmpty(banner) || stageTransitionText == null)
+            {
+                return;
+            }
+
+            stageTransitionText.text = banner;
+            stageTransitionColor = BuildRunAtmosphereAccent(snapshot);
+            stageTransitionStartedAt = Time.unscaledTime;
+            stageTransitionUntil = stageTransitionStartedAt + StageTransitionBannerDuration;
+            PlayClip(stageTransitionClip, snapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.34f : 0.25f);
+            PlayHaptic(snapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.055f : 0.028f);
+        }
+
+        private static string BuildStagePresentationKey(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return snapshot.Stopped ? string.Empty : "practice";
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return "infinite_" + Mathf.Max(1, snapshot.InfiniteThreatLevel);
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "escape";
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.ClearResolving
+                || snapshot.Phase == GreedLastRunPhase.FailResolving)
+            {
+                return string.Empty;
+            }
+
+            string chapterKey = "chapter_" + Mathf.Clamp(snapshot.ChapterIndex, 1, 4);
+            return snapshot.ChapterIndex == 3 && !string.IsNullOrEmpty(snapshot.ActiveRelic)
+                ? chapterKey + "_" + snapshot.ActiveRelic
+                : chapterKey;
+        }
+
+        private static string BuildStagePresentationText(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return "기초 연습  ·  3축 대응";
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return "무한 위협 " + Mathf.Max(1, snapshot.InfiniteThreatLevel);
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "공명핵 회수  ·  탈출 시작";
+            }
+
+            switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+            {
+                case 1:
+                    return "CHAPTER 1  ·  신호의 회랑";
+                case 2:
+                    return "CHAPTER 2  ·  압박의 축";
+                case 3:
+                    return string.IsNullOrEmpty(snapshot.ActiveRelic)
+                        ? "CHAPTER 3  ·  연쇄의 심부"
+                        : "CHAPTER 3  ·  " + snapshot.ActiveRelic + " 증폭";
+                default:
+                    return "CHAPTER 4  ·  왕의 핵실";
+            }
+        }
+
+        private void UpdateStageTransitionBanner()
+        {
+            if (stageTransitionText == null || stageTransitionLine == null)
+            {
+                return;
+            }
+
+            float remaining = stageTransitionUntil - Time.unscaledTime;
+            if (!runModeActive || remaining <= 0f)
+            {
+                stageTransitionText.color = new Color32(255, 238, 181, 0);
+                stageTransitionLine.color = new Color32(255, 238, 181, 0);
+                return;
+            }
+
+            float age = Mathf.Max(0f, Time.unscaledTime - stageTransitionStartedAt);
+            float fadeIn = Mathf.Clamp01(age / 0.16f);
+            float fadeOut = Mathf.Clamp01(remaining / 0.32f);
+            float visibility = Mathf.Min(fadeIn, fadeOut);
+            Color32 textColor = Color32.Lerp(new Color32(237, 239, 231, 255), stageTransitionColor, 0.58f);
+            textColor.a = (byte)Mathf.RoundToInt(255f * visibility);
+            stageTransitionText.color = textColor;
+            stageTransitionText.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.08f, 1f, Mathf.Clamp01(age / 0.28f));
+
+            Color32 lineColor = stageTransitionColor;
+            lineColor.a = (byte)Mathf.RoundToInt(210f * visibility);
+            stageTransitionLine.color = lineColor;
+            stageTransitionLine.rectTransform.localScale = new Vector3(Mathf.Lerp(0.35f, 1f, fadeIn), 1f, 1f);
+        }
+
+        private void PlayRhythmPulse(GreedLastRunSnapshot snapshot, float volume)
+        {
+            bool downbeat = rhythmBeatIndex % 4 == 0;
+            PlayClip(beatClip, volume);
+            if (downbeat)
+            {
+                float downbeatVolume = snapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.18f : 0.14f;
+                PlayClip(downbeatClip, downbeatVolume);
+            }
+
+            if (snapshot.FocusStateActive && rhythmBeatIndex % 2 == 0)
+            {
+                PlayClip(focusBeatClip, downbeat ? 0.13f : 0.085f);
+            }
+
+            rhythmBeatIndex += 1;
+        }
+
+        private void UpdateRunAtmosphere()
+        {
+            if (rootBackground == null)
+            {
+                return;
+            }
+
+            Color32 target = runModeActive && hasRunSnapshot
+                ? BuildRunAtmosphereBackground(latestRunSnapshot)
+                : new Color32(11, 16, 18, 255);
+            rootBackground.color = Color.Lerp(
+                rootBackground.color,
+                target,
+                1f - Mathf.Exp(-Time.unscaledDeltaTime * 3.4f));
+        }
+
+        private Color32 BuildRunLaneBaseColor(int laneIndex, float lanePulse)
+        {
+            if (!runModeActive || !hasRunSnapshot)
+            {
+                return Color32.Lerp(
+                    new Color32(32, 42, 49, 255),
+                    new Color32(69, 88, 92, 255),
+                    lanePulse * 0.35f);
+            }
+
+            Color32 accent = BuildRunAtmosphereAccent(latestRunSnapshot);
+            if (IsVisibleChoiceProfile(latestRunSnapshot.ActiveChoiceProfile))
+            {
+                accent = Color32.Lerp(
+                    accent,
+                    GetChoiceProfilePulseColor(latestRunSnapshot.ActiveChoiceProfile),
+                    0.16f);
+            }
+            Color32 darkBase = Color32.Lerp(new Color32(24, 31, 35, 255), accent, 0.13f + laneIndex * 0.018f);
+            float pulseStrength = latestRunSnapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.24f : 0.16f;
+            return Color32.Lerp(darkBase, accent, lanePulse * pulseStrength);
+        }
+
+        private static Color32 BuildRunAtmosphereBackground(GreedLastRunSnapshot snapshot)
+        {
+            Color32 background;
+            if (snapshot.InfiniteMode)
+            {
+                background = new Color32(16, 14, 10, 255);
+            }
+            else if (snapshot.Phase == GreedLastRunPhase.EscapeRunning
+                || snapshot.Phase == GreedLastRunPhase.ClearResolving)
+            {
+                background = new Color32(21, 14, 8, 255);
+            }
+            else
+            {
+                switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+                {
+                    case 1:
+                        background = new Color32(8, 17, 19, 255);
+                        break;
+                    case 2:
+                        background = new Color32(16, 16, 12, 255);
+                        break;
+                    case 3:
+                        background = new Color32(19, 11, 12, 255);
+                        break;
+                    default:
+                        background = new Color32(18, 13, 8, 255);
+                        break;
+                }
+            }
+
+            float threatStrength = BuildInfiniteThreatStrength(snapshot);
+            float blend = snapshot.InfiniteMode
+                ? Mathf.Lerp(0.08f, 0.18f, threatStrength)
+                : snapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.12f : 0.065f;
+            if (snapshot.FocusStateActive)
+            {
+                blend += 0.025f;
+            }
+
+            if (snapshot.Health <= 1 && !snapshot.Stopped)
+            {
+                background = Color32.Lerp(background, new Color32(32, 9, 9, 255), 0.22f);
+            }
+
+            return Color32.Lerp(background, BuildRunAtmosphereAccent(snapshot), blend);
+        }
+
+        private static Color32 BuildRunAtmosphereAccent(GreedLastRunSnapshot snapshot)
+        {
+            Color32 accent;
+            if (snapshot.InfiniteMode)
+            {
+                accent = new Color32(205, 166, 70, 255);
+            }
+            else if (snapshot.Phase == GreedLastRunPhase.EscapeRunning
+                || snapshot.Phase == GreedLastRunPhase.ClearResolving)
+            {
+                accent = new Color32(255, 196, 74, 255);
+            }
+            else
+            {
+                switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+                {
+                    case 1:
+                        accent = new Color32(87, 151, 142, 255);
+                        break;
+                    case 2:
+                        accent = new Color32(180, 137, 74, 255);
+                        break;
+                    case 3:
+                        accent = new Color32(196, 89, 65, 255);
+                        break;
+                    default:
+                        accent = new Color32(220, 174, 76, 255);
+                        break;
+                }
+            }
+
+            string profile = BuildAtmosphereChoiceProfile(snapshot);
+            if (IsVisibleChoiceProfile(profile))
+            {
+                accent = Color32.Lerp(
+                    accent,
+                    GetChoiceProfilePulseColor(profile),
+                    snapshot.InfiniteMode ? 0.30f : 0.22f);
+            }
+
+            string route = BuildAtmosphereRouteProfile(snapshot);
+            if (!string.IsNullOrEmpty(route))
+            {
+                accent = Color32.Lerp(
+                    accent,
+                    GetRouteProfileAtmosphereColor(route),
+                    snapshot.InfiniteMode ? 0.34f : 0.26f);
+            }
+
+            if (!string.IsNullOrEmpty(snapshot.ActiveRelic))
+            {
+                accent = Color32.Lerp(accent, GetRelicAtmosphereColor(snapshot.ActiveRelic), 0.18f);
+            }
+
+            if (snapshot.FocusStateActive)
+            {
+                accent = Color32.Lerp(accent, new Color32(255, 224, 129, 255), 0.20f);
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                accent = Color32.Lerp(
+                    accent,
+                    GetInfiniteThreatAtmosphereColor(snapshot.InfiniteThreatLevel),
+                    Mathf.Lerp(0.16f, 0.42f, BuildInfiniteThreatStrength(snapshot)));
+            }
+
+            if (snapshot.Health <= 1 && !snapshot.Stopped)
+            {
+                accent = Color32.Lerp(accent, new Color32(231, 91, 77, 255), 0.22f);
+            }
+
+            return accent;
+        }
+
+        private static string BuildAtmosphereChoiceProfile(GreedLastRunSnapshot snapshot)
+        {
+            string profile = snapshot.InfiniteMode && !string.IsNullOrEmpty(snapshot.ActiveInfiniteLoadoutProfile)
+                ? snapshot.ActiveInfiniteLoadoutProfile
+                : snapshot.ActiveChoiceProfile;
+            string extracted = ExtractChoiceProfileKeyword(profile);
+            if (!string.IsNullOrEmpty(extracted))
+            {
+                return extracted;
+            }
+
+            return IsVisibleChoiceProfile(profile) ? profile : string.Empty;
+        }
+
+        private static string ExtractChoiceProfileKeyword(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            if (value.Contains("안정형", StringComparison.Ordinal))
+            {
+                return "안정형";
+            }
+
+            if (value.Contains("집중형", StringComparison.Ordinal))
+            {
+                return "집중형";
+            }
+
+            if (value.Contains("연쇄형", StringComparison.Ordinal))
+            {
+                return "연쇄형";
+            }
+
+            if (value.Contains("고점형", StringComparison.Ordinal))
+            {
+                return "고점형";
+            }
+
+            return value.Contains("균형형", StringComparison.Ordinal) ? "균형형" : string.Empty;
+        }
+
+        private static string BuildAtmosphereRouteProfile(GreedLastRunSnapshot snapshot)
+        {
+            if (!string.IsNullOrEmpty(snapshot.ActiveRouteProfile))
+            {
+                return ExtractRouteProfileKeyword(snapshot.ActiveRouteProfile);
+            }
+
+            string profile = snapshot.InfiniteMode
+                ? snapshot.ActiveInfiniteLoadoutProfile
+                : snapshot.ActiveChoiceProfile;
+            return ExtractRouteProfileKeyword(profile);
+        }
+
+        private static string ExtractRouteProfileKeyword(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            if (value.Contains("안정 루트", StringComparison.Ordinal))
+            {
+                return "안정 루트";
+            }
+
+            if (value.Contains("변주 루트", StringComparison.Ordinal))
+            {
+                return "변주 루트";
+            }
+
+            if (value.Contains("압박 루트", StringComparison.Ordinal))
+            {
+                return "압박 루트";
+            }
+
+            return value.Contains("혼합 루트", StringComparison.Ordinal) ? "혼합 루트" : string.Empty;
+        }
+
+        private static Color32 GetRouteProfileAtmosphereColor(string route)
+        {
+            switch (route)
+            {
+                case "안정 루트":
+                    return new Color32(116, 202, 173, 255);
+                case "변주 루트":
+                    return new Color32(111, 169, 210, 255);
+                case "압박 루트":
+                    return new Color32(255, 157, 92, 255);
+                case "혼합 루트":
+                    return new Color32(218, 197, 144, 255);
+                default:
+                    return new Color32(255, 238, 181, 255);
+            }
+        }
+
+        private static Color32 GetRelicAtmosphereColor(string relic)
+        {
+            if (string.IsNullOrEmpty(relic))
+            {
+                return new Color32(255, 238, 181, 255);
+            }
+
+            if (relic.Contains("파라오", StringComparison.Ordinal))
+            {
+                return new Color32(255, 197, 86, 255);
+            }
+
+            if (relic.Contains("사막", StringComparison.Ordinal))
+            {
+                return new Color32(201, 228, 181, 255);
+            }
+
+            return relic.Contains("황금", StringComparison.Ordinal)
+                ? new Color32(255, 214, 105, 255)
+                : new Color32(218, 226, 218, 255);
+        }
+
+        private static Color32 GetInfiniteThreatAtmosphereColor(int threatLevel)
+        {
+            float pressure = Mathf.Clamp01((threatLevel - 1) / 4f);
+            return Color32.Lerp(new Color32(205, 166, 70, 255), new Color32(231, 91, 77, 255), pressure);
+        }
+
+        private static float BuildInfiniteThreatStrength(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.InfiniteMode
+                ? Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f)
+                : 0f;
+        }
+
+        private static float BuildStageMotionScale(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return 0.82f;
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return Mathf.Lerp(1f, 1.32f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return 1.30f;
+            }
+
+            switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+            {
+                case 1:
+                    return 0.86f;
+                case 2:
+                    return 1f;
+                case 3:
+                    return 1.16f;
+                default:
+                    return 1.08f;
+            }
+        }
+
+        private static float BuildStageDepthScale(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.PracticeMode)
+            {
+                return 0.88f;
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                return Mathf.Lerp(1.04f, 1.22f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return 1.28f;
+            }
+
+            switch (Mathf.Clamp(snapshot.ChapterIndex, 1, 4))
+            {
+                case 1:
+                    return 0.84f;
+                case 2:
+                    return 0.98f;
+                case 3:
+                    return 1.12f;
+                default:
+                    return 1.20f;
+            }
+        }
+
+        private void UpdateTempleDepthBackdrop()
+        {
+            if (runTunnelLines == null || runTunnelHorizon == null)
+            {
+                return;
+            }
+
+            bool visible = runModeActive && hasRunSnapshot;
+            float motionStrength = visible && !latestRunSnapshot.Paused && !latestRunSnapshot.Stopped
+                ? latestRunSnapshot.ActivePattern ? 1f : 0.72f
+                : visible ? 0.34f : 0f;
+            float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float stageMotionScale = visible ? BuildStageMotionScale(latestRunSnapshot) : 1f;
+            float stageDepthScale = visible ? BuildStageDepthScale(latestRunSnapshot) : 1f;
+            Color32 atmosphereAccent = visible
+                ? BuildRunAtmosphereAccent(latestRunSnapshot)
+                : new Color32(67, 105, 103, 255);
+            for (int i = 0; i < runTunnelLines.Length; i += 1)
+            {
+                Image line = runTunnelLines[i];
+                if (line == null)
+                {
+                    continue;
+                }
+
+                bool innerRail = i >= 2;
+                Color32 color = innerRail
+                    ? Color32.Lerp(atmosphereAccent, new Color32(255, 214, 105, 255), 0.24f)
+                    : Color32.Lerp(new Color32(67, 105, 103, 255), atmosphereAccent, 0.58f);
+                int alpha = Mathf.RoundToInt((innerRail ? 28f : 42f) * motionStrength + pulse * (innerRail ? 34f : 24f) * motionStrength);
+                line.color = WithAlpha(color, alpha);
+                line.rectTransform.localScale = new Vector3(
+                    1f,
+                    1f + pulse * 0.35f * motionStrength + (stageDepthScale - 1f) * 0.18f,
+                    1f);
+            }
+
+            int horizonAlpha = Mathf.RoundToInt(Mathf.Lerp(0f, 104f, motionStrength) * Mathf.Lerp(0.72f, 1f, pulse));
+            Color32 horizonColor = atmosphereAccent;
+            horizonColor.a = (byte)Mathf.Clamp(horizonAlpha, 0, 255);
+            runTunnelHorizon.color = horizonColor;
+            runTunnelHorizon.rectTransform.localScale = new Vector3(
+                Mathf.Lerp(0.82f, 1.12f, pulse) * stageDepthScale,
+                1f,
+                1f);
+
+            if (runSceneryPillars == null)
+            {
+                return;
+            }
+
+            bool sceneryRunning = visible
+                && !latestRunSnapshot.Paused
+                && !latestRunSnapshot.Stopped
+                && !latestRunSnapshot.ChoiceActive
+                && !latestRunSnapshot.CountdownActive;
+            const int depthPairs = 4;
+            for (int pair = 0; pair < depthPairs; pair += 1)
+            {
+                float phase = sceneryRunning
+                    ? Mathf.Repeat(beatPhase * 0.24f * stageMotionScale + pair / (float)depthPairs, 1f)
+                    : pair / (float)depthPairs;
+                float y = Mathf.Lerp(0.84f, 0.20f, phase);
+                float spread = Mathf.Min(0.475f, Mathf.Lerp(0.075f, 0.44f, phase) * stageDepthScale);
+                float width = Mathf.Lerp(12f, 44f, phase) * stageDepthScale;
+                float height = Mathf.Lerp(42f, 208f, phase) * stageDepthScale;
+                int alpha = visible
+                    ? Mathf.RoundToInt(Mathf.Lerp(22f, sceneryRunning ? 108f : 52f, phase) * motionStrength)
+                    : 0;
+                Color32 pillarColor = Color32.Lerp(new Color32(45, 65, 67, 255), atmosphereAccent, 0.34f + phase * 0.22f);
+                pillarColor.a = (byte)Mathf.Clamp(alpha, 0, 255);
+
+                for (int side = 0; side < 2; side += 1)
+                {
+                    int index = pair * 2 + side;
+                    Image pillar = runSceneryPillars[index];
+                    if (pillar == null)
+                    {
+                        continue;
+                    }
+
+                    float x = 0.5f + (side == 0 ? -spread : spread);
+                    RectTransform pillarRect = pillar.rectTransform;
+                    pillarRect.anchorMin = new Vector2(x, y);
+                    pillarRect.anchorMax = new Vector2(x, y);
+                    pillarRect.anchoredPosition = Vector2.zero;
+                    pillarRect.sizeDelta = new Vector2(width, height);
+                    pillarRect.localScale = Vector3.one;
+                    pillar.color = pillarColor;
+                }
+            }
+        }
+
+        private void UpdateRunnerAvatar()
+        {
+            if (runnerAvatarRoot == null || runnerShadow == null)
+            {
+                return;
+            }
+
+            bool visible = runModeActive && hasRunSnapshot;
+            runnerAvatarRoot.SetActive(visible);
+            runnerShadow.gameObject.SetActive(visible);
+            bool coreRecovered = visible
+                && runnerCoreGlow != null
+                && latestRunSnapshot.CoreRetrieved
+                && !latestRunSnapshot.InfiniteMode;
+            bool coreVisible = coreRecovered || (visible && latestRunSnapshot.FocusStateActive);
+            if (runnerCoreGlow != null)
+            {
+                runnerCoreGlow.gameObject.SetActive(coreVisible);
+            }
+
+            if (!visible)
+            {
+                return;
+            }
+
+            bool running = !latestRunSnapshot.Paused
+                && !latestRunSnapshot.Stopped
+                && !latestRunSnapshot.ChoiceActive;
+            float stride = running ? Mathf.Sin(beatPhase * Mathf.PI * 4f) : 0f;
+            float comboMotion = Mathf.Clamp01(latestRunSnapshot.Combo / 12f);
+            float bob = running ? Mathf.Abs(stride) * Mathf.Lerp(7f, 11f, comboMotion) : 0f;
+            RectTransform avatarRect = runnerAvatarRoot.GetComponent<RectTransform>();
+            avatarRect.anchoredPosition = new Vector2(0f, bob);
+            avatarRect.localScale = Vector3.one;
+            avatarRect.localEulerAngles = new Vector3(0f, 0f, stride * 1.6f);
+
+            ApplyRunnerLimbPose(stride * 27f, -stride * 27f, -stride * 22f, stride * 22f);
+            Color32 runnerBaseColor = new Color32(238, 211, 133, 255);
+            if (IsVisibleChoiceProfile(latestRunSnapshot.ActiveChoiceProfile))
+            {
+                runnerBaseColor = Color32.Lerp(
+                    runnerBaseColor,
+                    GetChoiceProfilePulseColor(latestRunSnapshot.ActiveChoiceProfile),
+                    0.22f);
+            }
+
+            if (latestRunSnapshot.FocusStateActive)
+            {
+                runnerBaseColor = Color32.Lerp(runnerBaseColor, new Color32(255, 196, 74, 255), 0.46f);
+            }
+            SetRunnerBodyColor(runnerBaseColor);
+
+            float shadowOffsetX = 0f;
+            float shadowScaleX = 1f + Mathf.Abs(stride) * 0.08f;
+            float shadowAlpha = 112f;
+            float remaining = runnerResponseUntil - Time.unscaledTime;
+            if (remaining > 0f)
+            {
+                float duration = Mathf.Max(0.01f, runnerResponseUntil - runnerResponseStartedAt);
+                float progress = Mathf.Clamp01((Time.unscaledTime - runnerResponseStartedAt) / duration);
+                float arc = Mathf.Sin(progress * Mathf.PI);
+                float channelDirection = runnerResponseChannel == GreedLastRunChannel.Left
+                    ? 1f
+                    : runnerResponseChannel == GreedLastRunChannel.Right
+                        ? -1f
+                        : Mathf.Sign(Mathf.Sin(beatPhase * Mathf.PI * 2f));
+                if (Mathf.Approximately(channelDirection, 0f))
+                {
+                    channelDirection = 1f;
+                }
+
+                SetRunnerBodyColor(Color32.Lerp(runnerBaseColor, runnerResponseColor, arc * 0.88f));
+                if (runnerResponseResult == GreedLastJudgementResult.Miss)
+                {
+                    float decay = 1f - progress;
+                    float shake = Mathf.Sin(progress * Mathf.PI * 10f) * decay;
+                    avatarRect.anchoredPosition = new Vector2(shake * 26f, bob - arc * 16f);
+                    avatarRect.localEulerAngles = new Vector3(0f, 0f, shake * 11f + channelDirection * arc * 7f);
+                    avatarRect.localScale = new Vector3(1f + arc * 0.08f, 1f - arc * 0.12f, 1f);
+                    ApplyRunnerLimbPose(-42f * arc, 34f * arc, 18f * arc, -28f * arc);
+                    shadowOffsetX = shake * 10f;
+                    shadowScaleX = 1.15f + arc * 0.18f;
+                    shadowAlpha = 142f;
+                }
+                else
+                {
+                    float responseStrength = runnerResponseResult == GreedLastJudgementResult.Good ? 0.68f : 1f;
+                    ApplyRunnerResponsePose(
+                        avatarRect,
+                        arc * responseStrength,
+                        channelDirection,
+                        ref shadowOffsetX,
+                        ref shadowScaleX,
+                        ref shadowAlpha);
+                }
+            }
+
+            runnerShadow.rectTransform.anchoredPosition = new Vector2(shadowOffsetX, 0f);
+            runnerShadow.rectTransform.localScale = new Vector3(shadowScaleX, Mathf.Lerp(0.72f, 1f, shadowScaleX - 0.55f), 1f);
+            runnerShadow.color = new Color32(0, 0, 0, (byte)Mathf.Clamp(Mathf.RoundToInt(shadowAlpha), 0, 180));
+            if (coreVisible)
+            {
+                float corePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+                runnerCoreGlow.rectTransform.anchoredPosition = avatarRect.anchoredPosition * 0.42f;
+                runnerCoreGlow.rectTransform.localScale = Vector3.one * Mathf.Lerp(0.78f, 1.16f, corePulse);
+                int coreAlpha = Mathf.RoundToInt(Mathf.Lerp(
+                    latestRunSnapshot.FocusStateActive ? 34f : 42f,
+                    coreRecovered ? 116f : 86f,
+                    corePulse));
+                Color32 auraColor = coreRecovered
+                    ? new Color32(255, 196, 74, 255)
+                    : new Color32(255, 214, 105, 255);
+                auraColor.a = (byte)Mathf.Clamp(coreAlpha, 0, 255);
+                runnerCoreGlow.color = auraColor;
+            }
+        }
+
+        private void ApplyRunnerResponsePose(
+            RectTransform avatarRect,
+            float arc,
+            float channelDirection,
+            ref float shadowOffsetX,
+            ref float shadowScaleX,
+            ref float shadowAlpha)
+        {
+            Vector4 transform = BuildRunnerResponsePoseTransform(runnerResponseType, arc, channelDirection);
+            Vector4 motion = BuildRunnerResponsePoseMotion(runnerResponseType, arc, channelDirection);
+            Vector4 limbs = BuildRunnerResponseLimbAngles(runnerResponseType, arc, channelDirection);
+            avatarRect.anchoredPosition = new Vector2(transform.x, transform.y);
+            avatarRect.localScale = new Vector3(transform.z, transform.w, 1f);
+            avatarRect.localEulerAngles = new Vector3(0f, 0f, motion.x);
+            ApplyRunnerLimbPose(limbs.x, limbs.y, limbs.z, limbs.w);
+            shadowOffsetX = motion.y;
+            shadowScaleX = motion.z;
+            shadowAlpha = motion.w;
+        }
+
+        private static Vector4 BuildRunnerResponsePoseTransformForPattern(
+            GreedLastPatternModel pattern,
+            float arc,
+            float channelDirection)
+        {
+            return BuildRunnerResponsePoseTransform(BuildRunnerResponseType(pattern), arc, channelDirection);
+        }
+
+        private static Vector4 BuildRunnerResponsePoseMotionForPattern(
+            GreedLastPatternModel pattern,
+            float arc,
+            float channelDirection)
+        {
+            return BuildRunnerResponsePoseMotion(BuildRunnerResponseType(pattern), arc, channelDirection);
+        }
+
+        private static Vector4 BuildRunnerResponseLimbAnglesForPattern(
+            GreedLastPatternModel pattern,
+            float arc,
+            float channelDirection)
+        {
+            return BuildRunnerResponseLimbAngles(BuildRunnerResponseType(pattern), arc, channelDirection);
+        }
+
+        private static Vector4 BuildRunnerResponsePoseTransform(
+            RunnerResponseType response,
+            float arc,
+            float channelDirection)
+        {
+            float safeArc = Mathf.Clamp01(arc);
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(0f, safeArc * 92f, 0.96f + safeArc * 0.04f, 1f - safeArc * 0.08f);
+                case RunnerResponseType.Slide:
+                    return new Vector4(
+                        channelDirection * safeArc * 12f,
+                        -safeArc * 30f,
+                        1f + safeArc * 0.24f,
+                        1f - safeArc * 0.44f);
+                case RunnerResponseType.Twist:
+                    return new Vector4(
+                        channelDirection * safeArc * 48f,
+                        safeArc * 8f,
+                        1f - safeArc * 0.16f,
+                        1f + safeArc * 0.05f);
+                default:
+                    return new Vector4(0f, 0f, 1f, 1f);
+            }
+        }
+
+        private static Vector4 BuildRunnerResponsePoseMotion(
+            RunnerResponseType response,
+            float arc,
+            float channelDirection)
+        {
+            float safeArc = Mathf.Clamp01(arc);
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(0f, 0f, Mathf.Lerp(1f, 0.58f, safeArc), Mathf.Lerp(112f, 54f, safeArc));
+                case RunnerResponseType.Slide:
+                    return new Vector4(
+                        -channelDirection * safeArc * 9f,
+                        channelDirection * safeArc * 8f,
+                        1f + safeArc * 0.38f,
+                        132f);
+                case RunnerResponseType.Twist:
+                    return new Vector4(
+                        -channelDirection * safeArc * 14f,
+                        channelDirection * safeArc * 24f,
+                        1f - safeArc * 0.18f,
+                        104f);
+                default:
+                    return new Vector4(0f, 0f, 1f, 112f);
+            }
+        }
+
+        private static Vector4 BuildRunnerResponseLimbAngles(
+            RunnerResponseType response,
+            float arc,
+            float channelDirection)
+        {
+            float safeArc = Mathf.Clamp01(arc);
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(-58f * safeArc, 58f * safeArc, 52f * safeArc, -52f * safeArc);
+                case RunnerResponseType.Slide:
+                    return new Vector4(50f * safeArc, 42f * safeArc, -18f * safeArc, 24f * safeArc);
+                case RunnerResponseType.Twist:
+                    return new Vector4(
+                        -channelDirection * 48f * safeArc,
+                        channelDirection * 48f * safeArc,
+                        channelDirection * 20f * safeArc,
+                        -channelDirection * 20f * safeArc);
+                default:
+                    return Vector4.zero;
+            }
+        }
+
+        private void ApplyRunnerLimbPose(float leftArmAngle, float rightArmAngle, float leftLegAngle, float rightLegAngle)
+        {
+            SetRunnerPartAngle(runnerLeftArm, leftArmAngle);
+            SetRunnerPartAngle(runnerRightArm, rightArmAngle);
+            SetRunnerPartAngle(runnerLeftLeg, leftLegAngle);
+            SetRunnerPartAngle(runnerRightLeg, rightLegAngle);
+        }
+
+        private static void SetRunnerPartAngle(Image part, float angle)
+        {
+            if (part != null)
+            {
+                part.rectTransform.localEulerAngles = new Vector3(0f, 0f, angle);
+            }
+        }
+
+        private void SetRunnerBodyColor(Color32 color)
+        {
+            SetRunnerPartColor(runnerHead, color);
+            SetRunnerPartColor(runnerTorso, color);
+            SetRunnerPartColor(runnerLeftArm, color);
+            SetRunnerPartColor(runnerRightArm, color);
+            SetRunnerPartColor(runnerLeftLeg, color);
+            SetRunnerPartColor(runnerRightLeg, color);
+        }
+
+        private static void SetRunnerPartColor(Image part, Color32 color)
+        {
+            if (part != null)
+            {
+                part.color = color;
             }
         }
 
@@ -6553,6 +21027,8 @@ namespace GreedLast
             if (trapMarker == null || judgementLine == null || !hasRunSnapshot)
             {
                 HideTrapDangerVisuals();
+                HideActiveActionCue();
+                HideInputTimingTrace();
                 return;
             }
 
@@ -6571,6 +21047,8 @@ namespace GreedLast
 
                 lastActivePatternVisual = false;
                 targetCuePlayed = false;
+                HideActiveActionCue();
+                HideInputTimingTrace();
                 return;
             }
 
@@ -6581,6 +21059,7 @@ namespace GreedLast
                 judgementLine.color = new Color32(255, 238, 181, 120);
                 ApplyJudgementLinePulse();
                 HideTimingBands();
+                ApplyStaggerRecoveryVisuals();
                 if (timingGuideText != null)
                 {
                     timingGuideText.text = runModeActive ? "다음 함정 대기" : string.Empty;
@@ -6590,12 +21069,15 @@ namespace GreedLast
 
                 lastActivePatternVisual = false;
                 targetCuePlayed = false;
+                HideActiveActionCue();
+                UpdateInputTimingTrace();
                 return;
             }
 
             if (!lastActivePatternVisual)
             {
                 PlayLaneCue(latestRunSnapshot.Pattern.Channel);
+                PlayRunnerResponseCue(latestRunSnapshot.Pattern);
                 trapEntryPulseUntil = Time.unscaledTime + TrapEntryPulseDuration;
                 targetCuePlayed = false;
             }
@@ -6603,6 +21085,8 @@ namespace GreedLast
             if (!latestRunSnapshot.Paused && !targetCuePlayed && latestRunSnapshot.CoreDeltaSeconds >= -TargetCueLeadSeconds)
             {
                 PlayClip(GetTimingCueClip(latestRunSnapshot.Pattern.TimingType), BuildTimingCueVolume(latestRunSnapshot));
+                PlayRunnerResponseCue(latestRunSnapshot.Pattern, BuildTargetActionCueVolume(latestRunSnapshot));
+                PlayVariationTimingCue(latestRunSnapshot);
                 targetCuePlayed = true;
             }
 
@@ -6620,28 +21104,45 @@ namespace GreedLast
 
             float progress = latestRunSnapshot.BeatProgress;
             float coreProgress = Mathf.Clamp01(latestRunSnapshot.Pattern.CoreSeconds / Mathf.Max(0.01f, latestRunSnapshot.Pattern.HitSeconds));
-            float y = Mathf.Lerp(0.88f, 0.18f, progress);
+            float visualProgress = BuildTrapVisualProgress(
+                latestRunSnapshot.Pattern.TimingType,
+                progress,
+                coreProgress);
+            float markerX = Mathf.Clamp01(
+                channelX
+                    + BuildTrapVisualHorizontalOffset(latestRunSnapshot.Pattern.TimingType, progress, coreProgress)
+                    + BuildTrapApproachSweepX(latestRunSnapshot.Pattern, visualProgress));
+            float y = Mathf.Lerp(BuildTrapApproachStartY(latestRunSnapshot.Pattern), 0.18f, visualProgress);
             float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
             RectTransform rect = trapMarker.rectTransform;
-            rect.anchorMin = new Vector2(channelX, y);
-            rect.anchorMax = new Vector2(channelX, y);
+            rect.anchorMin = new Vector2(markerX, y);
+            rect.anchorMax = new Vector2(markerX, y);
             rect.anchoredPosition = Vector2.zero;
 
             float coreNear = Mathf.Clamp01(1f - Mathf.Abs(latestRunSnapshot.CoreDeltaSeconds) / 0.32f);
             float entryPulse = BuildTrapEntryPulse();
-            UpdateTrapDangerVisuals(channelX, y, coreNear);
+            UpdateTrapMarkerShape(rect, latestRunSnapshot.Pattern, coreNear);
+            UpdateTrapDangerVisuals(channelX, markerX, y, coreNear);
             SetTimingBand(goodTimingBand, latestRunSnapshot.Pattern.GoodWindowSeconds, channelX, false);
             SetTimingBand(successTimingBand, latestRunSnapshot.Pattern.SuccessWindowSeconds, channelX, true);
+            SetCenterTimingBand(channelX);
 
             SetJudgementLineY(coreY);
 
-            trapMarker.color = Color32.Lerp(
+            Color32 markerColor = Color32.Lerp(
                 Color32.Lerp(new Color32(207, 87, 65, 170), new Color32(255, 238, 181, 255), entryPulse * 0.72f),
                 new Color32(255, 238, 181, 255),
                 coreNear);
+            if (TryGetPatternVariationAccent(latestRunSnapshot.Pattern, out Color32 markerVariationColor, out float markerVariationStrength))
+            {
+                markerColor = Color32.Lerp(markerColor, markerVariationColor, markerVariationStrength * 0.56f);
+            }
+
+            trapMarker.color = markerColor;
             trapMarker.rectTransform.localScale = Vector3.one * (Mathf.Lerp(0.88f, 1.22f, coreNear) + entryPulse * 0.18f);
             judgementLine.color = Color32.Lerp(new Color32(255, 238, 181, 150), new Color32(255, 255, 255, 255), coreNear);
             ApplyJudgementLinePulse();
+            ApplyStaggerRecoveryVisuals();
             if (timingGuideText != null)
             {
                 float exactPulse = BuildExactTimingPulse();
@@ -6651,6 +21152,142 @@ namespace GreedLast
                     : GetTimingGuideColor(latestRunSnapshot);
                 timingGuideText.rectTransform.localScale = Vector3.one * (1f + exactPulse * 0.085f);
             }
+
+            UpdateActiveActionCue(latestRunSnapshot, coreNear);
+            UpdateInputTimingTrace();
+        }
+
+        private void UpdateActiveActionCue(GreedLastRunSnapshot snapshot, float coreNear)
+        {
+            if (activeActionCueText == null)
+            {
+                return;
+            }
+
+            if (!ShouldShowActiveActionCue(snapshot))
+            {
+                HideActiveActionCue();
+                return;
+            }
+
+            string cue = BuildActiveActionCueText(snapshot);
+            if (string.IsNullOrEmpty(cue))
+            {
+                HideActiveActionCue();
+                return;
+            }
+
+            float exactPulse = BuildExactTimingPulse();
+            Color32 color = GetTimingGuideColor(snapshot);
+            if (exactPulse > 0f)
+            {
+                color = Color32.Lerp(color, new Color32(255, 248, 210, 255), exactPulse * 0.64f);
+            }
+
+            activeActionCueText.text = cue;
+            activeActionCueText.color = WithAlpha(color, Mathf.RoundToInt(Mathf.Lerp(180f, 255f, coreNear)));
+            activeActionCueText.rectTransform.localScale = Vector3.one * (1f + coreNear * 0.045f + exactPulse * 0.13f);
+        }
+
+        private static bool ShouldShowActiveActionCue(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.ActivePattern
+                && !snapshot.Stopped
+                && !snapshot.Paused
+                && !snapshot.CountdownActive
+                && !snapshot.ChoiceActive;
+        }
+
+        private void HideActiveActionCue()
+        {
+            if (activeActionCueText == null)
+            {
+                return;
+            }
+
+            activeActionCueText.text = string.Empty;
+            activeActionCueText.color = new Color32(255, 238, 181, 0);
+            activeActionCueText.rectTransform.localScale = Vector3.one;
+        }
+
+        private static float BuildTrapVisualProgress(
+            GreedLastTimingType timingType,
+            float linearProgress,
+            float coreProgress)
+        {
+            float progress = Mathf.Clamp01(linearProgress);
+            float safeCore = Mathf.Clamp(coreProgress, 0.05f, 0.95f);
+            if (timingType == GreedLastTimingType.Clutch)
+            {
+                if (progress <= safeCore)
+                {
+                    float normalized = progress / safeCore;
+                    return safeCore * Mathf.Pow(normalized, 1.42f);
+                }
+
+                float afterCore = (progress - safeCore) / Mathf.Max(0.01f, 1f - safeCore);
+                return safeCore + (1f - safeCore) * Mathf.Pow(afterCore, 0.82f);
+            }
+
+            if (timingType == GreedLastTimingType.Offbeat)
+            {
+                float normalizedToCore = progress / safeCore;
+                float distanceEnvelope = 1f - Mathf.Clamp01(Mathf.Abs(progress - safeCore) / 0.32f);
+                float wobble = Mathf.Sin(normalizedToCore * Mathf.PI * 2f) * 0.024f * distanceEnvelope;
+                return Mathf.Clamp01(progress + wobble);
+            }
+
+            return progress;
+        }
+
+        private static float BuildTrapVisualHorizontalOffset(
+            GreedLastTimingType timingType,
+            float linearProgress,
+            float coreProgress)
+        {
+            if (timingType != GreedLastTimingType.Offbeat)
+            {
+                return 0f;
+            }
+
+            float safeCore = Mathf.Max(0.05f, coreProgress);
+            float progress = Mathf.Clamp01(linearProgress);
+            float distanceEnvelope = 1f - Mathf.Clamp01(Mathf.Abs(progress - safeCore) / 0.34f);
+            return Mathf.Sin(progress / safeCore * Mathf.PI * 4f) * 0.018f * distanceEnvelope;
+        }
+
+        private void ApplyStaggerRecoveryVisuals()
+        {
+            if (judgementLine == null || !hasRunSnapshot)
+            {
+                return;
+            }
+
+            float remaining = latestRunSnapshot.StaggerRemainingSeconds;
+            if (!latestRunSnapshot.Staggered && remaining <= 0.01f)
+            {
+                return;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / StaggerRecoveryVisualSeconds);
+            float pulse = Mathf.Lerp(0.38f, 1f, normalized)
+                * (0.70f + Mathf.Sin(Time.unscaledTime * 28f) * 0.30f);
+            judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(231, 91, 77, 235), pulse * 0.52f);
+            float currentScaleY = judgementLine.rectTransform.localScale.y;
+            judgementLine.rectTransform.localScale = new Vector3(1f, Mathf.Max(currentScaleY, 1f + pulse * 0.34f), 1f);
+
+            if (goodTimingBand == null || latestRunSnapshot.ActivePattern)
+            {
+                return;
+            }
+
+            float lineY = judgementLine.rectTransform.anchorMin.y;
+            RectTransform bandRect = goodTimingBand.rectTransform;
+            bandRect.anchorMin = new Vector2(0.12f, Mathf.Clamp01(lineY - 0.018f - pulse * 0.012f));
+            bandRect.anchorMax = new Vector2(0.88f, Mathf.Clamp01(lineY + 0.018f + pulse * 0.012f));
+            bandRect.offsetMin = Vector2.zero;
+            bandRect.offsetMax = Vector2.zero;
+            goodTimingBand.color = new Color32(231, 91, 77, (byte)Mathf.RoundToInt(32f + pulse * 72f));
         }
 
         private void ApplyJudgementLinePulse()
@@ -6724,11 +21361,215 @@ namespace GreedLast
             }
 
             float centered = 1f - Mathf.Clamp01(absoluteDelta / successWindow);
+            float centerWindow = BuildCenterHitWindow(latestRunSnapshot.Pattern);
+            if (absoluteDelta <= centerWindow)
+            {
+                centered = Mathf.Lerp(centered, 1f, 0.42f);
+            }
+
             float shimmer = 0.74f + Mathf.Sin(Time.unscaledTime * 54f) * 0.26f;
             return Mathf.Clamp01(centered * shimmer);
         }
 
-        private void UpdateTrapDangerVisuals(float channelX, float y, float coreNear)
+        private static void UpdateTrapMarkerShape(RectTransform markerRect, GreedLastPatternModel pattern, float coreNear)
+        {
+            if (markerRect == null)
+            {
+                return;
+            }
+
+            Vector4 shape = BuildTrapMarkerShapeLayout(pattern, coreNear);
+            markerRect.sizeDelta = new Vector2(shape.x, shape.y);
+            markerRect.localEulerAngles = new Vector3(0f, 0f, shape.z);
+        }
+
+        private static Vector4 BuildTrapMarkerShapeLayout(GreedLastPatternModel pattern, float coreNear)
+        {
+            float safeCoreNear = Mathf.Clamp01(coreNear);
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(
+                        Mathf.Lerp(148f, 214f, safeCoreNear),
+                        Mathf.Lerp(44f, 66f, safeCoreNear),
+                        0f,
+                        0f);
+                case RunnerResponseType.Slide:
+                    return new Vector4(
+                        Mathf.Lerp(138f, 198f, safeCoreNear),
+                        Mathf.Lerp(76f, 112f, safeCoreNear),
+                        0f,
+                        0f);
+                case RunnerResponseType.Twist:
+                    float direction = pattern.Channel == GreedLastRunChannel.Left ? -1f : pattern.Channel == GreedLastRunChannel.Right ? 1f : 0.5f;
+                    return new Vector4(
+                        Mathf.Lerp(34f, 52f, safeCoreNear),
+                        Mathf.Lerp(126f, 184f, safeCoreNear),
+                        direction * Mathf.Lerp(12f, 24f, safeCoreNear),
+                        0f);
+                default:
+                    return new Vector4(128f, 128f, 0f, 0f);
+            }
+        }
+
+        private void UpdateResolvedTrapAfterimage()
+        {
+            if (resolvedTrapAfterimage == null || resolvedTrapImpact == null)
+            {
+                return;
+            }
+
+            float remaining = resolvedTrapUntil - Time.unscaledTime;
+            if (!runModeActive || !resolvedTrapPattern.IsValid || remaining <= 0f)
+            {
+                HideResolvedTrapAfterimage();
+                return;
+            }
+
+            float duration = Mathf.Max(0.01f, resolvedTrapUntil - resolvedTrapStartedAt);
+            float progress = Mathf.Clamp01((Time.unscaledTime - resolvedTrapStartedAt) / duration);
+            float eased = 1f - Mathf.Pow(1f - progress, 2f);
+            float fade = 1f - Mathf.Clamp01((progress - 0.42f) / 0.58f);
+            float channelX = resolvedTrapPattern.Channel == GreedLastRunChannel.Left
+                ? 0.2f
+                : resolvedTrapPattern.Channel == GreedLastRunChannel.Right
+                    ? 0.8f
+                    : 0.5f;
+            float convergedX = Mathf.Lerp(channelX, 0.5f, Mathf.Clamp01(progress * 3.2f));
+            RectTransform rect = resolvedTrapAfterimage.rectTransform;
+            UpdateTrapMarkerShape(rect, resolvedTrapPattern, 1f);
+
+            if (resolvedTrapResult == GreedLastJudgementResult.Miss)
+            {
+                float impactArc = Mathf.Sin(progress * Mathf.PI);
+                float shake = Mathf.Sin(progress * Mathf.PI * 12f) * (1f - progress);
+                rect.anchorMin = new Vector2(convergedX, Mathf.Lerp(0.18f, 0.155f, eased));
+                rect.anchorMax = rect.anchorMin;
+                rect.anchoredPosition = new Vector2(shake * 18f, 0f);
+                rect.localScale = Vector3.one * (1f + impactArc * 0.28f);
+                rect.localEulerAngles += new Vector3(0f, 0f, shake * 8f);
+                resolvedTrapAfterimage.color = WithAlpha(new Color32(231, 91, 77, 255), Mathf.RoundToInt(235f * fade));
+
+                RectTransform impactRect = resolvedTrapImpact.rectTransform;
+                Vector4 impactLayout = BuildResolvedMissImpactLayout(resolvedTrapPattern);
+                impactRect.anchorMin = new Vector2(impactLayout.x, impactLayout.y);
+                impactRect.anchorMax = impactRect.anchorMin;
+                impactRect.anchoredPosition = Vector2.zero;
+                impactRect.sizeDelta = new Vector2(impactLayout.z, impactLayout.w);
+                impactRect.localEulerAngles = new Vector3(0f, 0f, BuildResolvedMissImpactAngle(resolvedTrapPattern));
+                switch (BuildRunnerResponseType(resolvedTrapPattern))
+                {
+                    case RunnerResponseType.Jump:
+                        impactRect.localScale = new Vector3(
+                            Mathf.Lerp(0.34f, 1.58f, eased),
+                            0.82f + impactArc * 0.34f,
+                            1f);
+                        break;
+                    case RunnerResponseType.Slide:
+                        impactRect.localScale = new Vector3(
+                            0.86f + impactArc * 0.20f,
+                            Mathf.Lerp(0.38f, 1.36f, eased),
+                            1f);
+                        break;
+                    default:
+                        impactRect.localScale = Vector3.one * Mathf.Lerp(0.42f, 1.48f, eased);
+                        break;
+                }
+                resolvedTrapImpact.color = new Color32(231, 91, 77, (byte)Mathf.RoundToInt(118f * impactArc * fade));
+                return;
+            }
+
+            RunnerResponseType response = BuildRunnerResponseType(resolvedTrapPattern);
+            float avoidanceStrength = resolvedTrapResult == GreedLastJudgementResult.Good ? 0.62f : 1f;
+            float avoidanceEase = eased * avoidanceStrength;
+            float x = convergedX;
+            float y;
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    y = Mathf.Lerp(0.18f, 0.055f, avoidanceEase);
+                    rect.localScale = new Vector3(Mathf.Lerp(1.04f, 1.32f, avoidanceEase), Mathf.Lerp(1f, 0.72f, avoidanceEase), 1f);
+                    break;
+                case RunnerResponseType.Slide:
+                    y = Mathf.Lerp(0.205f, 0.105f, avoidanceEase);
+                    rect.localScale = new Vector3(Mathf.Lerp(1f, 1.38f, avoidanceEase), Mathf.Lerp(1f, 0.82f, avoidanceEase), 1f);
+                    break;
+                default:
+                    float direction = resolvedTrapPattern.Channel == GreedLastRunChannel.Right ? -1f : 1f;
+                    x += direction * avoidanceEase * 0.16f;
+                    y = Mathf.Lerp(0.18f, 0.095f, avoidanceEase);
+                    rect.localScale = new Vector3(Mathf.Lerp(1f, 0.72f, avoidanceEase), Mathf.Lerp(1f, 1.28f, avoidanceEase), 1f);
+                    rect.localEulerAngles += new Vector3(0f, 0f, direction * avoidanceEase * 22f);
+                    break;
+            }
+
+            rect.anchorMin = new Vector2(Mathf.Clamp01(x), y);
+            rect.anchorMax = rect.anchorMin;
+            rect.anchoredPosition = Vector2.zero;
+            int alpha = Mathf.RoundToInt((resolvedTrapResult == GreedLastJudgementResult.Good ? 172f : 222f) * fade);
+            resolvedTrapAfterimage.color = WithAlpha(resolvedTrapColor, alpha);
+            resolvedTrapImpact.color = new Color32(231, 91, 77, 0);
+        }
+
+        private void HideResolvedTrapAfterimage()
+        {
+            if (resolvedTrapAfterimage != null)
+            {
+                resolvedTrapAfterimage.color = new Color32(255, 238, 181, 0);
+                resolvedTrapAfterimage.rectTransform.localScale = Vector3.one;
+            }
+
+            if (resolvedTrapImpact != null)
+            {
+                resolvedTrapImpact.color = new Color32(231, 91, 77, 0);
+                resolvedTrapImpact.rectTransform.localScale = Vector3.one;
+                resolvedTrapImpact.rectTransform.localEulerAngles = Vector3.zero;
+            }
+        }
+
+        private static Vector4 BuildResolvedMissImpactLayout(GreedLastPatternModel pattern)
+        {
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(0.5f, 0.145f, 310f, 46f);
+                case RunnerResponseType.Slide:
+                    return new Vector4(0.5f, 0.30f, 218f, 78f);
+                case RunnerResponseType.Twist:
+                    float direction = pattern.Channel == GreedLastRunChannel.Left ? -1f : 1f;
+                    return new Vector4(0.5f + direction * 0.075f, 0.19f, 48f, 268f);
+                default:
+                    return new Vector4(0.5f, 0.155f, 170f, 170f);
+            }
+        }
+
+        private static float BuildResolvedMissImpactAngle(GreedLastPatternModel pattern)
+        {
+            if (BuildRunnerResponseType(pattern) != RunnerResponseType.Twist)
+            {
+                return 0f;
+            }
+
+            float direction = pattern.Channel == GreedLastRunChannel.Left ? -1f : 1f;
+            return direction * 32f;
+        }
+
+        private static float BuildMissHapticDuration(GreedLastPatternModel pattern)
+        {
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return 0.060f;
+                case RunnerResponseType.Slide:
+                    return 0.085f;
+                case RunnerResponseType.Twist:
+                    return 0.070f;
+                default:
+                    return 0.075f;
+            }
+        }
+
+        private void UpdateTrapDangerVisuals(float channelX, float markerX, float y, float coreNear)
         {
             float threatStrength = latestRunSnapshot.InfiniteMode
                 ? Mathf.Clamp01((latestRunSnapshot.InfiniteThreatLevel - 1) / 4f)
@@ -6737,16 +21578,29 @@ namespace GreedLast
             float warningPulse = 0.5f + Mathf.Sin((beatPhase * 1.6f + coreNear) * Mathf.PI * 2f) * 0.5f;
             Color32 baseColor = GetTrapBaseColor(latestRunSnapshot.Pattern.TimingType);
             Color32 accentColor = GetTrapAccentColor(latestRunSnapshot.Pattern.TimingType);
-            int dangerAlpha = Mathf.RoundToInt((Mathf.Lerp(28f, 116f, Mathf.Max(coreNear, threatStrength * 0.7f)) + entryPulse * 52f) * Mathf.Lerp(0.78f, 1.18f, warningPulse));
-            int glowAlpha = Mathf.RoundToInt(Mathf.Lerp(35f, 154f, Mathf.Max(coreNear, entryPulse * 0.65f)) + threatStrength * 32f);
-            int strikeAlpha = Mathf.RoundToInt(Mathf.Lerp(70f, 240f, Mathf.Max(coreNear, entryPulse * 0.54f)));
+            if (TryGetPatternVariationAccent(latestRunSnapshot.Pattern, out Color32 variationColor, out float variationStrength))
+            {
+                baseColor = Color32.Lerp(baseColor, variationColor, variationStrength * 0.72f);
+                accentColor = Color32.Lerp(accentColor, variationColor, variationStrength * 0.54f);
+            }
+
+            float variationPressure = BuildTrapVariationPressure(latestRunSnapshot.Pattern);
+            float visualPressure = Mathf.Clamp01(Mathf.Max(coreNear, threatStrength * 0.7f) + Mathf.Max(0f, variationPressure) * 0.42f);
+            int dangerAlpha = Mathf.RoundToInt((Mathf.Lerp(28f, 116f, visualPressure) + entryPulse * 52f + variationPressure * 34f) * Mathf.Lerp(0.78f, 1.18f, warningPulse));
+            int glowAlpha = Mathf.RoundToInt(Mathf.Lerp(35f, 154f, Mathf.Max(coreNear, entryPulse * 0.65f)) + threatStrength * 32f + variationPressure * 28f);
+            int strikeAlpha = Mathf.RoundToInt(Mathf.Lerp(70f, 240f, Mathf.Max(coreNear, entryPulse * 0.54f)) + variationPressure * 22f);
 
             if (laneDangerBand != null)
             {
-                float halfWidth = Mathf.Lerp(0.095f, 0.13f, threatStrength);
+                Vector4 dangerBounds = BuildTrapDangerBandLayout(
+                    latestRunSnapshot.Pattern,
+                    channelX,
+                    coreNear,
+                    threatStrength,
+                    variationPressure);
                 RectTransform dangerRect = laneDangerBand.rectTransform;
-                dangerRect.anchorMin = new Vector2(Mathf.Clamp01(channelX - halfWidth), 0.18f);
-                dangerRect.anchorMax = new Vector2(Mathf.Clamp01(channelX + halfWidth), 0.88f);
+                dangerRect.anchorMin = new Vector2(dangerBounds.x, dangerBounds.y);
+                dangerRect.anchorMax = new Vector2(dangerBounds.z, dangerBounds.w);
                 dangerRect.offsetMin = Vector2.zero;
                 dangerRect.offsetMax = Vector2.zero;
                 laneDangerBand.color = WithAlpha(baseColor, dangerAlpha);
@@ -6755,24 +21609,183 @@ namespace GreedLast
             if (trapGlow != null)
             {
                 RectTransform glowRect = trapGlow.rectTransform;
-                glowRect.anchorMin = new Vector2(channelX, y);
-                glowRect.anchorMax = new Vector2(channelX, y);
+                glowRect.anchorMin = new Vector2(markerX, y);
+                glowRect.anchorMax = new Vector2(markerX, y);
                 glowRect.anchoredPosition = Vector2.zero;
-                glowRect.localScale = Vector3.one * (Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f)) + entryPulse * 0.24f);
+                glowRect.localScale = Vector3.one * (Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f + Mathf.Max(0f, variationPressure) * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f)) + entryPulse * 0.24f);
                 trapGlow.color = WithAlpha(baseColor, glowAlpha);
             }
 
             if (trapStrike != null)
             {
                 RectTransform strikeRect = trapStrike.rectTransform;
-                strikeRect.anchorMin = new Vector2(channelX, y);
-                strikeRect.anchorMax = new Vector2(channelX, y);
+                strikeRect.anchorMin = new Vector2(markerX, y);
+                strikeRect.anchorMax = new Vector2(markerX, y);
                 strikeRect.anchoredPosition = Vector2.zero;
-                strikeRect.sizeDelta = new Vector2(Mathf.Lerp(24f, 44f, coreNear), Mathf.Lerp(150f, 230f, coreNear + threatStrength * 0.25f));
+                float strikePressure = Mathf.Clamp01(coreNear + threatStrength * 0.25f + Mathf.Max(0f, variationPressure) * 0.16f);
+                switch (BuildRunnerResponseType(latestRunSnapshot.Pattern))
+                {
+                    case RunnerResponseType.Jump:
+                        strikeRect.sizeDelta = new Vector2(
+                            Mathf.Lerp(150f, 236f + Mathf.Max(0f, variationPressure) * 18f, strikePressure),
+                            Mathf.Lerp(18f, 32f, coreNear));
+                        break;
+                    case RunnerResponseType.Slide:
+                        strikeRect.sizeDelta = new Vector2(
+                            Mathf.Lerp(28f, 48f + Mathf.Max(0f, variationPressure) * 10f, coreNear),
+                            Mathf.Lerp(170f, 248f, strikePressure));
+                        break;
+                    default:
+                        strikeRect.sizeDelta = new Vector2(
+                            Mathf.Lerp(22f, 38f + Mathf.Max(0f, variationPressure) * 9f, coreNear),
+                            Mathf.Lerp(150f, 220f, strikePressure));
+                        break;
+                }
                 strikeRect.localScale = Vector3.one * (Mathf.Lerp(0.82f, 1.18f, warningPulse) + entryPulse * 0.16f);
-                strikeRect.localEulerAngles = new Vector3(0f, 0f, GetTrapStrikeAngle(latestRunSnapshot.Pattern.TimingType));
+                strikeRect.localEulerAngles = new Vector3(0f, 0f, BuildTrapStrikeAngle(latestRunSnapshot.Pattern));
                 trapStrike.color = WithAlpha(accentColor, strikeAlpha);
             }
+        }
+
+        private static Vector4 BuildTrapDangerBandLayout(
+            GreedLastPatternModel pattern,
+            float channelX,
+            float coreNear,
+            float threatStrength,
+            float variationPressure)
+        {
+            float positiveVariation = Mathf.Max(0f, variationPressure);
+            float pressure = Mathf.Clamp01(coreNear + threatStrength * 0.24f + positiveVariation * 0.32f);
+            float halfWidth = Mathf.Clamp(
+                Mathf.Lerp(0.095f, 0.13f, threatStrength) + positiveVariation * 0.018f,
+                0.08f,
+                0.155f);
+            float minY = 0.18f;
+            float maxY = 0.88f;
+
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    halfWidth = Mathf.Clamp(halfWidth * 1.38f, 0.12f, 0.19f);
+                    minY = 0.145f;
+                    maxY = Mathf.Lerp(0.255f, 0.365f, pressure);
+                    break;
+                case RunnerResponseType.Slide:
+                    minY = Mathf.Lerp(0.50f, 0.305f, pressure);
+                    maxY = 0.91f;
+                    break;
+                case RunnerResponseType.Twist:
+                    halfWidth = Mathf.Clamp(halfWidth * 0.62f, 0.052f, 0.082f);
+                    break;
+            }
+
+            return new Vector4(
+                Mathf.Clamp01(channelX - halfWidth),
+                Mathf.Clamp01(minY),
+                Mathf.Clamp01(channelX + halfWidth),
+                Mathf.Clamp01(maxY));
+        }
+
+        private static float BuildTrapApproachStartY(GreedLastPatternModel pattern)
+        {
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return 0.62f;
+                case RunnerResponseType.Twist:
+                    return 0.72f;
+                default:
+                    return 0.88f;
+            }
+        }
+
+        private static float BuildTrapApproachSweepX(GreedLastPatternModel pattern, float visualProgress)
+        {
+            if (BuildRunnerResponseType(pattern) != RunnerResponseType.Twist)
+            {
+                return 0f;
+            }
+
+            float direction = pattern.Channel == GreedLastRunChannel.Left
+                ? -1f
+                : pattern.Channel == GreedLastRunChannel.Right
+                    ? 1f
+                    : 1f;
+            return direction * (1f - Mathf.Clamp01(visualProgress)) * 0.12f;
+        }
+
+        private static float BuildTrapStrikeAngle(GreedLastPatternModel pattern)
+        {
+            float timingAccent = GetTrapStrikeAngle(pattern.TimingType);
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return 90f + timingAccent * 0.18f;
+                case RunnerResponseType.Slide:
+                    return timingAccent * 0.42f;
+                case RunnerResponseType.Twist:
+                    float direction = pattern.Channel == GreedLastRunChannel.Left ? -1f : 1f;
+                    return direction * 38f + timingAccent * 0.22f;
+                default:
+                    return timingAccent;
+            }
+        }
+
+        private static float BuildTrapVariationPressure(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                return -0.10f;
+            }
+
+            if (prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return -0.08f;
+            }
+
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return -0.06f;
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return 0.16f;
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return 0.30f;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                return 0.14f;
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return 0.20f;
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal)
+                || prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return 0.12f;
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                return 0.08f;
+            }
+
+            if (prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                return 0.10f;
+            }
+
+            return 0f;
         }
 
         private void HideTrapDangerVisuals()
@@ -6811,6 +21824,46 @@ namespace GreedLast
                 successTimingBand.color = new Color32(255, 238, 181, 0);
                 successTimingBand.rectTransform.localScale = Vector3.one;
             }
+
+            if (centerTimingBand != null)
+            {
+                centerTimingBand.color = new Color32(255, 248, 210, 0);
+                centerTimingBand.rectTransform.localScale = Vector3.one;
+            }
+        }
+
+        private void UpdateInputTimingTrace()
+        {
+            if (inputTimingTraceMarker == null)
+            {
+                return;
+            }
+
+            float remaining = inputTimingTraceUntil - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                HideInputTimingTrace();
+                return;
+            }
+
+            float normalized = Mathf.Clamp01(remaining / InputTimingTraceDuration);
+            RectTransform traceRect = inputTimingTraceMarker.rectTransform;
+            traceRect.anchorMin = new Vector2(inputTimingTraceX, inputTimingTraceY);
+            traceRect.anchorMax = new Vector2(inputTimingTraceX, inputTimingTraceY);
+            traceRect.anchoredPosition = Vector2.zero;
+            traceRect.localScale = Vector3.one * Mathf.Lerp(0.86f, 1.18f, normalized);
+            Color32 color = inputTimingTraceColor;
+            color.a = (byte)Mathf.RoundToInt(Mathf.Lerp(0f, inputTimingTraceColor.a, normalized));
+            inputTimingTraceMarker.color = color;
+        }
+
+        private void HideInputTimingTrace()
+        {
+            if (inputTimingTraceMarker != null)
+            {
+                inputTimingTraceMarker.color = new Color32(255, 238, 181, 0);
+                inputTimingTraceMarker.rectTransform.localScale = Vector3.one;
+            }
         }
 
         private void SetJudgementLineY(float y)
@@ -6819,6 +21872,21 @@ namespace GreedLast
             lineRect.anchorMin = new Vector2(0.08f, y);
             lineRect.anchorMax = new Vector2(0.92f, y);
             lineRect.anchoredPosition = Vector2.zero;
+        }
+
+        private static float GetChannelAnchorX(GreedLastRunChannel channel)
+        {
+            switch (channel)
+            {
+                case GreedLastRunChannel.Left:
+                    return 0.2f;
+                case GreedLastRunChannel.Center:
+                    return 0.5f;
+                case GreedLastRunChannel.Right:
+                    return 0.8f;
+                default:
+                    return 0.5f;
+            }
         }
 
         private void SetTimingBand(Image band, float windowSeconds, float channelX, bool focusedLaneOnly)
@@ -6848,6 +21916,31 @@ namespace GreedLast
             band.rectTransform.localScale = Vector3.one * (1f + exactPulse * 0.045f);
         }
 
+        private void SetCenterTimingBand(float channelX)
+        {
+            if (centerTimingBand == null)
+            {
+                return;
+            }
+
+            GreedLastPatternModel pattern = latestRunSnapshot.Pattern;
+            float hitSeconds = Mathf.Max(0.01f, pattern.HitSeconds);
+            float windowSeconds = BuildCenterHitWindow(pattern);
+            float startProgress = Mathf.Clamp01((pattern.CoreSeconds - windowSeconds) / hitSeconds);
+            float endProgress = Mathf.Clamp01((pattern.CoreSeconds + windowSeconds) / hitSeconds);
+            float yA = Mathf.Lerp(0.88f, 0.18f, startProgress);
+            float yB = Mathf.Lerp(0.88f, 0.18f, endProgress);
+            RectTransform rect = centerTimingBand.rectTransform;
+            rect.anchorMin = new Vector2(Mathf.Clamp01(channelX - 0.062f), Mathf.Min(yA, yB));
+            rect.anchorMax = new Vector2(Mathf.Clamp01(channelX + 0.062f), Mathf.Max(yA, yB));
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            float exactPulse = BuildExactTimingPulse();
+            centerTimingBand.color = new Color32(255, 248, 210, (byte)Mathf.RoundToInt(Mathf.Lerp(98f, 220f, exactPulse)));
+            centerTimingBand.rectTransform.localScale = Vector3.one * (1f + exactPulse * 0.08f);
+        }
+
         private void PlayLaneCue(GreedLastRunChannel channel)
         {
             if (laneCueClips == null)
@@ -6860,6 +21953,88 @@ namespace GreedLast
             {
                 PlayClip(laneCueClips[index], LaneCueVolume);
             }
+        }
+
+        private void PlayRunnerResponseCue(GreedLastPatternModel pattern)
+        {
+            float volume = latestRunSnapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.18f : 0.14f;
+            PlayRunnerResponseCue(pattern, volume);
+        }
+
+        private void PlayRunnerResponseCue(GreedLastPatternModel pattern, float volume)
+        {
+            AudioClip clip;
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    clip = jumpActionCueClip;
+                    break;
+                case RunnerResponseType.Slide:
+                    clip = slideActionCueClip;
+                    break;
+                case RunnerResponseType.Twist:
+                    clip = twistActionCueClip;
+                    break;
+                default:
+                    clip = null;
+                    break;
+            }
+
+            if (clip != null)
+            {
+                PlayClip(clip, Mathf.Clamp(volume, 0f, MaxSfxVolume));
+            }
+        }
+
+        private static float BuildTargetActionCueVolume(GreedLastRunSnapshot snapshot)
+        {
+            float baseVolume = snapshot.Phase == GreedLastRunPhase.EscapeRunning
+                ? TargetActionCueVolume + 0.035f
+                : TargetActionCueVolume;
+            baseVolume += BuildTargetActionPayoffCueVolumeBonus(snapshot);
+            if (snapshot.InfiniteMode)
+            {
+                baseVolume += Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f) * 0.035f;
+            }
+
+            return Mathf.Min(baseVolume, 0.18f);
+        }
+
+        private static float BuildTargetActionPayoffCueVolumeBonus(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern || !snapshot.Pattern.IsValid)
+            {
+                return 0f;
+            }
+
+            float bonus;
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                bonus = 0.016f;
+            }
+            else
+            {
+                switch (snapshot.Pattern.TimingType)
+                {
+                    case GreedLastTimingType.Clutch:
+                    case GreedLastTimingType.Offbeat:
+                        bonus = 0.014f;
+                        break;
+                    case GreedLastTimingType.Perfect:
+                        bonus = 0.008f;
+                        break;
+                    default:
+                        bonus = 0f;
+                        break;
+                }
+            }
+
+            if (PatternHasRoute(snapshot.Pattern, "변주") || PatternHasRoute(snapshot.Pattern, "압박"))
+            {
+                bonus += 0.006f;
+            }
+
+            return bonus;
         }
 
         private AudioClip GetTimingCueClip(GreedLastTimingType timingType)
@@ -6887,8 +22062,62 @@ namespace GreedLast
             return Mathf.Lerp(TargetCueVolume, 0.36f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
         }
 
+        private void PlayVariationTimingCue(GreedLastRunSnapshot snapshot)
+        {
+            AudioClip clip = GetVariationCueClip(snapshot.Pattern);
+            if (clip == null)
+            {
+                return;
+            }
+
+            PlayClip(clip, BuildVariationCueVolume(snapshot));
+        }
+
+        private AudioClip GetVariationCueClip(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[안정]", StringComparison.Ordinal)
+                || prompt.Contains("[복구]", StringComparison.Ordinal)
+                || prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return variationBreatherClip;
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal)
+                || prompt.Contains("[위기]", StringComparison.Ordinal)
+                || prompt.Contains("[압박]", StringComparison.Ordinal)
+                || prompt.Contains("[심층]", StringComparison.Ordinal)
+                || prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return variationTensionClip;
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal)
+                || prompt.Contains("[정밀]", StringComparison.Ordinal)
+                || prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return variationPrecisionClip;
+            }
+
+            return null;
+        }
+
+        private static float BuildVariationCueVolume(GreedLastRunSnapshot snapshot)
+        {
+            float pressure = Mathf.Max(0f, BuildTrapVariationPressure(snapshot.Pattern));
+            float baseVolume = snapshot.InfiniteMode
+                ? Mathf.Lerp(0.14f, 0.24f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f))
+                : 0.16f;
+            return Mathf.Clamp(baseVolume + pressure * 0.16f, 0.12f, 0.32f);
+        }
+
         private void PlayJudgementFeedback(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.TimingRecommendationSampleCount <= 0)
+            {
+                lastTimingRecommendationReady = false;
+            }
+
             bool newResult = snapshot.LastResult != GreedLastJudgementResult.None
                 && (snapshot.Score != lastFeedbackScore
                     || snapshot.Health != lastFeedbackHealth
@@ -6903,6 +22132,23 @@ namespace GreedLast
                 return;
             }
 
+            bool timingRecommendationJustReady = snapshot.HasTimingRecommendation && !lastTimingRecommendationReady;
+            if (snapshot.HasTimingRecommendation)
+            {
+                lastTimingRecommendationReady = true;
+            }
+
+            bool reviewTargetAchievementJustReached = !reviewTargetAchievementAnnounced
+                && IsReviewTargetAchievementSnapshot(snapshot);
+            if (reviewTargetAchievementJustReached)
+            {
+                reviewTargetAchievementAnnounced = true;
+            }
+
+            TriggerRunnerResponse(snapshot);
+            TriggerResolvedTrapAfterimage(snapshot);
+            bool bundleCompleted = snapshot.JudgementText.Contains("패턴 묶음 완벽", StringComparison.Ordinal);
+            bool profileBonusFeedback = HasChoiceProfileScoreBonus(snapshot);
             switch (snapshot.LastResult)
             {
                 case GreedLastJudgementResult.Success:
@@ -6910,63 +22156,342 @@ namespace GreedLast
                     beatMarkerSuccessPulseUntil = Time.unscaledTime + BeatMarkerSuccessPulseDuration;
                     comboBadgePulseUntil = Time.unscaledTime + 0.22f;
                     bool tierFeedback = false;
+                    bool centerHitFeedback = snapshot.LastCenterHit && snapshot.PrecisionStreak >= 2;
+                    bool recoveryFeedback = snapshot.LastCenterHit && IsRecoveryPattern(snapshot.Pattern);
+                    bool perfectFocusFeedback = snapshot.LastCenterHit
+                        && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect;
+                    bool clutchCounterFeedback = snapshot.LastCenterHit
+                        && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch;
+                    bool offbeatFlowFeedback = snapshot.LastCenterHit
+                        && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat;
+                    bool variationRouteFeedback = offbeatFlowFeedback
+                        && JudgementTextContains(snapshot, "변주 루트 - 엇박 공명");
+                    bool pressureRouteFeedback = clutchCounterFeedback
+                        && JudgementTextContains(snapshot, "압박 루트 - 클러치 증폭");
+                    if (recoveryFeedback)
+                    {
+                        PlayClip(recoveryClip, 0.46f);
+                        PlayHaptic(0.045f);
+                    }
+                    else if (pressureRouteFeedback)
+                    {
+                        PlayClip(threatUpClip, 0.42f);
+                        PlayHaptic(BuildRoutePayoffHapticDuration("압박 루트", reviewTargetAchievementJustReached));
+                    }
+                    else if (variationRouteFeedback)
+                    {
+                        PlayClip(focusBeatClip, 0.36f);
+                        PlayHaptic(BuildRoutePayoffHapticDuration("변주 루트", reviewTargetAchievementJustReached));
+                    }
+                    else if (perfectFocusFeedback)
+                    {
+                        PlayClip(focusBeatClip, 0.30f);
+                        PlayHaptic(0.030f);
+                    }
+                    else if (clutchCounterFeedback)
+                    {
+                        PlayClip(variationPrecisionClip, 0.36f);
+                        PlayHaptic(0.035f);
+                    }
+                    else if (offbeatFlowFeedback)
+                    {
+                        PlayClip(chainClip, 0.32f);
+                        PlayHaptic(0.032f);
+                    }
+
+                    if (profileBonusFeedback)
+                    {
+                        beatMarkerProfilePulseUntil = Time.unscaledTime + BeatMarkerProfilePulseDuration;
+                    }
+
                     if (snapshot.Combo >= 3)
                     {
                         if (comboTierFeedbackPending)
                         {
                             PlayClip(comboTierClip, 0.38f);
-                            PlayHaptic(0.045f);
+                            PlayHaptic(reviewTargetAchievementJustReached ? 0.055f : 0.045f);
                             comboTierFeedbackPending = false;
                             tierFeedback = true;
                         }
                         else
                         {
                             PlayClip(chainClip, Mathf.Lerp(0.24f, 0.40f, Mathf.Clamp01(snapshot.Combo / 15f)));
-                            PlayHaptic(0.035f);
+                            PlayHaptic(reviewTargetAchievementJustReached ? 0.05f : 0.035f);
                         }
                     }
                     else
                     {
-                        PlayHaptic(0.018f);
+                        PlayHaptic(reviewTargetAchievementJustReached ? 0.05f : 0.018f);
                     }
 
-                    feedbackFlash.color = tierFeedback
-                        ? new Color32(255, 214, 105, 112)
-                        : new Color32(255, 238, 181, 90);
-                    feedbackFlashUntil = Time.unscaledTime + (tierFeedback ? 0.16f : 0.12f);
+                    if (centerHitFeedback
+                        && !tierFeedback
+                        && !recoveryFeedback
+                        && !perfectFocusFeedback
+                        && !clutchCounterFeedback
+                        && !offbeatFlowFeedback)
+                    {
+                        PlayClip(chainClip, Mathf.Lerp(0.18f, 0.30f, Mathf.Clamp01(snapshot.PrecisionStreak / 9f)));
+                        PlayHaptic(0.03f);
+                    }
+
+                    Color32 successFlashColor;
+                    float successFlashDuration;
+                    if (recoveryFeedback)
+                    {
+                        successFlashColor = new Color32(145, 231, 199, 112);
+                        successFlashDuration = 0.18f;
+                    }
+                    else if (pressureRouteFeedback)
+                    {
+                        successFlashColor = new Color32(238, 151, 76, 126);
+                        successFlashDuration = 0.20f;
+                    }
+                    else if (variationRouteFeedback)
+                    {
+                        successFlashColor = new Color32(181, 146, 226, 122);
+                        successFlashDuration = 0.19f;
+                    }
+                    else if (perfectFocusFeedback)
+                    {
+                        successFlashColor = new Color32(255, 238, 181, 108);
+                        successFlashDuration = 0.16f;
+                    }
+                    else if (clutchCounterFeedback)
+                    {
+                        successFlashColor = new Color32(226, 137, 70, 110);
+                        successFlashDuration = 0.17f;
+                    }
+                    else if (offbeatFlowFeedback)
+                    {
+                        successFlashColor = new Color32(181, 146, 226, 108);
+                        successFlashDuration = 0.165f;
+                    }
+                    else if (tierFeedback)
+                    {
+                        successFlashColor = new Color32(255, 214, 105, 112);
+                        successFlashDuration = 0.16f;
+                    }
+                    else if (centerHitFeedback)
+                    {
+                        successFlashColor = new Color32(255, 248, 210, 104);
+                        successFlashDuration = 0.145f;
+                    }
+                    else
+                    {
+                        successFlashColor = new Color32(255, 238, 181, 90);
+                        successFlashDuration = 0.12f;
+                    }
+
+                    if (profileBonusFeedback)
+                    {
+                        successFlashColor = Color32.Lerp(successFlashColor, GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), 0.36f);
+                    }
+
+                    feedbackFlash.color = successFlashColor;
+                    feedbackFlashUntil = Time.unscaledTime + Mathf.Max(
+                        successFlashDuration,
+                        profileBonusFeedback ? 0.14f : 0f);
                     break;
                 case GreedLastJudgementResult.Good:
                     comboTierFeedbackPending = false;
-                    if (IsFocusGuardSnapshot(snapshot))
+                    bool focusFlowFeedback = snapshot.FocusStateActive;
+                    bool stableRouteFeedback = JudgementTextContains(snapshot, "안정 루트 - 보정 회복");
+                    if (stableRouteFeedback)
                     {
-                        PlayClip(focusGuardClip, 0.50f);
-                        PlayHaptic(0.045f);
-                        beatMarkerFocusGuardUntil = Time.unscaledTime + BeatMarkerFocusGuardDuration;
-                        feedbackFlash.color = new Color32(145, 231, 199, 86);
-                        feedbackFlashUntil = Time.unscaledTime + 0.14f;
+                        PlayClip(recoveryClip, 0.38f);
+                        PlayHaptic(BuildRoutePayoffHapticDuration("안정 루트", reviewTargetAchievementJustReached));
+                        beatMarkerGoodPulseUntil = Time.unscaledTime + BeatMarkerGoodPulseDuration;
+                        feedbackFlash.color = new Color32(145, 231, 199, 104);
+                        feedbackFlashUntil = Time.unscaledTime + 0.16f;
+                    }
+                    else if (focusFlowFeedback)
+                    {
+                        PlayClip(focusBeatClip, 0.26f);
+                        PlayHaptic(reviewTargetAchievementJustReached ? 0.05f : 0.024f);
+                        beatMarkerGoodPulseUntil = Time.unscaledTime + BeatMarkerGoodPulseDuration;
+                        feedbackFlash.color = new Color32(255, 196, 74, 76);
+                        feedbackFlashUntil = Time.unscaledTime + 0.12f;
                     }
                     else
                     {
                         PlayClip(goodClip, 0.38f);
-                        PlayHaptic(0.012f);
+                        PlayHaptic(reviewTargetAchievementJustReached ? 0.05f : 0.012f);
                         beatMarkerGoodPulseUntil = Time.unscaledTime + BeatMarkerGoodPulseDuration;
                         feedbackFlash.color = new Color32(105, 168, 190, 75);
                         feedbackFlashUntil = Time.unscaledTime + 0.10f;
+                    }
+
+                    if (profileBonusFeedback)
+                    {
+                        beatMarkerProfilePulseUntil = Time.unscaledTime + BeatMarkerProfilePulseDuration;
+                        feedbackFlash.color = Color32.Lerp(feedbackFlash.color, GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), focusFlowFeedback ? 0.24f : 0.36f);
+                        feedbackFlashUntil = Mathf.Max(feedbackFlashUntil, Time.unscaledTime + 0.13f);
                     }
 
                     break;
                 case GreedLastJudgementResult.Miss:
                     comboTierFeedbackPending = false;
                     PlayClip(missClip, 0.48f);
-                    PlayHaptic(0.075f);
+                    PlayHaptic(BuildMissHapticDuration(snapshot.Pattern));
                     feedbackFlash.color = new Color32(180, 42, 36, 95);
                     feedbackFlashUntil = Time.unscaledTime + 0.16f;
                     break;
             }
 
+            if (reviewTargetAchievementJustReached)
+            {
+                beatMarkerProfilePulseUntil = Time.unscaledTime + BeatMarkerProfilePulseDuration;
+                feedbackFlash.color = new Color32(145, 231, 199, 118);
+                feedbackFlashUntil = Mathf.Max(feedbackFlashUntil, Time.unscaledTime + 0.20f);
+            }
+
             TriggerLaneJudgementPulse(snapshot);
             TriggerJudgementLinePulse(snapshot);
-            ShowJudgementFeedback(snapshot);
+            TriggerInputTimingTrace(snapshot);
+            RecordJudgementHistory(snapshot);
+            if (bundleCompleted)
+            {
+                TriggerPatternBundleFeedback(snapshot);
+            }
+
+            if (timingRecommendationJustReady)
+            {
+                PlayClip(comboTierClip, 0.28f);
+                PlayHaptic(0.025f);
+            }
+
+            ShowJudgementFeedback(snapshot, timingRecommendationJustReady, reviewTargetAchievementJustReached);
+        }
+
+        private void TriggerResolvedTrapAfterimage(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.Pattern.IsValid)
+            {
+                return;
+            }
+
+            resolvedTrapPattern = snapshot.Pattern;
+            resolvedTrapResult = snapshot.LastResult;
+            resolvedTrapStartedAt = Time.unscaledTime;
+            float duration = snapshot.LastResult == GreedLastJudgementResult.Miss
+                ? ResolvedTrapMissDuration
+                : snapshot.LastResult == GreedLastJudgementResult.Good
+                    ? ResolvedTrapGoodDuration
+                    : ResolvedTrapSuccessDuration;
+            resolvedTrapUntil = resolvedTrapStartedAt + duration;
+            Color32 baseColor = GetTrapAccentColor(snapshot.Pattern.TimingType);
+            resolvedTrapColor = snapshot.LastResult == GreedLastJudgementResult.Good
+                ? Color32.Lerp(baseColor, new Color32(105, 168, 190, 255), 0.56f)
+                : Color32.Lerp(baseColor, GetJudgementPulseColor(snapshot), 0.48f);
+        }
+
+        private void TriggerPatternBundleFeedback(GreedLastRunSnapshot snapshot)
+        {
+            bool stableBundle = JudgementTextContains(snapshot, "안정 완주");
+            bool variationBundle = JudgementTextContains(snapshot, "변주 완주");
+            bool pressureBundle = JudgementTextContains(snapshot, "압박 완주");
+            bool threeActionExact = JudgementTextContains(snapshot, "3동작 정확");
+            Color32 bundleColor;
+            if (stableBundle)
+            {
+                PlayClip(recoveryClip, 0.46f);
+                bundleColor = new Color32(145, 231, 199, 132);
+            }
+            else if (variationBundle)
+            {
+                PlayClip(focusBeatClip, 0.40f);
+                bundleColor = new Color32(181, 146, 226, 132);
+            }
+            else if (pressureBundle)
+            {
+                PlayClip(threatUpClip, 0.46f);
+                bundleColor = new Color32(238, 151, 76, 138);
+            }
+            else
+            {
+                bundleColor = new Color32(255, 214, 105, 126);
+            }
+
+            string bundleLabel = BuildPatternBundleBannerLabel(snapshot);
+            bool routeBundle = stableBundle || variationBundle || pressureBundle;
+            PlayClip(bundleCompleteClip, BuildPatternBundleCompletionVolume(routeBundle, threeActionExact));
+            PlayHaptic(BuildPatternBundleCompletionHapticDuration(stableBundle, variationBundle, pressureBundle, threeActionExact));
+            judgementHistoryPulseUntil = Time.unscaledTime + BuildPatternBundleHistoryPulseDuration(threeActionExact);
+            beatMarkerComboTierPulseUntil = Time.unscaledTime + BeatMarkerComboTierPulseDuration;
+            feedbackFlash.color = bundleColor;
+            feedbackFlashUntil = Mathf.Max(feedbackFlashUntil, Time.unscaledTime + BuildPatternBundleFeedbackFlashDuration(threeActionExact));
+
+            if (stageTransitionText != null)
+            {
+                stageTransitionText.text = bundleLabel;
+                stageTransitionColor = WithAlpha(bundleColor, 255);
+                stageTransitionStartedAt = Time.unscaledTime;
+                stageTransitionUntil = stageTransitionStartedAt + 1.05f;
+            }
+        }
+
+        private static string BuildPatternBundleBannerLabel(GreedLastRunSnapshot snapshot)
+        {
+            string label = JudgementTextContains(snapshot, "안정 완주")
+                ? "안정 완주"
+                : JudgementTextContains(snapshot, "변주 완주")
+                    ? "변주 완주"
+                    : JudgementTextContains(snapshot, "압박 완주")
+                        ? "압박 완주"
+                        : "3 패턴 완벽";
+            return JudgementTextContains(snapshot, "3동작 정확")
+                ? label + " · 3동작 정확"
+                : label;
+        }
+
+        private static float BuildPatternBundleCompletionVolume(bool routeBundle, bool threeActionExact)
+        {
+            float baseVolume = routeBundle ? 0.36f : 0.52f;
+            return threeActionExact ? baseVolume + 0.08f : baseVolume;
+        }
+
+        private static float BuildPatternBundleCompletionHapticDuration(
+            bool stableBundle,
+            bool variationBundle,
+            bool pressureBundle,
+            bool threeActionExact)
+        {
+            float baseDuration = pressureBundle ? 0.080f : variationBundle ? 0.070f : 0.065f;
+            return threeActionExact ? baseDuration + 0.012f : baseDuration;
+        }
+
+        private static float BuildPatternBundleHistoryPulseDuration(bool threeActionExact)
+        {
+            return threeActionExact ? 0.62f : 0.48f;
+        }
+
+        private static float BuildPatternBundleFeedbackFlashDuration(bool threeActionExact)
+        {
+            return threeActionExact ? 0.30f : 0.24f;
+        }
+
+        private void TriggerRunnerResponse(GreedLastRunSnapshot snapshot)
+        {
+            runnerResponseType = BuildRunnerResponseType(snapshot.Pattern);
+            runnerResponseChannel = snapshot.Pattern.Channel;
+            if (snapshot.MissReason == "wrong_channel"
+                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel))
+            {
+                runnerResponseChannel = inputChannel;
+            }
+
+            runnerResponseResult = snapshot.LastResult;
+            runnerResponseStartedAt = Time.unscaledTime;
+            float duration = snapshot.LastResult == GreedLastJudgementResult.Miss
+                ? RunnerMissResponseDuration
+                : snapshot.LastResult == GreedLastJudgementResult.Good
+                    ? RunnerGoodResponseDuration
+                    : RunnerSuccessResponseDuration;
+            runnerResponseUntil = runnerResponseStartedAt + duration;
+            runnerResponseColor = snapshot.FocusStateActive && snapshot.LastResult != GreedLastJudgementResult.Miss
+                ? Color32.Lerp(GetJudgementPulseColor(snapshot), new Color32(255, 214, 105, 255), 0.58f)
+                : GetJudgementPulseColor(snapshot);
         }
 
         private void TriggerLaneJudgementPulse(GreedLastRunSnapshot snapshot)
@@ -6978,15 +22503,35 @@ namespace GreedLast
                 return;
             }
 
-            int index = (int)snapshot.Pattern.Channel - 1;
+            if (snapshot.MissReason == "wrong_channel"
+                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel))
+            {
+                ArmLaneJudgementPulse(inputChannel, new Color32(231, 91, 77, 245), true);
+                ArmLaneJudgementPulse(snapshot.Pattern.Channel, new Color32(255, 238, 181, 225), false);
+                beatMarkerMissImpactUntil = Time.unscaledTime + BeatMarkerMissImpactDuration;
+                return;
+            }
+
+            Color32 pulseColor = HasChoiceProfileScoreBonus(snapshot) && snapshot.LastResult != GreedLastJudgementResult.Miss
+                ? Color32.Lerp(GetJudgementPulseColor(snapshot), GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), 0.42f)
+                : GetJudgementPulseColor(snapshot);
+            ArmLaneJudgementPulse(
+                snapshot.Pattern.Channel,
+                pulseColor,
+                snapshot.LastResult == GreedLastJudgementResult.Miss);
+        }
+
+        private void ArmLaneJudgementPulse(GreedLastRunChannel channel, Color32 pulseColor, bool shake)
+        {
+            int index = (int)channel - 1;
             if (index < 0 || index >= laneJudgementPulseUntil.Length)
             {
                 return;
             }
 
             laneJudgementPulseUntil[index] = Time.unscaledTime + 0.24f;
-            laneJudgementPulseColors[index] = GetJudgementPulseColor(snapshot);
-            if (snapshot.LastResult == GreedLastJudgementResult.Miss && laneMissShakeUntil != null && index < laneMissShakeUntil.Length)
+            laneJudgementPulseColors[index] = pulseColor;
+            if (shake && laneMissShakeUntil != null && index < laneMissShakeUntil.Length)
             {
                 laneMissShakeUntil[index] = Time.unscaledTime + LaneMissShakeDuration;
                 beatMarkerMissImpactUntil = Time.unscaledTime + BeatMarkerMissImpactDuration;
@@ -7001,21 +22546,147 @@ namespace GreedLast
             }
 
             judgementLinePulseUntil = Time.unscaledTime + JudgementLinePulseDuration;
-            judgementLinePulseColor = GetJudgementPulseColor(snapshot);
+            judgementLinePulseColor = HasChoiceProfileScoreBonus(snapshot) && snapshot.LastResult != GreedLastJudgementResult.Miss
+                ? Color32.Lerp(GetJudgementPulseColor(snapshot), GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), 0.54f)
+                : GetJudgementPulseColor(snapshot);
         }
 
-        private void ShowJudgementFeedback(GreedLastRunSnapshot snapshot)
+        private void TriggerInputTimingTrace(GreedLastRunSnapshot snapshot)
+        {
+            if (inputTimingTraceMarker == null
+                || snapshot.Pattern.Channel == GreedLastRunChannel.None
+                || !TryExtractSignedTimingDelta(snapshot.JudgementText, out float signedDeltaSeconds))
+            {
+                return;
+            }
+
+            float hitSeconds = Mathf.Max(0.01f, snapshot.Pattern.HitSeconds);
+            float coreProgress = Mathf.Clamp01(snapshot.Pattern.CoreSeconds / hitSeconds);
+            float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
+            GreedLastRunChannel traceChannel = snapshot.MissReason == "wrong_channel"
+                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel)
+                    ? inputChannel
+                    : snapshot.Pattern.Channel;
+            inputTimingTraceX = GetChannelAnchorX(traceChannel);
+            inputTimingTraceY = Mathf.Clamp(coreY - signedDeltaSeconds / hitSeconds * 0.70f, 0.18f, 0.88f);
+            inputTimingTraceColor = WithAlpha(GetJudgementFeedbackColor(snapshot), 225);
+            inputTimingTraceUntil = Time.unscaledTime + InputTimingTraceDuration;
+            inputTimingTraceMarker.transform.SetAsLastSibling();
+        }
+
+        private static bool TryExtractInputChannel(string judgementText, out GreedLastRunChannel channel)
+        {
+            channel = GreedLastRunChannel.None;
+            if (string.IsNullOrEmpty(judgementText))
+            {
+                return false;
+            }
+
+            string[] lines = judgementText.Replace("\r", string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (!line.Contains(" 입력", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (line.StartsWith("좌", StringComparison.Ordinal))
+                {
+                    channel = GreedLastRunChannel.Left;
+                    return true;
+                }
+
+                if (line.StartsWith("중", StringComparison.Ordinal))
+                {
+                    channel = GreedLastRunChannel.Center;
+                    return true;
+                }
+
+                if (line.StartsWith("우", StringComparison.Ordinal))
+                {
+                    channel = GreedLastRunChannel.Right;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryExtractSignedTimingDelta(string judgementText, out float signedDeltaSeconds)
+        {
+            signedDeltaSeconds = 0f;
+            if (string.IsNullOrEmpty(judgementText))
+            {
+                return false;
+            }
+
+            string[] lines = judgementText.Replace("\r", string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (line.Equals("정확", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                if (TryParseTimingDeltaLine(line, "빠름 ", -1f, out signedDeltaSeconds)
+                    || TryParseTimingDeltaLine(line, "늦음 ", 1f, out signedDeltaSeconds))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryParseTimingDeltaLine(string line, string prefix, float sign, out float signedDeltaSeconds)
+        {
+            signedDeltaSeconds = 0f;
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            int end = line.IndexOf("ms", prefix.Length, StringComparison.Ordinal);
+            if (end <= prefix.Length)
+            {
+                return false;
+            }
+
+            string numberText = line.Substring(prefix.Length, end - prefix.Length).Trim();
+            if (!int.TryParse(numberText, out int milliseconds))
+            {
+                return false;
+            }
+
+            signedDeltaSeconds = sign * Mathf.Abs(milliseconds) / 1000f;
+            return true;
+        }
+
+        private void ShowJudgementFeedback(
+            GreedLastRunSnapshot snapshot,
+            bool timingRecommendationJustReady,
+            bool reviewTargetAchievementJustReached)
         {
             if (judgementFeedbackText == null)
             {
                 return;
             }
 
-            judgementFeedbackText.fontSize = 48;
-            judgementFeedbackText.text = BuildJudgementFeedbackText(snapshot);
+            string feedbackText = BuildJudgementFeedbackText(snapshot);
+            if (timingRecommendationJustReady)
+            {
+                feedbackText += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
+            }
+
+            ApplyJudgementFeedbackLayout(feedbackText);
+            judgementFeedbackText.text = feedbackText;
             judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot);
             judgementFeedbackUntil = Time.unscaledTime + 0.82f;
-            judgementFeedbackPopUntil = Time.unscaledTime + JudgementFeedbackPopDuration;
+            judgementFeedbackPopScale = reviewTargetAchievementJustReached ? 0.30f : 0.18f;
+            judgementFeedbackPopUntil = Time.unscaledTime
+                + (reviewTargetAchievementJustReached ? 0.34f : JudgementFeedbackPopDuration);
         }
 
         private void ShowResumeCountdownFeedback(GreedLastRunSnapshot snapshot)
@@ -7026,40 +22697,650 @@ namespace GreedLast
             }
 
             judgementFeedbackText.fontSize = 104;
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 126f);
             judgementFeedbackText.text = BuildResumeCountdownFeedbackText(snapshot);
             judgementFeedbackText.color = new Color32(255, 238, 181, 255);
             judgementFeedbackText.rectTransform.localScale = Vector3.one;
             judgementFeedbackUntil = Time.unscaledTime + 0.12f;
         }
 
+        private void ApplyJudgementFeedbackLayout(string feedbackText)
+        {
+            int lineCount = CountTextLines(feedbackText);
+            if (lineCount >= 3)
+            {
+                judgementFeedbackText.fontSize = 34;
+                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.39f, 900f, 164f);
+                return;
+            }
+
+            if (lineCount >= 2)
+            {
+                judgementFeedbackText.fontSize = 40;
+                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 138f);
+                return;
+            }
+
+            judgementFeedbackText.fontSize = 48;
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 126f);
+        }
+
         private static string BuildJudgementFeedbackText(GreedLastRunSnapshot snapshot)
         {
             string[] lines = snapshot.JudgementText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             string timingLine = lines.Length > 1 ? lines[1] : string.Empty;
-            if (IsFocusGuardSnapshot(snapshot))
+            string transitionPayoff = string.Empty;
+            for (int i = 0; i < lines.Length; i += 1)
             {
-                return "집중 보호  피해 무효";
+                if (lines[i].StartsWith("복구 정박 -", StringComparison.Ordinal)
+                    || lines[i].StartsWith("압박 정박 -", StringComparison.Ordinal)
+                    || lines[i].StartsWith("엇박 정박 -", StringComparison.Ordinal))
+                {
+                    transitionPayoff = CompactUiText(lines[i], 54);
+                    break;
+                }
+            }
+
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                const string bundlePrefix = "패턴 묶음 완벽 - ";
+                if (lines[i].StartsWith(bundlePrefix, StringComparison.Ordinal))
+                {
+                    string bundleFeedback = "묶음 완벽\n" + lines[i].Substring(bundlePrefix.Length);
+                    return string.IsNullOrEmpty(transitionPayoff)
+                        ? bundleFeedback
+                        : bundleFeedback + "\n" + transitionPayoff;
+                }
             }
 
             switch (snapshot.LastResult)
             {
                 case GreedLastJudgementResult.Success:
+                    if (snapshot.PracticeMode)
+                    {
+                        return AppendPracticeReviewTargetFeedback(
+                            "정확 성공 · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult)
+                                + "\n" + BuildPracticeSuccessPayoffLine(snapshot),
+                            snapshot);
+                    }
+
                     string chainText = snapshot.Combo >= 3 ? "  연쇄 " + BuildRhythmChainLabel(snapshot) : string.Empty;
-                    return string.IsNullOrEmpty(timingLine) ? "정확" + chainText : "정확" + chainText + "  " + timingLine;
+                    string successActionText = snapshot.Pattern.IsValid ? " · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult) : string.Empty;
+                    return AppendJudgementFeedbackEffect(
+                        string.IsNullOrEmpty(timingLine)
+                            ? "정확" + successActionText + chainText
+                            : "정확" + successActionText + chainText + "  " + timingLine,
+                        BuildJudgementEffectLine(snapshot));
                 case GreedLastJudgementResult.Good:
-                    return string.IsNullOrEmpty(timingLine) ? "보정" : "보정  " + timingLine;
+                    if (snapshot.PracticeMode)
+                    {
+                        return AppendPracticeReviewTargetFeedback(
+                            "Good · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult)
+                                + "\n정확 성공은 아니며 집중은 오르지 않음",
+                            snapshot);
+                    }
+
+                    string goodActionText = snapshot.Pattern.IsValid ? " · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult) : string.Empty;
+                    return AppendJudgementFeedbackEffect(
+                        string.IsNullOrEmpty(timingLine) ? "보정" + goodActionText : "보정" + goodActionText + "  " + timingLine,
+                        BuildJudgementEffectLine(snapshot));
                 case GreedLastJudgementResult.Miss:
+                    if (snapshot.PracticeMode)
+                    {
+                        string practiceMissText = snapshot.MissReason == "wrong_channel"
+                            ? "Miss · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult)
+                                + "\n신호와 같은 좌·중·우 채널을 입력"
+                            : "Miss · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult)
+                                + "\n보정권 밖 입력은 피해 처리";
+                        return AppendPracticeReviewTargetFeedback(practiceMissText, snapshot);
+                    }
+
+                    string missActionText = snapshot.Pattern.IsValid
+                        ? " · " + BuildRunnerOutcomeLabel(snapshot.Pattern, snapshot.LastResult)
+                        : string.Empty;
+
                     if (snapshot.MissReason == "wrong_channel")
                     {
-                        return string.IsNullOrEmpty(timingLine) ? "실수  채널 오류" : "실수  " + timingLine;
+                        string deltaLine = lines.Length > 2 ? lines[2] : string.Empty;
+                        string wrongChannelText = string.IsNullOrEmpty(timingLine) ? "채널 오류" : timingLine;
+                        string keyHint = BuildTargetChannelKeyFeedback(snapshot);
+                        if (!string.IsNullOrEmpty(keyHint))
+                        {
+                            wrongChannelText += "  " + keyHint;
+                        }
+
+                        if (!string.IsNullOrEmpty(deltaLine))
+                        {
+                            wrongChannelText += "  " + deltaLine;
+                        }
+
+                        return AppendJudgementFeedbackEffect(
+                            "실수" + missActionText + "  " + wrongChannelText,
+                            BuildJudgementEffectLine(snapshot));
                     }
 
                     if (snapshot.MissReason == "no_input")
                     {
-                        return "실수  입력 없음";
+                        string keyHint = BuildTargetChannelKeyFeedback(snapshot);
+                        return AppendJudgementFeedbackEffect(
+                            string.IsNullOrEmpty(timingLine)
+                                ? "실수" + missActionText + "  입력 없음" + (string.IsNullOrEmpty(keyHint) ? string.Empty : "  " + keyHint)
+                                : "실수" + missActionText + "  입력 없음  " + timingLine + (string.IsNullOrEmpty(keyHint) ? string.Empty : "  " + keyHint),
+                            BuildJudgementEffectLine(snapshot));
                     }
 
-                    return string.IsNullOrEmpty(timingLine) ? "실수" : "실수  " + timingLine;
+                    string missText = string.IsNullOrEmpty(timingLine)
+                        ? "실수" + missActionText
+                        : "실수" + missActionText + "  " + timingLine;
+                    string timingHint = BuildTimingMissFeedbackHint(snapshot.MissReason);
+                    string baseMissText = string.IsNullOrEmpty(timingHint) ? missText : missText + "  " + timingHint;
+                    return AppendJudgementFeedbackEffect(baseMissText, BuildJudgementEffectLine(snapshot));
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildTargetChannelKeyFeedback(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.Pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            return BuildTargetChannelInputFeedback(snapshot.Pattern.Channel, DevToolsEnabled);
+        }
+
+        private static string BuildTargetChannelInputFeedback(GreedLastRunChannel channel, bool devToolsEnabled)
+        {
+            string inputHint = BuildRunChannelInputHintForMode(channel, devToolsEnabled);
+            if (string.IsNullOrEmpty(inputHint))
+            {
+                return string.Empty;
+            }
+
+            return devToolsEnabled ? "정답키 " + inputHint : "정답 " + inputHint;
+        }
+
+        private static string BuildPracticeSuccessPayoffLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastCenterHit && IsRecoveryPattern(snapshot.Pattern))
+            {
+                return "복구 정박 · 점수 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus
+                    + " · 연쇄 +" + GreedLastRunCore.RecoveryPrecisionComboBonus;
+            }
+
+            if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
+            {
+                return "정박 충전 · 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+            }
+
+            if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                return "압박 반격 · 점수 +" + GreedLastRunCore.ClutchCounterScoreBonus;
+            }
+
+            if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                return "엇박 포착 · 연쇄 +" + GreedLastRunCore.OffbeatFlowComboBonus;
+            }
+
+            return FormatTimingType(snapshot.Pattern.TimingType) + " 대응 확인";
+        }
+
+        private static string AppendPracticeReviewTargetFeedback(string baseText, GreedLastRunSnapshot snapshot)
+        {
+            string reviewTargetFeedback = BuildReviewTargetFeedbackLine(snapshot);
+            return string.IsNullOrEmpty(reviewTargetFeedback)
+                ? baseText
+                : baseText + "\n" + reviewTargetFeedback;
+        }
+
+        private static string AppendJudgementFeedbackEffect(string baseText, string effectText)
+        {
+            if (string.IsNullOrEmpty(effectText))
+            {
+                return baseText;
+            }
+
+            return baseText + "\n" + effectText;
+        }
+
+        private static string BuildJudgementEffectLine(GreedLastRunSnapshot snapshot)
+        {
+            string effect;
+            switch (snapshot.LastResult)
+            {
+                case GreedLastJudgementResult.Success:
+                    effect = BuildSuccessEffectLine(snapshot);
+                    break;
+                case GreedLastJudgementResult.Good:
+                    effect = BuildGoodEffectLine(snapshot);
+                    break;
+                case GreedLastJudgementResult.Miss:
+                    effect = BuildMissEffectLine(snapshot);
+                    break;
+                default:
+                    return string.Empty;
+            }
+
+            string routeStepFeedback = BuildRouteStepFeedback(snapshot);
+            if (!string.IsNullOrEmpty(routeStepFeedback))
+            {
+                effect = string.IsNullOrEmpty(effect)
+                    ? routeStepFeedback
+                    : effect + "\n" + routeStepFeedback;
+            }
+
+            string reviewTargetFeedback = BuildReviewTargetFeedbackLine(snapshot);
+            if (string.IsNullOrEmpty(reviewTargetFeedback))
+            {
+                return effect;
+            }
+
+            return string.IsNullOrEmpty(effect) ? reviewTargetFeedback : effect + "\n" + reviewTargetFeedback;
+        }
+
+        private static string BuildRouteStepFeedback(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastResult == GreedLastJudgementResult.None
+                || !TryGetNextRouteCadenceStep(snapshot, out string routeLabel, out string nextTiming, out string nextAction))
+            {
+                return string.Empty;
+            }
+
+            if (!snapshot.PerfectBundleIntact)
+            {
+                return "경로 " + routeLabel + " 중단 · 다음 " + nextTiming + " 연습 · " + nextAction;
+            }
+
+            int remaining = Mathf.Max(0, snapshot.ChapterTarget - snapshot.ChapterProgress);
+            if (remaining == 1)
+            {
+                return "경로 " + routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget
+                    + " · 마지막 " + nextTiming + " · " + nextAction
+                    + " · " + BuildRouteBundleRewardPreview(snapshot.ActiveRouteProfile);
+            }
+
+            return "경로 " + routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget
+                + " · 다음 " + nextTiming + " · " + nextAction;
+        }
+
+        private static bool TryGetNextRouteCadenceStep(
+            GreedLastRunSnapshot snapshot,
+            out string routeLabel,
+            out string nextTiming,
+            out string nextAction)
+        {
+            routeLabel = string.Empty;
+            nextTiming = string.Empty;
+            nextAction = string.Empty;
+            if (snapshot.InfiniteMode
+                || snapshot.ChoiceActive
+                || snapshot.Stopped
+                || snapshot.ChapterProgress <= 0
+                || snapshot.ChapterProgress >= snapshot.ChapterTarget
+                || !TryBuildRouteCadence(snapshot, out routeLabel, out GreedLastTimingType[] timings))
+            {
+                return false;
+            }
+
+            int nextStep = Mathf.Clamp(snapshot.ChapterProgress, 0, timings.Length - 1);
+            nextTiming = BuildCadenceToken(timings[nextStep]);
+            bool finalValidation = snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4;
+            GreedLastAvoidanceType avoidance = GreedLastRunCore.GetAuthoredAvoidanceType(
+                snapshot.ChapterIndex,
+                nextStep,
+                snapshot.PracticeMode,
+                snapshot.InfiniteMode,
+                finalValidation,
+                snapshot.ActiveRouteProfile);
+            nextAction = BuildAvoidanceActionLabel(avoidance);
+            return !string.IsNullOrEmpty(routeLabel) && nextTiming != "-" && avoidance != GreedLastAvoidanceType.None;
+        }
+
+        private static string BuildRouteBundleRewardPreview(string routeProfile)
+        {
+            switch (routeProfile)
+            {
+                case "안정 루트":
+                    return "회복 대기";
+                case "변주 루트":
+                    return "집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus + " 대기";
+                case "압박 루트":
+                    return "+" + GreedLastRunCore.PressureRouteBundleScoreBonus + "점 대기";
+                default:
+                    return "완주 보상 대기";
+            }
+        }
+
+        private static string BuildSuccessEffectLine(GreedLastRunSnapshot snapshot)
+        {
+            string effect = string.Empty;
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                AppendCompactStatus(
+                    ref effect,
+                    snapshot.LastCenterHit
+                        ? "흐름 회복 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus
+                        : "흐름 복귀");
+            }
+
+            if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
+            {
+                AppendCompactStatus(ref effect, "정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus);
+            }
+
+            if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                AppendCompactStatus(ref effect, "압박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus);
+                if (PatternHasRoute(snapshot.Pattern, "압박"))
+                {
+                    AppendCompactStatus(ref effect, "루트 증폭 +" + GreedLastRunCore.PressureRouteClutchScoreBonus);
+                }
+            }
+            else if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                AppendCompactStatus(ref effect, "엇박 연쇄 +" + GreedLastRunCore.OffbeatFlowComboBonus);
+                if (PatternHasRoute(snapshot.Pattern, "변주"))
+                {
+                    AppendCompactStatus(ref effect, "루트 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus);
+                }
+            }
+
+            int threatBonus = BuildThreatPrecisionBonusPreview(snapshot);
+            if (threatBonus > 0)
+            {
+                AppendCompactStatus(ref effect, "위협 +" + threatBonus);
+            }
+
+            int variationBonus = BuildPatternVariationPrecisionBonusPreview(snapshot.Pattern);
+            if (variationBonus > 0)
+            {
+                AppendCompactStatus(ref effect, "변주 +" + variationBonus);
+            }
+
+            if (snapshot.LastCenterHit)
+            {
+                AppendCompactStatus(ref effect, snapshot.PrecisionStreak >= 2 ? "정박 " + snapshot.PrecisionStreak : "정박");
+                AppendCompactStatus(ref effect, BuildPrecisionRewardStatus(snapshot));
+            }
+
+            if (snapshot.Combo >= 3)
+            {
+                AppendCompactStatus(ref effect, "연쇄 " + BuildRhythmChainLabel(snapshot));
+            }
+
+            AppendCompactStatus(ref effect, BuildChoiceProfileScoreBonusPreview(snapshot));
+
+            if (snapshot.FocusStateActive)
+            {
+                AppendCompactStatus(ref effect, "집중 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s");
+            }
+            else if (snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
+            {
+                AppendCompactStatus(ref effect, "집중 1칸");
+            }
+
+            return effect;
+        }
+
+        private static string BuildGoodEffectLine(GreedLastRunSnapshot snapshot)
+        {
+            string effect = "보정 생존";
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                AppendCompactStatus(ref effect, "복구 성공");
+            }
+
+            if (PatternHasRoute(snapshot.Pattern, "안정")
+                && JudgementTextContains(snapshot, "안정 루트 - 보정 회복"))
+            {
+                AppendCompactStatus(ref effect, "안정 회복 +" + GreedLastRunCore.StableRouteGoodHealthBonus);
+            }
+
+            AppendCompactStatus(ref effect, "판정선 안쪽");
+            AppendCompactStatus(ref effect, BuildChoiceProfileScoreBonusPreview(snapshot));
+            if (JudgementTextContains(snapshot, "연쇄 끊김"))
+            {
+                AppendCompactStatus(ref effect, "연쇄 리셋");
+            }
+
+            if (JudgementTextContains(snapshot, "완주 중단"))
+            {
+                AppendCompactStatus(ref effect, "완주 중단");
+            }
+
+            if (snapshot.FocusStateActive)
+            {
+                AppendCompactStatus(ref effect, "집중 연쇄 완충");
+            }
+            else if (snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
+            {
+                AppendCompactStatus(ref effect, "집중 1칸");
+            }
+
+            return effect;
+        }
+
+        private static bool PatternHasRoute(GreedLastPatternModel pattern, string route)
+        {
+            return !string.IsNullOrEmpty(route)
+                && !string.IsNullOrEmpty(pattern.Prompt)
+                && pattern.Prompt.Contains("[" + route + "]", StringComparison.Ordinal);
+        }
+
+        private static string BuildChoiceProfileScoreBonusPreview(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.LastResult != GreedLastJudgementResult.Success
+                && snapshot.LastResult != GreedLastJudgementResult.Good)
+            {
+                return string.Empty;
+            }
+
+            int bonus = 0;
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    bonus = snapshot.LastResult == GreedLastJudgementResult.Success
+                        ? snapshot.Health >= Mathf.Max(2, snapshot.MaxHealth - 1) ? 12 : 8
+                        : 12;
+                    break;
+                case "집중형":
+                    bonus = snapshot.LastResult == GreedLastJudgementResult.Success
+                        ? snapshot.LastCenterHit ? 18 : 8
+                        : 8;
+                    break;
+                case "연쇄형":
+                    bonus = snapshot.LastResult == GreedLastJudgementResult.Success
+                        ? snapshot.Combo >= 3 ? 20 : 10
+                        : 6;
+                    break;
+                case "고점형":
+                    bonus = snapshot.LastResult == GreedLastJudgementResult.Success
+                        ? snapshot.LastCenterHit ? 28 : 18
+                        : 8;
+                    break;
+                case "균형형":
+                    bonus = snapshot.LastResult == GreedLastJudgementResult.Success ? 10 : 8;
+                    break;
+            }
+
+            return bonus > 0 ? "조합 +" + bonus : string.Empty;
+        }
+
+        private static bool HasChoiceProfileScoreBonus(GreedLastRunSnapshot snapshot)
+        {
+            return !string.IsNullOrEmpty(BuildChoiceProfileScoreBonusPreview(snapshot));
+        }
+
+        private static string BuildMissEffectLine(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.DevInvincible)
+            {
+                string devEffect = "무적 테스트 / 체력 유지";
+                if (JudgementTextContains(snapshot, "완주 중단"))
+                {
+                    AppendCompactStatus(ref devEffect, "완주 중단");
+                }
+
+                return devEffect;
+            }
+
+            if (snapshot.Stopped)
+            {
+                string stoppedEffect = snapshot.InfiniteMode ? "무한 기록 종료" : "런 실패";
+                if (JudgementTextContains(snapshot, "완주 중단"))
+                {
+                    AppendCompactStatus(ref stoppedEffect, "완주 중단");
+                }
+
+                return stoppedEffect;
+            }
+
+            string effect;
+            switch (snapshot.MissReason)
+            {
+                case "wrong_channel":
+                    effect = "정답 채널 확인";
+                    break;
+                case "no_input":
+                    effect = "다음 함정 입력";
+                    break;
+                case "too_early":
+                    effect = "조금 늦게";
+                    break;
+                case "too_late":
+                    effect = "조금 빠르게";
+                    break;
+                default:
+                    effect = "회복 필요";
+                    break;
+            }
+
+            AppendCompactStatus(ref effect, BuildPatternVariationMissHint(snapshot.Pattern));
+            AppendCompactStatus(ref effect, "체력 " + snapshot.Health);
+            if (!snapshot.FocusStateActive
+                && snapshot.Focus == snapshot.MaxFocus - 1
+                && snapshot.MaxFocus > 1)
+            {
+                AppendCompactStatus(ref effect, "집중 1칸");
+            }
+
+            if (JudgementTextContains(snapshot, "완주 중단"))
+            {
+                AppendCompactStatus(ref effect, "완주 중단");
+            }
+
+            return effect;
+        }
+
+        private static string BuildPatternVariationMissHint(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[안정]", StringComparison.Ordinal)
+                || prompt.Contains("[복구]", StringComparison.Ordinal)
+                || prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return "판정 여유";
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return "탈출 집중";
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal)
+                || prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                return "압박 준비";
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                return "엇박 대기";
+            }
+
+            return string.Empty;
+        }
+
+        private static int BuildThreatPrecisionBonusPreview(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.InfiniteMode
+                || (!snapshot.ActivePattern && snapshot.LastResult != GreedLastJudgementResult.Success))
+            {
+                return 0;
+            }
+
+            int threatLevel = Mathf.Max(1, snapshot.InfiniteThreatLevel);
+            int bonus = Mathf.Max(0, threatLevel - 1) * 12;
+            if (snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                bonus += threatLevel >= 3 ? 10 : 0;
+            }
+            else if (snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                bonus += threatLevel >= 3 ? 8 : 0;
+            }
+
+            return bonus;
+        }
+
+        private static int BuildPatternVariationPrecisionBonusPreview(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal)
+                || prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return 0;
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return 40;
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return 30;
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal))
+            {
+                return 25;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                return 22;
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return 20;
+            }
+
+            if (prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return 15;
+            }
+
+            return 0;
+        }
+
+        private static bool JudgementTextContains(GreedLastRunSnapshot snapshot, string token)
+        {
+            return !string.IsNullOrEmpty(snapshot.JudgementText)
+                && snapshot.JudgementText.IndexOf(token, StringComparison.Ordinal) >= 0;
+        }
+
+        private static string BuildTimingMissFeedbackHint(string missReason)
+        {
+            switch (missReason)
+            {
+                case "too_early":
+                    return "다음은 조금 늦게";
+                case "too_late":
+                    return "다음은 조금 빠르게";
                 default:
                     return string.Empty;
             }
@@ -7067,6 +23348,11 @@ namespace GreedLast
 
         private static string BuildResumeCountdownFeedbackText(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.Paused && snapshot.StartCountdownActive && !snapshot.ResumeCountdownActive)
+            {
+                return "대기 " + Mathf.CeilToInt(snapshot.StartCountdownRemainingSeconds);
+            }
+
             if (snapshot.CountdownRemainingSeconds > 0.9f)
             {
                 return "2";
@@ -7077,7 +23363,7 @@ namespace GreedLast
                 return "1";
             }
 
-            return "시작";
+            return "GO";
         }
 
         private static Color32 GetJudgementFeedbackColor(GreedLastJudgementResult result)
@@ -7097,27 +23383,244 @@ namespace GreedLast
 
         private static Color32 GetJudgementFeedbackColor(GreedLastRunSnapshot snapshot)
         {
-            if (IsFocusGuardSnapshot(snapshot))
+            Color32 baseColor = GetJudgementFeedbackColor(snapshot.LastResult);
+            if (IsReviewTargetFailureSnapshot(snapshot))
+            {
+                return snapshot.LastResult == GreedLastJudgementResult.Good
+                    ? new Color32(240, 126, 91, 250)
+                    : new Color32(231, 91, 77, 245);
+            }
+
+            if (IsReviewTargetAchievementSnapshot(snapshot))
             {
                 return new Color32(145, 231, 199, 255);
             }
 
-            return GetJudgementFeedbackColor(snapshot.LastResult);
+            if (TryGetRoutePayoffFeedbackColor(snapshot, out Color32 routeColor))
+            {
+                return routeColor;
+            }
+
+            if (snapshot.FocusStateActive && snapshot.LastResult != GreedLastJudgementResult.Miss)
+            {
+                return Color32.Lerp(baseColor, new Color32(255, 214, 105, 255), 0.48f);
+            }
+
+            return baseColor;
+        }
+
+        private static bool TryGetRoutePayoffFeedbackColor(
+            GreedLastRunSnapshot snapshot,
+            out Color32 color)
+        {
+            if (snapshot.LastResult == GreedLastJudgementResult.Good
+                && JudgementTextContains(snapshot, "안정 루트 - 보정 회복"))
+            {
+                color = new Color32(145, 231, 199, 255);
+                return true;
+            }
+
+            if (snapshot.LastResult == GreedLastJudgementResult.Success
+                && snapshot.LastCenterHit
+                && JudgementTextContains(snapshot, "변주 루트 - 엇박 공명"))
+            {
+                color = new Color32(181, 146, 226, 255);
+                return true;
+            }
+
+            if (snapshot.LastResult == GreedLastJudgementResult.Success
+                && snapshot.LastCenterHit
+                && JudgementTextContains(snapshot, "압박 루트 - 클러치 증폭"))
+            {
+                color = new Color32(238, 151, 76, 255);
+                return true;
+            }
+
+            color = default;
+            return false;
+        }
+
+        private static float BuildRoutePayoffHapticDuration(string routeProfile, bool reviewTargetAchievementJustReached)
+        {
+            float baseSeconds;
+            switch (routeProfile)
+            {
+                case "안정 루트":
+                    baseSeconds = 0.030f;
+                    break;
+                case "변주 루트":
+                    baseSeconds = 0.040f;
+                    break;
+                case "압박 루트":
+                    baseSeconds = 0.050f;
+                    break;
+                default:
+                    baseSeconds = 0.018f;
+                    break;
+            }
+
+            return reviewTargetAchievementJustReached
+                ? Mathf.Max(0.055f, baseSeconds + 0.010f)
+                : baseSeconds;
+        }
+
+        private static bool IsReviewTargetFailureSnapshot(GreedLastRunSnapshot snapshot)
+        {
+            if (string.IsNullOrWhiteSpace(snapshot.ReviewTargetText)
+                || snapshot.LastResult == GreedLastJudgementResult.None)
+            {
+                return false;
+            }
+
+            string target = snapshot.ReviewTargetText;
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0;
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                return snapshot.LastResult == GreedLastJudgementResult.Good
+                    || snapshot.GoodCount > 0
+                    || snapshot.LastResult == GreedLastJudgementResult.Miss
+                    || snapshot.MissCount > 0;
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                return snapshot.NoInputMissCount > targetNoInput;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                return snapshot.MissCount > targetMisses;
+            }
+
+            return false;
+        }
+
+        private static bool IsReviewTargetAchievementSnapshot(GreedLastRunSnapshot snapshot)
+        {
+            if (string.IsNullOrWhiteSpace(snapshot.ReviewTargetText)
+                || snapshot.LastResult == GreedLastJudgementResult.None
+                || snapshot.LastResult == GreedLastJudgementResult.Miss)
+            {
+                return false;
+            }
+
+            string target = snapshot.ReviewTargetText;
+            if (snapshot.Stopped && target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return snapshot.MissCount <= 0;
+            }
+
+            if (snapshot.Stopped && target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                return snapshot.GoodCount <= 0 && snapshot.MissCount <= 0;
+            }
+
+            if (snapshot.Stopped && target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeywordForUi(target, "입력 없음");
+                return snapshot.NoInputMissCount <= targetNoInput;
+            }
+
+            if (snapshot.Stopped
+                && target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeywordForUi(target, "실수");
+                return snapshot.MissCount <= targetMisses;
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int targetCombo = ExtractTargetNumberAfterKeywordForUi(target, "콤보");
+                return targetCombo > 0 && snapshot.Combo >= targetCombo;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarkerForUi(target, "점");
+                return targetScore > 0 && snapshot.Score >= targetScore;
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarkerForUi(target, "구간");
+                return targetSections > 0 && snapshot.InfiniteSectionsCleared >= targetSections;
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeywordForUi(target, "위협");
+                return targetThreat > 0 && snapshot.MaxInfiniteThreatLevel >= targetThreat;
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return snapshot.TimingRecommendationApplied;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeywordForUi(target, "체력")
+                    : ExtractTargetNumberAfterKeywordForUi(target, "생존");
+                return targetHealth > 0 && snapshot.Health >= targetHealth;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeywordForUi(target, "집중");
+                return targetFocus > 0 && BuildReviewTargetFocusProgress(snapshot, target) >= targetFocus;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetPrecisionNumberForUi(target);
+                return targetPrecision > 0 && snapshot.PrecisionStreak >= targetPrecision;
+            }
+
+            return false;
+        }
+
+        private static Color32 GetChoiceProfilePulseColor(string profile)
+        {
+            switch (profile)
+            {
+                case "안정형":
+                    return new Color32(145, 231, 199, 255);
+                case "집중형":
+                    return new Color32(132, 190, 208, 255);
+                case "연쇄형":
+                    return new Color32(255, 214, 105, 255);
+                case "고점형":
+                    return new Color32(255, 169, 118, 255);
+                case "균형형":
+                    return new Color32(218, 226, 218, 255);
+                default:
+                    return new Color32(255, 238, 181, 255);
+            }
         }
 
         private static Color32 GetJudgementPulseColor(GreedLastRunSnapshot snapshot)
         {
-            if (IsFocusGuardSnapshot(snapshot))
+            if (TryGetRoutePayoffFeedbackColor(snapshot, out Color32 routeColor))
             {
-                return new Color32(145, 231, 199, 245);
+                return routeColor;
             }
 
-            return GetLaneJudgementPulseColor(snapshot.LastResult);
-        }
+            Color32 baseColor = GetLaneJudgementPulseColor(snapshot.LastResult);
+            if (snapshot.FocusStateActive && snapshot.LastResult != GreedLastJudgementResult.Miss)
+            {
+                return Color32.Lerp(baseColor, new Color32(255, 214, 105, 255), 0.52f);
+            }
 
-        private static bool IsFocusGuardSnapshot(GreedLastRunSnapshot snapshot)
-        {
-            return snapshot.MissReason == "focus_guard";
+            return baseColor;
         }
 
         private static Color32 GetLaneJudgementPulseColor(GreedLastJudgementResult result)
@@ -7160,7 +23663,7 @@ namespace GreedLast
 
             if (runModeActive
                 && hasRunSnapshot
-                && (latestRunSnapshot.ResumeCountdownActive || (latestRunSnapshot.StartCountdownActive && !latestRunSnapshot.Paused)))
+                && (latestRunSnapshot.ResumeCountdownActive || latestRunSnapshot.StartCountdownActive))
             {
                 ShowResumeCountdownFeedback(latestRunSnapshot);
                 return;
@@ -7193,7 +23696,7 @@ namespace GreedLast
 
             float pulse = Mathf.Clamp01(remaining / JudgementFeedbackPopDuration);
             float eased = pulse * pulse;
-            judgementFeedbackText.rectTransform.localScale = Vector3.one * (1f + eased * 0.18f);
+            judgementFeedbackText.rectTransform.localScale = Vector3.one * (1f + eased * judgementFeedbackPopScale);
         }
 
         private void PlayClip(AudioClip clip, float volume)
@@ -7210,6 +23713,13 @@ namespace GreedLast
             {
                 return;
             }
+
+            if (lastHapticAt >= 0f && Time.unscaledTime - lastHapticAt < MinHapticInterval)
+            {
+                return;
+            }
+
+            lastHapticAt = Time.unscaledTime;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
@@ -7250,7 +23760,12 @@ namespace GreedLast
                 return;
             }
 
-            SetButtonLabel(hapticsButton, hapticsEnabled ? "진동 ON" : "진동 OFF");
+            SetButtonLabel(hapticsButton, BuildHapticsButtonLabel(hapticsEnabled));
+        }
+
+        private static string BuildHapticsButtonLabel(bool enabled)
+        {
+            return enabled ? "진동 ON" : "진동 OFF";
         }
 
         private void AdjustSfxVolume(float delta)
@@ -7285,7 +23800,25 @@ namespace GreedLast
                 return;
             }
 
-            SetButtonLabel(sfxVolumeButtons[1], "소리 " + Mathf.RoundToInt(sfxVolume * 100f));
+            SetButtonLabel(sfxVolumeButtons[1], BuildSfxVolumeButtonLabel(sfxVolume));
+        }
+
+        private static string BuildSfxVolumeButtonLabel(float volume)
+        {
+            return "소리 " + Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f) + "%";
+        }
+
+        public static string BuildSensorySettingsChecklistTextFromPrefs()
+        {
+            float volume = PlayerPrefs.GetFloat(SfxVolumePrefsKey, DefaultSfxVolume);
+            bool hapticsOn = PlayerPrefs.GetInt(HapticsEnabledPrefsKey, 1) == 1;
+            return BuildSensorySettingsChecklistText(volume, hapticsOn);
+        }
+
+        public static string BuildSensorySettingsChecklistText(float volume, bool hapticsOn)
+        {
+            int volumePercent = Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f);
+            return "감각: 소리 " + volumePercent + "%·진동 " + (hapticsOn ? "ON" : "OFF");
         }
 
         private static AudioClip CreateTone(string name, float frequency, float duration, float gain)
@@ -7390,6 +23923,8 @@ namespace GreedLast
                     return "너무 늦음";
                 case "focus_guard":
                     return "집중 보호";
+                case "test_stop":
+                    return "정산 종료";
                 default:
                     return string.IsNullOrEmpty(missReason) ? "-" : missReason;
             }
@@ -7406,6 +23941,22 @@ namespace GreedLast
             return snapshot.Health + "/" + maxHealth;
         }
 
+        private static string FormatFocusStatus(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.FocusStateActive
+                ? "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s"
+                : "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
+        }
+
+        private static string BuildSnapshotFocusPerformance(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.FocusStateActivationCount <= 0
+                ? "집중 상태 미발동"
+                : "집중 발동 " + snapshot.FocusStateActivationCount
+                    + "  집중 중 정확 " + snapshot.FocusStateSuccessCount
+                    + "  유지 " + snapshot.FocusStateActiveSeconds.ToString("0.0") + "s";
+        }
+
         private static string FormatTimingOffset(float seconds)
         {
             int milliseconds = Mathf.RoundToInt(seconds * 1000f);
@@ -7417,13 +23968,6 @@ namespace GreedLast
             return milliseconds > 0
                 ? "+" + milliseconds + "ms"
                 : milliseconds + "ms";
-        }
-
-        private static string BuildFocusGuardLabel(GreedLastRunSnapshot snapshot)
-        {
-            return snapshot.Focus >= snapshot.MaxFocus
-                ? "준비"
-                : "충전 " + snapshot.Focus + "/" + snapshot.MaxFocus;
         }
 
         private static string BuildRhythmChainLabel(GreedLastRunSnapshot snapshot)
@@ -7456,6 +24000,74 @@ namespace GreedLast
             return "C";
         }
 
+        private static string FormatActiveInfiniteLoadoutName(string loadoutName)
+        {
+            return string.IsNullOrEmpty(loadoutName) ? "저장 조합 없음" : CompactUiText(loadoutName, 22);
+        }
+
+        private static string FormatActiveInfiniteLoadoutProfileSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string profile = snapshot.InfiniteMode && IsVisibleChoiceProfile(snapshot.ActiveInfiniteLoadoutProfile)
+                ? snapshot.ActiveInfiniteLoadoutProfile
+                : snapshot.ActiveChoiceProfile;
+            return IsVisibleChoiceProfile(profile)
+                ? " / " + CompactUiText(CompactActiveInfiniteLoadoutProfileText(profile), 16)
+                : string.Empty;
+        }
+
+        private static string CompactActiveInfiniteLoadoutProfileText(string profile)
+        {
+            return string.IsNullOrEmpty(profile)
+                ? string.Empty
+                : profile.Replace(" 루트", string.Empty).Replace(" / ", "/");
+        }
+
+        private static string CompactUiText(string value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "없음";
+            }
+
+            string compact = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            while (compact.Contains("  "))
+            {
+                compact = compact.Replace("  ", " ");
+            }
+
+            if (maxLength <= 3 || compact.Length <= maxLength)
+            {
+                return compact;
+            }
+
+            return compact.Substring(0, maxLength - 3) + "...";
+        }
+
+        private static string BuildInfiniteStoppedHighlight(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.InfiniteSectionsCleared >= 3 && snapshot.MissCount <= 2)
+            {
+                return "안정 생존";
+            }
+
+            if (snapshot.MaxCombo >= 9)
+            {
+                return "연쇄 유지";
+            }
+
+            if (snapshot.InfiniteThreatLevel >= 4)
+            {
+                return "고위험 도달";
+            }
+
+            if (snapshot.MissCount >= Mathf.Max(3, snapshot.SuccessCount + snapshot.GoodCount))
+            {
+                return "보정 필요";
+            }
+
+            return "기록 확인";
+        }
+
         private static float BuildBeatVisualSpeed(GreedLastRunSnapshot snapshot)
         {
             if (snapshot.ResumeCountdownActive || (snapshot.StartCountdownActive && !snapshot.Paused))
@@ -7463,17 +24075,15 @@ namespace GreedLast
                 return 1.6f;
             }
 
-            if (snapshot.Paused)
+            if (snapshot.Paused || snapshot.Stopped || snapshot.ChoiceActive)
             {
                 return 0f;
             }
 
-            if (!snapshot.InfiniteMode)
-            {
-                return 1.6f;
-            }
-
-            return Mathf.Lerp(1.6f, 2.18f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
+            float speed = snapshot.InfiniteMode
+                ? Mathf.Lerp(1.6f, 2.18f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f))
+                : 1.6f;
+            return snapshot.FocusStateActive ? speed * 1.12f : speed;
         }
 
         private static float BuildBeatInterval(GreedLastRunSnapshot snapshot)
@@ -7486,11 +24096,31 @@ namespace GreedLast
             return Mathf.Lerp(0.5f, 0.36f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
         }
 
+        private static float BuildBeatClickVolume(GreedLastRunSnapshot snapshot)
+        {
+            float volume = snapshot.ActivePattern ? ActiveBeatVolume : IdleBeatVolume;
+            if (snapshot.ActivePattern)
+            {
+                volume += Mathf.Max(0f, BuildTrapVariationPressure(snapshot.Pattern)) * 0.08f;
+                if (snapshot.InfiniteMode)
+                {
+                    volume += Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f) * 0.035f;
+                }
+            }
+
+            return Mathf.Clamp(volume, 0.04f, 0.22f);
+        }
+
         private static string BuildTimingGuideLabel(GreedLastRunSnapshot snapshot)
         {
             if (snapshot.ResumeCountdownActive)
             {
                 return "재개 " + snapshot.ResumeCountdownRemainingSeconds.ToString("0.0") + "s";
+            }
+
+            if (snapshot.StartCountdownActive && snapshot.Paused)
+            {
+                return "시작 대기 " + snapshot.StartCountdownRemainingSeconds.ToString("0.0") + "s";
             }
 
             if (snapshot.Paused)
@@ -7511,7 +24141,11 @@ namespace GreedLast
             float secondsToCore = -snapshot.CoreDeltaSeconds;
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
             string timingWord;
-            if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
+            if (absoluteDelta <= BuildCenterHitWindow(snapshot.Pattern))
+            {
+                timingWord = "정박";
+            }
+            else if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
             {
                 timingWord = "지금 누르기";
             }
@@ -7532,14 +24166,343 @@ namespace GreedLast
                 timingWord = "준비 " + secondsToCore.ToString("0.00") + "s";
             }
 
+            string beatCue = BuildActivePatternBeatCue(snapshot);
+            if (!string.IsNullOrEmpty(beatCue))
+            {
+                timingWord = beatCue + " · " + timingWord;
+            }
+
             string windowText = absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds
                 ? $"정확권 ±{snapshot.Pattern.SuccessWindowSeconds:0.00}s"
                 : absoluteDelta <= snapshot.Pattern.GoodWindowSeconds
                     ? $"보정권 ±{snapshot.Pattern.GoodWindowSeconds:0.00}s"
                     : $"정확 ±{snapshot.Pattern.SuccessWindowSeconds:0.00}s";
-            return FormatChannel(snapshot.Pattern.Channel)
+            string practicePrefix = snapshot.PracticeMode
+                ? "연습 " + Mathf.Clamp(snapshot.ChapterProgress + 1, 1, snapshot.ChapterTarget) + "/" + snapshot.ChapterTarget + " · "
+                : string.Empty;
+            return practicePrefix + FormatChannel(snapshot.Pattern.Channel)
+                + " / " + BuildTrapResponseCueLabel(snapshot.Pattern)
                 + " / " + timingWord
                 + " / " + windowText;
+        }
+
+        private static string BuildActiveActionCueText(GreedLastRunSnapshot snapshot)
+        {
+            return BuildActiveActionCueTextForMode(snapshot, DevToolsEnabled);
+        }
+
+        private static string BuildActiveActionCueTextForMode(GreedLastRunSnapshot snapshot, bool devToolsEnabled)
+        {
+            if (!snapshot.ActivePattern
+                || !snapshot.Pattern.IsValid
+                || snapshot.Paused
+                || snapshot.CountdownActive
+                || snapshot.Stopped
+                || snapshot.ChoiceActive)
+            {
+                return string.Empty;
+            }
+
+            string symbol = BuildRunnerResponseSymbol(snapshot.Pattern);
+            string label = BuildRunnerResponseLabel(snapshot.Pattern);
+            string action = string.IsNullOrEmpty(symbol) ? label : symbol + " " + label;
+            string keyHint = BuildRunChannelInputHintForMode(snapshot.Pattern.Channel, devToolsEnabled);
+            string beatCue = BuildActivePatternBeatCue(snapshot);
+            if (beatCue == "지금 박")
+            {
+                beatCue = "지금";
+            }
+
+            string hazard = BuildTrapApproachLabel(snapshot.Pattern);
+            string cue = string.IsNullOrEmpty(hazard)
+                ? action + " 회피"
+                : hazard + " 위험 → " + action + " 회피";
+            if (!string.IsNullOrEmpty(keyHint))
+            {
+                cue += " · " + keyHint;
+            }
+
+            if (!string.IsNullOrEmpty(beatCue))
+            {
+                cue += " · " + beatCue;
+            }
+
+            string payoff = BuildActiveActionCuePayoffText(snapshot);
+            if (!string.IsNullOrEmpty(payoff))
+            {
+                cue += " · " + payoff;
+            }
+
+            return CompactUiText(cue, 72);
+        }
+
+        private static string BuildActiveActionCuePayoffText(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern || !snapshot.Pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            int exactScore = BuildActiveExactScorePreview(snapshot);
+            int goodScore = BuildActiveGoodScorePreview(snapshot);
+            if (exactScore <= 0 || goodScore <= 0)
+            {
+                return string.Empty;
+            }
+
+            string text = "정확+" + exactScore;
+            string timingPayoff = BuildActiveTimingActionCuePayoffTag(snapshot);
+            if (!string.IsNullOrEmpty(timingPayoff))
+            {
+                text += " " + timingPayoff;
+            }
+
+            string routePayoff = BuildActiveRouteActionCuePayoffTag(snapshot);
+            if (!string.IsNullOrEmpty(routePayoff))
+            {
+                text += " " + routePayoff;
+            }
+
+            return text + " 보정+" + goodScore;
+        }
+
+        private static string BuildActiveTimingActionCuePayoffTag(GreedLastRunSnapshot snapshot)
+        {
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                return "복구+" + GreedLastRunCore.RecoveryPrecisionScoreBonus;
+            }
+
+            switch (snapshot.Pattern.TimingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return "집중+" + GreedLastRunCore.PerfectFocusChargeBonus;
+                case GreedLastTimingType.Clutch:
+                    return "반격+" + GreedLastRunCore.ClutchCounterScoreBonus;
+                case GreedLastTimingType.Offbeat:
+                    return "연쇄+" + GreedLastRunCore.OffbeatFlowComboBonus;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildActiveRouteActionCuePayoffTag(GreedLastRunSnapshot snapshot)
+        {
+            if (PatternHasRoute(snapshot.Pattern, "안정"))
+            {
+                return "보정회복+" + GreedLastRunCore.StableRouteGoodHealthBonus;
+            }
+
+            if (PatternHasRoute(snapshot.Pattern, "변주")
+                && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                return "변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+            }
+
+            if (PatternHasRoute(snapshot.Pattern, "압박")
+                && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                return "압박+" + GreedLastRunCore.PressureRouteClutchScoreBonus;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildRunChannelKeyHint(GreedLastRunChannel channel)
+        {
+            return DevToolsEnabled ? BuildRunChannelInputHintForMode(channel, true) : string.Empty;
+        }
+
+        private static string BuildRunChannelInputHint(GreedLastRunChannel channel)
+        {
+            return BuildRunChannelInputHintForMode(channel, DevToolsEnabled);
+        }
+
+        private static string BuildRunChannelInputHintForMode(GreedLastRunChannel channel, bool devToolsEnabled)
+        {
+            switch (channel)
+            {
+                case GreedLastRunChannel.Left:
+                    return devToolsEnabled ? "A/←" : "좌 탭";
+                case GreedLastRunChannel.Center:
+                    return devToolsEnabled ? "S/Space" : "중 탭";
+                case GreedLastRunChannel.Right:
+                    return devToolsEnabled ? "D/→" : "우 탭";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildActivePatternBeatCue(GreedLastRunSnapshot snapshot)
+        {
+            if (!snapshot.ActivePattern || !snapshot.Pattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
+            {
+                return "지금 박";
+            }
+
+            if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds)
+            {
+                return "지난 박";
+            }
+
+            if (snapshot.CoreDeltaSeconds > snapshot.Pattern.SuccessWindowSeconds)
+            {
+                return "늦은 박";
+            }
+
+            if (snapshot.CoreDeltaSeconds > 0f)
+            {
+                return "조금 늦음";
+            }
+
+            float secondsToCore = Mathf.Max(0f, -snapshot.CoreDeltaSeconds);
+            float beatInterval = Mathf.Max(0.01f, BuildBeatInterval(snapshot));
+            if (secondsToCore <= beatInterval * 0.35f)
+            {
+                return "다음 박";
+            }
+
+            int beatsToCore = Mathf.Clamp(Mathf.CeilToInt(secondsToCore / beatInterval), 1, 4);
+            return beatsToCore + "박 전";
+        }
+
+        private static string BuildRunnerResponseLabel(GreedLastPatternModel pattern)
+        {
+            return FormatRunnerResponseLabel(BuildRunnerResponseType(pattern));
+        }
+
+        private static string FormatRunnerResponseLabel(RunnerResponseType response)
+        {
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    return "점프";
+                case RunnerResponseType.Slide:
+                    return "숙이기";
+                case RunnerResponseType.Twist:
+                    return "비틀기";
+                default:
+                    return "대응";
+            }
+        }
+
+        private static string BuildRunnerResponseSymbol(GreedLastPatternModel pattern)
+        {
+            return FormatRunnerResponseSymbol(BuildRunnerResponseType(pattern));
+        }
+
+        private static string FormatRunnerResponseSymbol(RunnerResponseType response)
+        {
+            switch (response)
+            {
+                case RunnerResponseType.Jump:
+                    return "↑";
+                case RunnerResponseType.Slide:
+                    return "↓";
+                case RunnerResponseType.Twist:
+                    return "↔";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildTrapResponseCueLabel(GreedLastPatternModel pattern)
+        {
+            string symbol = BuildRunnerResponseSymbol(pattern);
+            string response = string.IsNullOrEmpty(symbol)
+                ? BuildRunnerResponseLabel(pattern)
+                : symbol + BuildRunnerResponseLabel(pattern);
+            return BuildTrapApproachLabel(pattern) + "→" + response;
+        }
+
+        private static string BuildTrapApproachLabel(GreedLastPatternModel pattern)
+        {
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return "바닥";
+                case RunnerResponseType.Slide:
+                    return "상단";
+                case RunnerResponseType.Twist:
+                    return "측면";
+                default:
+                    return "위험";
+            }
+        }
+
+        private static string BuildRunnerOutcomeLabel(GreedLastPatternModel pattern, GreedLastJudgementResult result)
+        {
+            string response = BuildTrapResponseCueLabel(pattern);
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    return response + " 회피";
+                case GreedLastJudgementResult.Good:
+                    return response + " 보정";
+                case GreedLastJudgementResult.Miss:
+                    return response + " 실패";
+                default:
+                    return response;
+            }
+        }
+
+        private static RunnerResponseType BuildRunnerResponseType(GreedLastPatternModel pattern)
+        {
+            switch (pattern.AvoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return RunnerResponseType.Jump;
+                case GreedLastAvoidanceType.Slide:
+                    return RunnerResponseType.Slide;
+                case GreedLastAvoidanceType.Twist:
+                    return RunnerResponseType.Twist;
+            }
+
+            string patternId = pattern.PatternId ?? string.Empty;
+            if (ContainsPatternToken(patternId, "floor")
+                || ContainsPatternToken(patternId, "sand")
+                || ContainsPatternToken(patternId, "falsebeat")
+                || ContainsPatternToken(patternId, "crack")
+                || ContainsPatternToken(patternId, "threshold")
+                || ContainsPatternToken(patternId, "weight")
+                || ContainsPatternToken(patternId, "mirror")
+                || ContainsPatternToken(patternId, "echo")
+                || ContainsPatternToken(patternId, "scarab")
+                || ContainsPatternToken(patternId, "vortex"))
+            {
+                return RunnerResponseType.Jump;
+            }
+
+            if (ContainsPatternToken(patternId, "drop")
+                || ContainsPatternToken(patternId, "pillar")
+                || ContainsPatternToken(patternId, "beam")
+                || ContainsPatternToken(patternId, "gate")
+                || ContainsPatternToken(patternId, "obelisk")
+                || ContainsPatternToken(patternId, "guard")
+                || ContainsPatternToken(patternId, "drum")
+                || ContainsPatternToken(patternId, "pulse")
+                || ContainsPatternToken(patternId, "chain"))
+            {
+                return RunnerResponseType.Slide;
+            }
+
+            return pattern.IsValid ? RunnerResponseType.Twist : RunnerResponseType.None;
+        }
+
+        private static bool ContainsPatternToken(string patternId, string token)
+        {
+            return patternId.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static float BuildCenterHitWindow(GreedLastPatternModel pattern)
+        {
+            return Mathf.Max(0.018f, pattern.SuccessWindowSeconds * CenterHitWindowScale);
         }
 
         private static Color32 GetTimingGuideColor(GreedLastRunSnapshot snapshot)
@@ -7560,6 +24523,11 @@ namespace GreedLast
             }
 
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            if (absoluteDelta <= BuildCenterHitWindow(snapshot.Pattern))
+            {
+                return new Color32(255, 248, 210, 255);
+            }
+
             if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
             {
                 return new Color32(255, 238, 181, 255);
@@ -7636,30 +24604,105 @@ namespace GreedLast
 
             if (snapshot.ChoiceActive)
             {
-                SetLaneLabelMode(34, true);
-                laneLabelTexts[0].text = snapshot.ChoiceLeft;
-                laneLabelTexts[1].text = snapshot.ChoiceCenter;
-                laneLabelTexts[2].text = snapshot.ChoiceRight;
+                SetLaneLabelMode(27, true);
+                laneLabelTexts[0].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceLeft);
+                laneLabelTexts[1].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceCenter);
+                laneLabelTexts[2].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceRight);
                 return;
             }
 
-            SetLaneLabelMode(56, false);
             if (!snapshot.ActivePattern || snapshot.Paused || snapshot.CountdownActive || snapshot.Stopped)
             {
-                laneLabelTexts[0].text = "좌";
-                laneLabelTexts[1].text = "중";
-                laneLabelTexts[2].text = "우";
+                SetLaneLabelMode(DevToolsEnabled ? 38 : 56, DevToolsEnabled);
+                laneLabelTexts[0].text = BuildRunLaneBaseLabel(0, compact: false);
+                laneLabelTexts[1].text = BuildRunLaneBaseLabel(1, compact: false);
+                laneLabelTexts[2].text = BuildRunLaneBaseLabel(2, compact: false);
                 SetRunLaneLabelColors(-1, snapshot);
                 return;
             }
 
             int targetIndex = Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2);
             string timingHint = BuildLaneTimingHint(snapshot);
-            laneLabelTexts[0].text = targetIndex == 0 ? "좌\n" + timingHint : "좌";
-            laneLabelTexts[1].text = targetIndex == 1 ? "중\n" + timingHint : "중";
-            laneLabelTexts[2].text = targetIndex == 2 ? "우\n" + timingHint : "우";
-            SetLaneLabelMode(42, true);
+            string responseHint = BuildLaneResponseHint(snapshot);
+            laneLabelTexts[0].text = targetIndex == 0
+                ? BuildRunLaneBaseLabel(0, compact: true) + "\n" + responseHint + "\n" + timingHint
+                : BuildRunLaneBaseLabel(0, compact: false);
+            laneLabelTexts[1].text = targetIndex == 1
+                ? BuildRunLaneBaseLabel(1, compact: true) + "\n" + responseHint + "\n" + timingHint
+                : BuildRunLaneBaseLabel(1, compact: false);
+            laneLabelTexts[2].text = targetIndex == 2
+                ? BuildRunLaneBaseLabel(2, compact: true) + "\n" + responseHint + "\n" + timingHint
+                : BuildRunLaneBaseLabel(2, compact: false);
+            SetLaneLabelMode(34, true);
             SetRunLaneLabelColors(targetIndex, snapshot);
+        }
+
+        private static string BuildRunLaneBaseLabel(int laneIndex, bool compact)
+        {
+            return BuildRunLaneBaseLabelForMode(laneIndex, compact, DevToolsEnabled);
+        }
+
+        private static string BuildRunLaneBaseLabelForMode(int laneIndex, bool compact, bool devToolsEnabled)
+        {
+            string label;
+            string keyHint;
+            switch (laneIndex)
+            {
+                case 0:
+                    label = "좌";
+                    keyHint = "A/←";
+                    break;
+                case 1:
+                    label = "중";
+                    keyHint = "S/Space";
+                    break;
+                case 2:
+                    label = "우";
+                    keyHint = "D/→";
+                    break;
+                default:
+                    label = "-";
+                    keyHint = string.Empty;
+                    break;
+            }
+
+            if (string.IsNullOrEmpty(keyHint))
+            {
+                return label;
+            }
+
+            if (!devToolsEnabled)
+            {
+                return compact ? label + " 탭" : label + "\n탭";
+            }
+
+            return compact ? label + " " + keyHint : label + "\n" + keyHint;
+        }
+
+        private static string BuildLaneResponseHint(GreedLastRunSnapshot snapshot)
+        {
+            string responseHint = BuildTrapResponseCueLabel(snapshot.Pattern);
+            string payoffHint = string.Empty;
+            if (IsRecoveryPattern(snapshot.Pattern))
+            {
+                payoffHint = "복구+" + GreedLastRunCore.RecoveryPrecisionScoreBonus;
+            }
+            else if (snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
+            {
+                payoffHint = "충전+" + GreedLastRunCore.PerfectFocusChargeBonus;
+            }
+            else if (snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
+            {
+                payoffHint = "반격+" + GreedLastRunCore.ClutchCounterScoreBonus;
+            }
+            else if (snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
+            {
+                payoffHint = "연쇄+" + GreedLastRunCore.OffbeatFlowComboBonus;
+            }
+
+            return string.IsNullOrEmpty(payoffHint)
+                ? responseHint
+                : responseHint + " · " + payoffHint;
         }
 
         private void SetRunLaneLabelColors(int targetIndex, GreedLastRunSnapshot snapshot)
@@ -7683,14 +24726,26 @@ namespace GreedLast
                 return new Color32(218, 226, 218, 230);
             }
 
-            return laneIndex == targetIndex
+            Color32 baseColor = laneIndex == targetIndex
                 ? GetTimingGuideColor(snapshot)
                 : new Color32(125, 139, 143, 170);
+            if (laneIndex == targetIndex
+                && TryGetPatternVariationAccent(snapshot.Pattern, out Color32 variationColor, out float variationStrength))
+            {
+                return Color32.Lerp(baseColor, variationColor, variationStrength * 0.58f);
+            }
+
+            return baseColor;
         }
 
         private static string BuildLaneTimingHint(GreedLastRunSnapshot snapshot)
         {
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
+            if (absoluteDelta <= BuildCenterHitWindow(snapshot.Pattern))
+            {
+                return "정박";
+            }
+
             if (absoluteDelta <= snapshot.Pattern.SuccessWindowSeconds)
             {
                 return "누르기";
@@ -7698,10 +24753,537 @@ namespace GreedLast
 
             if (absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
             {
-                return snapshot.CoreDeltaSeconds < 0f ? "곧" : "보정";
+                return snapshot.CoreDeltaSeconds < 0f
+                    ? "곧 " + FormatLaneTimingSeconds(-snapshot.CoreDeltaSeconds)
+                    : "늦음 " + FormatLaneTimingSeconds(snapshot.CoreDeltaSeconds);
             }
 
-            return snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds ? "놓침" : "대기";
+            return snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds
+                ? "놓침"
+                : "대기 " + FormatLaneTimingSeconds(-snapshot.CoreDeltaSeconds);
+        }
+
+        private static string FormatLaneTimingSeconds(float seconds)
+        {
+            return Mathf.Max(0f, seconds).ToString("0.00");
+        }
+
+        private static string BuildChoiceLaneLabel(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            string hint = BuildChoiceLaneHint(snapshot.ChoiceKind, choiceName);
+            string text = string.IsNullOrEmpty(hint)
+                ? choiceName
+                : choiceName + "\n" + hint;
+            return IsRecommendedChoice(snapshot, choiceName)
+                ? text + "\n" + BuildChoiceLaneRecommendationText(snapshot, choiceName)
+                : text;
+        }
+
+        private static string BuildChoiceLaneHint(GreedLastChoiceKind kind, string choiceName)
+        {
+            if (kind == GreedLastChoiceKind.Node && IsRouteChoiceName(choiceName))
+            {
+                return BuildRouteChoiceRewardText(choiceName)
+                    + "\n" + BuildRouteCadenceText(choiceName)
+                    + " / " + BuildAvoidanceCadenceText(choiceName, false, -1);
+            }
+
+            return BuildChoiceEffectHint(kind, choiceName);
+        }
+
+        private static string BuildChoiceLaneRecommendationText(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            string reason = BuildChoiceRecommendationReasonText(snapshot, choiceName);
+            return string.IsNullOrEmpty(reason)
+                ? "추천"
+                : "추천\n" + reason;
+        }
+
+        private static string GetChoiceNameForLane(GreedLastRunSnapshot snapshot, int laneIndex)
+        {
+            switch (laneIndex)
+            {
+                case 0:
+                    return snapshot.ChoiceLeft;
+                case 1:
+                    return snapshot.ChoiceCenter;
+                case 2:
+                    return snapshot.ChoiceRight;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildChoiceEffectHint(GreedLastChoiceKind kind, string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "박자 감각":
+                    return "집중 +1";
+                case "안정 호흡":
+                    return "체력 +1";
+                case "고점 본능":
+                    return "점수 +80";
+                case "안정 루트":
+                    return BuildRouteChoiceEffectHint(BuildRouteChoiceRewardText(choiceName), choiceName);
+                case "변주 루트":
+                    return BuildRouteChoiceEffectHint(BuildRouteChoiceRewardText(choiceName), choiceName);
+                case "압박 루트":
+                    return BuildRouteChoiceEffectHint(BuildRouteChoiceRewardText(choiceName), choiceName);
+                case "집중 축":
+                    return "집중+2/정확 누적";
+                case "생존 축":
+                    return "체력+1/보정 회복";
+                case "연쇄 축":
+                    return "콤보+2/정확 연쇄";
+                case "황금 박동":
+                    return "점수 +200";
+                case "사막의 잔상":
+                    return "체력+1/집중+1";
+                case "파라오의 각인":
+                    return "콤보+3/연쇄 증폭";
+                default:
+                    return kind == GreedLastChoiceKind.None ? string.Empty : "기본 유지";
+            }
+        }
+
+        private static string BuildRouteChoiceRewardText(string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "안정 루트":
+                    return "Good 체력+" + GreedLastRunCore.StableRouteGoodHealthBonus;
+                case "변주 루트":
+                    return "엇박 집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+                case "압박 루트":
+                    return "Clutch +" + GreedLastRunCore.PressureRouteClutchScoreBonus;
+                default:
+                    return "기본 유지";
+            }
+        }
+
+        private static string BuildRouteChoiceEffectHint(string rewardText, string choiceName)
+        {
+            return rewardText + "/" + BuildRouteCadenceText(choiceName) + "/" + BuildAvoidanceCadenceText(choiceName, false, -1);
+        }
+
+        private static Color32 BuildChoiceLaneTextColor(GreedLastRunSnapshot snapshot, int laneIndex)
+        {
+            string choiceName = GetChoiceNameForLane(snapshot, laneIndex);
+            if (IsRecommendedChoice(snapshot, choiceName))
+            {
+                return new Color32(255, 238, 181, 255);
+            }
+
+            switch (BuildChoiceEffectGroup(choiceName))
+            {
+                case "health":
+                    return new Color32(172, 230, 204, 255);
+                case "focus":
+                    return new Color32(178, 232, 238, 255);
+                case "score":
+                    return new Color32(255, 238, 181, 255);
+                case "combo":
+                    return new Color32(255, 197, 156, 255);
+                case "hybrid":
+                    return new Color32(204, 226, 196, 255);
+                default:
+                    return new Color32(218, 226, 218, 230);
+            }
+        }
+
+        private static Color32 BuildChoiceLaneColumnColor(GreedLastRunSnapshot snapshot, int laneIndex, float lanePulse)
+        {
+            string choiceName = GetChoiceNameForLane(snapshot, laneIndex);
+            bool recommended = IsRecommendedChoice(snapshot, choiceName);
+            Color32 baseColor;
+            switch (BuildChoiceEffectGroup(choiceName))
+            {
+                case "health":
+                    baseColor = new Color32(28, 70, 58, 232);
+                    break;
+                case "focus":
+                    baseColor = new Color32(29, 67, 84, 232);
+                    break;
+                case "score":
+                    baseColor = new Color32(95, 72, 28, 232);
+                    break;
+                case "combo":
+                    baseColor = new Color32(92, 52, 39, 232);
+                    break;
+                case "hybrid":
+                    baseColor = new Color32(47, 76, 56, 232);
+                    break;
+                default:
+                    baseColor = new Color32(32, 42, 49, 255);
+                    break;
+            }
+
+            Color32 pulseColor = recommended
+                ? new Color32(154, 112, 48, 255)
+                : new Color32(82, 93, 91, 242);
+            return Color32.Lerp(baseColor, pulseColor, recommended ? 0.34f + lanePulse * 0.18f : lanePulse * 0.22f);
+        }
+
+        private static bool IsRecommendedChoice(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            return !string.IsNullOrEmpty(choiceName)
+                && choiceName == BuildRecommendedChoiceName(snapshot);
+        }
+
+        private static string BuildRecommendedChoiceName(GreedLastRunSnapshot snapshot)
+        {
+            string retryChoice = FindChoiceByRetryOpeningContext(snapshot);
+            if (!string.IsNullOrEmpty(retryChoice))
+            {
+                return retryChoice;
+            }
+
+            if (snapshot.Health <= Mathf.Max(1, Mathf.CeilToInt(snapshot.MaxHealth * 0.45f)))
+            {
+                string survivalChoice = FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+                if (!string.IsNullOrEmpty(survivalChoice))
+                {
+                    return survivalChoice;
+                }
+            }
+
+            string segmentChoice = FindNodeChoiceBySegmentPerformance(snapshot);
+            if (!string.IsNullOrEmpty(segmentChoice))
+            {
+                return segmentChoice;
+            }
+
+            if (snapshot.Focus <= 1)
+            {
+                string focusChoice = FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
+                if (!string.IsNullOrEmpty(focusChoice))
+                {
+                    return focusChoice;
+                }
+            }
+
+            if (snapshot.PrecisionStreak >= 3)
+            {
+                string precisionChoice = FindChoiceByEffectGroup(snapshot, "score", "combo");
+                if (!string.IsNullOrEmpty(precisionChoice))
+                {
+                    return precisionChoice;
+                }
+            }
+
+            if (snapshot.Combo >= 4)
+            {
+                string comboChoice = FindChoiceByEffectGroup(snapshot, "combo");
+                if (!string.IsNullOrEmpty(comboChoice))
+                {
+                    return comboChoice;
+                }
+            }
+
+            if (snapshot.Score < 300)
+            {
+                string scoreChoice = FindChoiceByEffectGroup(snapshot, "score");
+                if (!string.IsNullOrEmpty(scoreChoice))
+                {
+                    return scoreChoice;
+                }
+            }
+
+            string profileChoice = FindChoiceByActiveProfile(snapshot);
+            if (!string.IsNullOrEmpty(profileChoice))
+            {
+                return profileChoice;
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildRecommendedChoiceReasonSuffix(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            if (string.IsNullOrEmpty(choiceName))
+            {
+                return string.Empty;
+            }
+
+            if (choiceName == FindChoiceByRetryOpeningContext(snapshot))
+            {
+                return BuildRetryChoiceReasonSuffix(snapshot);
+            }
+
+            string effectGroup = BuildChoiceEffectGroup(choiceName);
+            if ((effectGroup == "health" || effectGroup == "hybrid")
+                && snapshot.Health <= Mathf.Max(1, Mathf.CeilToInt(snapshot.MaxHealth * 0.45f)))
+            {
+                return " / 체력 보완";
+            }
+
+            if (snapshot.ChoiceKind == GreedLastChoiceKind.Node
+                && choiceName == FindNodeChoiceBySegmentPerformance(snapshot))
+            {
+                if (snapshot.LastCompletedSegmentMissCount > 0)
+                {
+                    return " / 직전 실수 안정화 · " + BuildRouteCadenceText(choiceName);
+                }
+
+                if (choiceName == "변주 루트"
+                    && snapshot.ActiveRouteProfile == "안정 루트")
+                {
+                    return snapshot.LastCompletedSegmentGoodCount > 0
+                        ? " / 안정 흐름 확장 · " + BuildRouteCadenceText(choiceName)
+                        : " / 안정 졸업 변주 · " + BuildRouteCadenceText(choiceName);
+                }
+
+                if (snapshot.LastCompletedSegmentGoodCount > 0)
+                {
+                    return " / 보정 정확 전환 · " + BuildRouteCadenceText(choiceName);
+                }
+
+                if (snapshot.LastCompletedSegmentExactCount >= 3)
+                {
+                    return " / 완전 정확 고점 · " + BuildRouteCadenceText(choiceName);
+                }
+            }
+
+            if ((effectGroup == "focus" || effectGroup == "hybrid") && snapshot.Focus <= 1)
+            {
+                return " / 집중 회복";
+            }
+
+            if ((effectGroup == "score" || effectGroup == "combo") && snapshot.PrecisionStreak >= 3)
+            {
+                return " / 정박 고점";
+            }
+
+            if (effectGroup == "combo" && snapshot.Combo >= 4)
+            {
+                return " / 연쇄 유지";
+            }
+
+            if (effectGroup == "score" && snapshot.Score < 300)
+            {
+                return " / 초반 점수";
+            }
+
+            if (choiceName == FindChoiceByActiveProfile(snapshot))
+            {
+                return " / 조합 연계";
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildRouteCadenceText(string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "안정 루트":
+                    return "정-압-정";
+                case "변주 루트":
+                    return "엇-정-엇";
+                case "압박 루트":
+                    return "압-엇-압";
+                default:
+                    return "3박";
+            }
+        }
+
+        private static string BuildRetryChoiceReasonSuffix(GreedLastRunSnapshot snapshot)
+        {
+            string text = snapshot.JudgementText ?? string.Empty;
+            if (text.Contains("복기 목표:", StringComparison.Ordinal))
+            {
+                if (text.Contains("실패", StringComparison.Ordinal))
+                {
+                    return " / 복기 실패 보완";
+                }
+
+                if (text.Contains("달성", StringComparison.Ordinal))
+                {
+                    return text.Contains("재도전 목표:", StringComparison.Ordinal)
+                        || text.Contains("목표:", StringComparison.Ordinal)
+                        ? " / 목표 상향"
+                        : " / 복기 달성 연장";
+                }
+
+                if (text.Contains("진행", StringComparison.Ordinal))
+                {
+                    return " / 복기 진행";
+                }
+            }
+
+            return " / 복기 목표";
+        }
+
+        private static string FindNodeChoiceBySegmentPerformance(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.ChoiceKind != GreedLastChoiceKind.Node
+                || string.IsNullOrEmpty(snapshot.LastCompletedSegment))
+            {
+                return string.Empty;
+            }
+
+            if (snapshot.LastCompletedSegmentMissCount > 0)
+            {
+                return FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+            }
+
+            if (snapshot.LastCompletedSegmentGoodCount > 0)
+            {
+                return snapshot.ActiveRouteProfile == "안정 루트"
+                    ? FindChoiceByEffectGroup(snapshot, "focus", "hybrid")
+                    : FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+            }
+
+            if (snapshot.LastCompletedSegmentExactCount >= 3
+                && snapshot.ActiveRouteProfile == "안정 루트")
+            {
+                return FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
+            }
+
+            return snapshot.LastCompletedSegmentExactCount >= 3
+                ? FindChoiceByEffectGroup(snapshot, "combo", "score")
+                : string.Empty;
+        }
+
+        private static string FindChoiceByRetryOpeningContext(GreedLastRunSnapshot snapshot)
+        {
+            if (snapshot.ChoiceKind != GreedLastChoiceKind.StartGift
+                || string.IsNullOrWhiteSpace(snapshot.JudgementText)
+                || (!snapshot.JudgementText.Contains("복기 재도전", StringComparison.Ordinal)
+                    && !snapshot.JudgementText.Contains("재도전 목표:", StringComparison.Ordinal)))
+            {
+                return string.Empty;
+            }
+
+            string text = snapshot.JudgementText.Replace("\r", string.Empty);
+            if (text.Contains("복기 목표:", StringComparison.Ordinal))
+            {
+                if (text.Contains("실패 실수", StringComparison.Ordinal))
+                {
+                    return FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+                }
+
+                if (text.Contains("실패 보정", StringComparison.Ordinal))
+                {
+                    return FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
+                }
+
+                if (text.Contains("진행", StringComparison.Ordinal)
+                    && (text.Contains("점", StringComparison.Ordinal)
+                        || text.Contains("콤보", StringComparison.Ordinal)
+                        || text.Contains("고점", StringComparison.Ordinal)))
+                {
+                    return FindChoiceByEffectGroup(snapshot, "score", "combo");
+                }
+            }
+
+            if (text.Contains("보정 0회", StringComparison.Ordinal)
+                || text.Contains("정확권", StringComparison.Ordinal)
+                || text.Contains("빠른 입력", StringComparison.Ordinal)
+                || text.Contains("늦은 입력", StringComparison.Ordinal)
+                || text.Contains("타이밍", StringComparison.Ordinal)
+                || text.Contains("정박", StringComparison.Ordinal))
+            {
+                return FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
+            }
+
+            if (text.Contains("콤보", StringComparison.Ordinal)
+                || text.Contains("점수", StringComparison.Ordinal)
+                || text.Contains("고점", StringComparison.Ordinal)
+                || text.Contains("점 탈출", StringComparison.Ordinal)
+                || text.Contains("점 /", StringComparison.Ordinal))
+            {
+                return FindChoiceByEffectGroup(snapshot, "score", "combo");
+            }
+
+            if (text.Contains("무실수", StringComparison.Ordinal)
+                || text.Contains("체력", StringComparison.Ordinal)
+                || text.Contains("생존", StringComparison.Ordinal)
+                || text.Contains("채널 확인", StringComparison.Ordinal)
+                || text.Contains("입력 없음", StringComparison.Ordinal)
+                || text.Contains("보충", StringComparison.Ordinal))
+            {
+                return FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildChoiceRecommendationReasonText(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            string suffix = BuildRecommendedChoiceReasonSuffix(snapshot, choiceName);
+            return suffix.StartsWith(" / ", StringComparison.Ordinal)
+                ? suffix.Substring(3)
+                : suffix;
+        }
+
+        private static string FindChoiceByEffectGroup(GreedLastRunSnapshot snapshot, string primaryGroup, string fallbackGroup = null)
+        {
+            string left = MatchChoiceEffectGroup(snapshot.ChoiceLeft, primaryGroup, fallbackGroup);
+            if (!string.IsNullOrEmpty(left))
+            {
+                return left;
+            }
+
+            string center = MatchChoiceEffectGroup(snapshot.ChoiceCenter, primaryGroup, fallbackGroup);
+            if (!string.IsNullOrEmpty(center))
+            {
+                return center;
+            }
+
+            return MatchChoiceEffectGroup(snapshot.ChoiceRight, primaryGroup, fallbackGroup);
+        }
+
+        private static string FindChoiceByActiveProfile(GreedLastRunSnapshot snapshot)
+        {
+            switch (snapshot.ActiveChoiceProfile)
+            {
+                case "안정형":
+                    return FindChoiceByEffectGroup(snapshot, "health", "hybrid");
+                case "집중형":
+                    return FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
+                case "연쇄형":
+                    return FindChoiceByEffectGroup(snapshot, "combo");
+                case "고점형":
+                    return FindChoiceByEffectGroup(snapshot, "score", "combo");
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string MatchChoiceEffectGroup(string choiceName, string primaryGroup, string fallbackGroup)
+        {
+            string effectGroup = BuildChoiceEffectGroup(choiceName);
+            return effectGroup == primaryGroup || (!string.IsNullOrEmpty(fallbackGroup) && effectGroup == fallbackGroup)
+                ? choiceName
+                : string.Empty;
+        }
+
+        private static string BuildChoiceEffectGroup(string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "안정 호흡":
+                case "안정 루트":
+                case "생존 축":
+                    return "health";
+                case "박자 감각":
+                case "변주 루트":
+                case "집중 축":
+                    return "focus";
+                case "고점 본능":
+                case "황금 박동":
+                    return "score";
+                case "압박 루트":
+                case "연쇄 축":
+                case "파라오의 각인":
+                    return "combo";
+                case "사막의 잔상":
+                    return "hybrid";
+                default:
+                    return string.Empty;
+            }
         }
 
         private void UpdateSaveSlotLabels(
@@ -7717,7 +25299,11 @@ namespace GreedLast
                 return;
             }
 
-            SetLaneLabelMode(34, true);
+            SetLaneLabelMode(showUsability ? 30 : 32, true);
+            bool slotChoiceRequired = selectedSlotIndex < 0;
+            bool noRefillSourceAvailable = !canSaveCandidate
+                && !AnyTrue(slotUsable)
+                && !AnyTrue(slotOccupied);
             for (int i = 0; i < laneLabelTexts.Length; i += 1)
             {
                 bool selected = i == selectedSlotIndex;
@@ -7728,15 +25314,31 @@ namespace GreedLast
                     && !string.IsNullOrEmpty(slotLabels[i])
                     ? slotLabels[i]
                     : "슬롯 " + (i + 1);
-                string actionHint = showUsability
-                    ? usable ? "시작 가능" : occupied ? "사용 완료" : "사용 불가"
-                    : canSaveCandidate
-                        ? occupied ? "교체 대상" : "바로 저장"
-                        : occupied ? "관리 가능" : "빈 슬롯";
+                string displaySlotState = BuildCompactSaveSlotLaneState(slotState, noRefillSourceAvailable);
+                bool lastUse = slotState.StartsWith("마지막", StringComparison.Ordinal);
+                bool recommended = slotState.Contains("추천", StringComparison.Ordinal);
+                string actionHint = BuildSaveSlotLaneActionHint(
+                    slotChoiceRequired,
+                    showUsability,
+                    canSaveCandidate,
+                    usable,
+                    occupied,
+                    lastUse,
+                    recommended,
+                    noRefillSourceAvailable);
 
                 laneLabelTexts[i].text = selected
-                    ? "선택\nS" + (i + 1) + "\n" + slotState + "\n" + actionHint
-                    : "S" + (i + 1) + "\n" + slotState + "\n" + actionHint;
+                    ? "선택\nS" + (i + 1) + "\n" + displaySlotState + "\n" + actionHint
+                    : "S" + (i + 1) + "\n" + displaySlotState + "\n" + actionHint;
+                laneLabelTexts[i].color = BuildSaveSlotLaneLabelColor(
+                    slotChoiceRequired,
+                    selected,
+                    showUsability,
+                    canSaveCandidate,
+                    usable,
+                    occupied,
+                    lastUse,
+                    recommended);
 
                 if (laneImages != null && i < laneImages.Length && laneImages[i] != null)
                 {
@@ -7744,16 +25346,196 @@ namespace GreedLast
                     {
                         laneImages[i].color = selected
                             ? usable ? new Color32(154, 112, 48, 255) : new Color32(108, 54, 48, 255)
-                            : usable ? new Color32(32, 52, 55, 225) : new Color32(24, 29, 31, 205);
+                            : slotChoiceRequired && usable ? new Color32(46, 76, 72, 235) : usable ? new Color32(32, 52, 55, 225) : new Color32(24, 29, 31, 205);
                     }
                     else
                     {
                         laneImages[i].color = selected
                             ? occupied ? new Color32(154, 112, 48, 255) : new Color32(74, 123, 118, 255)
-                            : occupied ? new Color32(32, 42, 49, 225) : new Color32(24, 50, 49, 215);
+                            : slotChoiceRequired && canSaveCandidate ? new Color32(52, 75, 68, 235) : occupied ? new Color32(32, 42, 49, 225) : new Color32(24, 50, 49, 215);
                     }
                 }
             }
+        }
+
+        private static string BuildCompactSaveSlotLaneState(string label, bool noRefillSourceAvailable = false)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                return noRefillSourceAvailable ? "보충\n필요" : "빈 슬롯";
+            }
+
+            if (label == "빈 슬롯")
+            {
+                return noRefillSourceAvailable ? "보충\n필요" : label;
+            }
+
+            if (label == "사용 완료")
+            {
+                return "소진";
+            }
+
+            bool recommended = label.Contains("추천", StringComparison.Ordinal);
+            string status;
+            if (label.StartsWith("마지막", StringComparison.Ordinal))
+            {
+                status = "마지막";
+            }
+            else
+            {
+                int useTextEnd = label.IndexOf("회 남음", StringComparison.Ordinal);
+                status = useTextEnd >= 0
+                    ? label.Substring(0, useTextEnd + 1)
+                    : CompactUiText(ExtractFirstSlashPart(label), 7);
+            }
+
+            string profile = ExtractSaveSlotProfile(label);
+            string grade = ExtractSaveSlotGrade(label);
+            string detail = string.Empty;
+            if (!string.IsNullOrEmpty(profile))
+            {
+                detail = profile;
+            }
+
+            if (!string.IsNullOrEmpty(grade))
+            {
+                detail = string.IsNullOrEmpty(detail) ? grade : detail + " " + grade;
+            }
+
+            string text = string.IsNullOrEmpty(detail) ? status : status + "\n" + detail;
+            return recommended ? text + "\n추천" : text;
+        }
+
+        private static string ExtractSaveSlotProfile(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = label.Split('/');
+            for (int i = 0; i < parts.Length; i += 1)
+            {
+                string part = parts[i].Trim();
+                if (part.EndsWith("형", StringComparison.Ordinal))
+                {
+                    return CompactUiText(part, 5);
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildSaveSlotLaneActionHint(
+            bool slotChoiceRequired,
+            bool showUsability,
+            bool canSaveCandidate,
+            bool usable,
+            bool occupied,
+            bool lastUse,
+            bool recommended,
+            bool noRefillSourceAvailable = false)
+        {
+            if (slotChoiceRequired)
+            {
+                if (showUsability)
+                {
+                    return usable ? lastUse ? "자동 비움" : "고르기" : occupied ? "소진" : noRefillSourceAvailable ? "보충 런" : "사용 불가";
+                }
+
+                return canSaveCandidate ? recommended ? "추천" : "고르기" : occupied ? "관리 가능" : noRefillSourceAvailable ? "보충 런" : "빈 슬롯";
+            }
+
+            if (showUsability)
+            {
+                return usable ? lastUse ? "시작 후 비움" : "시작 가능" : occupied ? "소진" : noRefillSourceAvailable ? "보충 런" : "사용 불가";
+            }
+
+            if (canSaveCandidate)
+            {
+                return occupied ? recommended ? "추천 교체" : "교체 대상" : recommended ? "추천 저장" : "바로 저장";
+            }
+
+            return occupied ? "관리 가능" : noRefillSourceAvailable ? "보충 런" : "빈 슬롯";
+        }
+
+        private static bool AnyTrue(bool[] values)
+        {
+            if (values == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < values.Length; i += 1)
+            {
+                if (values[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Color32 BuildSaveSlotLaneLabelColor(
+            bool slotChoiceRequired,
+            bool selected,
+            bool showUsability,
+            bool canSaveCandidate,
+            bool usable,
+            bool occupied,
+            bool lastUse,
+            bool recommended)
+        {
+            if (selected)
+            {
+                return new Color32(255, 238, 181, 255);
+            }
+
+            if (slotChoiceRequired)
+            {
+                if (showUsability)
+                {
+                    if (usable && lastUse)
+                    {
+                        return new Color32(230, 205, 150, 245);
+                    }
+
+                    return usable
+                        ? new Color32(205, 235, 221, 245)
+                        : new Color32(145, 154, 152, 190);
+                }
+
+                if (canSaveCandidate && recommended)
+                {
+                    return new Color32(255, 238, 181, 245);
+                }
+
+                return canSaveCandidate
+                    ? new Color32(215, 232, 212, 245)
+                    : occupied ? new Color32(190, 204, 204, 220) : new Color32(145, 154, 152, 190);
+            }
+
+            if (showUsability)
+            {
+                if (usable && lastUse)
+                {
+                    return new Color32(230, 205, 150, 235);
+                }
+
+                return usable
+                    ? new Color32(218, 226, 218, 235)
+                    : new Color32(145, 154, 152, 190);
+            }
+
+            if (canSaveCandidate && recommended)
+            {
+                return new Color32(255, 238, 181, 240);
+            }
+
+            return occupied
+                ? new Color32(218, 226, 218, 230)
+                : new Color32(184, 214, 207, 220);
         }
 
         private void UpdateRecordBoardLaneLabels(int pageIndex)
@@ -7779,17 +25561,20 @@ namespace GreedLast
             }
         }
 
-        private void UpdateGrowthLaneLabels()
+        private void UpdateProfileBoardLaneLabels(int pageIndex)
         {
             if (laneLabelTexts == null || laneLabelTexts.Length < 3)
             {
                 return;
             }
 
-            SetLaneLabelMode(33, true);
-            laneLabelTexts[0].text = "좌\n생존";
-            laneLabelTexts[1].text = "중\n집중";
-            laneLabelTexts[2].text = "우\n타이밍";
+            int page = NormalizeProfileBoardPage(pageIndex);
+            int previousPage = (page + ProfileBoardPageCount - 1) % ProfileBoardPageCount;
+            int nextPage = (page + 1) % ProfileBoardPageCount;
+            SetLaneLabelMode(34, true);
+            laneLabelTexts[0].text = "좌\n" + GetProfileBoardPageLabel(previousPage);
+            laneLabelTexts[1].text = "중\n" + BuildProfileBoardCenterLaneLabel();
+            laneLabelTexts[2].text = "우\n" + GetProfileBoardPageLabel(nextPage);
             if (laneButtons != null)
             {
                 for (int i = 0; i < laneButtons.Length; i += 1)
@@ -7797,6 +25582,135 @@ namespace GreedLast
                     SetLaneInputInteractable(i, true);
                 }
             }
+        }
+
+        private void UpdateGrowthLaneLabels(GreedLastStateSnapshot snapshot)
+        {
+            if (laneLabelTexts == null || laneLabelTexts.Length < 3)
+            {
+                return;
+            }
+
+            SetLaneLabelMode(25, true);
+            laneLabelTexts[0].text = "좌\n생존\n" + FormatGrowthLaneLevel(snapshot.GrowthSurvivalLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 0);
+            laneLabelTexts[1].text = "중\n집중\n" + FormatGrowthLaneLevel(snapshot.GrowthFocusLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 1);
+            laneLabelTexts[2].text = "우\n타이밍\n" + FormatGrowthLaneLevel(snapshot.GrowthTimingLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 2);
+            laneLabelTexts[0].color = BuildGrowthLaneLabelColor(snapshot.GrowthSurvivalLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 0);
+            laneLabelTexts[1].color = BuildGrowthLaneLabelColor(snapshot.GrowthFocusLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 1);
+            laneLabelTexts[2].color = BuildGrowthLaneLabelColor(snapshot.GrowthTimingLevel, snapshot.GrowthPoints, snapshot.RecommendedGrowthTrackIndex == 2);
+            if (laneButtons != null)
+            {
+                for (int i = 0; i < laneButtons.Length; i += 1)
+                {
+                    SetLaneInputInteractable(i, true);
+                }
+            }
+        }
+
+        private void SetGrowthBoardVisualState(GreedLastStateSnapshot snapshot)
+        {
+            growthBoardPoints = Mathf.Max(0, snapshot.GrowthPoints);
+            growthLaneLevels[0] = Mathf.Clamp(snapshot.GrowthSurvivalLevel, 0, GrowthUiMaxLevel);
+            growthLaneLevels[1] = Mathf.Clamp(snapshot.GrowthFocusLevel, 0, GrowthUiMaxLevel);
+            growthLaneLevels[2] = Mathf.Clamp(snapshot.GrowthTimingLevel, 0, GrowthUiMaxLevel);
+            recommendedGrowthLaneIndex = snapshot.RecommendedGrowthTrackIndex >= 0 && snapshot.RecommendedGrowthTrackIndex < growthLaneLevels.Length
+                ? snapshot.RecommendedGrowthTrackIndex
+                : -1;
+        }
+
+        private int GetGrowthLaneLevel(int laneIndex)
+        {
+            return growthLaneLevels != null && laneIndex >= 0 && laneIndex < growthLaneLevels.Length
+                ? growthLaneLevels[laneIndex]
+                : 0;
+        }
+
+        private Color32 BuildGrowthLaneColumnColor(int laneIndex, float lanePulse)
+        {
+            int level = GetGrowthLaneLevel(laneIndex);
+            float levelRatio = level / (float)GrowthUiMaxLevel;
+            Color32 trackColor = GetGrowthTrackColumnColor(laneIndex);
+            Color32 baseColor = Color32.Lerp(
+                new Color32(22, 29, 31, 230),
+                trackColor,
+                0.26f + levelRatio * 0.52f);
+
+            if (level >= GrowthUiMaxLevel)
+            {
+                return Color32.Lerp(baseColor, new Color32(255, 238, 181, 255), 0.36f + lanePulse * 0.12f);
+            }
+
+            int cost = Mathf.Clamp(level + 1, 1, GrowthUiMaxLevel);
+            bool recommended = laneIndex == recommendedGrowthLaneIndex;
+            if (growthBoardPoints >= cost)
+            {
+                return Color32.Lerp(
+                    baseColor,
+                    recommended ? new Color32(255, 214, 105, 255) : new Color32(205, 166, 70, 255),
+                    (recommended ? 0.46f : 0.30f) + lanePulse * 0.18f);
+            }
+
+            return Color32.Lerp(
+                baseColor,
+                recommended ? new Color32(98, 126, 104, 245) : new Color32(64, 74, 76, 235),
+                recommended ? 0.34f : 0.18f);
+        }
+
+        private static Color32 GetGrowthTrackColumnColor(int laneIndex)
+        {
+            switch (laneIndex)
+            {
+                case 0:
+                    return new Color32(96, 122, 86, 245);
+                case 1:
+                    return new Color32(68, 103, 128, 245);
+                case 2:
+                    return new Color32(130, 104, 58, 245);
+                default:
+                    return new Color32(69, 88, 92, 245);
+            }
+        }
+
+        private static string FormatGrowthLaneLevel(int level, int points, bool recommended)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthUiMaxLevel);
+            if (safeLevel >= GrowthUiMaxLevel)
+            {
+                return "MAX";
+            }
+
+            int cost = Mathf.Clamp(safeLevel + 1, 1, GrowthUiMaxLevel);
+            if (recommended)
+            {
+                return points >= cost
+                    ? "Lv " + safeLevel + "\n추천 가능"
+                    : "Lv " + safeLevel + "\n추천 " + cost + "pt";
+            }
+
+            return points >= cost
+                ? "Lv " + safeLevel + "\n가능"
+                : "Lv " + safeLevel + "\n" + cost + "pt";
+        }
+
+        private static Color32 BuildGrowthLaneLabelColor(int level, int points, bool recommended)
+        {
+            int safeLevel = Mathf.Clamp(level, 0, GrowthUiMaxLevel);
+            if (safeLevel >= GrowthUiMaxLevel)
+            {
+                return new Color32(255, 238, 181, 245);
+            }
+
+            int cost = Mathf.Clamp(safeLevel + 1, 1, GrowthUiMaxLevel);
+            if (recommended)
+            {
+                return points >= cost
+                    ? new Color32(255, 238, 181, 255)
+                    : new Color32(198, 229, 197, 238);
+            }
+
+            return points >= cost
+                ? new Color32(255, 226, 147, 245)
+                : new Color32(170, 183, 182, 210);
         }
 
         private static string GetRecordBoardPageLabel(int page)
@@ -7814,9 +25728,46 @@ namespace GreedLast
             }
         }
 
+        private static string GetRecordBoardPageButtonLabel(int page)
+        {
+            int normalized = NormalizeRecordBoardPage(page);
+            return (normalized + 1) + "/" + RecordBoardPageCount + " " + GetRecordBoardPageLabel(normalized).Replace("\n", " ");
+        }
+
+        private static string GetProfileBoardPageLabel(int page)
+        {
+            switch (NormalizeProfileBoardPage(page))
+            {
+                case 1:
+                    return "저장\n성장";
+                case 2:
+                    return "장식";
+                case 3:
+                    return "검증";
+                default:
+                    return "요약";
+            }
+        }
+
+        private static string GetProfileBoardPageButtonLabel(int page)
+        {
+            int normalized = NormalizeProfileBoardPage(page);
+            return (normalized + 1) + "/" + ProfileBoardPageCount + " " + GetProfileBoardPageLabel(normalized).Replace("\n", " ");
+        }
+
+        private static string BuildProfileBoardCenterLaneLabel()
+        {
+            return "기록\n보드";
+        }
+
         private static int NormalizeRecordBoardPage(int page)
         {
             return ((page % RecordBoardPageCount) + RecordBoardPageCount) % RecordBoardPageCount;
+        }
+
+        private static int NormalizeProfileBoardPage(int page)
+        {
+            return ((page % ProfileBoardPageCount) + ProfileBoardPageCount) % ProfileBoardPageCount;
         }
 
         private void UpdateDefaultLaneLabels()
@@ -7839,8 +25790,63 @@ namespace GreedLast
             }
         }
 
+        private void UpdateInfinitePreparationLaneLabels(string detail)
+        {
+            if (laneLabelTexts == null || laneLabelTexts.Length < 3)
+            {
+                return;
+            }
+
+            string safeDetail = detail ?? string.Empty;
+            bool giftStep = safeDetail.Contains("시작 정비 1/2", StringComparison.Ordinal);
+            bool relicStep = safeDetail.Contains("시작 정비 2/2", StringComparison.Ordinal);
+            bool completeStep = safeDetail.Contains("시작 정비 완료", StringComparison.Ordinal);
+            if (!giftStep && !relicStep && !completeStep)
+            {
+                UpdateDefaultLaneLabels();
+                return;
+            }
+
+            SetLaneLabelMode(27, true);
+            if (giftStep)
+            {
+                laneLabelTexts[0].text = "좌\n생존 축\n보정 회복";
+                laneLabelTexts[1].text = "중\n집중 축\n집중 가속";
+                laneLabelTexts[2].text = "우\n연쇄 축\n콤보 가속";
+            }
+            else if (relicStep)
+            {
+                laneLabelTexts[0].text = "좌\n사막의 잔상\n보정 회복";
+                laneLabelTexts[1].text = "중\n황금 박동\n정확 고점";
+                laneLabelTexts[2].text = "우\n파라오 각인\n연쇄 증폭";
+            }
+            else
+            {
+                laneLabelTexts[0].text = "좌\n기프트\n다시 선택";
+                laneLabelTexts[1].text = "중\n유물\n다시 선택";
+                laneLabelTexts[2].text = "우\n현재 선택\n유지";
+            }
+
+            Color32[] colors =
+            {
+                new Color32(172, 230, 204, 255),
+                new Color32(178, 232, 238, 255),
+                new Color32(255, 197, 156, 255),
+            };
+            for (int i = 0; i < laneLabelTexts.Length; i += 1)
+            {
+                laneLabelTexts[i].color = colors[i];
+                SetLaneInputInteractable(i, !completeStep || i < 2);
+            }
+        }
+
         private void SetLaneInputInteractable(int laneIndex, bool interactable)
         {
+            if (!interactable && laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
+            {
+                laneHoldActive[laneIndex] = false;
+            }
+
             if (laneButtons != null && laneIndex >= 0 && laneIndex < laneButtons.Length && laneButtons[laneIndex] != null)
             {
                 laneButtons[laneIndex].interactable = interactable;
@@ -7866,6 +25872,7 @@ namespace GreedLast
                 label.resizeTextForBestFit = bestFit;
                 label.resizeTextMinSize = 20;
                 label.resizeTextMaxSize = fontSize;
+                label.color = new Color32(218, 226, 218, 230);
                 label.rectTransform.localScale = Vector3.one;
             }
         }

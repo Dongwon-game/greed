@@ -9,6 +9,7 @@ namespace GreedLast.Editor
     {
         private const string ScenePath = "Assets/Scenes/GreedLast_Boot.unity";
 
+        [MenuItem("Greed Last/Rebuild Boot Scene")]
         public static void Build()
         {
             Directory.CreateDirectory("Assets/Scenes");
@@ -27,6 +28,7 @@ namespace GreedLast.Editor
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+            Debug.Log("Greed Last boot scene rebuilt: " + ScenePath);
         }
     }
 }

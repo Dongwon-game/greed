@@ -19,6 +19,14 @@ namespace GreedLast
         Offbeat = 3,
     }
 
+    public enum GreedLastAvoidanceType
+    {
+        None = 0,
+        Jump = 1,
+        Slide = 2,
+        Twist = 3,
+    }
+
     public enum GreedLastJudgementResult
     {
         None = 0,
@@ -54,6 +62,9 @@ namespace GreedLast
         RelicChoice = 1,
         AfterCore = 2,
         BeforeClear = 3,
+        ReviewTargetCheck = 4,
+        RouteCycle = 5,
+        AvoidanceCycle = 6,
     }
 
     public enum GreedLastRunAttemptOutcome
@@ -71,6 +82,10 @@ namespace GreedLast
             int health,
             int combo,
             int focus,
+            int maxCombo,
+            int successCount,
+            int goodCount,
+            int missCount,
             float distance,
             string loadoutName,
             string startGift,
@@ -84,6 +99,10 @@ namespace GreedLast
             Health = health;
             Combo = combo;
             Focus = focus;
+            MaxCombo = maxCombo;
+            SuccessCount = successCount;
+            GoodCount = goodCount;
+            MissCount = missCount;
             Distance = distance;
             LoadoutName = loadoutName ?? string.Empty;
             StartGift = startGift ?? string.Empty;
@@ -98,6 +117,10 @@ namespace GreedLast
         public int Health { get; }
         public int Combo { get; }
         public int Focus { get; }
+        public int MaxCombo { get; }
+        public int SuccessCount { get; }
+        public int GoodCount { get; }
+        public int MissCount { get; }
         public float Distance { get; }
         public string LoadoutName { get; }
         public string StartGift { get; }
@@ -108,6 +131,10 @@ namespace GreedLast
 
         public static GreedLastRunRecord Empty => new GreedLastRunRecord(
             false,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0,
@@ -212,10 +239,12 @@ namespace GreedLast
             int sectionsCleared,
             int maxThreatLevel,
             string loadoutName,
+            string loadoutProfile,
             int successCount,
             int goodCount,
             int missCount,
             int maxCombo,
+            string missReason,
             string timingProfile)
         {
             IsValid = isValid;
@@ -224,10 +253,12 @@ namespace GreedLast
             SectionsCleared = sectionsCleared;
             MaxThreatLevel = maxThreatLevel;
             LoadoutName = loadoutName ?? string.Empty;
+            LoadoutProfile = loadoutProfile ?? string.Empty;
             SuccessCount = successCount;
             GoodCount = goodCount;
             MissCount = missCount;
             MaxCombo = maxCombo;
+            MissReason = missReason ?? string.Empty;
             TimingProfile = timingProfile ?? string.Empty;
         }
 
@@ -237,10 +268,12 @@ namespace GreedLast
         public int SectionsCleared { get; }
         public int MaxThreatLevel { get; }
         public string LoadoutName { get; }
+        public string LoadoutProfile { get; }
         public int SuccessCount { get; }
         public int GoodCount { get; }
         public int MissCount { get; }
         public int MaxCombo { get; }
+        public string MissReason { get; }
         public string TimingProfile { get; }
 
         public static GreedLastInfiniteRunRecord Empty => new GreedLastInfiniteRunRecord(
@@ -250,10 +283,12 @@ namespace GreedLast
             0,
             0,
             string.Empty,
+            string.Empty,
             0,
             0,
             0,
             0,
+            string.Empty,
             string.Empty);
     }
 
@@ -285,7 +320,8 @@ namespace GreedLast
             float coreSeconds,
             float successWindowSeconds,
             float goodWindowSeconds,
-            float hitSeconds)
+            float hitSeconds,
+            GreedLastAvoidanceType avoidanceType = GreedLastAvoidanceType.None)
         {
             PatternId = patternId ?? string.Empty;
             Channel = channel;
@@ -296,6 +332,7 @@ namespace GreedLast
             SuccessWindowSeconds = successWindowSeconds;
             GoodWindowSeconds = goodWindowSeconds;
             HitSeconds = hitSeconds;
+            AvoidanceType = avoidanceType;
         }
 
         public string PatternId { get; }
@@ -307,6 +344,7 @@ namespace GreedLast
         public float SuccessWindowSeconds { get; }
         public float GoodWindowSeconds { get; }
         public float HitSeconds { get; }
+        public GreedLastAvoidanceType AvoidanceType { get; }
 
         public bool IsValid => Channel != GreedLastRunChannel.None;
 
@@ -329,13 +367,15 @@ namespace GreedLast
             GreedLastTimingType timingType,
             string message,
             string ignoreReason,
-            string missReason)
+            string missReason,
+            bool centerHit = false)
         {
             Result = result;
             TimingType = timingType;
             Message = message ?? string.Empty;
             IgnoreReason = ignoreReason ?? string.Empty;
             MissReason = missReason ?? string.Empty;
+            CenterHit = centerHit;
         }
 
         public GreedLastJudgementResult Result { get; }
@@ -343,6 +383,7 @@ namespace GreedLast
         public string Message { get; }
         public string IgnoreReason { get; }
         public string MissReason { get; }
+        public bool CenterHit { get; }
     }
 
     public readonly struct GreedLastRunSnapshot
@@ -358,16 +399,49 @@ namespace GreedLast
             int combo,
             int focus,
             int maxFocus,
+            bool focusStateActive,
+            float focusStateRemainingSeconds,
+            int focusStateActivationCount,
+            int focusStateSuccessCount,
+            float focusStateActiveSeconds,
             int maxCombo,
+            int precisionStreak,
+            int maxPrecisionStreak,
+            int recoveryPrecisionCount,
+            int perfectFocusChargeCount,
+            int clutchCounterCount,
+            int offbeatFlowCount,
+            int stableRouteRecoveryCount,
+            int variationRouteFlowCount,
+            int pressureRouteCounterCount,
+            int stableRouteBundleCount,
+            int variationRouteBundleCount,
+            int pressureRouteBundleCount,
+            bool lastCenterHit,
             int successCount,
+            int perfectSuccessCount,
+            int clutchSuccessCount,
+            int offbeatSuccessCount,
             int goodCount,
             int missCount,
+            int noInputMissCount,
             int infiniteSectionsCleared,
             int infiniteThreatLevel,
+            int maxInfiniteThreatLevel,
             float distance,
             int chapterIndex,
             int chapterProgress,
             int chapterTarget,
+            string lastCompletedSegment,
+            int lastCompletedSegmentExactCount,
+            int lastCompletedSegmentGoodCount,
+            int lastCompletedSegmentMissCount,
+            int currentSegmentExactCount,
+            int currentSegmentGoodCount,
+            int currentSegmentMissCount,
+            int currentBundleAvoidanceMask,
+            int threeActionExactBundleCount,
+            bool perfectBundleIntact,
             GreedLastRunPhase phase,
             GreedLastChoiceKind choiceKind,
             string choicePrompt,
@@ -385,8 +459,11 @@ namespace GreedLast
             bool resumeCountdownActive,
             bool startCountdownActive,
             bool staggered,
+            float staggerRemainingSeconds,
             bool devInvincible,
             bool infiniteMode,
+            bool refillRun,
+            bool practiceMode,
             float elapsedSeconds,
             float beatProgress,
             float coreDeltaSeconds,
@@ -397,6 +474,18 @@ namespace GreedLast
             int timingRecommendationMilliseconds,
             int timingRecommendationSampleCount,
             int timingRecommendationSampleTarget,
+            bool timingRecommendationApplied,
+            int appliedTimingRecommendationMilliseconds,
+            int focusGiftStacks,
+            int survivalGiftStacks,
+            int chainGiftStacks,
+            string activeRelic,
+            string activeChoiceProfile,
+            string activeRouteProfile,
+            string activeInfiniteLoadoutName,
+            string activeInfiniteLoadoutProfile,
+            string reviewTargetText,
+            string recentPatternFlow,
             string timingProfile)
         {
             Pattern = pattern;
@@ -409,16 +498,49 @@ namespace GreedLast
             Combo = combo;
             Focus = focus;
             MaxFocus = maxFocus;
+            FocusStateActive = focusStateActive;
+            FocusStateRemainingSeconds = Mathf.Max(0f, focusStateRemainingSeconds);
+            FocusStateActivationCount = Mathf.Max(0, focusStateActivationCount);
+            FocusStateSuccessCount = Mathf.Max(0, focusStateSuccessCount);
+            FocusStateActiveSeconds = Mathf.Max(0f, focusStateActiveSeconds);
             MaxCombo = maxCombo;
+            PrecisionStreak = Mathf.Max(0, precisionStreak);
+            MaxPrecisionStreak = Mathf.Max(0, maxPrecisionStreak);
+            RecoveryPrecisionCount = Mathf.Max(0, recoveryPrecisionCount);
+            PerfectFocusChargeCount = Mathf.Max(0, perfectFocusChargeCount);
+            ClutchCounterCount = Mathf.Max(0, clutchCounterCount);
+            OffbeatFlowCount = Mathf.Max(0, offbeatFlowCount);
+            StableRouteRecoveryCount = Mathf.Max(0, stableRouteRecoveryCount);
+            VariationRouteFlowCount = Mathf.Max(0, variationRouteFlowCount);
+            PressureRouteCounterCount = Mathf.Max(0, pressureRouteCounterCount);
+            StableRouteBundleCount = Mathf.Max(0, stableRouteBundleCount);
+            VariationRouteBundleCount = Mathf.Max(0, variationRouteBundleCount);
+            PressureRouteBundleCount = Mathf.Max(0, pressureRouteBundleCount);
+            LastCenterHit = lastCenterHit;
             SuccessCount = successCount;
+            PerfectSuccessCount = Mathf.Max(0, perfectSuccessCount);
+            ClutchSuccessCount = Mathf.Max(0, clutchSuccessCount);
+            OffbeatSuccessCount = Mathf.Max(0, offbeatSuccessCount);
             GoodCount = goodCount;
             MissCount = missCount;
+            NoInputMissCount = Mathf.Max(0, noInputMissCount);
             InfiniteSectionsCleared = infiniteSectionsCleared;
             InfiniteThreatLevel = infiniteThreatLevel;
+            MaxInfiniteThreatLevel = Mathf.Max(InfiniteThreatLevel, maxInfiniteThreatLevel);
             Distance = distance;
             ChapterIndex = chapterIndex;
             ChapterProgress = chapterProgress;
             ChapterTarget = chapterTarget;
+            LastCompletedSegment = lastCompletedSegment ?? string.Empty;
+            LastCompletedSegmentExactCount = Mathf.Max(0, lastCompletedSegmentExactCount);
+            LastCompletedSegmentGoodCount = Mathf.Max(0, lastCompletedSegmentGoodCount);
+            LastCompletedSegmentMissCount = Mathf.Max(0, lastCompletedSegmentMissCount);
+            CurrentSegmentExactCount = Mathf.Max(0, currentSegmentExactCount);
+            CurrentSegmentGoodCount = Mathf.Max(0, currentSegmentGoodCount);
+            CurrentSegmentMissCount = Mathf.Max(0, currentSegmentMissCount);
+            CurrentBundleAvoidanceMask = Mathf.Max(0, currentBundleAvoidanceMask);
+            ThreeActionExactBundleCount = Mathf.Max(0, threeActionExactBundleCount);
+            PerfectBundleIntact = perfectBundleIntact;
             Phase = phase;
             ChoiceKind = choiceKind;
             ChoicePrompt = choicePrompt ?? string.Empty;
@@ -436,8 +558,11 @@ namespace GreedLast
             ResumeCountdownActive = resumeCountdownActive;
             StartCountdownActive = startCountdownActive;
             Staggered = staggered;
+            StaggerRemainingSeconds = Mathf.Max(0f, staggerRemainingSeconds);
             DevInvincible = devInvincible;
             InfiniteMode = infiniteMode;
+            RefillRun = refillRun;
+            PracticeMode = practiceMode;
             ElapsedSeconds = elapsedSeconds;
             BeatProgress = beatProgress;
             CoreDeltaSeconds = coreDeltaSeconds;
@@ -448,6 +573,18 @@ namespace GreedLast
             TimingRecommendationMilliseconds = timingRecommendationMilliseconds;
             TimingRecommendationSampleCount = Mathf.Max(0, timingRecommendationSampleCount);
             TimingRecommendationSampleTarget = Mathf.Max(1, timingRecommendationSampleTarget);
+            TimingRecommendationApplied = timingRecommendationApplied;
+            AppliedTimingRecommendationMilliseconds = appliedTimingRecommendationMilliseconds;
+            FocusGiftStacks = Mathf.Max(0, focusGiftStacks);
+            SurvivalGiftStacks = Mathf.Max(0, survivalGiftStacks);
+            ChainGiftStacks = Mathf.Max(0, chainGiftStacks);
+            ActiveRelic = activeRelic ?? string.Empty;
+            ActiveChoiceProfile = activeChoiceProfile ?? string.Empty;
+            ActiveRouteProfile = activeRouteProfile ?? string.Empty;
+            ActiveInfiniteLoadoutName = activeInfiniteLoadoutName ?? string.Empty;
+            ActiveInfiniteLoadoutProfile = activeInfiniteLoadoutProfile ?? string.Empty;
+            ReviewTargetText = reviewTargetText ?? string.Empty;
+            RecentPatternFlow = recentPatternFlow ?? string.Empty;
             TimingProfile = timingProfile ?? string.Empty;
         }
 
@@ -461,16 +598,49 @@ namespace GreedLast
         public int Combo { get; }
         public int Focus { get; }
         public int MaxFocus { get; }
+        public bool FocusStateActive { get; }
+        public float FocusStateRemainingSeconds { get; }
+        public int FocusStateActivationCount { get; }
+        public int FocusStateSuccessCount { get; }
+        public float FocusStateActiveSeconds { get; }
         public int MaxCombo { get; }
+        public int PrecisionStreak { get; }
+        public int MaxPrecisionStreak { get; }
+        public int RecoveryPrecisionCount { get; }
+        public int PerfectFocusChargeCount { get; }
+        public int ClutchCounterCount { get; }
+        public int OffbeatFlowCount { get; }
+        public int StableRouteRecoveryCount { get; }
+        public int VariationRouteFlowCount { get; }
+        public int PressureRouteCounterCount { get; }
+        public int StableRouteBundleCount { get; }
+        public int VariationRouteBundleCount { get; }
+        public int PressureRouteBundleCount { get; }
+        public bool LastCenterHit { get; }
         public int SuccessCount { get; }
+        public int PerfectSuccessCount { get; }
+        public int ClutchSuccessCount { get; }
+        public int OffbeatSuccessCount { get; }
         public int GoodCount { get; }
         public int MissCount { get; }
+        public int NoInputMissCount { get; }
         public int InfiniteSectionsCleared { get; }
         public int InfiniteThreatLevel { get; }
+        public int MaxInfiniteThreatLevel { get; }
         public float Distance { get; }
         public int ChapterIndex { get; }
         public int ChapterProgress { get; }
         public int ChapterTarget { get; }
+        public string LastCompletedSegment { get; }
+        public int LastCompletedSegmentExactCount { get; }
+        public int LastCompletedSegmentGoodCount { get; }
+        public int LastCompletedSegmentMissCount { get; }
+        public int CurrentSegmentExactCount { get; }
+        public int CurrentSegmentGoodCount { get; }
+        public int CurrentSegmentMissCount { get; }
+        public int CurrentBundleAvoidanceMask { get; }
+        public int ThreeActionExactBundleCount { get; }
+        public bool PerfectBundleIntact { get; }
         public GreedLastRunPhase Phase { get; }
         public GreedLastChoiceKind ChoiceKind { get; }
         public string ChoicePrompt { get; }
@@ -490,8 +660,11 @@ namespace GreedLast
         public bool StartCountdownActive { get; }
         public bool CountdownActive => ResumeCountdownActive || StartCountdownActive;
         public bool Staggered { get; }
+        public float StaggerRemainingSeconds { get; }
         public bool DevInvincible { get; }
         public bool InfiniteMode { get; }
+        public bool RefillRun { get; }
+        public bool PracticeMode { get; }
         public float ElapsedSeconds { get; }
         public float BeatProgress { get; }
         public float CoreDeltaSeconds { get; }
@@ -503,6 +676,18 @@ namespace GreedLast
         public int TimingRecommendationMilliseconds { get; }
         public int TimingRecommendationSampleCount { get; }
         public int TimingRecommendationSampleTarget { get; }
+        public bool TimingRecommendationApplied { get; }
+        public int AppliedTimingRecommendationMilliseconds { get; }
+        public int FocusGiftStacks { get; }
+        public int SurvivalGiftStacks { get; }
+        public int ChainGiftStacks { get; }
+        public string ActiveRelic { get; }
+        public string ActiveChoiceProfile { get; }
+        public string ActiveRouteProfile { get; }
+        public string ActiveInfiniteLoadoutName { get; }
+        public string ActiveInfiniteLoadoutProfile { get; }
+        public string ReviewTargetText { get; }
+        public string RecentPatternFlow { get; }
         public string TimingProfile { get; }
     }
 
@@ -510,10 +695,22 @@ namespace GreedLast
     {
         private const int MaxHealth = 3;
         private const int MaxFocus = 3;
+        private const float FocusStateDurationSeconds = 5f;
+        private const float FocusStateSuccessExtensionSeconds = 0.35f;
+        private const float FocusStateBundleExtensionSeconds = 1f;
+        private const float VariationRouteBundleExtensionSeconds = 1.5f;
+        private const float FocusStateMaxDurationSeconds = 7f;
+        private const float FocusStateScoreMultiplier = 1.20f;
         private const int MaxGrowthLevel = 3;
         private const int MaxChoiceHistory = 12;
         private const float StaggerSeconds = 0.55f;
-        private const float AutoGapSeconds = 0.75f;
+        private const float ChapterOneGapSeconds = 0.82f;
+        private const float ChapterTwoGapSeconds = 0.64f;
+        private const float ChapterThreeGapSeconds = 0.40f;
+        private const float ChapterFourGapSeconds = 0.54f;
+        private const float EscapeGapSeconds = 0.44f;
+        private const float InfiniteBaseGapSeconds = 0.68f;
+        private const float InfiniteThreatRiseBreatherSeconds = 0.45f;
         private const float RunSpeedMetersPerSecond = 4.2f;
         private const float MinInputTimingOffsetSeconds = -0.2f;
         private const float MaxInputTimingOffsetSeconds = 0.2f;
@@ -524,46 +721,127 @@ namespace GreedLast
         private const float ResumeCountdownSeconds = 1.4f;
         private const float ResumeBufferSeconds = 0.65f;
         private const int TimingRecommendationMinSamples = 3;
-        private const string InputTimingOffsetPrefsKey = "GreedLast.RunCore.InputTimingOffsetSeconds";
+        private const float CenterHitWindowScale = 0.45f;
+        private const int PrecisionStreakFocusStep = 3;
+        private const int RecentPatternMemory = 4;
+        public const string InputTimingOffsetPrefsKey = "GreedLast.RunCore.InputTimingOffsetSeconds";
+
+        public const int RecoveryPrecisionScoreBonus = 75;
+        public const int RecoveryPrecisionFocusBonus = 1;
+        public const int RecoveryPrecisionComboBonus = 1;
+        public const int PerfectFocusChargeBonus = 1;
+        public const int ClutchCounterScoreBonus = 50;
+        public const int OffbeatFlowComboBonus = 1;
+        public const int StableRouteGoodHealthBonus = 1;
+        public const int VariationRouteOffbeatFocusBonus = 1;
+        public const int PressureRouteClutchScoreBonus = 35;
+        public const int StableRouteBundleHealthBonus = 1;
+        public const int VariationRouteBundleFocusBonus = 2;
+        public const int PressureRouteBundleScoreBonus = 150;
+        public const float FinalValidationTempoEaseScale = 1.04f;
+        public const float FinalValidationWindowEaseScale = 1.05f;
 
         private readonly GreedLastPatternModel[] patternDeck =
         {
-            new GreedLastPatternModel("left_floor_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌측 바닥 창살", 0.45f, 1.05f, 0.10f, 0.30f, 1.48f),
-            new GreedLastPatternModel("center_gate_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "정면 압박문", 0.55f, 1.28f, 0.13f, 0.36f, 1.72f),
-            new GreedLastPatternModel("right_blade_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 엇박 칼날", 0.40f, 0.92f, 0.11f, 0.31f, 1.36f),
-            new GreedLastPatternModel("left_wall_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 회전 벽", 0.50f, 1.18f, 0.12f, 0.34f, 1.58f),
-            new GreedLastPatternModel("center_sand_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 모래 함몰", 0.44f, 1.00f, 0.10f, 0.29f, 1.42f),
-            new GreedLastPatternModel("right_pillar_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 낙하 기둥", 0.58f, 1.34f, 0.13f, 0.37f, 1.78f),
-            new GreedLastPatternModel("left_falsebeat_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 발판", 0.38f, 0.88f, 0.11f, 0.30f, 1.32f),
-            new GreedLastPatternModel("center_guard_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "정면 수호상 압박", 0.53f, 1.24f, 0.12f, 0.35f, 1.66f),
-            new GreedLastPatternModel("right_spear_perfect", GreedLastRunChannel.Right, GreedLastTimingType.Perfect, "우측 황금 창", 0.46f, 1.08f, 0.10f, 0.30f, 1.50f),
-            new GreedLastPatternModel("left_sand_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 모래 압류", 0.52f, 1.22f, 0.12f, 0.34f, 1.64f),
-            new GreedLastPatternModel("center_falsebeat_offbeat", GreedLastRunChannel.Center, GreedLastTimingType.Offbeat, "중앙 엇박 석문", 0.39f, 0.90f, 0.11f, 0.30f, 1.34f),
-            new GreedLastPatternModel("right_floor_perfect", GreedLastRunChannel.Right, GreedLastTimingType.Perfect, "우측 붕괴 바닥", 0.47f, 1.10f, 0.10f, 0.30f, 1.52f),
-            new GreedLastPatternModel("left_blade_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 칼날", 0.37f, 0.86f, 0.10f, 0.29f, 1.28f),
-            new GreedLastPatternModel("center_beam_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 광선 틈", 0.43f, 0.98f, 0.10f, 0.28f, 1.38f),
-            new GreedLastPatternModel("right_guard_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 수호상 압박", 0.56f, 1.30f, 0.13f, 0.36f, 1.74f),
+            new GreedLastPatternModel("left_floor_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌측 바닥 창살", 0.45f, 1.05f, 0.10f, 0.30f, 1.48f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_gate_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "정면 압박문", 0.55f, 1.28f, 0.13f, 0.36f, 1.72f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_blade_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 엇박 칼날", 0.40f, 0.92f, 0.11f, 0.31f, 1.36f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("left_wall_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 회전 벽", 0.50f, 1.18f, 0.12f, 0.34f, 1.58f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("center_sand_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 모래 함몰", 0.44f, 1.00f, 0.10f, 0.29f, 1.42f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("right_pillar_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 낙하 기둥", 0.58f, 1.34f, 0.13f, 0.37f, 1.78f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("left_falsebeat_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 발판", 0.38f, 0.88f, 0.11f, 0.30f, 1.32f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_guard_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "정면 수호상 압박", 0.53f, 1.24f, 0.12f, 0.35f, 1.66f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_spear_perfect", GreedLastRunChannel.Right, GreedLastTimingType.Perfect, "우측 황금 창", 0.46f, 1.08f, 0.10f, 0.30f, 1.50f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("left_sand_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 모래 압류", 0.52f, 1.22f, 0.12f, 0.34f, 1.64f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_falsebeat_offbeat", GreedLastRunChannel.Center, GreedLastTimingType.Offbeat, "중앙 엇박 석문", 0.39f, 0.90f, 0.11f, 0.30f, 1.34f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("right_floor_perfect", GreedLastRunChannel.Right, GreedLastTimingType.Perfect, "우측 붕괴 바닥", 0.47f, 1.10f, 0.10f, 0.30f, 1.52f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("left_blade_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 칼날", 0.37f, 0.86f, 0.10f, 0.29f, 1.28f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("center_beam_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 광선 틈", 0.43f, 0.98f, 0.10f, 0.28f, 1.38f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_guard_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 수호상 압박", 0.56f, 1.30f, 0.13f, 0.36f, 1.74f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("left_drum_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌측 박동 낙석", 0.42f, 0.96f, 0.10f, 0.28f, 1.36f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("center_pulse_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "중앙 박동 기둥", 0.57f, 1.32f, 0.13f, 0.36f, 1.76f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_vortex_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 모래 와류", 0.36f, 0.84f, 0.10f, 0.29f, 1.26f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("left_hidden_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 숨은 창", 0.54f, 1.26f, 0.12f, 0.35f, 1.68f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("center_crack_offbeat", GreedLastRunChannel.Center, GreedLastTimingType.Offbeat, "중앙 엇박 균열", 0.38f, 0.87f, 0.10f, 0.29f, 1.30f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("right_threshold_perfect", GreedLastRunChannel.Right, GreedLastTimingType.Perfect, "우측 정박 문턱", 0.45f, 1.04f, 0.10f, 0.30f, 1.46f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("left_mirror_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌측 거울 발판", 0.44f, 1.02f, 0.10f, 0.29f, 1.44f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_chain_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "중앙 사슬 압박", 0.59f, 1.36f, 0.13f, 0.37f, 1.80f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_echo_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 잔향 발판", 0.37f, 0.85f, 0.10f, 0.29f, 1.28f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("left_scarab_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 성충", 0.36f, 0.83f, 0.10f, 0.28f, 1.24f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_weight_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 무게판", 0.48f, 1.12f, 0.10f, 0.31f, 1.54f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("right_hidden_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 숨은 창", 0.55f, 1.27f, 0.12f, 0.35f, 1.70f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("left_drop_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌측 낙하 석판", 0.46f, 1.07f, 0.10f, 0.30f, 1.50f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("center_echo_offbeat", GreedLastRunChannel.Center, GreedLastTimingType.Offbeat, "중앙 잔향 틈", 0.39f, 0.89f, 0.10f, 0.29f, 1.32f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("right_chain_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 사슬 압박", 0.58f, 1.33f, 0.13f, 0.36f, 1.77f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("left_echo_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 잔향 틈", 0.37f, 0.86f, 0.10f, 0.29f, 1.29f, GreedLastAvoidanceType.Jump),
+            new GreedLastPatternModel("center_obelisk_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 오벨리스크 틈", 0.47f, 1.09f, 0.10f, 0.30f, 1.51f, GreedLastAvoidanceType.Slide),
+            new GreedLastPatternModel("right_scarab_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 엇박 성충", 0.36f, 0.84f, 0.10f, 0.28f, 1.25f, GreedLastAvoidanceType.Jump),
         };
 
         private GreedLastPatternModel currentPattern = GreedLastPatternModel.Empty;
+        private string lastSelectedPatternId = string.Empty;
+        private string previousSelectedPatternId = string.Empty;
+        private readonly string[] recentPatternFamilyKeys = new string[RecentPatternMemory];
+        private readonly GreedLastRunChannel[] recentPatternChannels = new GreedLastRunChannel[RecentPatternMemory];
+        private readonly GreedLastTimingType[] recentPatternTimingTypes = new GreedLastTimingType[RecentPatternMemory];
+        private readonly GreedLastAvoidanceType[] recentPatternAvoidanceTypes = new GreedLastAvoidanceType[RecentPatternMemory];
+        private int recentPatternCount;
+        private int devAvoidanceCycleIndex;
         private int patternIndex;
         private int score;
         private int health = MaxHealth;
         private int maxHealthThisRun = MaxHealth;
         private int combo;
         private int focus;
+        private float focusStateRemainingSeconds;
+        private int focusStateActivationCount;
+        private int focusStateSuccessCount;
+        private float focusStateActiveSeconds;
         private int maxCombo;
+        private int precisionStreak;
+        private int maxPrecisionStreak;
+        private int recoveryPrecisionCount;
+        private int perfectFocusChargeCount;
+        private int clutchCounterCount;
+        private int offbeatFlowCount;
+        private int stableRouteRecoveryCount;
+        private int variationRouteFlowCount;
+        private int pressureRouteCounterCount;
+        private int stableRouteBundleCount;
+        private int variationRouteBundleCount;
+        private int pressureRouteBundleCount;
+        private int threeActionExactBundleCount;
         private int successCount;
+        private int perfectSuccessCount;
+        private int clutchSuccessCount;
+        private int offbeatSuccessCount;
         private int goodCount;
         private int missCount;
+        private int noInputMissCount;
+        private readonly int[] avoidanceExactCounts = new int[4];
+        private readonly int[] avoidanceGoodCounts = new int[4];
+        private readonly int[] avoidanceMissCounts = new int[4];
+        private readonly int[] chapterExactCounts = new int[4];
+        private readonly int[] chapterGoodCounts = new int[4];
+        private readonly int[] chapterMissCounts = new int[4];
+        private int escapeExactCount;
+        private int escapeGoodCount;
+        private int escapeMissCount;
+        private string lastCompletedSegment = string.Empty;
+        private int lastCompletedSegmentExactCount;
+        private int lastCompletedSegmentGoodCount;
+        private int lastCompletedSegmentMissCount;
         private int timingSampleCount;
         private int earlyInputCount;
         private int lateInputCount;
+        private bool timingRecommendationApplied;
+        private int appliedTimingRecommendationMilliseconds;
         private int infiniteSectionsCleared;
         private int infiniteThreatTestOffset;
         private int maxInfiniteThreatLevel;
         private float timingSignedErrorTotal;
         private float timingAbsErrorTotal;
+        private float timingRecommendedOffsetTotal;
         private float patternStartedAt;
         private float staggerUntil;
         private float nextPatternAt;
@@ -582,6 +860,11 @@ namespace GreedLast
         private float startCountdownEndsAt;
         private int chapterIndex;
         private int chapterProgress;
+        private int patternBundleBreakCount;
+        private int currentBundleExactCount;
+        private int currentBundleGoodCount;
+        private int currentBundleMissCount;
+        private int currentBundleAvoidanceMask;
         private GreedLastRunPhase phase;
         private GreedLastChoiceKind choiceKind;
         private bool coreRetrieved;
@@ -589,6 +872,10 @@ namespace GreedLast
         private bool saveEligible;
         private bool devInvincible;
         private bool infiniteMode;
+        private bool refillRunMode;
+        private bool practiceMode;
+        private bool infiniteThreatBreatherPatternPending;
+        private bool recoveryBreatherPatternPending;
         private int growthSurvivalLevel;
         private int growthFocusLevel;
         private int growthTimingLevel;
@@ -600,6 +887,13 @@ namespace GreedLast
         private string primaryGift = string.Empty;
         private string relic = string.Empty;
         private string activeInfiniteLoadoutName = string.Empty;
+        private string activeInfiniteLoadoutProfile = string.Empty;
+        private string activeInfiniteLoadoutDisplayProfile = string.Empty;
+        private string reviewTargetText = string.Empty;
+        private string lastPracticeOpeningContext = string.Empty;
+        private int activeInfiniteFocusGiftStacks;
+        private int activeInfiniteSurvivalGiftStacks;
+        private int activeInfiniteChainGiftStacks;
         private string choicePrompt = string.Empty;
         private string choiceLeft = string.Empty;
         private string choiceCenter = string.Empty;
@@ -608,19 +902,23 @@ namespace GreedLast
         private string ignoreReason = string.Empty;
         private string missReason = string.Empty;
         private GreedLastJudgementResult lastResult = GreedLastJudgementResult.None;
+        private bool lastCenterHit;
 
         public event Action<GreedLastRunSnapshot> SnapshotChanged;
 
         public bool CanExitAfterClear => stopped && saveEligible && phase == GreedLastRunPhase.ClearResolving;
+        public bool CanExitAfterPractice => practiceMode && stopped;
         public bool IsStoppedInfiniteRun => stopped && infiniteMode;
-        public bool IsStoppedNormalRun => stopped && !infiniteMode;
+        public bool IsStoppedNormalRun => stopped && !infiniteMode && !practiceMode;
+        public bool IsPracticeRun => practiceMode;
+        public bool IsPracticeComplete => practiceMode && stopped && phase == GreedLastRunPhase.ClearResolving;
         public bool IsInfiniteRun => infiniteMode;
         public bool IsPaused => paused;
         public float InputTimingOffsetSeconds => inputTimingOffsetSeconds;
         public bool HasTimingRecommendation => timingSampleCount >= TimingRecommendationMinSamples;
         public int TimingRecommendationMilliseconds => HasTimingRecommendation
             ? Mathf.RoundToInt(Mathf.Clamp(
-                inputTimingOffsetSeconds - timingSignedErrorTotal / timingSampleCount,
+                timingRecommendedOffsetTotal / timingSampleCount,
                 MinInputTimingOffsetSeconds,
                 MaxInputTimingOffsetSeconds) * 1000f)
             : 0;
@@ -636,26 +934,90 @@ namespace GreedLast
 
         public GreedLastRunCore()
         {
-            inputTimingOffsetSeconds = Mathf.Clamp(
+            inputTimingOffsetSeconds = LoadStoredInputTimingOffsetSeconds();
+        }
+
+        public static float LoadStoredInputTimingOffsetSeconds()
+        {
+            return Mathf.Clamp(
                 PlayerPrefs.GetFloat(InputTimingOffsetPrefsKey, 0f),
                 MinInputTimingOffsetSeconds,
                 MaxInputTimingOffsetSeconds);
         }
 
+        public static string BuildStoredInputTimingOffsetChecklistText()
+        {
+            return "보정: " + FormatOffset(LoadStoredInputTimingOffsetSeconds());
+        }
+
         private void ResetRunStats()
         {
             maxCombo = 0;
+            precisionStreak = 0;
+            maxPrecisionStreak = 0;
+            recoveryPrecisionCount = 0;
+            perfectFocusChargeCount = 0;
+            clutchCounterCount = 0;
+            offbeatFlowCount = 0;
+            stableRouteRecoveryCount = 0;
+            variationRouteFlowCount = 0;
+            pressureRouteCounterCount = 0;
+            stableRouteBundleCount = 0;
+            variationRouteBundleCount = 0;
+            pressureRouteBundleCount = 0;
+            threeActionExactBundleCount = 0;
+            lastCenterHit = false;
             successCount = 0;
+            perfectSuccessCount = 0;
+            clutchSuccessCount = 0;
+            offbeatSuccessCount = 0;
             goodCount = 0;
             missCount = 0;
+            noInputMissCount = 0;
+            for (int i = 0; i < avoidanceExactCounts.Length; i += 1)
+            {
+                avoidanceExactCounts[i] = 0;
+                avoidanceGoodCounts[i] = 0;
+                avoidanceMissCounts[i] = 0;
+            }
+
+            for (int i = 0; i < chapterMissCounts.Length; i += 1)
+            {
+                chapterExactCounts[i] = 0;
+                chapterGoodCounts[i] = 0;
+                chapterMissCounts[i] = 0;
+            }
+
+            escapeExactCount = 0;
+            escapeGoodCount = 0;
+            escapeMissCount = 0;
+            lastCompletedSegment = string.Empty;
+            lastCompletedSegmentExactCount = 0;
+            lastCompletedSegmentGoodCount = 0;
+            lastCompletedSegmentMissCount = 0;
             timingSampleCount = 0;
             earlyInputCount = 0;
             lateInputCount = 0;
+            timingRecommendationApplied = false;
+            appliedTimingRecommendationMilliseconds = 0;
             timingSignedErrorTotal = 0f;
             timingAbsErrorTotal = 0f;
+            timingRecommendedOffsetTotal = 0f;
+            focusStateActivationCount = 0;
+            focusStateSuccessCount = 0;
+            focusStateActiveSeconds = 0f;
             infiniteSectionsCleared = 0;
             infiniteThreatTestOffset = 0;
             maxInfiniteThreatLevel = 1;
+            patternBundleBreakCount = 0;
+            currentBundleExactCount = 0;
+            currentBundleGoodCount = 0;
+            currentBundleMissCount = 0;
+            infiniteThreatBreatherPatternPending = false;
+            recoveryBreatherPatternPending = false;
+            lastSelectedPatternId = string.Empty;
+            previousSelectedPatternId = string.Empty;
+            ClearRecentPatternHistory();
         }
 
         private void ResetRunVitals()
@@ -664,6 +1026,12 @@ namespace GreedLast
             health = maxHealth;
             maxHealthThisRun = maxHealth;
             focus = BuildGrowthStartFocus();
+            focusStateRemainingSeconds = 0f;
+            if (focus >= MaxFocus)
+            {
+                focus = 0;
+                focusStateRemainingSeconds = FocusStateDurationSeconds;
+            }
         }
 
         private int BuildGrowthMaxHealth()
@@ -719,10 +1087,112 @@ namespace GreedLast
 
         public void Enter()
         {
+            Enter(string.Empty);
+        }
+
+        public void Enter(string openingContext)
+        {
+            Enter(openingContext, false);
+        }
+
+        public void Enter(string openingContext, bool refillRun)
+        {
+            ResetNormalRunState(refillRun);
+            reviewTargetText = ExtractReviewTargetText(openingContext);
+            OpenChoice(GreedLastChoiceKind.StartGift);
+            judgementText = (string.IsNullOrEmpty(openingContext) ? string.Empty : openingContext + "\n")
+                + "시작 기프트를 선택하세요."
+                + BuildGrowthAppliedText();
+            ignoreReason = string.Empty;
+            missReason = string.Empty;
+            lastResult = GreedLastJudgementResult.None;
+            Publish();
+        }
+
+        public void EnterPractice()
+        {
+            EnterPractice(string.Empty);
+        }
+
+        public void EnterPractice(string openingContext)
+        {
+            StartPractice(Time.realtimeSinceStartup, openingContext);
+        }
+
+        public void RestartPractice(float now)
+        {
+            StartPractice(now, lastPracticeOpeningContext);
+        }
+
+        private void StartPractice(float now, string openingContext)
+        {
+            lastPracticeOpeningContext = openingContext ?? string.Empty;
+            ResetNormalRunState(refillRun: false);
+            reviewTargetText = ExtractReviewTargetText(lastPracticeOpeningContext);
+            practiceMode = true;
+            chapterProgress = ResolvePracticeOpeningStep(lastPracticeOpeningContext);
+            patternIndex = chapterProgress;
+            startGift = "기초 연습";
+            primaryGift = string.Empty;
+            relic = string.Empty;
+            phase = GreedLastRunPhase.RunPlaying;
+            choiceKind = GreedLastChoiceKind.None;
+            string contextPrefix = string.IsNullOrEmpty(lastPracticeOpeningContext) ? string.Empty : lastPracticeOpeningContext + "\n";
+            PrepareStartCountdown(
+                now,
+                contextPrefix
+                + "기초연습 준비\n좌·중·우는 이동이 아니라 위험에 대응하는 채널입니다."
+                + "\n" + BuildPracticeOpeningStepGuide(chapterProgress));
+            ignoreReason = string.Empty;
+            missReason = string.Empty;
+            lastResult = GreedLastJudgementResult.None;
+            Publish();
+        }
+
+        private static int ResolvePracticeOpeningStep(string openingContext)
+        {
+            if (string.IsNullOrWhiteSpace(openingContext))
+            {
+                return 0;
+            }
+
+            if (openingContext.Contains("비틀기 단계", StringComparison.Ordinal)
+                || openingContext.Contains("측면→↔비틀기", StringComparison.Ordinal)
+                || openingContext.Contains("엇박 비틀기", StringComparison.Ordinal))
+            {
+                return 2;
+            }
+
+            if (openingContext.Contains("숙이기 단계", StringComparison.Ordinal)
+                || openingContext.Contains("상단→↓숙이기", StringComparison.Ordinal)
+                || openingContext.Contains("클러치 숙이기", StringComparison.Ordinal))
+            {
+                return 1;
+            }
+
+            return 0;
+        }
+
+        private static string BuildPracticeOpeningStepGuide(int chapterProgress)
+        {
+            switch (Mathf.Clamp(chapterProgress, 0, ChapterTargetPatterns - 1))
+            {
+                case 1:
+                    return "복기 시작: 클러치 상단→↓숙이기부터 남은 단계를 확인합니다.";
+                case 2:
+                    return "복기 시작: 엇박 측면→↔비틀기 단계를 바로 확인합니다.";
+                default:
+                    return "정박 바닥→↑점프 · 클러치 상단→↓숙이기 · 엇박 측면→↔비틀기를 차례로 연습합니다.";
+            }
+        }
+
+        private void ResetNormalRunState(bool refillRun)
+        {
             score = 0;
             combo = 0;
             ResetRunVitals();
             ResetRunStats();
+            RegisterInitialFocusState();
             currentPattern = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
@@ -742,14 +1212,14 @@ namespace GreedLast
             escapeSucceeded = false;
             saveEligible = false;
             infiniteMode = false;
+            refillRunMode = refillRun;
+            practiceMode = false;
             activeInfiniteLoadoutName = string.Empty;
+            devAvoidanceCycleIndex = 0;
+            activeInfiniteLoadoutProfile = string.Empty;
+            activeInfiniteLoadoutDisplayProfile = string.Empty;
+            reviewTargetText = string.Empty;
             ClearChoices();
-            OpenChoice(GreedLastChoiceKind.StartGift);
-            judgementText = "시작 기프트를 선택하세요." + BuildGrowthAppliedText();
-            ignoreReason = string.Empty;
-            missReason = string.Empty;
-            lastResult = GreedLastJudgementResult.None;
-            Publish();
         }
 
         public void EnterInfiniteRun()
@@ -759,10 +1229,16 @@ namespace GreedLast
 
         public void EnterInfiniteRun(GreedLastRunRecord loadoutRecord)
         {
+            EnterInfiniteRun(loadoutRecord, string.Empty);
+        }
+
+        public void EnterInfiniteRun(GreedLastRunRecord loadoutRecord, string openingContext)
+        {
             score = 0;
             combo = 0;
             ResetRunVitals();
             ResetRunStats();
+            RegisterInitialFocusState();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
             activePattern = false;
@@ -783,6 +1259,8 @@ namespace GreedLast
             escapeSucceeded = false;
             saveEligible = false;
             infiniteMode = true;
+            refillRunMode = false;
+            practiceMode = false;
             ClearChoices();
             phase = GreedLastRunPhase.RunPlaying;
             choiceKind = GreedLastChoiceKind.None;
@@ -800,9 +1278,23 @@ namespace GreedLast
             startGift = loadoutRecord.IsValid ? loadoutRecord.StartGift : string.Empty;
             primaryGift = loadoutRecord.IsValid ? loadoutRecord.PrimaryGift : string.Empty;
             relic = loadoutRecord.IsValid ? loadoutRecord.Relic : string.Empty;
+            activeInfiniteFocusGiftStacks = BuildStoredGiftStackCount(loadoutRecord, "집중 축");
+            activeInfiniteSurvivalGiftStacks = BuildStoredGiftStackCount(loadoutRecord, "생존 축");
+            activeInfiniteChainGiftStacks = BuildStoredGiftStackCount(loadoutRecord, "연쇄 축");
+            activeInfiniteLoadoutProfile = BuildInfiniteLoadoutProfile(loadoutRecord);
+            activeInfiniteLoadoutDisplayProfile = BuildInfiniteLoadoutDisplayProfile(loadoutRecord);
+            reviewTargetText = ExtractReviewTargetText(openingContext);
             string bonusText = ApplyInfiniteLoadoutBonus(loadoutRecord);
-            PrepareStartCountdown(now, "무한모드 시작 준비 - " + loadoutName
+            string contextPrefix = string.IsNullOrEmpty(openingContext) ? string.Empty : openingContext + "\n";
+            PrepareStartCountdown(now, contextPrefix + "무한모드 시작 준비 - " + loadoutName
+                + BuildChoiceProfileResultLine()
+                + (string.IsNullOrEmpty(relic) ? string.Empty : "\n시작 유물: " + relic + " / 이번 무한 런")
                 + "\n" + bonusText
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(
+                    loadoutRecord,
+                    growthSurvivalLevel,
+                    growthFocusLevel,
+                    growthTimingLevel)
                 + BuildGrowthAppliedText()
                 + "\n카운트 뒤 첫 함정이 내려옵니다.");
             Publish();
@@ -819,9 +1311,83 @@ namespace GreedLast
             startCountdownActive = false;
             autoFlowBeforePause = false;
             infiniteMode = false;
+            refillRunMode = false;
             activeInfiniteLoadoutName = string.Empty;
+            activeInfiniteLoadoutProfile = string.Empty;
+            activeInfiniteLoadoutDisplayProfile = string.Empty;
+            reviewTargetText = string.Empty;
             phase = GreedLastRunPhase.None;
             Publish();
+        }
+
+        private static string ExtractReviewTargetText(string context)
+        {
+            if (string.IsNullOrWhiteSpace(context))
+            {
+                return string.Empty;
+            }
+
+            string[] lines = context.Replace("\r", string.Empty).Split('\n');
+            string reviewTarget = string.Empty;
+            string trainingHint = string.Empty;
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("재도전 목표:", StringComparison.Ordinal))
+                {
+                    return line.Substring("재도전 목표:".Length).Trim();
+                }
+
+                if (line.StartsWith("목표:", StringComparison.Ordinal))
+                {
+                    return line.Substring("목표:".Length).Trim();
+                }
+
+                if (line.StartsWith("복기 목표:", StringComparison.Ordinal))
+                {
+                    reviewTarget = ExtractTargetFromReviewResultLine(line.Substring("복기 목표:".Length).Trim());
+                    continue;
+                }
+
+                if (line.StartsWith("훈련 힌트:", StringComparison.Ordinal))
+                {
+                    trainingHint = line.Substring("훈련 힌트:".Length).Trim();
+                    continue;
+                }
+
+                if (line.StartsWith("힌트:", StringComparison.Ordinal))
+                {
+                    trainingHint = line.Substring("힌트:".Length).Trim();
+                }
+            }
+
+            return !string.IsNullOrEmpty(reviewTarget) ? reviewTarget : trainingHint;
+        }
+
+        private static string ExtractTargetFromReviewResultLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return string.Empty;
+            }
+
+            string[] markers =
+            {
+                " / 실패 ",
+                " / 달성 ",
+                " / 진행 ",
+                " / 기록됨",
+            };
+            for (int i = 0; i < markers.Length; i += 1)
+            {
+                int markerIndex = line.IndexOf(markers[i], StringComparison.Ordinal);
+                if (markerIndex > 0)
+                {
+                    return line.Substring(0, markerIndex).Trim();
+                }
+            }
+
+            return line.Trim();
         }
 
         public GreedLastRunRecord CreateRunRecord()
@@ -834,9 +1400,7 @@ namespace GreedLast
             string gift = string.IsNullOrEmpty(primaryGift) ? "미정 기프트" : primaryGift;
             string chosenRelic = string.IsNullOrEmpty(relic) ? "미정 유물" : relic;
             string chosenStartGift = string.IsNullOrEmpty(startGift) ? "미정 시작" : startGift;
-            string summary = choiceHistoryCount > 0
-                ? string.Join(" / ", choiceHistory, 0, choiceHistoryCount)
-                : "테스트 루트";
+            string summary = BuildChoiceHistorySummary("테스트 루트");
 
             return new GreedLastRunRecord(
                 true,
@@ -844,6 +1408,10 @@ namespace GreedLast
                 health,
                 combo,
                 focus,
+                maxCombo,
+                successCount,
+                goodCount,
+                missCount,
                 distance,
                 gift + " + " + chosenRelic,
                 chosenStartGift,
@@ -867,9 +1435,7 @@ namespace GreedLast
                 return GreedLastRunAttemptRecord.Empty;
             }
 
-            string summary = choiceHistoryCount > 0
-                ? string.Join(" / ", choiceHistory, 0, choiceHistoryCount)
-                : "선택 없음";
+            string summary = BuildChoiceHistorySummary("선택 없음");
 
             return new GreedLastRunAttemptRecord(
                 true,
@@ -892,6 +1458,24 @@ namespace GreedLast
                 BuildTimingProfileText());
         }
 
+        private string BuildChoiceHistorySummary(string fallbackSummary)
+        {
+            string summary = choiceHistoryCount > 0
+                ? string.Join(" / ", choiceHistory, 0, choiceHistoryCount)
+                : fallbackSummary;
+            string profile = BuildActiveChoiceProfile();
+            return IsRecordableChoiceProfile(profile)
+                ? summary + "\n조합 성향: " + profile
+                : summary;
+        }
+
+        private static bool IsRecordableChoiceProfile(string profile)
+        {
+            return !string.IsNullOrEmpty(profile)
+                && profile != "루트 미정"
+                && profile != "저장 조합";
+        }
+
         public GreedLastInfiniteRunRecord CreateInfiniteRunRecord()
         {
             bool hasRunStarted = infiniteMode
@@ -912,10 +1496,12 @@ namespace GreedLast
                 infiniteSectionsCleared,
                 maxInfiniteThreatLevel,
                 BuildCurrentInfiniteLoadoutName(),
+                BuildCurrentInfiniteLoadoutProfile(),
                 successCount,
                 goodCount,
                 missCount,
                 maxCombo,
+                missReason,
                 BuildTimingProfileText());
         }
 
@@ -944,11 +1530,18 @@ namespace GreedLast
                     return;
                 }
 
-                Publish();
+                Publish(now);
                 return;
             }
 
-            if (!stopped)
+            if (!stopped && CanAutoStartPattern && focusStateRemainingSeconds > 0f)
+            {
+                float previousFocusSeconds = focusStateRemainingSeconds;
+                focusStateRemainingSeconds = Mathf.Max(0f, focusStateRemainingSeconds - deltaTime);
+                focusStateActiveSeconds += Mathf.Max(0f, previousFocusSeconds - focusStateRemainingSeconds);
+            }
+
+            if (!stopped && CanAutoStartPattern)
             {
                 distance += deltaTime * RunSpeedMetersPerSecond;
             }
@@ -971,10 +1564,11 @@ namespace GreedLast
             float elapsed = now - patternStartedAt;
             if (!inputConsumed && elapsed > currentPattern.HitSeconds)
             {
+                float signedDelta = elapsed - currentPattern.CoreSeconds;
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "실수 - 입력 없음\n늦음",
+                    "실수 - 입력 없음\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     "no_input"));
                 return;
@@ -1006,7 +1600,7 @@ namespace GreedLast
                 }
                 else
                 {
-                    RestartAutoFlow(now);
+                    RestartAutoFlow(now, "이전 시도 기록 저장 완료");
                 }
 
                 return;
@@ -1031,6 +1625,17 @@ namespace GreedLast
             }
 
             Publish();
+        }
+
+        public void RestartStoppedNormalRun(float now, string restartPrefix)
+        {
+            if (!IsStoppedNormalRun)
+            {
+                ToggleAutoFlow(now);
+                return;
+            }
+
+            RestartAutoFlow(now, string.IsNullOrEmpty(restartPrefix) ? "이전 시도 기록 저장 완료" : restartPrefix);
         }
 
         public void TogglePause(float now)
@@ -1118,20 +1723,19 @@ namespace GreedLast
         {
             if (stopped)
             {
-                ignoreReason = "stopped";
-                Publish();
-                return;
-            }
-
-            if (startCountdownActive)
-            {
-                Ignore("start_countdown", "시작 카운트 중입니다.");
+                Ignore("stopped", BuildStoppedInputMessage());
                 return;
             }
 
             if (paused)
             {
                 Ignore("paused", "일시정지 중입니다. 재개 후 입력하세요.");
+                return;
+            }
+
+            if (startCountdownActive)
+            {
+                Ignore("start_countdown", "시작 카운트 중입니다.");
                 return;
             }
 
@@ -1143,7 +1747,7 @@ namespace GreedLast
 
             if (now < staggerUntil)
             {
-                Ignore("locked_by_stagger", "경직 중 입력은 무효입니다.");
+                Ignore("locked_by_stagger", BuildStaggerInputMessage(now));
                 return;
             }
 
@@ -1162,29 +1766,32 @@ namespace GreedLast
             inputConsumed = true;
             float elapsed = now - patternStartedAt;
             float judgedElapsed = elapsed + inputTimingOffsetSeconds;
+            float signedDelta = judgedElapsed - currentPattern.CoreSeconds;
 
             if (channel != currentPattern.Channel)
             {
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel),
+                    "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel)
+                        + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     "wrong_channel"));
                 return;
             }
 
-            float signedDelta = judgedElapsed - currentPattern.CoreSeconds;
             RecordTimingSample(signedDelta);
             float delta = Mathf.Abs(signedDelta);
             if (delta <= currentPattern.SuccessWindowSeconds)
             {
+                bool centerHit = delta <= BuildCenterHitWindow(currentPattern);
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Success,
                     currentPattern.TimingType,
                     "정확 / " + FormatTimingType(currentPattern.TimingType) + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    string.Empty));
+                    string.Empty,
+                    centerHit));
                 return;
             }
 
@@ -1215,6 +1822,8 @@ namespace GreedLast
                 inputTimingOffsetSeconds + deltaSeconds,
                 MinInputTimingOffsetSeconds,
                 MaxInputTimingOffsetSeconds);
+            timingRecommendationApplied = false;
+            appliedTimingRecommendationMilliseconds = 0;
             SaveInputTimingOffset();
             judgementText = "입력 보정 " + FormatOffset(inputTimingOffsetSeconds);
             Publish();
@@ -1223,6 +1832,8 @@ namespace GreedLast
         public void ResetInputTimingOffset()
         {
             inputTimingOffsetSeconds = 0f;
+            timingRecommendationApplied = false;
+            appliedTimingRecommendationMilliseconds = 0;
             SaveInputTimingOffset();
             judgementText = "입력 보정 0ms";
             Publish();
@@ -1233,16 +1844,21 @@ namespace GreedLast
             if (!HasTimingRecommendation)
             {
                 inputTimingOffsetSeconds = 0f;
+                timingRecommendationApplied = false;
+                appliedTimingRecommendationMilliseconds = 0;
                 SaveInputTimingOffset();
                 judgementText = "보정 추천 샘플 부족 - 입력 보정 0ms";
                 Publish();
                 return;
             }
 
+            int recommendationMilliseconds = TimingRecommendationMilliseconds;
             inputTimingOffsetSeconds = Mathf.Clamp(
-                TimingRecommendationMilliseconds / 1000f,
+                recommendationMilliseconds / 1000f,
                 MinInputTimingOffsetSeconds,
                 MaxInputTimingOffsetSeconds);
+            timingRecommendationApplied = true;
+            appliedTimingRecommendationMilliseconds = recommendationMilliseconds;
             SaveInputTimingOffset();
             judgementText = "추천 입력 보정 적용 " + FormatOffset(inputTimingOffsetSeconds);
             Publish();
@@ -1257,8 +1873,15 @@ namespace GreedLast
                 return;
             }
 
-            focus = MaxFocus;
-            judgementText = "테스트 집중 MAX - 다음 실수에서 집중 보호를 확인할 수 있습니다.";
+            bool wasActive = IsFocusStateActive;
+            focus = 0;
+            focusStateRemainingSeconds = FocusStateDurationSeconds;
+            if (!wasActive)
+            {
+                focusStateActivationCount += 1;
+            }
+
+            judgementText = "테스트 집중 상태 발동 - 정확 성공의 점수와 연쇄 유지 효과를 확인합니다.";
             Publish();
         }
 
@@ -1288,7 +1911,9 @@ namespace GreedLast
 
             infiniteThreatTestOffset += 1;
             maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, GetInfiniteThreatLevel());
-            judgementText = "테스트 위협 상승 - 다음 함정부터 위협 " + GetInfiniteThreatLevel() + " 적용";
+            infiniteThreatBreatherPatternPending = true;
+            judgementText = "테스트 위협 상승 - " + BuildInfiniteThreatChangeSummary()
+                + "\n첫 함정은 유예 패턴으로 폭·보상 확인";
             Publish();
         }
 
@@ -1317,7 +1942,9 @@ namespace GreedLast
             }
 
             infiniteThreatTestOffset -= 1;
-            judgementText = "테스트 위협 하강 - 다음 함정부터 위협 " + GetInfiniteThreatLevel() + " 적용";
+            infiniteThreatBreatherPatternPending = true;
+            judgementText = "테스트 위협 하강 - " + BuildInfiniteThreatChangeSummary()
+                + "\n첫 함정은 유예 패턴으로 폭·보상 확인";
             Publish();
         }
 
@@ -1325,7 +1952,7 @@ namespace GreedLast
         {
             if (!infiniteMode)
             {
-                judgementText = "무한모드에서만 테스트 종료를 사용할 수 있습니다.";
+                judgementText = "무한모드에서만 정산 종료를 사용할 수 있습니다.";
                 Publish();
                 return;
             }
@@ -1349,7 +1976,7 @@ namespace GreedLast
             score = Mathf.Max(score, 1);
             distance = Mathf.Max(distance, 1f);
             missReason = "test_stop";
-            judgementText = "무한모드 테스트 종료\n무한 재시작 또는 로비로 돌아갈 수 있습니다.";
+            judgementText = "무한모드 정산 종료\n기록을 확인한 뒤 재시작하거나 로비로 돌아갈 수 있습니다.";
             Publish();
         }
 
@@ -1404,7 +2031,7 @@ namespace GreedLast
             resumeCountdownActive = true;
             resumeCountdownEndsAt = now + ResumeCountdownSeconds;
             judgementText = "재개 준비 - 카운트 후 함정이 다시 내려옵니다.";
-            Publish();
+            Publish(now);
         }
 
         private void ResumeFromPause(float now)
@@ -1440,7 +2067,7 @@ namespace GreedLast
                 : autoFlow
                     ? "재개 - 앞 박자 여유 후 이어집니다."
                     : "재개 - 자동 진행은 정지 상태입니다.";
-            Publish();
+            Publish(now);
         }
 
         private void SaveInputTimingOffset()
@@ -1454,6 +2081,7 @@ namespace GreedLast
             timingSampleCount += 1;
             timingSignedErrorTotal += signedDeltaSeconds;
             timingAbsErrorTotal += Mathf.Abs(signedDeltaSeconds);
+            timingRecommendedOffsetTotal += inputTimingOffsetSeconds - signedDeltaSeconds;
 
             if (signedDeltaSeconds < -0.02f)
             {
@@ -1462,6 +2090,16 @@ namespace GreedLast
             else if (signedDeltaSeconds > 0.02f)
             {
                 lateInputCount += 1;
+            }
+
+            if (timingRecommendationApplied && HasTimingRecommendation)
+            {
+                int currentMilliseconds = Mathf.RoundToInt(inputTimingOffsetSeconds * 1000f);
+                if (Mathf.Abs(currentMilliseconds - TimingRecommendationMilliseconds) >= 25)
+                {
+                    timingRecommendationApplied = false;
+                    appliedTimingRecommendationMilliseconds = 0;
+                }
             }
         }
 
@@ -1472,18 +2110,60 @@ namespace GreedLast
             missReason = outcome.MissReason;
             judgementText = outcome.Message;
             lastResult = outcome.Result;
+            lastCenterHit = outcome.Result == GreedLastJudgementResult.Success && outcome.CenterHit;
             int comboBeforeResolve = combo;
+            bool focusStateWasActive = IsFocusStateActive;
+            bool recoveryPattern = IsRecoveryPattern(currentPattern);
+            bool routeBundleWasIntact = patternBundleBreakCount <= 0;
             maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, GetInfiniteThreatLevel());
+            RecordCurrentBundleJudgement(outcome.Result);
+            RecordCurrentSegmentJudgement(outcome.Result);
+            RecordAvoidanceJudgement(currentPattern.AvoidanceType, outcome.Result);
 
             switch (outcome.Result)
             {
                 case GreedLastJudgementResult.Success:
                     successCount += 1;
-                    int comboGain = HasChoice(primaryGift, "연쇄 축") || HasChoice(relic, "파라오의 각인") ? 2 : 1;
+                    switch (currentPattern.TimingType)
+                    {
+                        case GreedLastTimingType.Perfect:
+                            perfectSuccessCount += 1;
+                            break;
+                        case GreedLastTimingType.Clutch:
+                            clutchSuccessCount += 1;
+                            break;
+                        case GreedLastTimingType.Offbeat:
+                            offbeatSuccessCount += 1;
+                            break;
+                    }
+
+                    if (focusStateWasActive)
+                    {
+                        focusStateSuccessCount += 1;
+                    }
+
+                    int chainGiftStacks = GetActiveGiftStackCount("연쇄 축");
+                    int comboGain = 1 + Mathf.Min(2, chainGiftStacks);
+                    if (chainGiftStacks > 0 && HasChoice(relic, "파라오의 각인"))
+                    {
+                        comboGain += 1;
+                    }
+
+                    if (recoveryPattern && outcome.CenterHit)
+                    {
+                        comboGain += RecoveryPrecisionComboBonus;
+                    }
+
+                    if (currentPattern.TimingType == GreedLastTimingType.Offbeat && outcome.CenterHit)
+                    {
+                        comboGain += OffbeatFlowComboBonus;
+                    }
+
                     combo += comboGain;
                     maxCombo = Mathf.Max(maxCombo, combo);
                     int successScore = 100 + combo * 10;
-                    int focusGain = HasChoice(primaryGift, "집중 축") ? 2 : 1;
+                    int focusGiftStacks = GetActiveGiftStackCount("집중 축");
+                    int focusGain = 1 + Mathf.Min(2, focusGiftStacks);
                     if (HasChoice(startGift, "고점 본능"))
                     {
                         successScore += 20;
@@ -1499,9 +2179,187 @@ namespace GreedLast
                         successScore += 30;
                     }
 
-                    score += successScore;
-                    focus = Mathf.Min(MaxFocus, focus + focusGain);
-                    AppendChoiceEffect("조합 효과: +" + successScore + "점 / 콤보 +" + comboGain + " / 집중 +" + focusGain);
+                    int threatPrecisionBonus = BuildThreatPrecisionBonus(currentPattern.TimingType);
+                    int variationPrecisionBonus = BuildPatternVariationPrecisionBonus(currentPattern);
+                    int profileSuccessBonus = BuildChoiceProfileSuccessScoreBonus(out string profileSuccessText);
+                    int centerHitBonus = 0;
+                    int centerHitFocusGain = 0;
+                    int recoveryPrecisionBonus = 0;
+                    int recoveryFocusGain = 0;
+                    int perfectFocusChargeGain = 0;
+                    int clutchCounterBonus = 0;
+                    int variationRouteFocusGain = 0;
+                    int pressureRouteCounterBonus = 0;
+                    if (outcome.CenterHit)
+                    {
+                        precisionStreak += 1;
+                        maxPrecisionStreak = Mathf.Max(maxPrecisionStreak, precisionStreak);
+                        centerHitBonus = BuildCenterHitScoreBonus();
+                        if (precisionStreak % PrecisionStreakFocusStep == 0)
+                        {
+                            centerHitFocusGain = 1;
+                        }
+
+                        if (recoveryPattern)
+                        {
+                            recoveryPrecisionCount += 1;
+                            recoveryPrecisionBonus = RecoveryPrecisionScoreBonus;
+                            recoveryFocusGain = RecoveryPrecisionFocusBonus;
+                        }
+
+                        if (currentPattern.TimingType == GreedLastTimingType.Clutch)
+                        {
+                            clutchCounterCount += 1;
+                            clutchCounterBonus = ClutchCounterScoreBonus;
+                        }
+                        else if (currentPattern.TimingType == GreedLastTimingType.Perfect)
+                        {
+                            perfectFocusChargeCount += 1;
+                            perfectFocusChargeGain = PerfectFocusChargeBonus;
+                        }
+                        else if (currentPattern.TimingType == GreedLastTimingType.Offbeat)
+                        {
+                            offbeatFlowCount += 1;
+                        }
+
+                        if (currentPattern.TimingType == GreedLastTimingType.Offbeat
+                            && HasActiveRoute("변주 루트"))
+                        {
+                            variationRouteFlowCount += 1;
+                            variationRouteFocusGain = VariationRouteOffbeatFocusBonus;
+                        }
+
+                        if (currentPattern.TimingType == GreedLastTimingType.Clutch
+                            && HasActiveRoute("압박 루트"))
+                        {
+                            pressureRouteCounterCount += 1;
+                            pressureRouteCounterBonus = PressureRouteClutchScoreBonus;
+                        }
+                    }
+                    else
+                    {
+                        BreakPrecisionStreak();
+                    }
+
+                    int totalSuccessScore = successScore
+                        + threatPrecisionBonus
+                        + variationPrecisionBonus
+                        + profileSuccessBonus
+                        + centerHitBonus
+                        + recoveryPrecisionBonus
+                        + clutchCounterBonus
+                        + pressureRouteCounterBonus;
+                    int focusStateScoreBonus = BuildFocusStateScoreBonus(totalSuccessScore, focusStateWasActive);
+                    totalSuccessScore += focusStateScoreBonus;
+                    score += totalSuccessScore;
+                    GainFocus(
+                        focusGain + centerHitFocusGain + recoveryFocusGain + perfectFocusChargeGain + variationRouteFocusGain,
+                        extendActiveState: true,
+                        out bool focusStateActivated,
+                        out bool focusStateExtended);
+                    string successEffect = "조합 효과: +" + successScore + "점 / 콤보 +" + comboGain;
+                    if (!focusStateWasActive)
+                    {
+                        successEffect += " / 집중 +" + (focusGain + centerHitFocusGain + recoveryFocusGain
+                            + perfectFocusChargeGain + variationRouteFocusGain);
+                    }
+
+                    AppendChoiceEffect(successEffect);
+                    if (focusGiftStacks > 0)
+                    {
+                        AppendChoiceEffect("집중 축 x" + focusGiftStacks + " - 정확 집중 +" + focusGain);
+                    }
+
+                    if (chainGiftStacks > 0)
+                    {
+                        AppendChoiceEffect("연쇄 축 x" + chainGiftStacks + " - 정확 콤보 +" + comboGain);
+                    }
+
+                    if (HasChoice(relic, "황금 박동"))
+                    {
+                        AppendChoiceEffect("황금 박동 - 정확 고점 +40점");
+                    }
+                    else if (chainGiftStacks > 0 && HasChoice(relic, "파라오의 각인"))
+                    {
+                        AppendChoiceEffect("파라오의 각인 - 연쇄 증폭 +1");
+                    }
+
+                    if (profileSuccessBonus > 0)
+                    {
+                        AppendChoiceEffect(profileSuccessText + " +" + profileSuccessBonus + "점");
+                    }
+
+                    if (threatPrecisionBonus > 0)
+                    {
+                        AppendChoiceEffect("무한 위협 정확 보너스 +" + threatPrecisionBonus + "점");
+                    }
+
+                    if (variationPrecisionBonus > 0)
+                    {
+                        AppendChoiceEffect("함정 변주 정확 보너스 +" + variationPrecisionBonus + "점");
+                    }
+
+                    if (centerHitBonus > 0)
+                    {
+                        string centerHitText = "정박 연속 " + precisionStreak + " / 보너스 +" + centerHitBonus + "점";
+                        AppendChoiceEffect(centerHitText);
+                    }
+
+                    if (recoveryPrecisionBonus > 0)
+                    {
+                        string recoveryText = "복구 정박 - 흐름 재점화 / 보너스 +" + recoveryPrecisionBonus
+                            + "점 / 콤보 +" + RecoveryPrecisionComboBonus;
+                        if (!focusStateWasActive)
+                        {
+                            recoveryText += " / 집중 +" + recoveryFocusGain;
+                        }
+
+                        AppendChoiceEffect(recoveryText);
+                    }
+                    else if (recoveryPattern)
+                    {
+                        AppendChoiceEffect("복구 성공 - 흐름 재진입");
+                    }
+
+                    if (perfectFocusChargeGain > 0)
+                    {
+                        AppendChoiceEffect("정박 중앙 - 집중 충전 / 집중 +" + perfectFocusChargeGain);
+                    }
+
+                    if (clutchCounterBonus > 0)
+                    {
+                        AppendChoiceEffect("압박 정박 - 반격 / 보너스 +" + clutchCounterBonus + "점");
+                    }
+                    else if (outcome.CenterHit && currentPattern.TimingType == GreedLastTimingType.Offbeat)
+                    {
+                        AppendChoiceEffect("엇박 정박 - 연쇄 가속 / 콤보 +" + OffbeatFlowComboBonus);
+                    }
+
+                    if (variationRouteFocusGain > 0)
+                    {
+                        AppendChoiceEffect("변주 루트 - 엇박 공명 / 집중 +" + variationRouteFocusGain);
+                    }
+
+                    if (pressureRouteCounterBonus > 0)
+                    {
+                        AppendChoiceEffect("압박 루트 - 클러치 증폭 / 보너스 +" + pressureRouteCounterBonus + "점");
+                    }
+
+                    if (focusStateScoreBonus > 0)
+                    {
+                        AppendChoiceEffect("집중 상태 점수 배율 x" + FocusStateScoreMultiplier.ToString("0.00") + " / +" + focusStateScoreBonus + "점");
+                    }
+
+                    if (focusStateActivated)
+                    {
+                        AppendChoiceEffect("집중 상태 발동 " + FocusStateDurationSeconds.ToString("0.0") + "초");
+                    }
+                    else if (focusStateExtended)
+                    {
+                        AppendChoiceEffect("집중 상태 연장 +" + FocusStateSuccessExtensionSeconds.ToString("0.00") + "초");
+                    }
+
+                    AppendRunStateResult("결과: 점수 +" + totalSuccessScore + " / 콤보 " + combo + " / " + BuildFocusStateResultText());
                     int rhythmChainLevel = GetRhythmChainLevel(combo);
                     if (rhythmChainLevel > 0)
                     {
@@ -1516,20 +2374,38 @@ namespace GreedLast
                     }
                     break;
                 case GreedLastJudgementResult.Good:
+                    patternBundleBreakCount += 1;
                     goodCount += 1;
                     int goodScore = 25;
+                    int profileGoodBonus = BuildChoiceProfileGoodScoreBonus(out string profileGoodText);
                     int goodFocusGain = 0;
                     int goodHealthGain = 0;
+                    int survivalGiftHealthGain = 0;
+                    int stableRouteHealthGain = 0;
                     if (HasChoice(startGift, "박자 감각") || HasChoice(relic, "사막의 잔상"))
                     {
                         goodFocusGain = 1;
-                        focus = Mathf.Min(MaxFocus, focus + goodFocusGain);
                     }
 
-                    if (HasChoice(primaryGift, "생존 축") && health < BuildBonusHealthCap())
+                    int survivalGiftStacks = GetActiveGiftStackCount("생존 축");
+                    if (survivalGiftStacks > 0 && health < BuildBonusHealthCap())
                     {
-                        goodHealthGain = 1;
-                        health += goodHealthGain;
+                        survivalGiftHealthGain = Mathf.Min(
+                            1 + survivalGiftStacks / 2,
+                            BuildBonusHealthCap() - health);
+                        health += survivalGiftHealthGain;
+                        goodHealthGain += survivalGiftHealthGain;
+                        maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
+                    }
+
+                    if (HasActiveRoute("안정 루트") && health < BuildBonusHealthCap())
+                    {
+                        stableRouteHealthGain = Mathf.Min(
+                            StableRouteGoodHealthBonus,
+                            BuildBonusHealthCap() - health);
+                        health += stableRouteHealthGain;
+                        goodHealthGain += stableRouteHealthGain;
+                        stableRouteRecoveryCount += stableRouteHealthGain > 0 ? 1 : 0;
                         maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     }
 
@@ -1538,10 +2414,20 @@ namespace GreedLast
                         goodScore += 15;
                     }
 
+                    goodScore += profileGoodBonus;
+                    int goodFocusStateScoreBonus = BuildFocusStateScoreBonus(goodScore, focusStateWasActive);
+                    goodScore += goodFocusStateScoreBonus;
                     score += goodScore;
-                    combo = 0;
+                    bool focusChainSoftened = focusStateWasActive && comboBeforeResolve > 0;
+                    combo = focusChainSoftened ? Mathf.Max(0, comboBeforeResolve - 1) : 0;
+                    BreakPrecisionStreak();
+                    GainFocus(
+                        goodFocusGain,
+                        extendActiveState: false,
+                        out bool goodFocusStateActivated,
+                        out _);
                     string goodEffectText = "조합 효과: +" + goodScore + "점";
-                    if (goodFocusGain > 0)
+                    if (goodFocusGain > 0 && !focusStateWasActive)
                     {
                         goodEffectText += " / 집중 +" + goodFocusGain;
                     }
@@ -1552,32 +2438,71 @@ namespace GreedLast
                     }
 
                     AppendChoiceEffect(goodEffectText);
-                    AppendChainBreakText(comboBeforeResolve);
+                    if (recoveryPattern)
+                    {
+                        AppendChoiceEffect("복구 보정 - 생존 흐름 유지");
+                    }
+                    if (survivalGiftStacks > 0 && survivalGiftHealthGain > 0)
+                    {
+                        AppendChoiceEffect("생존 축 x" + survivalGiftStacks + " - 보정 회복 +" + survivalGiftHealthGain);
+                    }
+
+                    if (stableRouteHealthGain > 0)
+                    {
+                        AppendChoiceEffect("안정 루트 - 보정 회복 / 체력 +" + stableRouteHealthGain);
+                    }
+
+                    if (HasChoice(relic, "사막의 잔상") && goodFocusGain > 0)
+                    {
+                        AppendChoiceEffect("사막의 잔상 - 보정 집중 +" + goodFocusGain);
+                    }
+
+                    if (profileGoodBonus > 0)
+                    {
+                        AppendChoiceEffect(profileGoodText + " +" + profileGoodBonus + "점");
+                    }
+
+                    if (goodFocusStateScoreBonus > 0)
+                    {
+                        AppendChoiceEffect("집중 상태 점수 배율 / +" + goodFocusStateScoreBonus + "점");
+                    }
+
+                    if (focusChainSoftened)
+                    {
+                        AppendChoiceEffect("집중 상태 - 연쇄 " + comboBeforeResolve + " → " + combo);
+                    }
+
+                    if (goodFocusStateActivated)
+                    {
+                        AppendChoiceEffect("집중 상태 발동 " + FocusStateDurationSeconds.ToString("0.0") + "초");
+                    }
+
+                    AppendRunStateResult("결과: 점수 +" + goodScore + " / 체력 " + health + "/" + BuildBonusHealthCap() + " / " + BuildFocusStateResultText());
+                    if (!focusChainSoftened)
+                    {
+                        AppendChainBreakText(comboBeforeResolve);
+                    }
                     break;
                 case GreedLastJudgementResult.Miss:
+                    patternBundleBreakCount += 1;
                     combo = 0;
+                    BreakPrecisionStreak();
+                    focusStateRemainingSeconds = 0f;
+                    missCount += 1;
+                    if (outcome.MissReason == "no_input")
+                    {
+                        noInputMissCount += 1;
+                    }
                     if (devInvincible)
                     {
-                        missCount += 1;
                         staggerUntil = Time.realtimeSinceStartup + StaggerSeconds;
                         health = Mathf.Max(1, health);
+                        recoveryBreatherPatternPending = true;
                         judgementText += "\n테스트 무적 - 피해를 무시했습니다.";
+                        AppendRunStateResult("결과: 무적 보호 / 체력 " + health + "/" + BuildBonusHealthCap());
                         break;
                     }
 
-                    if (focus >= MaxFocus)
-                    {
-                        focus = 0;
-                        goodCount += 1;
-                        score += 40;
-                        missReason = "focus_guard";
-                        lastResult = GreedLastJudgementResult.Good;
-                        judgementText = "집중 보호 - 피해 무효\n" + outcome.Message;
-                        AppendChainBreakText(comboBeforeResolve);
-                        break;
-                    }
-
-                    missCount += 1;
                     staggerUntil = Time.realtimeSinceStartup + StaggerSeconds;
                     health = Mathf.Max(0, health - 1);
                     if (health == 0)
@@ -1593,12 +2518,22 @@ namespace GreedLast
                         phase = GreedLastRunPhase.FailResolving;
                         saveEligible = false;
                         judgementText = infiniteMode
-                            ? "무한모드 종료 - 체력 0\n무한 재시작 또는 로비로 돌아갈 수 있습니다."
+                            ? "무한모드 종료 - 체력 0\n기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다."
                             : "탈출 실패 - 체력 0\n로비로 돌아가거나 다시 시작하세요.";
+                    }
+                    else
+                    {
+                        recoveryBreatherPatternPending = true;
+                        AppendRunStateResult("결과: 피해 -1 / 체력 " + health + "/" + BuildBonusHealthCap());
                     }
 
                     AppendChainBreakText(comboBeforeResolve);
                     break;
+            }
+
+            if (routeBundleWasIntact && patternBundleBreakCount > 0)
+            {
+                AppendChoiceEffect(BuildRouteBundleBreakText());
             }
 
             if (!stopped)
@@ -1607,6 +2542,414 @@ namespace GreedLast
             }
 
             Publish();
+        }
+
+        private string BuildRouteBundleBreakText()
+        {
+            if (HasActiveRoute("안정 루트"))
+            {
+                return "안정 완주 중단 - 보정 생존, 다음 묶음에서 재도전";
+            }
+
+            if (HasActiveRoute("변주 루트"))
+            {
+                return "변주 완주 중단 - 엇박 흐름, 다음 묶음에서 재도전";
+            }
+
+            if (HasActiveRoute("압박 루트"))
+            {
+                return "압박 완주 중단 - 고점 도전, 다음 묶음에서 재도전";
+            }
+
+            return string.Empty;
+        }
+
+        private void RecordCurrentSegmentJudgement(GreedLastJudgementResult result)
+        {
+            if (infiniteMode || practiceMode)
+            {
+                return;
+            }
+
+            if (phase == GreedLastRunPhase.EscapeRunning)
+            {
+                switch (result)
+                {
+                    case GreedLastJudgementResult.Success:
+                        escapeExactCount += 1;
+                        break;
+                    case GreedLastJudgementResult.Good:
+                        escapeGoodCount += 1;
+                        break;
+                    case GreedLastJudgementResult.Miss:
+                        escapeMissCount += 1;
+                        break;
+                }
+
+                return;
+            }
+
+            int chapterSlot = Mathf.Clamp(chapterIndex, 1, 4) - 1;
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    chapterExactCounts[chapterSlot] += 1;
+                    break;
+                case GreedLastJudgementResult.Good:
+                    chapterGoodCounts[chapterSlot] += 1;
+                    break;
+                case GreedLastJudgementResult.Miss:
+                    chapterMissCounts[chapterSlot] += 1;
+                    break;
+            }
+        }
+
+        private void RecordAvoidanceJudgement(GreedLastAvoidanceType avoidanceType, GreedLastJudgementResult result)
+        {
+            int index = (int)avoidanceType;
+            if (index <= 0 || index >= avoidanceExactCounts.Length)
+            {
+                return;
+            }
+
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    avoidanceExactCounts[index] += 1;
+                    currentBundleAvoidanceMask |= 1 << index;
+                    break;
+                case GreedLastJudgementResult.Good:
+                    avoidanceGoodCounts[index] += 1;
+                    break;
+                case GreedLastJudgementResult.Miss:
+                    avoidanceMissCounts[index] += 1;
+                    break;
+            }
+        }
+
+        private void RecordCurrentBundleJudgement(GreedLastJudgementResult result)
+        {
+            switch (result)
+            {
+                case GreedLastJudgementResult.Success:
+                    currentBundleExactCount += 1;
+                    break;
+                case GreedLastJudgementResult.Good:
+                    currentBundleGoodCount += 1;
+                    break;
+                case GreedLastJudgementResult.Miss:
+                    currentBundleMissCount += 1;
+                    break;
+            }
+        }
+
+        private void CaptureCompletedSegmentPerformance()
+        {
+            if (phase == GreedLastRunPhase.EscapeRunning && coreRetrieved)
+            {
+                lastCompletedSegment = "탈출";
+                lastCompletedSegmentExactCount = currentBundleExactCount;
+                lastCompletedSegmentGoodCount = currentBundleGoodCount;
+                lastCompletedSegmentMissCount = currentBundleMissCount;
+                return;
+            }
+
+            int chapterSlot = Mathf.Clamp(chapterIndex, 1, 4) - 1;
+            lastCompletedSegment = (chapterSlot + 1) + "장";
+            lastCompletedSegmentExactCount = currentBundleExactCount;
+            lastCompletedSegmentGoodCount = currentBundleGoodCount;
+            lastCompletedSegmentMissCount = currentBundleMissCount;
+        }
+
+        private void CaptureCompletedInfiniteSectionPerformance()
+        {
+            lastCompletedSegment = "무한 " + infiniteSectionsCleared + "구간";
+            lastCompletedSegmentExactCount = currentBundleExactCount;
+            lastCompletedSegmentGoodCount = currentBundleGoodCount;
+            lastCompletedSegmentMissCount = currentBundleMissCount;
+        }
+
+        private string BuildCompletedBundlePerformanceText()
+        {
+            string coaching = lastCompletedSegmentMissCount > 0
+                ? "생존 재정비"
+                : lastCompletedSegmentGoodCount > 0 ? "정확권 전환" : "완전 정확";
+            return lastCompletedSegment
+                + " 판정 정확 " + lastCompletedSegmentExactCount
+                + " / 보정 " + lastCompletedSegmentGoodCount
+                + " / 실수 " + lastCompletedSegmentMissCount
+                + " / " + coaching;
+        }
+
+        private void ResetCurrentBundlePerformance()
+        {
+            currentBundleExactCount = 0;
+            currentBundleGoodCount = 0;
+            currentBundleMissCount = 0;
+            currentBundleAvoidanceMask = 0;
+        }
+
+        private bool IsFocusStateActive => focusStateRemainingSeconds > 0.01f;
+
+        private static int BuildFocusStateScoreBonus(int baseScore, bool focusStateActive)
+        {
+            if (!focusStateActive || baseScore <= 0)
+            {
+                return 0;
+            }
+
+            return Mathf.Max(1, Mathf.RoundToInt(baseScore * (FocusStateScoreMultiplier - 1f)));
+        }
+
+        private void GainFocus(
+            int amount,
+            bool extendActiveState,
+            out bool stateActivated,
+            out bool stateExtended)
+        {
+            stateActivated = false;
+            stateExtended = false;
+            if (IsFocusStateActive)
+            {
+                if (extendActiveState)
+                {
+                    float previous = focusStateRemainingSeconds;
+                    focusStateRemainingSeconds = Mathf.Min(
+                        FocusStateMaxDurationSeconds,
+                        focusStateRemainingSeconds + FocusStateSuccessExtensionSeconds);
+                    stateExtended = focusStateRemainingSeconds > previous + 0.001f;
+                }
+
+                return;
+            }
+
+            if (amount <= 0)
+            {
+                return;
+            }
+
+            focus = Mathf.Min(MaxFocus, focus + amount);
+            if (focus < MaxFocus)
+            {
+                return;
+            }
+
+            focus = 0;
+            focusStateRemainingSeconds = FocusStateDurationSeconds;
+            focusStateActivationCount += 1;
+            stateActivated = true;
+        }
+
+        private void RegisterInitialFocusState()
+        {
+            if (IsFocusStateActive)
+            {
+                focusStateActivationCount = Mathf.Max(1, focusStateActivationCount);
+            }
+        }
+
+        private string BuildFocusStateResultText()
+        {
+            return IsFocusStateActive
+                ? "집중 상태 " + focusStateRemainingSeconds.ToString("0.0") + "초"
+                : "집중 " + focus + "/" + MaxFocus;
+        }
+
+        private void AppendRunStateResult(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            judgementText += "\n" + text;
+        }
+
+        private void BreakPrecisionStreak()
+        {
+            if (precisionStreak >= 2)
+            {
+                AppendChoiceEffect("정박 연속 " + precisionStreak + " 끊김");
+            }
+
+            precisionStreak = 0;
+        }
+
+        private int BuildCenterHitScoreBonus()
+        {
+            int streakBonus = Mathf.Clamp(precisionStreak, 1, 9) * 5;
+            int threatBonus = infiniteMode ? GetInfiniteThreatLevel() * 4 : 0;
+            return 25 + streakBonus + threatBonus;
+        }
+
+        private int BuildChoiceProfileSuccessScoreBonus(out string label)
+        {
+            switch (BuildActiveChoiceProfile())
+            {
+                case "안정형":
+                    label = health >= Mathf.Max(2, maxHealthThisRun - 1) ? "안정형 유지" : "안정형 복구";
+                    return health >= Mathf.Max(2, maxHealthThisRun - 1) ? 12 : 8;
+                case "집중형":
+                    label = lastCenterHit ? "집중형 정박" : "집중형 유지";
+                    return lastCenterHit ? 18 : 8;
+                case "연쇄형":
+                    label = combo >= 3 ? "연쇄형 유지" : "연쇄형 시동";
+                    return combo >= 3 ? 20 : 10;
+                case "고점형":
+                    label = lastCenterHit ? "고점형 정박" : "고점형 성공";
+                    return lastCenterHit ? 28 : 18;
+                case "균형형":
+                    label = "균형형 보너스";
+                    return 10;
+                default:
+                    label = string.Empty;
+                    return 0;
+            }
+        }
+
+        private int BuildChoiceProfileGoodScoreBonus(out string label)
+        {
+            switch (BuildActiveChoiceProfile())
+            {
+                case "안정형":
+                    label = "안정형 보정";
+                    return 12;
+                case "집중형":
+                    label = "집중형 보정";
+                    return 8;
+                case "연쇄형":
+                    label = "연쇄형 재정비";
+                    return 6;
+                case "고점형":
+                    label = "고점형 보정";
+                    return 8;
+                case "균형형":
+                    label = "균형형 보정";
+                    return 8;
+                default:
+                    label = string.Empty;
+                    return 0;
+            }
+        }
+
+        private static float BuildCenterHitWindow(GreedLastPatternModel pattern)
+        {
+            return Mathf.Max(0.018f, pattern.SuccessWindowSeconds * CenterHitWindowScale);
+        }
+
+        private int BuildThreatPrecisionBonus(GreedLastTimingType timingType)
+        {
+            return infiniteMode ? BuildThreatPrecisionBonusForLevel(GetInfiniteThreatLevel(), timingType) : 0;
+        }
+
+        private static int BuildThreatPrecisionBonusForLevel(int threatLevel, GreedLastTimingType timingType)
+        {
+            int safeThreatLevel = Mathf.Clamp(threatLevel, 1, InfiniteThreatMaxLevel);
+            int bonus = Mathf.Max(0, safeThreatLevel - 1) * 12;
+            if (timingType == GreedLastTimingType.Clutch)
+            {
+                bonus += safeThreatLevel >= 3 ? 10 : 0;
+            }
+            else if (timingType == GreedLastTimingType.Offbeat)
+            {
+                bonus += safeThreatLevel >= 3 ? 8 : 0;
+            }
+
+            return bonus;
+        }
+
+        private string BuildInfiniteThreatChangeSummary()
+        {
+            int threatLevel = GetInfiniteThreatLevel();
+            return "위협 " + threatLevel + "/5 " + BuildInfiniteThreatPressureLabel(threatLevel)
+                + " / 위험폭 " + BuildInfiniteThreatDangerWidthLabel(threatLevel)
+                + " / " + BuildThreatPrecisionRewardRange(threatLevel);
+        }
+
+        private static string BuildInfiniteThreatPressureLabel(int threatLevel)
+        {
+            switch (Mathf.Clamp(threatLevel, 1, InfiniteThreatMaxLevel))
+            {
+                case 1:
+                    return "안정";
+                case 2:
+                    return "상승";
+                case 3:
+                    return "압박";
+                case 4:
+                    return "고압";
+                default:
+                    return "최고";
+            }
+        }
+
+        private static string BuildInfiniteThreatDangerWidthLabel(int threatLevel)
+        {
+            switch (Mathf.Clamp(threatLevel, 1, InfiniteThreatMaxLevel))
+            {
+                case 1:
+                    return "좁음";
+                case 2:
+                    return "보통";
+                case 3:
+                    return "확대";
+                case 4:
+                    return "넓음";
+                default:
+                    return "최대";
+            }
+        }
+
+        private static string BuildThreatPrecisionRewardRange(int threatLevel)
+        {
+            int perfectBonus = BuildThreatPrecisionBonusForLevel(threatLevel, GreedLastTimingType.Perfect);
+            int clutchBonus = BuildThreatPrecisionBonusForLevel(threatLevel, GreedLastTimingType.Clutch);
+            int offbeatBonus = BuildThreatPrecisionBonusForLevel(threatLevel, GreedLastTimingType.Offbeat);
+            int minBonus = Mathf.Min(perfectBonus, Mathf.Min(clutchBonus, offbeatBonus));
+            int maxBonus = Mathf.Max(perfectBonus, Mathf.Max(clutchBonus, offbeatBonus));
+            return minBonus == maxBonus ? "정확+" + minBonus : "정확+" + minBonus + "~" + maxBonus;
+        }
+
+        private static int BuildPatternVariationPrecisionBonus(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal)
+                || prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return 0;
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return 40;
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return 30;
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal))
+            {
+                return 25;
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                return 22;
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return 20;
+            }
+
+            if (prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return 15;
+            }
+
+            return 0;
         }
 
         public void ToggleDevInvincible()
@@ -1634,6 +2977,32 @@ namespace GreedLast
 
         public void JumpToDevShortcut(GreedLastDevShortcut shortcut, float now)
         {
+            if (shortcut == GreedLastDevShortcut.ReviewTargetCheck && infiniteMode)
+            {
+                PrepareInfiniteReviewTargetDevCheck(now);
+                Publish();
+                return;
+            }
+
+            if (shortcut == GreedLastDevShortcut.RouteCycle)
+            {
+                string nextRoute = BuildNextRouteTestChoice(lastNode);
+                PrepareDevJump(now);
+                PrepareRouteTestDevCheck(nextRoute, now);
+                Publish();
+                return;
+            }
+
+            if (shortcut == GreedLastDevShortcut.AvoidanceCycle)
+            {
+                GreedLastAvoidanceType avoidanceType = (GreedLastAvoidanceType)(devAvoidanceCycleIndex % 3 + 1);
+                devAvoidanceCycleIndex = (devAvoidanceCycleIndex + 1) % 3;
+                PrepareDevJump(now);
+                PrepareAvoidanceTestDevCheck(avoidanceType, now);
+                Publish();
+                return;
+            }
+
             PrepareDevJump(now);
 
             switch (shortcut)
@@ -1669,11 +3038,295 @@ namespace GreedLast
                     coreRetrieved = true;
                     SeedFullDevRoute();
                     phase = GreedLastRunPhase.EscapeRunning;
-                    PrepareStartCountdown(now, "테스트 바로가기 - 탈출 성공 직전\n카운트 뒤 마지막 함정이 내려옵니다.");
+                    PrepareStartCountdown(now, "테스트 바로가기 - 탈출 직전\n카운트 뒤 마지막 함정이 내려옵니다.");
+                    break;
+                case GreedLastDevShortcut.ReviewTargetCheck:
+                    PrepareReviewTargetDevCheck(now);
                     break;
             }
 
             Publish();
+        }
+
+        private static string BuildNextRouteTestChoice(string currentRoute)
+        {
+            if (HasChoice(currentRoute, "안정 루트"))
+            {
+                return "변주 루트";
+            }
+
+            return HasChoice(currentRoute, "변주 루트")
+                ? "압박 루트"
+                : "안정 루트";
+        }
+
+        private void PrepareRouteTestDevCheck(string route, float now)
+        {
+            score = 0;
+            combo = 0;
+            distance = 0f;
+            ResetRunVitals();
+            chapterIndex = 2;
+            chapterProgress = 0;
+            patternIndex = 0;
+            phase = GreedLastRunPhase.RunPlaying;
+            SeedDevChoice(GreedLastChoiceKind.Node, route);
+            string contract = route == "안정 루트"
+                ? "Good 체력 +" + StableRouteGoodHealthBonus + " / 넓은 판정"
+                : route == "변주 루트"
+                    ? "엇박 정박 집중 +" + VariationRouteOffbeatFocusBonus
+                    : "Clutch 정박 +" + PressureRouteClutchScoreBonus + "점 / 좁은 판정";
+            PrepareStartCountdown(
+                now,
+                "테스트 경로 체험 - " + route + "\n" + contract + "\n카운트 뒤 대표 함정이 내려옵니다.");
+        }
+
+        private void PrepareAvoidanceTestDevCheck(GreedLastAvoidanceType avoidanceType, float now)
+        {
+            score = 0;
+            combo = 0;
+            distance = 0f;
+            ResetRunVitals();
+            chapterIndex = 1;
+            chapterProgress = Mathf.Clamp((int)avoidanceType - 1, 0, ChapterTargetPatterns - 1);
+            patternIndex = chapterProgress;
+            phase = GreedLastRunPhase.RunPlaying;
+            SeedDevChoice(GreedLastChoiceKind.StartGift, "박자 감각");
+            string action = avoidanceType == GreedLastAvoidanceType.Jump
+                ? "점프"
+                : avoidanceType == GreedLastAvoidanceType.Slide ? "숙이기" : "비틀기";
+            PrepareStartCountdown(
+                now,
+                "테스트 동작 확인 - " + action
+                    + "\n카운트 뒤 대표 함정의 궤적·자세·판정 피드백을 확인합니다.");
+        }
+
+        private void PrepareReviewTargetDevCheck(float now)
+        {
+            string target = reviewTargetText ?? string.Empty;
+            score = 0;
+            combo = 0;
+            ResetRunVitals();
+            maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
+
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                chapterIndex = 1;
+                chapterProgress = 0;
+                SeedDevChoice(GreedLastChoiceKind.StartGift, "박자 감각");
+                phase = GreedLastRunPhase.RunPlaying;
+                PrepareStartCountdown(now, "테스트 바로가기 - 활성 복기 목표가 없습니다.");
+                return;
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal)
+                || target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                chapterIndex = 4;
+                chapterProgress = ChapterTargetPatterns - 1;
+                coreRetrieved = true;
+                SeedFullDevRoute();
+                phase = GreedLastRunPhase.EscapeRunning;
+                PrepareStartCountdown(
+                    now,
+                    "테스트 목표 직전 - " + target + "\n정확 입력 한 번 뒤 최종 정산을 확인합니다.");
+                return;
+            }
+
+            chapterIndex = 1;
+            chapterProgress = 0;
+            SeedDevChoice(GreedLastChoiceKind.StartGift, "박자 감각");
+            phase = GreedLastRunPhase.RunPlaying;
+            SeedReviewTargetOneHitBefore(target);
+
+            PrepareStartCountdown(
+                now,
+                "테스트 목표 직전 - " + target + "\n"
+                    + (target.Contains("추천 보정 적용", StringComparison.Ordinal)
+                        ? "가운데 추천 적용 버튼으로 달성 피드백을 확인합니다."
+                        : "다음 정확 입력으로 달성 피드백을 확인합니다."));
+        }
+
+        private void PrepareInfiniteReviewTargetDevCheck(float now)
+        {
+            string target = reviewTargetText ?? string.Empty;
+            if (health <= 0)
+            {
+                health = Mathf.Max(1, BuildGrowthMaxHealth());
+                maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
+            }
+
+            currentPattern = GreedLastPatternModel.Empty;
+            activePattern = false;
+            inputConsumed = false;
+            stopped = false;
+            paused = false;
+            resumeCountdownActive = false;
+            startCountdownActive = false;
+            autoFlowBeforePause = false;
+            autoFlow = false;
+            staggerUntil = 0f;
+            lastTickAt = now;
+            saveEligible = false;
+            escapeSucceeded = false;
+            phase = GreedLastRunPhase.RunPlaying;
+            ignoreReason = string.Empty;
+            missReason = string.Empty;
+            lastResult = GreedLastJudgementResult.None;
+
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                PrepareStartCountdown(now, "테스트 바로가기 - 활성 무한 복기 목표가 없습니다.");
+                return;
+            }
+
+            if (target.Contains("무실수", StringComparison.Ordinal)
+                || target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                chapterProgress = ChapterTargetPatterns - 1;
+                goodCount = 0;
+                missCount = 0;
+                currentBundleExactCount = 0;
+                currentBundleGoodCount = 0;
+                currentBundleMissCount = 0;
+                PrepareStartCountdown(
+                    now,
+                    "테스트 무한 목표 직전 - " + target + "\n정확 입력 한 번 뒤 End 정산 종료로 정산을 확인합니다.");
+                return;
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeyword(target, "입력 없음");
+                noInputMissCount = Mathf.Max(0, targetNoInput);
+                chapterProgress = ChapterTargetPatterns - 1;
+                ResetCurrentBundlePerformance();
+                PrepareStartCountdown(
+                    now,
+                    "테스트 무한 목표 직전 - " + target + "\n정확 입력 뒤 End 정산 종료로 입력 누락을 정산합니다.");
+                return;
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarker(target, "구간");
+                infiniteSectionsCleared = Mathf.Max(0, targetSections - 1);
+                chapterProgress = ChapterTargetPatterns - 1;
+                ResetCurrentBundlePerformance();
+                PrepareStartCountdown(
+                    now,
+                    "테스트 무한 목표 직전 - " + target + "\n다음 정확 입력으로 목표 구간에 도달합니다.");
+                return;
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = Mathf.Clamp(ExtractTargetNumberAfterKeyword(target, "위협"), 1, InfiniteThreatMaxLevel);
+                infiniteSectionsCleared = targetThreat <= 1 ? 0 : targetThreat * 2 - 3;
+                infiniteThreatTestOffset = 0;
+                maxInfiniteThreatLevel = Mathf.Max(1, GetInfiniteThreatLevel());
+                chapterProgress = ChapterTargetPatterns - 1;
+                ResetCurrentBundlePerformance();
+                PrepareStartCountdown(
+                    now,
+                    "테스트 무한 목표 직전 - " + target + "\n다음 정확 입력으로 목표 위협에 진입합니다.");
+                return;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeyword(target, "실수");
+                missCount = Mathf.Max(0, targetMisses);
+                chapterProgress = ChapterTargetPatterns - 1;
+                ResetCurrentBundlePerformance();
+                PrepareStartCountdown(
+                    now,
+                    "테스트 무한 목표 직전 - " + target + "\n정확 입력 뒤 End 정산 종료로 허용 실수를 정산합니다.");
+                return;
+            }
+
+            SeedReviewTargetOneHitBefore(target);
+            PrepareStartCountdown(
+                now,
+                "테스트 무한 목표 직전 - " + target + "\n"
+                    + (target.Contains("추천 보정 적용", StringComparison.Ordinal)
+                        ? "가운데 추천 적용 버튼으로 달성 피드백을 확인합니다."
+                        : "다음 정확 입력으로 달성 피드백을 확인합니다."));
+        }
+
+        private void SeedReviewTargetOneHitBefore(string target)
+        {
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                inputTimingOffsetSeconds = 0f;
+                timingSampleCount = TimingRecommendationMinSamples;
+                timingSignedErrorTotal = 0.32f;
+                timingAbsErrorTotal = 0.32f;
+                timingRecommendedOffsetTotal = -0.32f;
+                earlyInputCount = 0;
+                lateInputCount = TimingRecommendationMinSamples;
+                timingRecommendationApplied = false;
+                appliedTimingRecommendationMilliseconds = 0;
+                return;
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int targetCombo = ExtractTargetNumberAfterKeyword(target, "콤보");
+                combo = Mathf.Max(0, targetCombo - 1);
+                maxCombo = Mathf.Max(maxCombo, combo);
+                return;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarker(target, "점");
+                score = Mathf.Max(0, targetScore - 1);
+                return;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeyword(target, "체력")
+                    : ExtractTargetNumberAfterKeyword(target, "생존");
+                maxHealthThisRun = Mathf.Max(maxHealthThisRun, targetHealth);
+                health = Mathf.Clamp(targetHealth, 1, Mathf.Max(1, maxHealthThisRun));
+                return;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                int targetFocus = ExtractTargetNumberAfterKeyword(target, "집중");
+                focusStateRemainingSeconds = 0f;
+                if (target.Contains("발동", StringComparison.Ordinal))
+                {
+                    focusStateActivationCount = Mathf.Max(0, targetFocus - 1);
+                    focus = Mathf.Max(0, MaxFocus - 1);
+                }
+                else
+                {
+                    focusStateActivationCount = 0;
+                    focus = Mathf.Clamp(targetFocus - 1, 0, MaxFocus - 1);
+                }
+
+                return;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetNumberBeforeMarker(target, "연속");
+                if (targetPrecision <= 0)
+                {
+                    targetPrecision = target.Contains("정박", StringComparison.Ordinal)
+                        ? ExtractTargetNumberAfterKeyword(target, "정박")
+                        : ExtractTargetNumberAfterKeyword(target, "정확권");
+                }
+
+                precisionStreak = Mathf.Max(0, targetPrecision - 1);
+                maxPrecisionStreak = Mathf.Max(maxPrecisionStreak, precisionStreak);
+            }
         }
 
         private void PrepareDevJump(float now)
@@ -1689,6 +3342,8 @@ namespace GreedLast
             ResetRunStats();
             infiniteMode = false;
             activeInfiniteLoadoutName = string.Empty;
+            activeInfiniteLoadoutProfile = string.Empty;
+            activeInfiniteLoadoutDisplayProfile = string.Empty;
             currentPattern = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
@@ -1699,6 +3354,7 @@ namespace GreedLast
             autoFlowBeforePause = false;
             autoFlow = false;
             staggerUntil = 0f;
+            focusStateRemainingSeconds = 0f;
             lastTickAt = now;
             coreRetrieved = false;
             escapeSucceeded = false;
@@ -1755,12 +3411,313 @@ namespace GreedLast
             RecordChoice(kind, selected);
         }
 
-        private void RestartAutoFlow(float now)
+        private string BuildActiveChoiceProfile()
+        {
+            if (infiniteMode && !string.IsNullOrEmpty(activeInfiniteLoadoutProfile))
+            {
+                return activeInfiniteLoadoutProfile;
+            }
+
+            int survivalScore = 0;
+            int focusScore = 0;
+            int comboScore = 0;
+            int scoreScore = 0;
+            if (choiceHistoryCount > 0)
+            {
+                for (int i = 0; i < choiceHistoryCount; i += 1)
+                {
+                    AccumulateChoiceProfileScore(
+                        choiceHistory[i],
+                        ref survivalScore,
+                        ref focusScore,
+                        ref comboScore,
+                        ref scoreScore);
+                }
+            }
+            else
+            {
+                AccumulateChoiceProfileScore(startGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+                AccumulateChoiceProfileScore(lastNode, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+                AccumulateChoiceProfileScore(primaryGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+                AccumulateChoiceProfileScore(relic, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            }
+
+            if (survivalScore + focusScore + comboScore + scoreScore <= 0)
+            {
+                return infiniteMode ? "저장 조합" : "루트 미정";
+            }
+
+            int topScore = Mathf.Max(survivalScore, focusScore, comboScore, scoreScore);
+            int topCount = 0;
+            topCount += survivalScore == topScore ? 1 : 0;
+            topCount += focusScore == topScore ? 1 : 0;
+            topCount += comboScore == topScore ? 1 : 0;
+            topCount += scoreScore == topScore ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "균형형";
+            }
+
+            if (survivalScore == topScore)
+            {
+                return "안정형";
+            }
+
+            if (focusScore == topScore)
+            {
+                return "집중형";
+            }
+
+            if (comboScore == topScore)
+            {
+                return "연쇄형";
+            }
+
+            return "고점형";
+        }
+
+        private static string BuildInfiniteLoadoutProfile(GreedLastRunRecord loadoutRecord)
+        {
+            if (!loadoutRecord.IsValid)
+            {
+                return string.Empty;
+            }
+
+            string explicitProfile = ExtractExplicitLoadoutProfile(loadoutRecord.ChoiceSummary);
+            if (!string.IsNullOrEmpty(explicitProfile))
+            {
+                return explicitProfile;
+            }
+
+            int survivalScore = 0;
+            int focusScore = 0;
+            int comboScore = 0;
+            int scoreScore = 0;
+            if (!string.IsNullOrEmpty(loadoutRecord.ChoiceSummary)
+                && loadoutRecord.ChoiceSummary != "선택 없음"
+                && loadoutRecord.ChoiceSummary != "테스트 루트")
+            {
+                AccumulateChoiceProfileTextScore(loadoutRecord.ChoiceSummary, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            }
+            else
+            {
+                AccumulateChoiceProfileScore(loadoutRecord.StartGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+                AccumulateChoiceProfileScore(loadoutRecord.PrimaryGift, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+                AccumulateChoiceProfileScore(loadoutRecord.Relic, ref survivalScore, ref focusScore, ref comboScore, ref scoreScore);
+            }
+
+            return BuildChoiceProfileFromScores(survivalScore, focusScore, comboScore, scoreScore);
+        }
+
+        private static string BuildInfiniteLoadoutDisplayProfile(GreedLastRunRecord loadoutRecord)
+        {
+            if (!loadoutRecord.IsValid)
+            {
+                return string.Empty;
+            }
+
+            string profile = BuildInfiniteLoadoutProfile(loadoutRecord);
+            string route = BuildInfiniteLoadoutRouteProfile(loadoutRecord.ChoiceSummary);
+            return JoinLoadoutProfileAndRoute(profile, route);
+        }
+
+        private static string BuildInfiniteLoadoutRouteProfile(string choiceSummary)
+        {
+            int safeCount = CountChoiceOccurrences(choiceSummary, "안정 루트");
+            int syncopationCount = CountChoiceOccurrences(choiceSummary, "변주 루트");
+            int pressureCount = CountChoiceOccurrences(choiceSummary, "압박 루트");
+            int total = safeCount + syncopationCount + pressureCount;
+            if (total <= 0)
+            {
+                return string.Empty;
+            }
+
+            int top = Mathf.Max(safeCount, syncopationCount, pressureCount);
+            int topCount = 0;
+            topCount += safeCount == top ? 1 : 0;
+            topCount += syncopationCount == top ? 1 : 0;
+            topCount += pressureCount == top ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "혼합 루트";
+            }
+
+            if (safeCount == top)
+            {
+                return "안정 루트";
+            }
+
+            return syncopationCount == top ? "변주 루트" : "압박 루트";
+        }
+
+        private static string JoinLoadoutProfileAndRoute(string profile, string route)
+        {
+            bool hasProfile = !string.IsNullOrEmpty(profile);
+            bool hasRoute = !string.IsNullOrEmpty(route);
+            if (hasProfile && hasRoute)
+            {
+                return profile + " / " + route;
+            }
+
+            return hasProfile ? profile : route;
+        }
+
+        private static string ExtractExplicitLoadoutProfile(string choiceSummary)
+        {
+            if (string.IsNullOrEmpty(choiceSummary))
+            {
+                return string.Empty;
+            }
+
+            string normalized = choiceSummary.Replace("\r", string.Empty);
+            string[] lines = normalized.Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                if (!lines[i].StartsWith("조합 성향:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string profile = lines[i].Substring("조합 성향:".Length).Trim();
+                return IsKnownChoiceProfile(profile) ? profile : string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsKnownChoiceProfile(string profile)
+        {
+            return profile == "안정형"
+                || profile == "집중형"
+                || profile == "연쇄형"
+                || profile == "고점형"
+                || profile == "균형형";
+        }
+
+        private static string BuildChoiceProfileFromScores(int survivalScore, int focusScore, int comboScore, int scoreScore)
+        {
+            if (survivalScore + focusScore + comboScore + scoreScore <= 0)
+            {
+                return string.Empty;
+            }
+
+            int topScore = Mathf.Max(survivalScore, focusScore, comboScore, scoreScore);
+            int topCount = 0;
+            topCount += survivalScore == topScore ? 1 : 0;
+            topCount += focusScore == topScore ? 1 : 0;
+            topCount += comboScore == topScore ? 1 : 0;
+            topCount += scoreScore == topScore ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "균형형";
+            }
+
+            if (survivalScore == topScore)
+            {
+                return "안정형";
+            }
+
+            if (focusScore == topScore)
+            {
+                return "집중형";
+            }
+
+            return comboScore == topScore ? "연쇄형" : "고점형";
+        }
+
+        private static void AccumulateChoiceProfileScore(
+            string choice,
+            ref int survivalScore,
+            ref int focusScore,
+            ref int comboScore,
+            ref int scoreScore)
+        {
+            switch (choice)
+            {
+                case "안정 호흡":
+                case "안정 루트":
+                case "생존 축":
+                case "사막의 잔상":
+                    survivalScore += 2;
+                    break;
+                case "박자 감각":
+                case "변주 루트":
+                case "집중 축":
+                    focusScore += 2;
+                    break;
+                case "압박 루트":
+                case "연쇄 축":
+                case "파라오의 각인":
+                    comboScore += 2;
+                    break;
+                case "고점 본능":
+                case "황금 박동":
+                    scoreScore += 2;
+                    break;
+            }
+
+            if (choice == "사막의 잔상")
+            {
+                focusScore += 1;
+            }
+
+            if (choice == "파라오의 각인")
+            {
+                focusScore += 1;
+            }
+        }
+
+        private static void AccumulateChoiceProfileTextScore(
+            string text,
+            ref int survivalScore,
+            ref int focusScore,
+            ref int comboScore,
+            ref int scoreScore)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            AddChoiceProfileTextScore(text, "안정 호흡", ref survivalScore, 2);
+            AddChoiceProfileTextScore(text, "안정 루트", ref survivalScore, 2);
+            AddChoiceProfileTextScore(text, "생존 축", ref survivalScore, 2);
+            AddChoiceProfileTextScore(text, "사막의 잔상", ref survivalScore, 2);
+            AddChoiceProfileTextScore(text, "박자 감각", ref focusScore, 2);
+            AddChoiceProfileTextScore(text, "변주 루트", ref focusScore, 2);
+            AddChoiceProfileTextScore(text, "집중 축", ref focusScore, 2);
+            AddChoiceProfileTextScore(text, "압박 루트", ref comboScore, 2);
+            AddChoiceProfileTextScore(text, "연쇄 축", ref comboScore, 2);
+            AddChoiceProfileTextScore(text, "파라오의 각인", ref comboScore, 2);
+            AddChoiceProfileTextScore(text, "고점 본능", ref scoreScore, 2);
+            AddChoiceProfileTextScore(text, "황금 박동", ref scoreScore, 2);
+
+            if (ContainsChoice(text, "사막의 잔상"))
+            {
+                focusScore += 1;
+            }
+
+            if (ContainsChoice(text, "파라오의 각인"))
+            {
+                focusScore += 1;
+            }
+        }
+
+        private static void AddChoiceProfileTextScore(string text, string choice, ref int score, int amount)
+        {
+            if (ContainsChoice(text, choice))
+            {
+                score += amount;
+            }
+        }
+
+        private void RestartAutoFlow(float now, string restartPrefix = null)
         {
             score = 0;
             combo = 0;
             ResetRunVitals();
             ResetRunStats();
+            RegisterInitialFocusState();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
             activePattern = false;
@@ -1780,10 +3737,14 @@ namespace GreedLast
             escapeSucceeded = false;
             saveEligible = false;
             infiniteMode = false;
+            activeInfiniteLoadoutName = string.Empty;
+            activeInfiniteLoadoutProfile = string.Empty;
+            activeInfiniteLoadoutDisplayProfile = string.Empty;
             ClearChoices();
             OpenChoice(GreedLastChoiceKind.StartGift);
             autoFlow = false;
-            judgementText = "재도전 시작 - 시작 기프트를 선택하세요." + BuildGrowthAppliedText();
+            judgementText = (string.IsNullOrEmpty(restartPrefix) ? string.Empty : restartPrefix + "\n")
+                + "재도전 시작 - 시작 기프트를 선택하세요." + BuildGrowthAppliedText();
             ignoreReason = string.Empty;
             missReason = string.Empty;
             lastResult = GreedLastJudgementResult.None;
@@ -1856,6 +3817,7 @@ namespace GreedLast
                     judgementText += "\n효과: " + rewardText;
                 }
 
+                judgementText += BuildChoiceProfileResultLine();
                 OpenChoice(GreedLastChoiceKind.Gift);
                 Publish();
                 return;
@@ -1871,6 +3833,7 @@ namespace GreedLast
                     judgementText += "\n효과: " + rewardText;
                 }
 
+                judgementText += BuildChoiceProfileResultLine();
                 OpenChoice(GreedLastChoiceKind.Relic);
                 Publish();
                 return;
@@ -1902,8 +3865,97 @@ namespace GreedLast
             string readyText = string.IsNullOrEmpty(rewardText)
                 ? nextText
                 : nextText + "\n효과: " + rewardText;
+            readyText += BuildChoiceProfileResultLine();
             PrepareStartCountdown(now, readyText + "\n카운트 뒤 첫 함정이 내려옵니다.");
             Publish();
+        }
+
+        private string BuildChoiceProfileResultLine()
+        {
+            string profile = BuildActiveChoiceProfile();
+            if (!IsRecordableChoiceProfile(profile))
+            {
+                return string.Empty;
+            }
+
+            string displayProfile = infiniteMode
+                ? BuildCurrentInfiniteLoadoutProfile()
+                : JoinLoadoutProfileAndRoute(profile, BuildActiveRouteProfile());
+            return "\n조합 성향: " + (string.IsNullOrEmpty(displayProfile) ? profile : displayProfile);
+        }
+
+        private string BuildActiveRouteProfile()
+        {
+            int safeCount = CountChoiceHistoryOccurrences("안정 루트");
+            int syncopationCount = CountChoiceHistoryOccurrences("변주 루트");
+            int pressureCount = CountChoiceHistoryOccurrences("압박 루트");
+            int total = safeCount + syncopationCount + pressureCount;
+            if (total <= 0)
+            {
+                return string.Empty;
+            }
+
+            int top = Mathf.Max(safeCount, syncopationCount, pressureCount);
+            int topCount = 0;
+            topCount += safeCount == top ? 1 : 0;
+            topCount += syncopationCount == top ? 1 : 0;
+            topCount += pressureCount == top ? 1 : 0;
+            if (topCount > 1)
+            {
+                return "혼합 루트";
+            }
+
+            if (safeCount == top)
+            {
+                return "안정 루트";
+            }
+
+            return syncopationCount == top ? "변주 루트" : "압박 루트";
+        }
+
+        private int CountChoiceHistoryOccurrences(string choice)
+        {
+            int count = 0;
+            for (int i = 0; i < choiceHistoryCount; i += 1)
+            {
+                if (string.Equals(choiceHistory[i], choice, StringComparison.Ordinal))
+                {
+                    count += 1;
+                }
+            }
+
+            return count;
+        }
+
+        private int GetActiveGiftStackCount(string gift)
+        {
+            if (!infiniteMode)
+            {
+                return CountChoiceHistoryOccurrences(gift);
+            }
+
+            switch (gift)
+            {
+                case "집중 축":
+                    return activeInfiniteFocusGiftStacks;
+                case "생존 축":
+                    return activeInfiniteSurvivalGiftStacks;
+                case "연쇄 축":
+                    return activeInfiniteChainGiftStacks;
+                default:
+                    return 0;
+            }
+        }
+
+        private static int BuildStoredGiftStackCount(GreedLastRunRecord record, string gift)
+        {
+            if (!record.IsValid)
+            {
+                return 0;
+            }
+
+            int stacks = CountChoiceOccurrences(record.ChoiceSummary, gift);
+            return stacks > 0 || !HasChoice(record.PrimaryGift, gift) ? stacks : 1;
         }
 
         private void RecordChoice(GreedLastChoiceKind completedKind, string selected)
@@ -1948,6 +4000,9 @@ namespace GreedLast
             lastNode = string.Empty;
             primaryGift = string.Empty;
             relic = string.Empty;
+            activeInfiniteFocusGiftStacks = 0;
+            activeInfiniteSurvivalGiftStacks = 0;
+            activeInfiniteChainGiftStacks = 0;
         }
 
         private string ApplyChoiceReward(GreedLastChoiceKind completedKind, string selected)
@@ -1955,8 +4010,7 @@ namespace GreedLast
             switch (selected)
             {
                 case "박자 감각":
-                    focus = Mathf.Min(MaxFocus, focus + 1);
-                    return "집중 +1";
+                    return ApplyChoiceFocusReward(1);
                 case "안정 호흡":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
@@ -1967,43 +4021,65 @@ namespace GreedLast
                 case "안정 루트":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return "체력 +1";
+                    return "체력 +1 / 넓은 판정 / Good 체력 +" + StableRouteGoodHealthBonus;
                 case "변주 루트":
-                    focus = Mathf.Min(MaxFocus, focus + 1);
-                    return "집중 +1";
+                    return ApplyChoiceFocusReward(1) + " / 엇박 우선 / 정박 집중 +" + VariationRouteOffbeatFocusBonus;
                 case "압박 루트":
                     combo += 1;
                     maxCombo = Mathf.Max(maxCombo, combo);
                     score += 120;
-                    return "콤보 +1 / 점수 +120";
+                    return "콤보 +1 / 점수 +120 / 좁은 판정 / Clutch +" + PressureRouteClutchScoreBonus;
                 case "집중 축":
-                    focus = Mathf.Min(MaxFocus, focus + 2);
-                    return "집중 +2";
+                    return AppendGiftStackReward(selected, ApplyChoiceFocusReward(2));
                 case "생존 축":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return "체력 +1";
+                    return AppendGiftStackReward(selected, "체력 +1");
                 case "연쇄 축":
                     combo += 2;
                     maxCombo = Mathf.Max(maxCombo, combo);
                     score += 60;
-                    return "콤보 +2 / 점수 +60";
+                    return AppendGiftStackReward(selected, "콤보 +2 / 점수 +60");
                 case "황금 박동":
                     score += 200;
                     return "점수 +200";
                 case "사막의 잔상":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    focus = Mathf.Min(MaxFocus, focus + 1);
-                    return "체력 +1 / 집중 +1";
+                    return "체력 +1 / " + ApplyChoiceFocusReward(1);
                 case "파라오의 각인":
                     combo += 3;
                     maxCombo = Mathf.Max(maxCombo, combo);
-                    focus = MaxFocus;
-                    return "콤보 +3 / 집중 최대";
+                    return "콤보 +3 / " + ApplyChoiceFocusReward(MaxFocus);
                 default:
                     return completedKind == GreedLastChoiceKind.None ? string.Empty : "기본 흐름 유지";
             }
+        }
+
+        private string AppendGiftStackReward(string gift, string rewardText)
+        {
+            int stacks = CountChoiceHistoryOccurrences(gift);
+            return rewardText + " / " + gift + " 누적 " + Mathf.Max(1, stacks);
+        }
+
+        private string ApplyChoiceFocusReward(int amount)
+        {
+            GainFocus(
+                Mathf.Max(0, amount),
+                extendActiveState: true,
+                out bool stateActivated,
+                out bool stateExtended);
+            if (stateActivated)
+            {
+                return "집중 상태 발동";
+            }
+
+            if (stateExtended)
+            {
+                return "집중 상태 연장";
+            }
+
+            return "집중 +" + Mathf.Max(0, amount);
         }
 
         public static string BuildInfiniteLoadoutBonusPreview(GreedLastRunRecord loadoutRecord)
@@ -2022,6 +4098,163 @@ namespace GreedLast
             return text;
         }
 
+        public static GreedLastRunRecord CreatePreparedInfiniteLoadout(
+            GreedLastRunRecord storedLoadout,
+            string preparationGift,
+            string preparationRelic)
+        {
+            if (!storedLoadout.IsValid)
+            {
+                return GreedLastRunRecord.Empty;
+            }
+
+            string gift = IsInfinitePreparationGift(preparationGift)
+                ? preparationGift
+                : string.Empty;
+            string relicChoice = IsInfinitePreparationRelic(preparationRelic)
+                ? preparationRelic
+                : string.Empty;
+            string summary = storedLoadout.ChoiceSummary ?? string.Empty;
+            if (!string.IsNullOrEmpty(gift))
+            {
+                summary = string.IsNullOrEmpty(summary) ? gift : summary + " / " + gift;
+            }
+
+            return new GreedLastRunRecord(
+                true,
+                storedLoadout.Score,
+                storedLoadout.Health,
+                storedLoadout.Combo,
+                storedLoadout.Focus,
+                storedLoadout.MaxCombo,
+                storedLoadout.SuccessCount,
+                storedLoadout.GoodCount,
+                storedLoadout.MissCount,
+                storedLoadout.Distance,
+                storedLoadout.LoadoutName,
+                storedLoadout.StartGift,
+                storedLoadout.PrimaryGift,
+                relicChoice,
+                summary,
+                storedLoadout.TimingProfile);
+        }
+
+        private static bool IsInfinitePreparationGift(string gift)
+        {
+            return gift == "집중 축" || gift == "생존 축" || gift == "연쇄 축";
+        }
+
+        private static bool IsInfinitePreparationRelic(string relicChoice)
+        {
+            return relicChoice == "황금 박동"
+                || relicChoice == "사막의 잔상"
+                || relicChoice == "파라오의 각인";
+        }
+
+        public static string BuildInfiniteLoadoutBonusBreakdown(GreedLastRunRecord loadoutRecord)
+        {
+            GreedLastInfiniteLoadoutBonus bonus = CalculateInfiniteLoadoutBonus(loadoutRecord);
+            if (!loadoutRecord.IsValid || !bonus.HasAnyBonus)
+            {
+                return "보너스 상세: 기본 체력 / 기본 집중 / 콤보 0 / 점수 0";
+            }
+
+            string text = "보너스 상세: 체력 +" + bonus.HealthBonus
+                + " / 집중 +" + bonus.FocusBonus
+                + " / 콤보 +" + bonus.ComboBonus
+                + " / 점수 +" + bonus.ScoreBonus;
+            string reason = BuildInfiniteLoadoutBonusReason(loadoutRecord);
+            return string.IsNullOrEmpty(reason)
+                ? text
+                : text + "\n근거: " + reason;
+        }
+
+        public static string BuildInfiniteLoadoutBonusGrade(GreedLastRunRecord loadoutRecord)
+        {
+            GreedLastInfiniteLoadoutBonus bonus = CalculateInfiniteLoadoutBonus(loadoutRecord);
+            if (!loadoutRecord.IsValid || !bonus.HasAnyBonus)
+            {
+                return "보너스 기본";
+            }
+
+            int value = bonus.HealthBonus * 2
+                + bonus.FocusBonus
+                + bonus.ComboBonus
+                + Mathf.Clamp(bonus.ScoreBonus / 80, 0, 4);
+            if (value >= 8)
+            {
+                return "보너스 S";
+            }
+
+            if (value >= 5)
+            {
+                return "보너스 A";
+            }
+
+            if (value >= 3)
+            {
+                return "보너스 B";
+            }
+
+            return "보너스 C";
+        }
+
+        public static string BuildInfiniteLoadoutStartStatePreview(
+            GreedLastRunRecord loadoutRecord,
+            int survivalLevel,
+            int focusLevel,
+            int timingLevel)
+        {
+            GreedLastInfiniteLoadoutBonus bonus = CalculateInfiniteLoadoutBonus(loadoutRecord);
+            int safeSurvivalLevel = Mathf.Clamp(survivalLevel, 0, MaxGrowthLevel);
+            int safeFocusLevel = Mathf.Clamp(focusLevel, 0, MaxGrowthLevel);
+            int safeTimingLevel = Mathf.Clamp(timingLevel, 0, MaxGrowthLevel);
+            int baseHealth = MaxHealth + safeSurvivalLevel;
+            int healthCap = baseHealth + 2;
+            int startHealth = Mathf.Clamp(baseHealth + bonus.HealthBonus, 1, healthCap);
+            int totalStartFocus = Mathf.Clamp(safeFocusLevel, 0, MaxFocus) + bonus.FocusBonus;
+            bool startsInFocusState = totalStartFocus >= MaxFocus;
+            int startFocus = startsInFocusState ? 0 : Mathf.Clamp(totalStartFocus, 0, MaxFocus);
+            int startCombo = Mathf.Clamp(bonus.ComboBonus, 0, 9);
+            string text = "시작 상태: 체력 " + startHealth + "/" + healthCap
+                + (startsInFocusState
+                    ? " / 집중 상태 " + FocusStateDurationSeconds.ToString("0.0") + "초"
+                    : " / 집중 " + startFocus + "/" + MaxFocus)
+                + " / 콤보 " + startCombo
+                + " / 점수 " + bonus.ScoreBonus;
+            string routePreview = BuildInfiniteLoadoutRouteStartPreview(loadoutRecord);
+            if (!string.IsNullOrEmpty(routePreview))
+            {
+                text += "\n무한 루트: " + routePreview;
+            }
+
+            if (safeTimingLevel > 0)
+            {
+                text += "\n판정 보정: 정확 +" + (safeTimingLevel * 5)
+                    + "ms / 보정 +" + (safeTimingLevel * 12) + "ms";
+            }
+
+            return text;
+        }
+
+        private static string BuildInfiniteLoadoutRouteStartPreview(GreedLastRunRecord loadoutRecord)
+        {
+            string route = BuildInfiniteLoadoutRouteProfile(loadoutRecord.ChoiceSummary);
+            switch (route)
+            {
+                case "압박 루트":
+                    return "압박 태그와 클러치 패턴이 가끔 강화";
+                case "변주 루트":
+                    return "엇박 패턴이 가끔 섞임";
+                case "안정 루트":
+                    return "정박 패턴으로 안정 진입";
+                case "혼합 루트":
+                    return "혼합 성향 / 기본 위협 중심";
+                default:
+                    return string.Empty;
+            }
+        }
+
         private string ApplyInfiniteLoadoutBonus(GreedLastRunRecord loadoutRecord)
         {
             GreedLastInfiniteLoadoutBonus bonus = CalculateInfiniteLoadoutBonus(loadoutRecord);
@@ -2032,7 +4265,7 @@ namespace GreedLast
 
             health = Mathf.Clamp(health + bonus.HealthBonus, 1, BuildBonusHealthCap());
             maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-            focus = Mathf.Clamp(focus + bonus.FocusBonus, 0, MaxFocus);
+            GainFocus(bonus.FocusBonus, extendActiveState: true, out _, out _);
             combo = Mathf.Clamp(combo + bonus.ComboBonus, 0, 9);
             maxCombo = Mathf.Max(maxCombo, combo);
             score += bonus.ScoreBonus;
@@ -2050,10 +4283,23 @@ namespace GreedLast
             int focusBonus = 0;
             int comboBonus = 0;
             int scoreBonus = Mathf.Clamp(Mathf.RoundToInt(loadoutRecord.Score * 0.10f), 0, 200);
+            int judgementTotal = loadoutRecord.SuccessCount + loadoutRecord.GoodCount + loadoutRecord.MissCount;
 
             AccumulateLoadoutKeywordBonus(loadoutRecord.StartGift, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
-            AccumulateLoadoutKeywordBonus(loadoutRecord.PrimaryGift, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
-            AccumulateLoadoutKeywordBonus(loadoutRecord.Relic, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
+            int survivalGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "생존 축");
+            int focusGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "집중 축");
+            int chainGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "연쇄 축");
+            if (survivalGiftStacks + focusGiftStacks + chainGiftStacks > 0)
+            {
+                healthBonus += Mathf.Min(2, survivalGiftStacks);
+                focusBonus += focusGiftStacks > 0 ? Mathf.Min(MaxFocus, focusGiftStacks + 1) : 0;
+                comboBonus += Mathf.Min(5, chainGiftStacks * 2);
+                scoreBonus += Mathf.Min(180, chainGiftStacks * 60);
+            }
+            else
+            {
+                AccumulateLoadoutKeywordBonus(loadoutRecord.PrimaryGift, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
+            }
 
             if (ContainsChoice(loadoutRecord.ChoiceSummary, "안정 루트"))
             {
@@ -2071,11 +4317,84 @@ namespace GreedLast
                 scoreBonus += 50;
             }
 
+            if (loadoutRecord.MaxCombo >= 6)
+            {
+                comboBonus += 1;
+            }
+
+            if (loadoutRecord.MaxCombo >= 10)
+            {
+                scoreBonus += 60;
+            }
+
+            if (judgementTotal > 0 && loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount >= loadoutRecord.GoodCount + loadoutRecord.MissCount)
+            {
+                focusBonus += 1;
+                scoreBonus += 40;
+            }
+
+            int precisionStreak = ExtractPrecisionStreak(loadoutRecord.TimingProfile);
+            if (precisionStreak >= 3)
+            {
+                focusBonus += 1;
+                scoreBonus += Mathf.Clamp(precisionStreak * 12, 36, 80);
+            }
+
+            if (precisionStreak >= 5)
+            {
+                comboBonus += 1;
+                scoreBonus += 40;
+            }
+
+            if (loadoutRecord.MissCount >= 3)
+            {
+                scoreBonus = Mathf.Max(0, scoreBonus - 40);
+            }
+
             return new GreedLastInfiniteLoadoutBonus(
                 Mathf.Clamp(healthBonus, 0, 2),
                 Mathf.Clamp(focusBonus, 0, MaxFocus),
                 Mathf.Clamp(comboBonus, 0, 5),
                 Mathf.Clamp(scoreBonus, 0, 300));
+        }
+
+        private static string BuildInfiniteLoadoutBonusReason(GreedLastRunRecord loadoutRecord)
+        {
+            if (!loadoutRecord.IsValid)
+            {
+                return string.Empty;
+            }
+
+            string reason = string.Empty;
+            int survivalGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "생존 축");
+            int focusGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "집중 축");
+            int chainGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "연쇄 축");
+            AppendBonusReason(
+                ref reason,
+                loadoutRecord.Health >= 4 || survivalGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "생존 축"),
+                survivalGiftStacks > 1 ? "생존 x" + survivalGiftStacks : "생존");
+            AppendBonusReason(
+                ref reason,
+                loadoutRecord.Focus >= MaxFocus || focusGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "집중 축"),
+                focusGiftStacks > 1 ? "집중 x" + focusGiftStacks : "집중");
+            AppendBonusReason(
+                ref reason,
+                loadoutRecord.MaxCombo >= 6 || chainGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "연쇄 축"),
+                chainGiftStacks > 1 ? "연쇄 x" + chainGiftStacks : "연쇄");
+            AppendBonusReason(ref reason, loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount > 0, "정확도");
+            AppendBonusReason(ref reason, ExtractPrecisionStreak(loadoutRecord.TimingProfile) >= 3, "정박");
+            AppendBonusReason(ref reason, loadoutRecord.Score >= 700 || ContainsChoice(loadoutRecord.StartGift, "고점 본능"), "고점");
+            return reason;
+        }
+
+        private static void AppendBonusReason(ref string reason, bool condition, string label)
+        {
+            if (!condition)
+            {
+                return;
+            }
+
+            reason = string.IsNullOrEmpty(reason) ? label : reason + " / " + label;
         }
 
         private static void AccumulateLoadoutKeywordBonus(
@@ -2126,9 +4445,83 @@ namespace GreedLast
                 && choiceSummary.IndexOf(choice, StringComparison.Ordinal) >= 0;
         }
 
+        private static int CountChoiceOccurrences(string text, string choice)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(choice))
+            {
+                return 0;
+            }
+
+            int count = 0;
+            int index = 0;
+            while (index < text.Length)
+            {
+                int nextIndex = text.IndexOf(choice, index, StringComparison.Ordinal);
+                if (nextIndex < 0)
+                {
+                    break;
+                }
+
+                count += 1;
+                index = nextIndex + choice.Length;
+            }
+
+            return count;
+        }
+
+        private static int ExtractPrecisionStreak(string timingProfile)
+        {
+            if (string.IsNullOrWhiteSpace(timingProfile))
+            {
+                return 0;
+            }
+
+            string normalized = timingProfile.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            string prefix = "정박 최고 ";
+            int start = normalized.IndexOf(prefix, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return 0;
+            }
+
+            start += prefix.Length;
+            int end = start;
+            while (end < normalized.Length && char.IsDigit(normalized[end]))
+            {
+                end += 1;
+            }
+
+            if (end <= start)
+            {
+                return 0;
+            }
+
+            return int.TryParse(normalized.Substring(start, end - start), out int value)
+                ? Mathf.Max(0, value)
+                : 0;
+        }
+
         private static bool HasChoice(string selected, string expected)
         {
             return string.Equals(selected, expected, StringComparison.Ordinal);
+        }
+
+        private bool HasActiveRoute(string routeName)
+        {
+            if (HasChoice(lastNode, routeName))
+            {
+                return true;
+            }
+
+            return infiniteMode
+                && !string.IsNullOrEmpty(activeInfiniteLoadoutDisplayProfile)
+                && activeInfiniteLoadoutDisplayProfile.Contains(routeName, StringComparison.Ordinal);
+        }
+
+        private static bool IsRecoveryPattern(GreedLastPatternModel pattern)
+        {
+            return !string.IsNullOrEmpty(pattern.Prompt)
+                && pattern.Prompt.Contains("[복구]", StringComparison.Ordinal);
         }
 
         private static int GetRhythmChainLevel(int comboValue)
@@ -2149,6 +4542,41 @@ namespace GreedLast
             return string.IsNullOrEmpty(activeInfiniteLoadoutName)
                 ? "저장 조합 없음"
                 : activeInfiniteLoadoutName;
+        }
+
+        private string BuildCurrentInfiniteLoadoutProfile()
+        {
+            if (!string.IsNullOrEmpty(activeInfiniteLoadoutDisplayProfile))
+            {
+                return activeInfiniteLoadoutDisplayProfile;
+            }
+
+            string profile = BuildActiveChoiceProfile();
+            return string.IsNullOrEmpty(profile) || profile == "루트 미정" || profile == "저장 조합"
+                ? string.Empty
+                : profile;
+        }
+
+        private string BuildCurrentActiveRouteProfile()
+        {
+            if (!infiniteMode)
+            {
+                return lastNode;
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("안정 루트", StringComparison.Ordinal))
+            {
+                return "안정 루트";
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("변주 루트", StringComparison.Ordinal))
+            {
+                return "변주 루트";
+            }
+
+            return activeInfiniteLoadoutDisplayProfile.Contains("압박 루트", StringComparison.Ordinal)
+                ? "압박 루트"
+                : string.Empty;
         }
 
         private void AppendChainBreakText(int previousCombo)
@@ -2173,28 +4601,78 @@ namespace GreedLast
         private void AdvanceRunAfterPattern(float now)
         {
             chapterProgress += 1;
+            bool patternBundleCompleted = chapterProgress >= ChapterTargetPatterns;
+            string patternBundleRewardText = patternBundleCompleted && !practiceMode
+                ? ApplyCompletedPatternBundleReward()
+                : string.Empty;
+            string precisionPayoffText = patternBundleCompleted
+                ? BuildCompletedPatternPrecisionPayoffText()
+                : string.Empty;
+            if (patternBundleCompleted && !practiceMode && !infiniteMode)
+            {
+                CaptureCompletedSegmentPerformance();
+                ResetCurrentBundlePerformance();
+            }
+
+            if (practiceMode && patternBundleCompleted)
+            {
+                autoFlow = false;
+                stopped = true;
+                activePattern = false;
+                inputConsumed = true;
+                saveEligible = false;
+                phase = GreedLastRunPhase.ClearResolving;
+                judgementText = "기초연습 완료 - 3축 대응 확인"
+                    + "\n정확 " + successCount + " / 보정 " + goodCount + " / 실수 " + missCount
+                    + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
+                    + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText)
+                    + "\n" + BuildPracticeCompletionReviewText()
+                    + "\n다시 연습하거나 로비에서 일반 런을 시작하세요.";
+                ResetCurrentBundlePerformance();
+                return;
+            }
+
             if (infiniteMode)
             {
-                if (chapterProgress >= ChapterTargetPatterns)
+                bool threatRose = false;
+                if (patternBundleCompleted)
                 {
+                    if (!string.IsNullOrEmpty(patternBundleRewardText))
+                    {
+                        judgementText += "\n" + patternBundleRewardText;
+                    }
+
+                    int previousThreatLevel = GetInfiniteThreatLevel();
                     chapterProgress = 0;
                     infiniteSectionsCleared += 1;
-                    maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, GetInfiniteThreatLevel());
-                    int sectionBonus = 50 * GetInfiniteThreatLevel();
+                    CaptureCompletedInfiniteSectionPerformance();
+                    int currentThreatLevel = GetInfiniteThreatLevel();
+                    maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, currentThreatLevel);
+                    threatRose = currentThreatLevel > previousThreatLevel;
+                    int sectionBonus = 50 * currentThreatLevel;
                     score += sectionBonus;
                     judgementText += "\n무한 구간 유지 보너스 +" + sectionBonus
-                        + " / 위협 " + GetInfiniteThreatLevel();
+                        + " / 위협 " + currentThreatLevel
+                        + "\n" + BuildCompletedBundlePerformanceText();
+                    if (threatRose)
+                    {
+                        judgementText += "\n위협 상승 - " + BuildInfiniteThreatChangeSummary()
+                            + "\n짧은 호흡 뒤 함정 속도와 판정 압박 증가";
+                        infiniteThreatBreatherPatternPending = true;
+                    }
+
+                    ResetCurrentBundlePerformance();
                 }
 
                 phase = GreedLastRunPhase.RunPlaying;
                 autoFlow = true;
-                nextPatternAt = now + AutoGapSeconds;
+                nextPatternAt = now + BuildNextPatternGapSeconds() + (threatRose ? InfiniteThreatRiseBreatherSeconds : 0f);
                 return;
             }
 
-            if (chapterProgress < ChapterTargetPatterns)
+            if (!patternBundleCompleted)
             {
-                nextPatternAt = now + AutoGapSeconds;
+                nextPatternAt = now + BuildNextPatternGapSeconds();
                 return;
             }
 
@@ -2204,7 +4682,9 @@ namespace GreedLast
             if (chapterIndex <= 3)
             {
                 phase = GreedLastRunPhase.ChapterWrapUp;
-                judgementText = $"챕터 {chapterIndex} 종료 - 선택으로 방향을 정리합니다.";
+                judgementText = $"챕터 {chapterIndex} 종료 - 선택으로 방향을 정리합니다."
+                    + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
+                    + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText);
                 OpenChoice(GreedLastChoiceKind.Node);
                 return;
             }
@@ -2214,7 +4694,11 @@ namespace GreedLast
                 phase = GreedLastRunPhase.CoreRetrieve;
                 coreRetrieved = true;
                 phase = GreedLastRunPhase.EscapeRunning;
-                PrepareStartCountdown(now, "공명핵 회수 - 탈출 검증 준비\n카운트 뒤 마지막 구간이 시작됩니다.");
+                PrepareStartCountdown(
+                    now,
+                    "공명핵 회수 - 탈출 검증 준비\n카운트 뒤 마지막 구간이 시작됩니다."
+                        + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
+                        + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText));
                 return;
             }
 
@@ -2223,12 +4707,295 @@ namespace GreedLast
             stopped = true;
             autoFlow = false;
             phase = GreedLastRunPhase.ClearResolving;
-            judgementText = "탈출 성공 - 일반 런 클리어\n저장 가능한 기프트 방향이 만들어졌습니다.";
+            judgementText = "탈출 성공 - 일반 런 클리어\n저장 가능한 기프트 방향이 만들어졌습니다."
+                + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
+                + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText);
+        }
+
+        private string BuildPracticeCompletionReviewText()
+        {
+            string review;
+            if (missCount > 0)
+            {
+                review = "복기 우선: 실수 " + missCount + "회 / 같은 채널과 입력 순간 재확인";
+            }
+            else if (goodCount > 0)
+            {
+                review = "복기 우선: 보정 " + goodCount + "회 / 판정선 중앙 재확인";
+            }
+            else
+            {
+                review = "준비 완료: 3축 정확 / 일반 런 진입 가능";
+            }
+
+            return review
+                + "\n" + BuildPracticeAvoidanceReviewText()
+                + "\n" + BuildPracticeTimingCalibrationText();
+        }
+
+        private string BuildPracticeAvoidanceReviewText()
+        {
+            string[] labels = { string.Empty, "바닥→↑점프", "상단→↓숙이기", "측면→↔비틀기" };
+            for (int i = 1; i < labels.Length; i += 1)
+            {
+                if (avoidanceMissCounts[i] > 0)
+                {
+                    return "회피 복기: " + labels[i] + " 실패 / " + i + "단계 다시";
+                }
+            }
+
+            for (int i = 1; i < labels.Length; i += 1)
+            {
+                if (avoidanceGoodCounts[i] > 0)
+                {
+                    return "회피 복기: " + labels[i] + " 보정 / " + i + "단계 다시";
+                }
+            }
+
+            return "회피 동작: 바닥→↑점프 · 상단→↓숙이기 · 측면→↔비틀기 정확";
+        }
+
+        private string BuildPracticeTimingCalibrationText()
+        {
+            if (!HasTimingRecommendation)
+            {
+                return "입력 보정 샘플 " + timingSampleCount + "/" + TimingRecommendationMinSamples
+                    + " / 정확·Good 입력으로 보완";
+            }
+
+            int currentMilliseconds = Mathf.RoundToInt(inputTimingOffsetSeconds * 1000f);
+            int recommendationMilliseconds = TimingRecommendationMilliseconds;
+            if (Mathf.Abs(currentMilliseconds - recommendationMilliseconds) < 25)
+            {
+                return "입력 보정: 현재 설정 안정 " + FormatOffset(inputTimingOffsetSeconds);
+            }
+
+            return "입력 보정 제안: " + FormatOffset(recommendationMilliseconds / 1000f)
+                + " / 오른쪽 추천 적용";
+        }
+
+        private string BuildCompletedPatternPrecisionPayoffText()
+        {
+            if (lastResult != GreedLastJudgementResult.Success || !lastCenterHit || !currentPattern.IsValid)
+            {
+                return string.Empty;
+            }
+
+            string text = string.Empty;
+            if (IsRecoveryPattern(currentPattern))
+            {
+                text = "복구 정박 - 흐름 재점화 / 보너스 +" + RecoveryPrecisionScoreBonus
+                    + "점 / 콤보 +" + RecoveryPrecisionComboBonus;
+            }
+
+            string timingPayoff;
+            switch (currentPattern.TimingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    timingPayoff = "정박 중앙 - 집중 충전 / 집중 +" + PerfectFocusChargeBonus;
+                    break;
+                case GreedLastTimingType.Clutch:
+                    timingPayoff = "압박 정박 - 반격 / 보너스 +" + ClutchCounterScoreBonus + "점";
+                    break;
+                case GreedLastTimingType.Offbeat:
+                    timingPayoff = "엇박 정박 - 연쇄 가속 / 콤보 +" + OffbeatFlowComboBonus;
+                    break;
+                default:
+                    timingPayoff = string.Empty;
+                    break;
+            }
+
+            string routePayoff = string.Empty;
+            if (currentPattern.TimingType == GreedLastTimingType.Offbeat
+                && HasActiveRoute("변주 루트"))
+            {
+                routePayoff = "변주 루트 - 엇박 공명 / 집중 +" + VariationRouteOffbeatFocusBonus;
+            }
+            else if (currentPattern.TimingType == GreedLastTimingType.Clutch
+                && HasActiveRoute("압박 루트"))
+            {
+                routePayoff = "압박 루트 - 클러치 증폭 / 보너스 +" + PressureRouteClutchScoreBonus + "점";
+            }
+
+            if (string.IsNullOrEmpty(timingPayoff))
+            {
+                return string.IsNullOrEmpty(text) ? routePayoff : text + "\n" + routePayoff;
+            }
+
+            text = string.IsNullOrEmpty(text) ? timingPayoff : text + "\n" + timingPayoff;
+            return string.IsNullOrEmpty(routePayoff) ? text : text + "\n" + routePayoff;
+        }
+
+        private float BuildNextPatternGapSeconds()
+        {
+            float gap;
+            if (infiniteMode)
+            {
+                gap = Mathf.Lerp(
+                    InfiniteBaseGapSeconds,
+                    0.36f,
+                    Mathf.Clamp01((GetInfiniteThreatLevel() - 1) / 4f));
+            }
+            else if (phase == GreedLastRunPhase.EscapeRunning)
+            {
+                gap = EscapeGapSeconds;
+            }
+            else
+            {
+                switch (Mathf.Clamp(chapterIndex, 1, 4))
+                {
+                    case 1:
+                        gap = ChapterOneGapSeconds;
+                        break;
+                    case 2:
+                        gap = ChapterTwoGapSeconds;
+                        break;
+                    case 3:
+                        gap = ChapterThreeGapSeconds;
+                        break;
+                    default:
+                        gap = ChapterFourGapSeconds;
+                        break;
+                }
+            }
+
+            if (HasChoice(lastNode, "안정 루트"))
+            {
+                gap += 0.12f;
+            }
+            else if (HasChoice(lastNode, "압박 루트"))
+            {
+                gap -= 0.08f;
+            }
+            else if (HasChoice(lastNode, "변주 루트"))
+            {
+                gap -= 0.03f;
+            }
+
+            if (recoveryBreatherPatternPending)
+            {
+                gap += 0.20f;
+            }
+
+            return Mathf.Clamp(gap, 0.28f, 1.05f);
+        }
+
+        private string ApplyCompletedPatternBundleReward()
+        {
+            bool cleanBundle = patternBundleBreakCount <= 0;
+            patternBundleBreakCount = 0;
+            if (!cleanBundle)
+            {
+                return string.Empty;
+            }
+
+            const int allAvoidanceMask = (1 << (int)GreedLastAvoidanceType.Jump)
+                | (1 << (int)GreedLastAvoidanceType.Slide)
+                | (1 << (int)GreedLastAvoidanceType.Twist);
+            bool threeActionExact = (currentBundleAvoidanceMask & allAvoidanceMask) == allAvoidanceMask;
+            if (threeActionExact)
+            {
+                threeActionExactBundleCount += 1;
+            }
+
+            if (HasActiveRoute("안정 루트"))
+            {
+                stableRouteBundleCount += 1;
+                if (health < BuildBonusHealthCap())
+                {
+                    int healthGain = Mathf.Min(
+                        StableRouteBundleHealthBonus,
+                        BuildBonusHealthCap() - health);
+                    health += healthGain;
+                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
+                    return AppendThreeActionExactText("패턴 묶음 완벽 - 안정 완주 / 체력 +" + healthGain, threeActionExact);
+                }
+
+                return AppendThreeActionExactText(
+                    "패턴 묶음 완벽 - 안정 완주 / "
+                        + ApplyRouteBundleFocusReward(1, FocusStateBundleExtensionSeconds),
+                    threeActionExact);
+            }
+
+            if (HasActiveRoute("변주 루트"))
+            {
+                variationRouteBundleCount += 1;
+                return AppendThreeActionExactText(
+                    "패턴 묶음 완벽 - 변주 완주 / "
+                        + ApplyRouteBundleFocusReward(
+                            VariationRouteBundleFocusBonus,
+                            VariationRouteBundleExtensionSeconds),
+                    threeActionExact);
+            }
+
+            if (HasActiveRoute("압박 루트"))
+            {
+                pressureRouteBundleCount += 1;
+                score += PressureRouteBundleScoreBonus;
+                return AppendThreeActionExactText(
+                    "패턴 묶음 완벽 - 압박 완주 / 점수 +" + PressureRouteBundleScoreBonus
+                        + " / " + ApplyRouteBundleFocusReward(1, FocusStateBundleExtensionSeconds),
+                    threeActionExact);
+            }
+
+            if (IsFocusStateActive)
+            {
+                float previous = focusStateRemainingSeconds;
+                focusStateRemainingSeconds = Mathf.Min(
+                    FocusStateMaxDurationSeconds,
+                    focusStateRemainingSeconds + FocusStateBundleExtensionSeconds);
+                float gained = Mathf.Max(0f, focusStateRemainingSeconds - previous);
+                return AppendThreeActionExactText(
+                    "패턴 묶음 완벽 - 집중 상태 +" + gained.ToString("0.0") + "초",
+                    threeActionExact);
+            }
+
+            GainFocus(1, extendActiveState: false, out bool stateActivated, out _);
+            string baseText = stateActivated
+                ? "패턴 묶음 완벽 - 집중 상태 발동"
+                : "패턴 묶음 완벽 - 집중 +1";
+            return AppendThreeActionExactText(baseText, threeActionExact);
+        }
+
+        private static string AppendThreeActionExactText(string baseText, bool achieved)
+        {
+            return achieved ? baseText + " / 3동작 정확" : baseText;
+        }
+
+        private string ApplyRouteBundleFocusReward(int amount, float activeExtensionSeconds)
+        {
+            if (IsFocusStateActive)
+            {
+                float previous = focusStateRemainingSeconds;
+                focusStateRemainingSeconds = Mathf.Min(
+                    FocusStateMaxDurationSeconds,
+                    focusStateRemainingSeconds + Mathf.Max(0f, activeExtensionSeconds));
+                float gained = Mathf.Max(0f, focusStateRemainingSeconds - previous);
+                return "집중 상태 +" + gained.ToString("0.0") + "초";
+            }
+
+            GainFocus(
+                Mathf.Max(0, amount),
+                extendActiveState: false,
+                out bool stateActivated,
+                out _);
+            return stateActivated
+                ? "집중 상태 발동"
+                : "집중 +" + Mathf.Max(0, amount);
         }
 
         private void StartPattern(float now)
         {
-            currentPattern = BuildActivePattern(SelectPatternFromDeck());
+            bool useInfiniteThreatBreather = infiniteThreatBreatherPatternPending;
+            bool useRecoveryBreather = recoveryBreatherPatternPending;
+            string previousMissReason = missReason;
+            GreedLastPatternModel selectedPattern = SelectPatternFromDeck();
+            currentPattern = BuildActivePattern(selectedPattern, useInfiniteThreatBreather, useRecoveryBreather);
+            string recoveryCue = BuildRecoveryPatternCue(previousMissReason, currentPattern);
+            string routeCue = BuildRoutePatternCue(currentPattern);
+            RememberSelectedPattern(selectedPattern);
+            infiniteThreatBreatherPatternPending = false;
+            recoveryBreatherPatternPending = false;
             maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, GetInfiniteThreatLevel());
             patternIndex += 1;
             patternStartedAt = now;
@@ -2237,6 +5004,16 @@ namespace GreedLast
             ignoreReason = string.Empty;
             missReason = string.Empty;
             judgementText = "예고를 보고 같은 채널을 누르세요.";
+            if (!string.IsNullOrEmpty(recoveryCue))
+            {
+                judgementText += "\n" + recoveryCue;
+            }
+
+            if (!string.IsNullOrEmpty(routeCue))
+            {
+                judgementText += "\n" + routeCue;
+            }
+
             lastResult = GreedLastJudgementResult.None;
             Publish();
         }
@@ -2247,6 +5024,8 @@ namespace GreedLast
             if (infiniteMode)
             {
                 deckIndex += infiniteSectionsCleared + GetInfiniteThreatLevel();
+                deckIndex = ApplyInfiniteLoadoutRoutePatternBias(deckIndex);
+                deckIndex = ApplyRecoveryPatternBias(deckIndex);
             }
             else
             {
@@ -2257,9 +5036,143 @@ namespace GreedLast
                 }
 
                 deckIndex = ApplyRoutePatternBias(deckIndex);
+                deckIndex = ApplyRecoveryPatternBias(deckIndex);
             }
 
-            return patternDeck[Mathf.Abs(deckIndex) % patternDeck.Length];
+            return patternDeck[FindReadablePatternIndex(deckIndex)];
+        }
+
+        private int ApplyRecoveryPatternBias(int deckIndex)
+        {
+            switch (missReason)
+            {
+                case "wrong_channel":
+                    return FindPatternIndexAvoidingChannel(deckIndex + 1, currentPattern.Channel);
+                case "too_early":
+                    return FindPatternIndexByTiming(deckIndex + 1, GreedLastTimingType.Clutch);
+                case "too_late":
+                    return FindPatternIndexByTiming(deckIndex, GreedLastTimingType.Perfect);
+                case "no_input":
+                case "focus_guard":
+                    return FindPatternIndexAvoidingTiming(deckIndex, GreedLastTimingType.Offbeat);
+                default:
+                    return deckIndex;
+            }
+        }
+
+        private int ApplyInfiniteLoadoutRoutePatternBias(int deckIndex)
+        {
+            if (!infiniteMode || string.IsNullOrEmpty(activeInfiniteLoadoutDisplayProfile))
+            {
+                return deckIndex;
+            }
+
+            int seed = Mathf.Abs(patternIndex + infiniteSectionsCleared * 3 + combo + GetInfiniteThreatLevel());
+            if (activeInfiniteLoadoutDisplayProfile.Contains("변주", StringComparison.Ordinal))
+            {
+                return seed % 3 == 0
+                    ? FindPatternIndexByTiming(deckIndex + 1, GreedLastTimingType.Offbeat)
+                    : deckIndex;
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("압박", StringComparison.Ordinal))
+            {
+                return seed % 3 == 0
+                    ? FindPatternIndexByTiming(deckIndex + 1, GreedLastTimingType.Clutch)
+                    : deckIndex;
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("안정", StringComparison.Ordinal))
+            {
+                return seed % 3 == 0
+                    ? FindPatternIndexByTiming(deckIndex, GreedLastTimingType.Perfect)
+                    : deckIndex;
+            }
+
+            return deckIndex;
+        }
+
+        private static string BuildRecoveryPatternCue(string previousMissReason, GreedLastPatternModel nextPattern)
+        {
+            string targetText = nextPattern.IsValid
+                ? " / 다음 " + FormatChannel(nextPattern.Channel) + " " + FormatTimingType(nextPattern.TimingType)
+                : string.Empty;
+            switch (previousMissReason)
+            {
+                case "wrong_channel":
+                    return "복구 예고: 직전 채널 오류 - 목표 레인 확인" + targetText;
+                case "too_early":
+                    return "복구 예고: 너무 빨랐음 - 판정선까지 대기" + targetText;
+                case "too_late":
+                    return "복구 예고: 너무 늦었음 - 예고 직후 빠르게 준비" + targetText;
+                case "no_input":
+                    return "복구 예고: 입력 없음 - 밝아진 레인 먼저 확인" + targetText;
+                case "focus_guard":
+                    return "복구 예고: 집중 보호 후 안정 패턴" + targetText;
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string BuildRoutePatternCue(GreedLastPatternModel pattern)
+        {
+            string prompt = pattern.Prompt ?? string.Empty;
+            if (prompt.Contains("[복구]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 복구 - 판정 여유";
+            }
+
+            if (prompt.Contains("[압박]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 압박 - Clutch 정박 +" + PressureRouteClutchScoreBonus + "점 / 판정 좁음";
+            }
+
+            if (prompt.Contains("[변주]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 변주 - 엇박 정박 집중 +" + VariationRouteOffbeatFocusBonus;
+            }
+
+            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 안정 - Good 체력 +" + StableRouteGoodHealthBonus + " / 판정 여유";
+            }
+
+            if (prompt.Contains("[유예]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 유예 - 조금 대기";
+            }
+
+            if (prompt.Contains("[탈출]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 탈출 - 마지막 압박";
+            }
+
+            if (prompt.Contains("[위기]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 위기 - 빠른 판단";
+            }
+
+            if (prompt.Contains("[급박]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 급박 - 조금 빠르게 준비";
+            }
+
+            if (prompt.Contains("[정밀]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 정밀 - 판정선 중앙";
+            }
+
+            if (prompt.Contains("[연쇄]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 연쇄 - 콤보 유지";
+            }
+
+            if (prompt.Contains("[심층]", StringComparison.Ordinal))
+            {
+                return "루트 예고: 심층 - 판정 압박";
+            }
+
+            return string.Empty;
         }
 
         private int ApplyRoutePatternBias(int deckIndex)
@@ -2286,7 +5199,7 @@ namespace GreedLast
         {
             for (int i = 0; i < patternDeck.Length; i += 1)
             {
-                int candidate = Mathf.Abs(startIndex + i) % patternDeck.Length;
+                int candidate = NormalizePatternIndex(startIndex + i);
                 if (patternDeck[candidate].TimingType == timingType)
                 {
                     return candidate;
@@ -2300,7 +5213,7 @@ namespace GreedLast
         {
             for (int i = 0; i < patternDeck.Length; i += 1)
             {
-                int candidate = Mathf.Abs(startIndex + i) % patternDeck.Length;
+                int candidate = NormalizePatternIndex(startIndex + i);
                 if (patternDeck[candidate].TimingType != timingType)
                 {
                     return candidate;
@@ -2310,15 +5223,509 @@ namespace GreedLast
             return startIndex;
         }
 
-        private GreedLastPatternModel BuildActivePattern(GreedLastPatternModel source)
+        private int FindPatternIndexAvoidingChannel(int startIndex, GreedLastRunChannel channel)
+        {
+            if (channel == GreedLastRunChannel.None)
+            {
+                return startIndex;
+            }
+
+            for (int i = 0; i < patternDeck.Length; i += 1)
+            {
+                int candidate = NormalizePatternIndex(startIndex + i);
+                if (patternDeck[candidate].Channel != channel)
+                {
+                    return candidate;
+                }
+            }
+
+            return startIndex;
+        }
+
+        private int FindReadablePatternIndex(int startIndex)
+        {
+            int bestIndex = NormalizePatternIndex(startIndex);
+            int bestPenalty = int.MaxValue;
+
+            for (int i = 0; i < patternDeck.Length; i += 1)
+            {
+                int candidate = NormalizePatternIndex(startIndex + i);
+                int penalty = BuildPatternRepeatPenalty(patternDeck[candidate]);
+                if (penalty <= 0)
+                {
+                    return candidate;
+                }
+
+                if (penalty < bestPenalty)
+                {
+                    bestPenalty = penalty;
+                    bestIndex = candidate;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        private int NormalizePatternIndex(int index)
+        {
+            return ((index % patternDeck.Length) + patternDeck.Length) % patternDeck.Length;
+        }
+
+        private int BuildPatternRepeatPenalty(GreedLastPatternModel candidate)
+        {
+            if (!candidate.IsValid)
+            {
+                return 0;
+            }
+
+            int penalty = 0;
+            GreedLastTimingType preferredTiming = BuildPreferredChapterTiming();
+            if (preferredTiming != GreedLastTimingType.None
+                && candidate.TimingType != preferredTiming)
+            {
+                penalty += 180;
+            }
+
+            GreedLastAvoidanceType preferredAvoidance = BuildPreferredAvoidanceType();
+            if (preferredAvoidance != GreedLastAvoidanceType.None
+                && candidate.AvoidanceType != preferredAvoidance)
+            {
+                penalty += 90;
+            }
+
+            if (IsSamePatternFamily(candidate.PatternId, lastSelectedPatternId))
+            {
+                penalty += 100;
+            }
+
+            if ((infiniteMode || phase == GreedLastRunPhase.EscapeRunning)
+                && IsSamePatternFamily(candidate.PatternId, previousSelectedPatternId))
+            {
+                penalty += 60;
+            }
+
+            if (currentPattern.IsValid && candidate.Channel == currentPattern.Channel)
+            {
+                penalty += 40;
+            }
+
+            if (infiniteMode
+                && GetInfiniteThreatLevel() >= 4
+                && currentPattern.IsValid
+                && candidate.TimingType == currentPattern.TimingType)
+            {
+                penalty += 35;
+            }
+
+            string familyKey = BuildPatternFamilyKey(candidate.PatternId);
+            int count = Mathf.Min(recentPatternCount, RecentPatternMemory);
+            for (int i = 0; i < count; i += 1)
+            {
+                int freshness = RecentPatternMemory - i;
+                if (!string.IsNullOrEmpty(familyKey) && familyKey == recentPatternFamilyKeys[i])
+                {
+                    penalty += 9 * freshness;
+                }
+
+                if (candidate.Channel == recentPatternChannels[i])
+                {
+                    penalty += 4 * freshness;
+                }
+
+                if (candidate.TimingType == recentPatternTimingTypes[i])
+                {
+                    penalty += (infiniteMode ? 4 : 2) * freshness;
+                }
+
+                if (candidate.AvoidanceType != GreedLastAvoidanceType.None
+                    && candidate.AvoidanceType == recentPatternAvoidanceTypes[i])
+                {
+                    penalty += (infiniteMode ? 4 : 3) * freshness;
+                }
+            }
+
+            return penalty;
+        }
+
+        private GreedLastTimingType BuildPreferredChapterTiming()
+        {
+            if (practiceMode)
+            {
+                switch (chapterProgress % ChapterTargetPatterns)
+                {
+                    case 0:
+                        return GreedLastTimingType.Perfect;
+                    case 1:
+                        return GreedLastTimingType.Clutch;
+                    default:
+                        return GreedLastTimingType.Offbeat;
+                }
+            }
+
+            if (infiniteMode)
+            {
+                return GreedLastTimingType.None;
+            }
+
+            if (phase == GreedLastRunPhase.EscapeRunning)
+            {
+                switch (chapterProgress % 3)
+                {
+                    case 0:
+                        return GreedLastTimingType.Clutch;
+                    case 1:
+                        return GreedLastTimingType.Offbeat;
+                    default:
+                        return GreedLastTimingType.Perfect;
+                }
+            }
+
+            if (chapterIndex == 1)
+            {
+                switch (chapterProgress % 3)
+                {
+                    case 0:
+                        return GreedLastTimingType.Perfect;
+                    case 1:
+                        return GreedLastTimingType.Clutch;
+                    default:
+                        return GreedLastTimingType.Offbeat;
+                }
+            }
+
+            if (chapterIndex == 3 && chapterProgress % 3 == 1)
+            {
+                GreedLastTimingType relicTiming = BuildPreferredRelicTiming();
+                if (relicTiming != GreedLastTimingType.None)
+                {
+                    return relicTiming;
+                }
+            }
+
+            if (chapterIndex == 2 || chapterIndex == 3)
+            {
+                GreedLastTimingType routeTiming = BuildPreferredRouteTiming();
+                if (routeTiming != GreedLastTimingType.None)
+                {
+                    return routeTiming;
+                }
+            }
+
+            if (chapterIndex >= 4)
+            {
+                switch (chapterProgress % 3)
+                {
+                    case 0:
+                        return GreedLastTimingType.Clutch;
+                    case 1:
+                        return GreedLastTimingType.Offbeat;
+                    default:
+                        return GreedLastTimingType.Perfect;
+                }
+            }
+
+            return GreedLastTimingType.None;
+        }
+
+        private GreedLastAvoidanceType BuildPreferredAvoidanceType()
+        {
+            return GetAuthoredAvoidanceType(
+                chapterIndex,
+                chapterProgress,
+                practiceMode,
+                infiniteMode,
+                phase == GreedLastRunPhase.EscapeRunning || chapterIndex >= 4,
+                BuildCurrentActiveRouteProfile());
+        }
+
+        public static GreedLastAvoidanceType GetAuthoredAvoidanceType(
+            int chapterIndex,
+            int chapterProgress,
+            bool practiceMode,
+            bool infiniteMode,
+            bool finalValidation,
+            string activeRouteProfile)
+        {
+            int step = Mathf.Max(0, chapterProgress) % ChapterTargetPatterns;
+            if (practiceMode || chapterIndex <= 1)
+            {
+                switch (step)
+                {
+                    case 0:
+                        return GreedLastAvoidanceType.Jump;
+                    case 1:
+                        return GreedLastAvoidanceType.Slide;
+                    default:
+                        return GreedLastAvoidanceType.Twist;
+                }
+            }
+
+            if (infiniteMode)
+            {
+                return GreedLastAvoidanceType.None;
+            }
+
+            if (finalValidation || chapterIndex >= 4)
+            {
+                switch (step)
+                {
+                    case 0:
+                        return GreedLastAvoidanceType.Slide;
+                    case 1:
+                        return GreedLastAvoidanceType.Twist;
+                    default:
+                        return GreedLastAvoidanceType.Jump;
+                }
+            }
+
+            if (string.Equals(activeRouteProfile, "변주 루트", StringComparison.Ordinal))
+            {
+                switch (step)
+                {
+                    case 0:
+                        return GreedLastAvoidanceType.Twist;
+                    case 1:
+                        return GreedLastAvoidanceType.Slide;
+                    default:
+                        return GreedLastAvoidanceType.Jump;
+                }
+            }
+
+            if (string.Equals(activeRouteProfile, "압박 루트", StringComparison.Ordinal))
+            {
+                switch (step)
+                {
+                    case 0:
+                        return GreedLastAvoidanceType.Slide;
+                    case 1:
+                        return GreedLastAvoidanceType.Twist;
+                    default:
+                        return GreedLastAvoidanceType.Jump;
+                }
+            }
+
+            switch (step)
+            {
+                case 0:
+                    return GreedLastAvoidanceType.Jump;
+                case 1:
+                    return GreedLastAvoidanceType.Slide;
+                default:
+                    return GreedLastAvoidanceType.Twist;
+            }
+        }
+
+        private GreedLastTimingType BuildPreferredRouteTiming()
+        {
+            int step = Mathf.Clamp(chapterProgress, 0, ChapterTargetPatterns - 1);
+            if (HasChoice(lastNode, "안정 루트"))
+            {
+                return step == 1
+                    ? GreedLastTimingType.Clutch
+                    : GreedLastTimingType.Perfect;
+            }
+
+            if (HasChoice(lastNode, "변주 루트"))
+            {
+                return step == 1
+                    ? GreedLastTimingType.Perfect
+                    : GreedLastTimingType.Offbeat;
+            }
+
+            if (HasChoice(lastNode, "압박 루트"))
+            {
+                return step == 1
+                    ? GreedLastTimingType.Offbeat
+                    : GreedLastTimingType.Clutch;
+            }
+
+            return GreedLastTimingType.None;
+        }
+
+        private GreedLastTimingType BuildPreferredRelicTiming()
+        {
+            if (HasChoice(relic, "황금 박동"))
+            {
+                return GreedLastTimingType.Perfect;
+            }
+
+            if (HasChoice(relic, "사막의 잔상"))
+            {
+                return GreedLastTimingType.Offbeat;
+            }
+
+            return HasChoice(relic, "파라오의 각인")
+                ? GreedLastTimingType.Clutch
+                : GreedLastTimingType.None;
+        }
+
+        private void RememberSelectedPattern(GreedLastPatternModel selectedPattern)
+        {
+            if (!selectedPattern.IsValid)
+            {
+                return;
+            }
+
+            previousSelectedPatternId = lastSelectedPatternId;
+            lastSelectedPatternId = selectedPattern.PatternId;
+            RememberRecentPattern(selectedPattern);
+        }
+
+        private void RememberRecentPattern(GreedLastPatternModel selectedPattern)
+        {
+            for (int i = RecentPatternMemory - 1; i > 0; i -= 1)
+            {
+                recentPatternFamilyKeys[i] = recentPatternFamilyKeys[i - 1];
+                recentPatternChannels[i] = recentPatternChannels[i - 1];
+                recentPatternTimingTypes[i] = recentPatternTimingTypes[i - 1];
+                recentPatternAvoidanceTypes[i] = recentPatternAvoidanceTypes[i - 1];
+            }
+
+            recentPatternFamilyKeys[0] = BuildPatternFamilyKey(selectedPattern.PatternId);
+            recentPatternChannels[0] = selectedPattern.Channel;
+            recentPatternTimingTypes[0] = selectedPattern.TimingType;
+            recentPatternAvoidanceTypes[0] = selectedPattern.AvoidanceType;
+            recentPatternCount = Mathf.Min(recentPatternCount + 1, RecentPatternMemory);
+        }
+
+        private void ClearRecentPatternHistory()
+        {
+            for (int i = 0; i < RecentPatternMemory; i += 1)
+            {
+                recentPatternFamilyKeys[i] = string.Empty;
+                recentPatternChannels[i] = GreedLastRunChannel.None;
+                recentPatternTimingTypes[i] = GreedLastTimingType.None;
+                recentPatternAvoidanceTypes[i] = GreedLastAvoidanceType.None;
+            }
+
+            recentPatternCount = 0;
+        }
+
+        private string BuildRecentPatternFlowText()
+        {
+            int count = Mathf.Min(recentPatternCount, RecentPatternMemory);
+            if (count <= 0)
+            {
+                return string.Empty;
+            }
+
+            string text = string.Empty;
+            for (int i = count - 1; i >= 0; i -= 1)
+            {
+                if (recentPatternChannels[i] == GreedLastRunChannel.None
+                    || recentPatternTimingTypes[i] == GreedLastTimingType.None)
+                {
+                    continue;
+                }
+
+                string hazard = FormatAvoidanceHazardShort(recentPatternAvoidanceTypes[i]);
+                string action = FormatAvoidanceTypeShort(recentPatternAvoidanceTypes[i]);
+                string avoidanceCue = string.IsNullOrEmpty(action)
+                    ? string.Empty
+                    : string.IsNullOrEmpty(hazard) ? action : hazard + "→" + action;
+                string item = FormatChannel(recentPatternChannels[i])
+                    + FormatTimingTypeShort(recentPatternTimingTypes[i])
+                    + (string.IsNullOrEmpty(avoidanceCue) ? string.Empty : "·" + avoidanceCue);
+                text = string.IsNullOrEmpty(text)
+                    ? item
+                    : text + " > " + item;
+            }
+
+            return text;
+        }
+
+        private static string FormatTimingTypeShort(GreedLastTimingType timingType)
+        {
+            switch (timingType)
+            {
+                case GreedLastTimingType.Perfect:
+                    return "정";
+                case GreedLastTimingType.Clutch:
+                    return "압";
+                case GreedLastTimingType.Offbeat:
+                    return "엇";
+                default:
+                    return "-";
+            }
+        }
+
+        private static string FormatAvoidanceTypeShort(GreedLastAvoidanceType avoidanceType)
+        {
+            switch (avoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return "점";
+                case GreedLastAvoidanceType.Slide:
+                    return "숙";
+                case GreedLastAvoidanceType.Twist:
+                    return "틀";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string FormatAvoidanceHazardShort(GreedLastAvoidanceType avoidanceType)
+        {
+            switch (avoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump:
+                    return "바";
+                case GreedLastAvoidanceType.Slide:
+                    return "상";
+                case GreedLastAvoidanceType.Twist:
+                    return "측";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static bool IsSamePatternFamily(string candidateId, string storedId)
+        {
+            string candidateFamily = BuildPatternFamilyKey(candidateId);
+            string storedFamily = BuildPatternFamilyKey(storedId);
+            return !string.IsNullOrEmpty(candidateId)
+                && !string.IsNullOrEmpty(storedId)
+                && (candidateId == storedId
+                    || candidateId.StartsWith(storedId, StringComparison.Ordinal)
+                    || storedId.StartsWith(candidateId, StringComparison.Ordinal)
+                    || (!string.IsNullOrEmpty(candidateFamily) && candidateFamily == storedFamily));
+        }
+
+        private static string BuildPatternFamilyKey(string patternId)
+        {
+            if (string.IsNullOrEmpty(patternId))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = patternId.Split('_');
+            if (parts.Length < 2)
+            {
+                return patternId;
+            }
+
+            string lanePart = parts[0];
+            if (lanePart == "left" || lanePart == "center" || lanePart == "right")
+            {
+                return parts[1];
+            }
+
+            return parts[0];
+        }
+
+        private GreedLastPatternModel BuildActivePattern(
+            GreedLastPatternModel source,
+            bool useInfiniteThreatBreather,
+            bool useRecoveryBreather)
         {
             if (!infiniteMode)
             {
                 int pressureLevel = phase == GreedLastRunPhase.EscapeRunning
                     ? 4
                     : Mathf.Clamp(chapterIndex, 1, 4);
-                float normalSpeedScale = Mathf.Clamp(1f - (pressureLevel - 1) * 0.035f, 0.88f, 1f);
-                float normalWindowScale = Mathf.Clamp(1f - (pressureLevel - 1) * 0.025f, 0.90f, 1f);
+                bool finalValidation = phase == GreedLastRunPhase.EscapeRunning || chapterIndex >= 4;
+                float normalSpeedScale = BuildNormalChapterTempoScale(pressureLevel, finalValidation);
+                float normalWindowScale = BuildNormalChapterWindowScale(pressureLevel, finalValidation);
                 string routeSuffix = string.Empty;
                 if (HasChoice(lastNode, "안정 루트"))
                 {
@@ -2339,6 +5746,20 @@ namespace GreedLast
                     routeSuffix = " [압박]";
                 }
 
+                string variationSuffix = BuildNormalPatternVariationSuffix(
+                    pressureLevel,
+                    out float variationSpeedScale,
+                    out float variationWindowScale);
+                normalSpeedScale = Mathf.Clamp(normalSpeedScale * variationSpeedScale, 0.78f, 1.08f);
+                normalWindowScale = Mathf.Clamp(normalWindowScale * variationWindowScale, 0.82f, 1.14f);
+                string recoverySuffix = string.Empty;
+                if (useRecoveryBreather)
+                {
+                    normalSpeedScale = Mathf.Min(1.10f, normalSpeedScale * 1.04f);
+                    normalWindowScale = Mathf.Min(1.16f, normalWindowScale * 1.06f);
+                    recoverySuffix = " [복구]";
+                }
+
                 string suffix = phase == GreedLastRunPhase.EscapeRunning
                     ? " [탈출]"
                     : pressureLevel >= 3
@@ -2348,27 +5769,179 @@ namespace GreedLast
                     source.PatternId + "_normal_" + pressureLevel,
                     source.Channel,
                     source.TimingType,
-                    source.Prompt + suffix + routeSuffix,
+                    source.Prompt + suffix + routeSuffix + variationSuffix + recoverySuffix,
                     source.TelegraphSeconds * normalSpeedScale,
                     source.CoreSeconds * normalSpeedScale,
                     source.SuccessWindowSeconds * normalWindowScale + BuildGrowthSuccessWindowBonus(),
                     source.GoodWindowSeconds * normalWindowScale + BuildGrowthGoodWindowBonus(),
-                    source.HitSeconds * normalSpeedScale);
+                    source.HitSeconds * normalSpeedScale,
+                    source.AvoidanceType);
             }
 
             int threatLevel = GetInfiniteThreatLevel();
             float speedScale = Mathf.Clamp(1f - (threatLevel - 1) * 0.07f, 0.72f, 1f);
             float windowScale = Mathf.Clamp(1f - (threatLevel - 1) * 0.05f, 0.80f, 1f);
+            string infiniteVariationSuffix;
+            float infiniteSpeedScale;
+            float infiniteWindowScale;
+            string infiniteRouteSuffix = BuildInfiniteLoadoutRoutePatternSuffix();
+            if (useRecoveryBreather)
+            {
+                infiniteSpeedScale = 1.05f;
+                infiniteWindowScale = 1.07f;
+                infiniteVariationSuffix = " [복구]";
+            }
+            else if (useInfiniteThreatBreather)
+            {
+                infiniteSpeedScale = 1.04f;
+                infiniteWindowScale = 1.06f;
+                infiniteVariationSuffix = " [유예]";
+            }
+            else
+            {
+                infiniteVariationSuffix = BuildInfinitePatternVariationSuffix(
+                    threatLevel,
+                    out infiniteSpeedScale,
+                    out infiniteWindowScale);
+            }
+
+            speedScale = Mathf.Clamp(speedScale * infiniteSpeedScale, 0.68f, 1.05f);
+            windowScale = Mathf.Clamp(windowScale * infiniteWindowScale, 0.76f, 1.08f);
             return new GreedLastPatternModel(
                 source.PatternId + "_threat_" + threatLevel,
                 source.Channel,
                 source.TimingType,
-                source.Prompt + " [위협 " + threatLevel + "]",
+                source.Prompt + " [위협 " + threatLevel + "]" + infiniteRouteSuffix + infiniteVariationSuffix,
                 source.TelegraphSeconds * speedScale,
                 source.CoreSeconds * speedScale,
                 source.SuccessWindowSeconds * windowScale + BuildGrowthSuccessWindowBonus(),
                 source.GoodWindowSeconds * windowScale + BuildGrowthGoodWindowBonus(),
-                source.HitSeconds * speedScale);
+                source.HitSeconds * speedScale,
+                source.AvoidanceType);
+        }
+
+        private static float BuildNormalChapterTempoScale(int pressureLevel, bool finalValidation)
+        {
+            float scale = Mathf.Clamp(1f - (Mathf.Clamp(pressureLevel, 1, 4) - 1) * 0.035f, 0.88f, 1f);
+            return finalValidation
+                ? Mathf.Min(1.10f, scale * FinalValidationTempoEaseScale)
+                : scale;
+        }
+
+        private static float BuildNormalChapterWindowScale(int pressureLevel, bool finalValidation)
+        {
+            float scale = Mathf.Clamp(1f - (Mathf.Clamp(pressureLevel, 1, 4) - 1) * 0.025f, 0.90f, 1f);
+            return finalValidation
+                ? Mathf.Min(1.16f, scale * FinalValidationWindowEaseScale)
+                : scale;
+        }
+
+        private string BuildInfiniteLoadoutRoutePatternSuffix()
+        {
+            if (!infiniteMode || string.IsNullOrEmpty(activeInfiniteLoadoutDisplayProfile))
+            {
+                return string.Empty;
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("압박", StringComparison.Ordinal))
+            {
+                return " [압박]";
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("변주", StringComparison.Ordinal))
+            {
+                return " [변주]";
+            }
+
+            if (activeInfiniteLoadoutDisplayProfile.Contains("안정", StringComparison.Ordinal))
+            {
+                return " [안정]";
+            }
+
+            return string.Empty;
+        }
+
+        private string BuildNormalPatternVariationSuffix(int pressureLevel, out float speedScale, out float windowScale)
+        {
+            speedScale = 1f;
+            windowScale = 1f;
+            if (pressureLevel <= 1 && combo < 3)
+            {
+                return string.Empty;
+            }
+
+            int seed = Mathf.Abs(patternIndex + chapterIndex * 5 + chapterProgress * 3 + combo * 2);
+            switch (seed % 4)
+            {
+                case 0:
+                    speedScale = 0.97f;
+                    windowScale = 0.99f;
+                    return " [급박]";
+                case 1:
+                    speedScale = 1.03f;
+                    windowScale = 1.02f;
+                    return " [유예]";
+                case 2:
+                    if (pressureLevel >= 3 || combo >= 3)
+                    {
+                        windowScale = 0.97f;
+                        return " [정밀]";
+                    }
+
+                    return string.Empty;
+                default:
+                    if (combo >= 6)
+                    {
+                        speedScale = 0.98f;
+                        windowScale = 0.98f;
+                        return " [연쇄]";
+                    }
+
+                    return string.Empty;
+            }
+        }
+
+        private string BuildInfinitePatternVariationSuffix(int threatLevel, out float speedScale, out float windowScale)
+        {
+            speedScale = 1f;
+            windowScale = 1f;
+            int seed = Mathf.Abs(patternIndex + infiniteSectionsCleared * 7 + threatLevel * 11 + combo * 3);
+            switch (seed % 5)
+            {
+                case 0:
+                    speedScale = 0.97f;
+                    windowScale = 0.99f;
+                    return " [급박]";
+                case 1:
+                    speedScale = 1.02f;
+                    windowScale = 1.01f;
+                    return " [유예]";
+                case 2:
+                    if (threatLevel >= 3)
+                    {
+                        windowScale = 0.97f;
+                        return " [정밀]";
+                    }
+
+                    return string.Empty;
+                case 3:
+                    if (combo >= 6)
+                    {
+                        speedScale = 0.98f;
+                        windowScale = 0.98f;
+                        return " [연쇄]";
+                    }
+
+                    return string.Empty;
+                default:
+                    if (threatLevel >= 4)
+                    {
+                        speedScale = 0.95f;
+                        return " [위기]";
+                    }
+
+                    return string.Empty;
+            }
         }
 
         private int GetInfiniteThreatLevel()
@@ -2386,7 +5959,28 @@ namespace GreedLast
         {
             ignoreReason = reason;
             judgementText = message;
+            lastResult = GreedLastJudgementResult.None;
+            lastCenterHit = false;
             Publish();
+        }
+
+        private string BuildStoppedInputMessage()
+        {
+            if (infiniteMode)
+            {
+                return "무한모드 종료 - 기록 정산 또는 정산 후 로비를 선택하세요.";
+            }
+
+            return saveEligible
+                ? "탈출 성공 - 저장하거나 로비로 돌아가세요."
+                : "런 종료 - 로비로 돌아가 다시 시작하세요.";
+        }
+
+        private string BuildStaggerInputMessage(float now)
+        {
+            return "경직 중 입력은 무효입니다.\n다음 입력까지 "
+                + Mathf.Max(0f, staggerUntil - now).ToString("0.0")
+                + "s";
         }
 
         private static string FormatTimingDelta(float signedDeltaSeconds)
@@ -2404,9 +5998,41 @@ namespace GreedLast
 
         private string BuildTimingProfileText()
         {
+            string focusPerformance = " / 집중 발동 " + focusStateActivationCount
+                + "회 / 집중 성공 " + focusStateSuccessCount
+                + "회 / 집중 유지 " + focusStateActiveSeconds.ToString("0.0") + "초"
+                + (noInputMissCount > 0 ? " / 입력 없음 " + noInputMissCount + "회" : string.Empty)
+                + (timingRecommendationApplied
+                    ? " / 추천 보정 적용 " + appliedTimingRecommendationMilliseconds + "ms"
+                    : string.Empty)
+                + " / 정박 성공 " + perfectSuccessCount
+                + "회 / 압박 성공 " + clutchSuccessCount
+                + "회 / 엇박 성공 " + offbeatSuccessCount + "회"
+                + " / 복구 정박 " + recoveryPrecisionCount + "회"
+                + " / 정박 충전 " + perfectFocusChargeCount + "회"
+                + " / 압박 반격 " + clutchCounterCount + "회"
+                + " / 엇박 연쇄 " + offbeatFlowCount + "회"
+                + " / 안정 복구 " + stableRouteRecoveryCount + "회"
+                + " / 변주 공명 " + variationRouteFlowCount + "회"
+                + " / 압박 증폭 " + pressureRouteCounterCount + "회"
+                + " / 안정 완주 " + stableRouteBundleCount + "회"
+                + " / 변주 완주 " + variationRouteBundleCount + "회"
+                + " / 압박 완주 " + pressureRouteBundleCount + "회"
+                + " / 3동작 정확 " + threeActionExactBundleCount + "회"
+                + BuildAvoidancePerformanceText(GreedLastAvoidanceType.Jump, "점프")
+                + BuildAvoidancePerformanceText(GreedLastAvoidanceType.Slide, "숙이기")
+                + BuildAvoidancePerformanceText(GreedLastAvoidanceType.Twist, "비틀기")
+                + BuildSegmentPerformanceText("1장", chapterExactCounts[0], chapterGoodCounts[0], chapterMissCounts[0])
+                + BuildSegmentPerformanceText("2장", chapterExactCounts[1], chapterGoodCounts[1], chapterMissCounts[1])
+                + BuildSegmentPerformanceText("3장", chapterExactCounts[2], chapterGoodCounts[2], chapterMissCounts[2])
+                + BuildSegmentPerformanceText("4장", chapterExactCounts[3], chapterGoodCounts[3], chapterMissCounts[3])
+                + BuildSegmentPerformanceText("탈출", escapeExactCount, escapeGoodCount, escapeMissCount)
+                + BuildLastCompletedSegmentProfileText()
+                + BuildInfiniteTerminalSegmentProfileText()
+                + BuildReviewTargetProfileText();
             if (timingSampleCount <= 0)
             {
-                return "타이밍 기록 없음 / 추천 샘플 0/" + TimingRecommendationMinSamples;
+                return "타이밍 기록 없음 / 추천 샘플 0/" + TimingRecommendationMinSamples + focusPerformance;
             }
 
             float averageSigned = timingSignedErrorTotal / timingSampleCount;
@@ -2418,7 +6044,257 @@ namespace GreedLast
                 + " / 오차 " + Mathf.RoundToInt(averageAbs * 1000f) + "ms"
                 + " / 빠름 " + earlyInputCount
                 + " 늦음 " + lateInputCount
-                + " / " + recommendation;
+                + " / 정박 최고 " + maxPrecisionStreak
+                + " / " + recommendation
+                + focusPerformance;
+        }
+
+        private string BuildAvoidancePerformanceText(GreedLastAvoidanceType avoidanceType, string label)
+        {
+            int index = (int)avoidanceType;
+            return " / " + label + " 정확 " + avoidanceExactCounts[index]
+                + "회 / " + label + " 보정 " + avoidanceGoodCounts[index]
+                + "회 / " + label + " 실수 " + avoidanceMissCounts[index] + "회";
+        }
+
+        private string BuildReviewTargetProfileText()
+        {
+            if (string.IsNullOrWhiteSpace(reviewTargetText))
+            {
+                return string.Empty;
+            }
+
+            return " / 복기 목표 " + reviewTargetText.Trim()
+                + " / 복기 결과 " + BuildReviewTargetResultText(reviewTargetText);
+        }
+
+        private string BuildReviewTargetResultText(string target)
+        {
+            if (target.Contains("무실수", StringComparison.Ordinal))
+            {
+                return missCount <= 0 ? "달성 무실수" : "실패 실수 " + missCount;
+            }
+
+            if (target.Contains("보정 0회", StringComparison.Ordinal))
+            {
+                if (goodCount > 0)
+                {
+                    return "실패 보정 " + goodCount;
+                }
+
+                return missCount > 0 ? "실패 실수 " + missCount : "달성 보정 0";
+            }
+
+            if (target.Contains("입력 없음", StringComparison.Ordinal))
+            {
+                int targetNoInput = ExtractTargetNumberAfterKeyword(target, "입력 없음");
+                return noInputMissCount <= targetNoInput
+                    ? "달성 입력 없음 " + noInputMissCount + "/" + targetNoInput
+                    : "실패 입력 없음 " + noInputMissCount + "/" + targetNoInput;
+            }
+
+            if (target.Contains("추천 보정 적용", StringComparison.Ordinal))
+            {
+                return timingRecommendationApplied
+                    ? "달성 추천 보정 " + appliedTimingRecommendationMilliseconds + "ms"
+                    : "진행 추천 보정 미적용";
+            }
+
+            if (target.Contains("콤보", StringComparison.Ordinal))
+            {
+                int currentCombo = Mathf.Max(combo, maxCombo);
+                int targetCombo = ExtractTargetNumberAfterKeyword(target, "콤보");
+                return targetCombo > 0 && currentCombo >= targetCombo
+                    ? "달성 콤보 " + currentCombo
+                    : "진행 콤보 " + currentCombo;
+            }
+
+            if (target.Contains("점", StringComparison.Ordinal))
+            {
+                int targetScore = ExtractTargetNumberBeforeMarker(target, "점");
+                return targetScore > 0 && score >= targetScore
+                    ? "달성 " + score + "점"
+                    : "진행 " + score + "점";
+            }
+
+            if (target.Contains("구간 생존", StringComparison.Ordinal))
+            {
+                int targetSections = ExtractTargetNumberBeforeMarker(target, "구간");
+                return targetSections > 0 && infiniteSectionsCleared >= targetSections
+                    ? "달성 " + infiniteSectionsCleared + "구간 생존"
+                    : "진행 " + infiniteSectionsCleared + "/" + targetSections + "구간";
+            }
+
+            if (target.Contains("위협", StringComparison.Ordinal))
+            {
+                int targetThreat = ExtractTargetNumberAfterKeyword(target, "위협");
+                return targetThreat > 0 && maxInfiniteThreatLevel >= targetThreat
+                    ? "달성 위협 " + maxInfiniteThreatLevel
+                    : "진행 위협 " + maxInfiniteThreatLevel;
+            }
+
+            if (target.Contains("실수", StringComparison.Ordinal)
+                && target.Contains("이하", StringComparison.Ordinal))
+            {
+                int targetMisses = ExtractTargetNumberAfterKeyword(target, "실수");
+                return missCount <= targetMisses
+                    ? "달성 실수 " + missCount + "/" + targetMisses
+                    : "실패 실수 " + missCount + "/" + targetMisses;
+            }
+
+            if (target.Contains("체력", StringComparison.Ordinal) || target.Contains("생존", StringComparison.Ordinal))
+            {
+                int targetHealth = target.Contains("체력", StringComparison.Ordinal)
+                    ? ExtractTargetNumberAfterKeyword(target, "체력")
+                    : ExtractTargetNumberAfterKeyword(target, "생존");
+                return targetHealth > 0 && health >= targetHealth
+                    ? "달성 체력 " + health
+                    : "진행 체력 " + health;
+            }
+
+            if (target.Contains("집중", StringComparison.Ordinal))
+            {
+                bool activationTarget = target.Contains("발동", StringComparison.Ordinal);
+                int currentFocus = activationTarget
+                    ? focusStateActivationCount
+                    : focusStateActivationCount > 0 ? Mathf.Max(focus, MaxFocus) : focus;
+                int targetFocus = ExtractTargetNumberAfterKeyword(target, "집중");
+                string focusText = activationTarget
+                    ? "집중 발동 " + currentFocus + "회"
+                    : "집중 " + currentFocus;
+                return targetFocus > 0 && currentFocus >= targetFocus
+                    ? "달성 " + focusText
+                    : "진행 " + focusText;
+            }
+
+            if (target.Contains("정박", StringComparison.Ordinal) || target.Contains("정확권", StringComparison.Ordinal))
+            {
+                int targetPrecision = ExtractTargetNumberBeforeMarker(target, "연속");
+                if (targetPrecision <= 0)
+                {
+                    targetPrecision = target.Contains("정박", StringComparison.Ordinal)
+                        ? ExtractTargetNumberAfterKeyword(target, "정박")
+                        : ExtractTargetNumberAfterKeyword(target, "정확권");
+                }
+
+                return targetPrecision > 0 && maxPrecisionStreak >= targetPrecision
+                    ? "달성 정박 " + maxPrecisionStreak
+                    : "진행 정박 " + maxPrecisionStreak;
+            }
+
+            return "기록됨";
+        }
+
+        private static int ExtractFirstTargetNumber(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < text.Length; i += 1)
+            {
+                if (!char.IsDigit(text[i]))
+                {
+                    continue;
+                }
+
+                int start = i;
+                while (i < text.Length && char.IsDigit(text[i]))
+                {
+                    i += 1;
+                }
+
+                string value = text.Substring(start, i - start);
+                return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+            }
+
+            return 0;
+        }
+
+        private static int ExtractTargetNumberAfterKeyword(string text, string keyword)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(keyword))
+            {
+                return 0;
+            }
+
+            int keywordIndex = text.IndexOf(keyword, StringComparison.Ordinal);
+            return keywordIndex < 0
+                ? 0
+                : ExtractFirstTargetNumber(text.Substring(keywordIndex + keyword.Length));
+        }
+
+        private static int ExtractTargetNumberBeforeMarker(string text, string marker)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(marker))
+            {
+                return 0;
+            }
+
+            int markerIndex = text.IndexOf(marker, StringComparison.Ordinal);
+            if (markerIndex <= 0)
+            {
+                return 0;
+            }
+
+            int end = markerIndex - 1;
+            while (end >= 0 && char.IsWhiteSpace(text[end]))
+            {
+                end -= 1;
+            }
+
+            int start = end;
+            while (start >= 0 && char.IsDigit(text[start]))
+            {
+                start -= 1;
+            }
+
+            if (start == end)
+            {
+                return 0;
+            }
+
+            string value = text.Substring(start + 1, end - start);
+            return int.TryParse(value, out int number) ? Mathf.Max(0, number) : 0;
+        }
+
+        private static string BuildSegmentPerformanceText(string segment, int exact, int good, int miss)
+        {
+            return " / " + segment + " 정확 " + exact
+                + "회 / " + segment + " 보정 " + good
+                + "회 / " + segment + " 실수 " + miss + "회";
+        }
+
+        private string BuildLastCompletedSegmentProfileText()
+        {
+            if (string.IsNullOrEmpty(lastCompletedSegment))
+            {
+                return string.Empty;
+            }
+
+            return " / 최근 구간 " + lastCompletedSegment
+                + " / 최근 구간 정확 " + lastCompletedSegmentExactCount
+                + "회 / 최근 구간 보정 " + lastCompletedSegmentGoodCount
+                + "회 / 최근 구간 실수 " + lastCompletedSegmentMissCount + "회";
+        }
+
+        private string BuildInfiniteTerminalSegmentProfileText()
+        {
+            int resolvedPatternCount = currentBundleExactCount + currentBundleGoodCount + currentBundleMissCount;
+            if (!infiniteMode
+                || !stopped
+                || missReason == "test_stop"
+                || resolvedPatternCount <= 0)
+            {
+                return string.Empty;
+            }
+
+            return " / 종료 구간 무한 " + (infiniteSectionsCleared + 1) + "구간"
+                + " / 종료 구간 진행 " + resolvedPatternCount + "/" + ChapterTargetPatterns
+                + " / 종료 구간 정확 " + currentBundleExactCount
+                + "회 / 종료 구간 보정 " + currentBundleGoodCount
+                + "회 / 종료 구간 실수 " + currentBundleMissCount + "회";
         }
 
         private static string FormatOffset(float seconds)
@@ -2466,7 +6342,11 @@ namespace GreedLast
 
         private void Publish()
         {
-            float realtimeNow = Time.realtimeSinceStartup;
+            Publish(Time.realtimeSinceStartup);
+        }
+
+        private void Publish(float realtimeNow)
+        {
             float now = paused ? pausedAt : realtimeNow;
             float elapsedSeconds = activePattern ? now - patternStartedAt : 0f;
             float hitSeconds = Mathf.Max(0.01f, currentPattern.HitSeconds);
@@ -2475,9 +6355,13 @@ namespace GreedLast
             float resumeCountdownRemaining = resumeCountdownActive
                 ? Mathf.Max(0f, resumeCountdownEndsAt - realtimeNow)
                 : 0f;
+            float startCountdownReferenceNow = paused && startCountdownActive
+                ? pausedAt
+                : realtimeNow;
             float startCountdownRemaining = startCountdownActive
-                ? Mathf.Max(0f, startCountdownEndsAt - realtimeNow)
+                ? Mathf.Max(0f, startCountdownEndsAt - startCountdownReferenceNow)
                 : 0f;
+            float staggerRemaining = Mathf.Max(0f, staggerUntil - now);
             SnapshotChanged?.Invoke(new GreedLastRunSnapshot(
                 currentPattern,
                 judgementText,
@@ -2489,16 +6373,49 @@ namespace GreedLast
                 combo,
                 focus,
                 MaxFocus,
+                IsFocusStateActive,
+                focusStateRemainingSeconds,
+                focusStateActivationCount,
+                focusStateSuccessCount,
+                focusStateActiveSeconds,
                 maxCombo,
+                precisionStreak,
+                maxPrecisionStreak,
+                recoveryPrecisionCount,
+                perfectFocusChargeCount,
+                clutchCounterCount,
+                offbeatFlowCount,
+                stableRouteRecoveryCount,
+                variationRouteFlowCount,
+                pressureRouteCounterCount,
+                stableRouteBundleCount,
+                variationRouteBundleCount,
+                pressureRouteBundleCount,
+                lastCenterHit,
                 successCount,
+                perfectSuccessCount,
+                clutchSuccessCount,
+                offbeatSuccessCount,
                 goodCount,
                 missCount,
+                noInputMissCount,
                 infiniteSectionsCleared,
                 GetInfiniteThreatLevel(),
+                maxInfiniteThreatLevel,
                 distance,
                 chapterIndex,
                 chapterProgress,
                 ChapterTargetPatterns,
+                lastCompletedSegment,
+                lastCompletedSegmentExactCount,
+                lastCompletedSegmentGoodCount,
+                lastCompletedSegmentMissCount,
+                currentBundleExactCount,
+                currentBundleGoodCount,
+                currentBundleMissCount,
+                currentBundleAvoidanceMask,
+                threeActionExactBundleCount,
+                patternBundleBreakCount <= 0,
                 phase,
                 choiceKind,
                 choicePrompt,
@@ -2516,8 +6433,11 @@ namespace GreedLast
                 resumeCountdownActive,
                 startCountdownActive,
                 now < staggerUntil,
+                staggerRemaining,
                 devInvincible,
                 infiniteMode,
+                refillRunMode,
+                practiceMode,
                 elapsedSeconds,
                 beatProgress,
                 coreDelta,
@@ -2528,6 +6448,18 @@ namespace GreedLast
                 TimingRecommendationMilliseconds,
                 timingSampleCount,
                 TimingRecommendationMinSamples,
+                timingRecommendationApplied,
+                appliedTimingRecommendationMilliseconds,
+                GetActiveGiftStackCount("집중 축"),
+                GetActiveGiftStackCount("생존 축"),
+                GetActiveGiftStackCount("연쇄 축"),
+                relic,
+                BuildActiveChoiceProfile(),
+                BuildCurrentActiveRouteProfile(),
+                activeInfiniteLoadoutName,
+                BuildCurrentInfiniteLoadoutProfile(),
+                reviewTargetText,
+                BuildRecentPatternFlowText(),
                 BuildTimingProfileText()));
         }
     }
