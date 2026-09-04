@@ -21,6 +21,10 @@ namespace GreedLast.Editor
                     && GreedLastApp.BootBrandHoldSeconds <= 0.9f,
                 "The automatic title screen must remain readable without turning startup into an extra menu.");
             Require(
+                GreedLastApp.PrototypeVSyncCount == 0
+                    && GreedLastApp.PrototypeTargetFrameRate == 60,
+                "The mobile rhythm prototype must keep a deterministic 60 fps target without quality-level vSync overriding frame pacing.");
+            Require(
                 InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.BootInit)
                     == "리듬으로 피하고, 정확하게 돌파하라"
                     && InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.ConnectChecking)

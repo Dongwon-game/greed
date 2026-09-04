@@ -10632,6 +10632,9 @@ namespace GreedLast
 
     public sealed class GreedLastApp : MonoBehaviour
     {
+        public const int PrototypeVSyncCount = 0;
+        public const int PrototypeTargetFrameRate = 60;
+
         internal const string PracticeCompletedPrefsKey = "GreedLast.Onboarding.PracticeCompleted";
         public const float BootBrandHoldSeconds = 0.65f;
         private const float GrowthUpgradeRepeatBlockSeconds = 0.35f;
@@ -10714,8 +10717,8 @@ namespace GreedLast
 
         private void Awake()
         {
-            QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount = PrototypeVSyncCount;
+            Application.targetFrameRate = PrototypeTargetFrameRate;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             ConfigurePrototypeMobileOrientation();
 
