@@ -64,6 +64,15 @@ namespace GreedLast.Editor
             Require(
                 Resources.Load<Texture2D>("GreedLast/PrototypeEntrance") != null,
                 "The generated prototype entrance illustration must be packaged as a Resources texture for editor and player builds.");
+            TextureImporter entranceTextureImporter = AssetImporter.GetAtPath(
+                "Assets/Resources/GreedLast/PrototypeEntrance.png") as TextureImporter;
+            Require(
+                entranceTextureImporter != null
+                    && !entranceTextureImporter.mipmapEnabled
+                    && !entranceTextureImporter.isReadable
+                    && entranceTextureImporter.wrapMode == TextureWrapMode.Clamp
+                    && entranceTextureImporter.maxTextureSize <= 2048,
+                "The full-screen entrance illustration must use mobile-conscious UI texture settings without mipmaps, CPU readback, or repeating edges.");
             Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.BootInit)
                     && !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.ConnectChecking)
