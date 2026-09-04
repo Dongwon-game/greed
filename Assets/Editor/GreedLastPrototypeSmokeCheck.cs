@@ -11,16 +11,105 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check")]
         public static void Run()
         {
+            Require(
+                GreedLastDevToolPolicy.ShouldEnable(isEditor: true, isDebugBuild: false)
+                    && GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: true)
+                    && !GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: false),
+                "Dev-only shortcut panels must be unavailable in a non-editor release build.");
+            Require(
+                GreedLastApp.BootBrandHoldSeconds >= 0.6f
+                    && GreedLastApp.BootBrandHoldSeconds <= 0.9f,
+                "The automatic title screen must remain readable without turning startup into an extra menu.");
+            Require(
+                InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.BootInit)
+                    == "리듬으로 피하고, 정확하게 돌파하라"
+                    && InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.ConnectChecking)
+                        == "피라미드 입구를 여는 중"
+                    && InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.LobbyReady)
+                        .Contains("좌 · 중 · 우", StringComparison.Ordinal)
+                    && string.IsNullOrEmpty(
+                        InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.InfiniteRecordBoard)),
+                "Boot, loading, lobby, and record screens must use subtitles that match their visible purpose.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.BootInit)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.ConnectChecking)
+                    && InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.LobbyReady)
+                    && InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.ConnectBlocked)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", false, GreedLastScreenState.LobbyReady),
+                "The editor connection switch must stay out of the title/loading sequence and appear only where it can be used.");
+
             var core = new GreedLastRunCore();
             GreedLastRunSnapshot snapshot = default;
             core.SnapshotChanged += value => snapshot = value;
+            Require(
+                string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildJudgementFeedbackText", default(GreedLastRunSnapshot))),
+                "A default snapshot with no judgement text must not throw or show stale judgement feedback.");
 
             float now = Time.realtimeSinceStartup;
             core.Enter("prototype smoke", refillRun: false);
             Require(snapshot.ChoiceActive, "Normal run must open with a start gift choice.");
+            GreedLastRunSnapshot startGiftChoiceSnapshot = snapshot;
 
             core.HandleInput(GreedLastRunChannel.Center, now + 0.01f);
             Require(snapshot.StartCountdownActive, "Choosing a start gift must prepare the run countdown.");
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldStartChoiceConfirmation",
+                    true,
+                    startGiftChoiceSnapshot,
+                    snapshot),
+                "Committing a start gift into the run countdown must trigger one choice-confirmation beat.");
+            Require(
+                InvokeRuntimeUiInt(
+                    "ResolveChoiceConfirmationLaneIndex",
+                    startGiftChoiceSnapshot,
+                    snapshot.JudgementText) == 1,
+                "The choice-confirmation beat must recover the selected center lane from the committed start gift.");
+            Require(
+                InvokeRuntimeUiFloat("BuildChoiceConfirmationPulse", 1, 1, 0.56f)
+                    > InvokeRuntimeUiFloat("BuildChoiceConfirmationPulse", 1, 1, 0.12f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildChoiceConfirmationPulse", 0, 1, 0.56f),
+                        0f),
+                "Choice confirmation must fade only on the selected lane.");
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldShowChoiceConfirmationRipple",
+                    InvokeRuntimeUiFloat("BuildChoiceConfirmationPulse", 1, 1, 0.30f))
+                    && !InvokeRuntimeUiStaticBool("ShouldShowChoiceConfirmationRipple", 0f),
+                "A committed choice must keep its selected-lane ripple visible through the opening countdown handoff.");
+            Require(
+                InvokeRuntimeUiFloat("BuildChoiceConfirmationLaneVolume", 1, false)
+                    > InvokeRuntimeUiFloat("BuildChoiceConfirmationLaneVolume", 1, true)
+                    && InvokeRuntimeUiFloat("BuildChoiceConfirmationAccentVolume", false)
+                        > InvokeRuntimeUiFloat("BuildChoiceConfirmationAccentVolume", true)
+                    && InvokeRuntimeUiFloat("BuildChoiceConfirmationHapticDuration", false)
+                        > InvokeRuntimeUiFloat("BuildChoiceConfirmationHapticDuration", true)
+                    && InvokeRuntimeUiFloat("BuildChoiceConfirmationCountdownBeatDelay", false)
+                        > InvokeRuntimeUiFloat("BuildChoiceConfirmationCountdownBeatDelay", true),
+                "A final choice must land more firmly and leave a short lead before countdown compared with an intermediate route-to-gift choice.");
+            Require(
+                InvokeRuntimeUiFloat("BuildCountdownBeatScheduleStartTime", 10f, 10.18f) > 10f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildCountdownBeatScheduleStartTime", 10f, 0f),
+                        10f),
+                "Only a freshly committed final choice may postpone the first countdown click.");
+            float postChoiceStageDelay = InvokeRuntimeUiFloat("BuildStageTransitionStartDelay", 0.56f);
+            float postChoiceCountdownDelay = InvokeRuntimeUiFloat("BuildChoiceConfirmationCountdownBeatDelay", false);
+            Require(
+                postChoiceStageDelay > 0f
+                    && postChoiceCountdownDelay > postChoiceStageDelay
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStageTransitionStartDelay", 0f),
+                        0f),
+                "A final choice must leave separate room for choice confirmation, chapter presentation, and the first countdown click.");
+            Require(
+                !InvokeRuntimeUiStaticBool(
+                    "ShouldStartChoiceConfirmation",
+                    true,
+                    snapshot,
+                    snapshot),
+                "Repeated countdown snapshots must not replay the choice-confirmation beat.");
 
             core.Tick(now + 2f);
             core.Tick(now + 3f);
@@ -29,6 +118,28 @@ namespace GreedLast.Editor
             core.FillFocusForTest();
             Require(snapshot.FocusStateActive, "The focus test command must activate focus state.");
             Require(snapshot.FocusStateActivationCount == 1, "Focus activation must be counted for the result summary.");
+            string focusFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", snapshot);
+            Require(
+                focusFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                    && focusFeelStatus.Contains("→정확→고점", StringComparison.Ordinal),
+                "A focus-state trap must name high-score payoff as the exact-input goal. Actual: "
+                    + focusFeelStatus);
+            Require(
+                GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains("정확→고점", StringComparison.Ordinal),
+                "A focus-state live coach must lead with the high-score exact-input goal.");
+            string focusActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueText", snapshot);
+            Require(
+                focusActionCue.Contains("고점", StringComparison.Ordinal)
+                    && focusActionCue.Contains("→고점", StringComparison.Ordinal)
+                    && focusActionCue.Contains("정확+", StringComparison.Ordinal),
+                "A focus-state active action cue must show the high-score exact-input goal beside the payoff. Actual: "
+                    + focusActionCue);
+            string focusScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", snapshot);
+            Require(
+                focusScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                    && focusScorePreview.Contains("→고점", StringComparison.Ordinal),
+                "A focus-state score preview must keep the high-score exact-input goal beside the score. Actual: "
+                    + focusScorePreview);
             core.Tick(now + 3.25f);
             Require(snapshot.FocusStateActiveSeconds > 0.2f, "Active focus time must accumulate only while the run is moving.");
             int scoreBeforeFocusHit = snapshot.Score;
@@ -39,6 +150,9 @@ namespace GreedLast.Editor
             Require(snapshot.Score > scoreBeforeFocusHit, "Focus success must award score.");
             Require(snapshot.FocusStateSuccessCount == 1, "An exact input during focus state must be counted separately.");
             Require(snapshot.JudgementText.Contains("집중 상태 점수 배율", StringComparison.Ordinal), "Focus success must report its score multiplier.");
+            Require(
+                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot).Contains("정확→고점", StringComparison.Ordinal),
+                "A focused exact judgement must keep its high-score payoff goal visible after input.");
 
             core.RequestNextPattern(now + 5f);
             Require(snapshot.ActivePattern && snapshot.Pattern.IsValid, "A second trap pattern must be startable.");
@@ -82,6 +196,88 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildStartCountdownContext", refillSnapshot).Contains("보충 런", StringComparison.Ordinal),
                 "A refill countdown must preserve why the player is re-entering the pyramid.");
+            float refillClock = refillNow + 0.01f;
+            for (int chapter = 1; chapter <= 4; chapter += 1)
+            {
+                StartBufferedPattern(refillCore, ref refillSnapshot, ref refillClock);
+                if (chapter == 1)
+                {
+                    string refillFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", refillSnapshot);
+                    Require(
+                        refillFeelStatus.Contains("체감 보충", StringComparison.Ordinal)
+                            && !refillFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                            && refillFeelStatus.Contains("→정확", StringComparison.Ordinal),
+                        "A refill-run active trap must expose the refill feel token instead of looking like a normal run. Actual: "
+                            + refillFeelStatus);
+                }
+
+                ResolveExactBundle(refillCore, ref refillSnapshot, ref refillClock, "refill chapter " + chapter);
+                if (chapter <= 3)
+                {
+                    Require(refillSnapshot.ChoiceKind == GreedLastChoiceKind.Node, "A refill clear sample must keep normal-run chapter choices.");
+                    refillCore.HandleInput(GreedLastRunChannel.Left, refillClock += 0.2f);
+                    Require(refillSnapshot.ChoiceKind == GreedLastChoiceKind.Gift, "A refill node choice must lead to its chapter gift.");
+                    refillCore.HandleInput(GreedLastRunChannel.Center, refillClock += 0.2f);
+                    if (chapter == 2)
+                    {
+                        Require(refillSnapshot.ChoiceKind == GreedLastChoiceKind.Relic, "A refill chapter-two gift must still lead to relic choice.");
+                        refillCore.HandleInput(GreedLastRunChannel.Right, refillClock += 0.2f);
+                    }
+                }
+            }
+
+            Require(refillSnapshot.CoreRetrieved, "A completed refill run must still retrieve the resonance core.");
+            Require(refillSnapshot.Phase == GreedLastRunPhase.EscapeRunning, "A completed refill chapter set must enter escape verification.");
+            StartBufferedPattern(refillCore, ref refillSnapshot, ref refillClock);
+            ResolveExactBundle(refillCore, ref refillSnapshot, ref refillClock, "refill escape verification");
+            Require(
+                refillSnapshot.RefillRun && refillSnapshot.SaveEligible && refillCore.CanExitAfterClear,
+                "A clean refill clear must expose the same one-time save-or-skip choice as a normal clear.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", refillSnapshot, true) == "저장 없이 로비",
+                "A stopped refill clear must label the lobby button as explicitly skipping the save candidate.");
+            GreedLastRunRecord refillClearRecord = refillCore.CreateRunRecord();
+            Require(refillClearRecord.IsValid, "A completed refill run must create a reusable clear record.");
+            var refillSkipBackend = CreateIsolatedBackend();
+            refillSkipBackend.RegisterClear(refillClearRecord);
+            Require(refillSkipBackend.HasSaveLoadoutCandidate, "A refill clear skip test must begin from a pending save candidate.");
+            int refillOccupiedSlotCountBeforeSkip = CountOccupiedSaveSlots(refillSkipBackend.LoadLobby());
+            refillSkipBackend.DiscardSaveLoadoutCandidate();
+            GreedLastLobbySnapshot refillSkippedLobby = refillSkipBackend.LoadLobby();
+            Require(
+                !refillSkipBackend.HasSaveLoadoutCandidate
+                    && !refillSkippedLobby.SaveLoadoutCandidateAvailable
+                    && CountOccupiedSaveSlots(refillSkippedLobby) == refillOccupiedSlotCountBeforeSkip,
+                "Skipping a refill clear save must consume only the candidate and must not mutate existing slots.");
+            string refillSkipNotice = InvokeAppStaticLabel(
+                "BuildRefillClearSkipSaveMessage",
+                refillSkipBackend.BuildRunClearSkipSaveMessage(refillClearRecord));
+            RequireTextLayoutBudget(refillSkipNotice, 4, 120, "completed refill skip-save notice");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", refillSkipNotice)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", refillSkipNotice) == "보충 기록",
+                "A refill skip-save lobby notice must stay visible and route the record button to refill review.");
+            Require(
+                refillSkipNotice.StartsWith("보충 런 저장 안 함", StringComparison.Ordinal)
+                    && refillSkipNotice.Contains("저장 조합은 갱신되지 않았습니다.", StringComparison.Ordinal)
+                    && refillSkipNotice.Contains("기록:", StringComparison.Ordinal)
+                    && !refillSkipNotice.Contains("판정:", StringComparison.Ordinal)
+                    && !refillSkipNotice.Contains("저장 후보", StringComparison.Ordinal),
+                "A completed refill skip-save notice must remain compact and must not revive candidate details.");
+            var refillSkipStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+            GreedLastStateSnapshot refillSkipNoticeSnapshot = default;
+            refillSkipStateMachine.StateChanged += value => refillSkipNoticeSnapshot = value;
+            refillSkipStateMachine.SetLobbyReady(refillSkippedLobby);
+            refillSkipStateMachine.ShowLocalNotice(refillSkipNotice);
+            Require(
+                refillSkipNoticeSnapshot.State == GreedLastScreenState.LobbyReady
+                    && refillSkipNoticeSnapshot.Headline == "피라미드 입구"
+                    && refillSkipNoticeSnapshot.Detail == refillSkipNotice
+                    && refillSkipNoticeSnapshot.CoreActionsEnabled
+                    && !refillSkipNoticeSnapshot.SaveLoadoutCandidateAvailable
+                    && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", refillSkipNoticeSnapshot.Detail)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", refillSkipNoticeSnapshot.Detail) == "보충 기록",
+                "A refill skip-save notice must survive the lobby state-machine notice path as a visible refill review summary.");
 
             var cleanBundleCore = new GreedLastRunCore();
             GreedLastRunSnapshot cleanSnapshot = default;
@@ -108,6 +304,7 @@ namespace GreedLast.Editor
             string[] expectedPracticeHazards = { "바닥", "상단", "측면" };
             string[] expectedPracticeResponses = { "점프", "숙이기", "비틀기" };
             string[] expectedPracticeSymbols = { "↑", "↓", "↔" };
+            string[] expectedPracticePayoffGoals = { "정확→집중", "정확→반격", "정확→연쇄" };
             GreedLastAvoidanceType[] expectedPracticeAvoidanceTypes =
             {
                 GreedLastAvoidanceType.Jump,
@@ -133,6 +330,20 @@ namespace GreedLast.Editor
                         && InvokeRuntimeUiLabel("BuildRouteCadencePipActionSymbol", cleanSnapshot, i)
                             == (i == 0 ? "↑" : i == 1 ? "↓" : "↔"),
                     "Chapter one must expose the active jump-slide-twist step in the progress rail.");
+                float farCadenceReadiness = InvokeRuntimeUiFloat("BuildRouteCadencePipReadinessPulse", "active", -0.42f, 0.10f, 0f);
+                float closeCadenceReadiness = InvokeRuntimeUiFloat("BuildRouteCadencePipReadinessPulse", "active", 0.02f, 0.10f, 0f);
+                float stageCadenceReadiness = InvokeRuntimeUiFloat("BuildRouteCadencePipReadinessPulse", "active", -0.42f, 0.10f, 1f);
+                Require(
+                    closeCadenceReadiness > farCadenceReadiness
+                        && stageCadenceReadiness > farCadenceReadiness
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRouteCadencePipReadinessPulse", "done", 0f, 0.10f, 1f), 0f)
+                        && InvokeRuntimeUiFloat("BuildRouteCadencePipActiveScale", 0f, closeCadenceReadiness)
+                            > InvokeRuntimeUiFloat("BuildRouteCadencePipActiveScale", 0f, farCadenceReadiness)
+                        && InvokeRuntimeUiFloat("BuildRouteCadencePipActiveActionScale", 0f, closeCadenceReadiness)
+                            > InvokeRuntimeUiFloat("BuildRouteCadencePipActiveActionScale", 0f, farCadenceReadiness)
+                        && InvokeRuntimeUiFloat("BuildRouteCadencePipActiveColorBlend", closeCadenceReadiness)
+                            > InvokeRuntimeUiFloat("BuildRouteCadencePipActiveColorBlend", farCadenceReadiness),
+                    "The active route cadence pip must breathe brighter and larger near the judgement window.");
                 cleanBundleCore.HandleInput(
                     cleanSnapshot.Pattern.Channel,
                     patternStart + cleanSnapshot.Pattern.CoreSeconds - cleanBundleCore.InputTimingOffsetSeconds);
@@ -182,6 +393,25 @@ namespace GreedLast.Editor
                     && InvokeRuntimeUiFloat("BuildPatternBundleFeedbackFlashDuration", true)
                         > InvokeRuntimeUiFloat("BuildPatternBundleFeedbackFlashDuration", false),
                 "A three-action exact bundle must keep the judgement-history and flash feedback alive longer.");
+            float freshThreeActionBurstAlpha = InvokeRuntimeUiFloat("BuildThreeActionExactBurstAlpha", 0.62f);
+            float midThreeActionBurstAlpha = InvokeRuntimeUiFloat("BuildThreeActionExactBurstAlpha", 0.31f);
+            float fadedThreeActionBurstAlpha = InvokeRuntimeUiFloat("BuildThreeActionExactBurstAlpha", 0f);
+            Require(
+                freshThreeActionBurstAlpha > midThreeActionBurstAlpha
+                    && midThreeActionBurstAlpha > fadedThreeActionBurstAlpha,
+                "A three-action exact burst must fade out after the completion moment.");
+            Require(
+                InvokeRuntimeUiFloat("BuildThreeActionExactBurstScale", 0.31f)
+                    > InvokeRuntimeUiFloat("BuildThreeActionExactBurstScale", 0.62f)
+                    && InvokeRuntimeUiFloat("BuildThreeActionExactBurstSpread", 1f)
+                        > InvokeRuntimeUiFloat("BuildThreeActionExactBurstSpread", 0f)
+                    && InvokeRuntimeUiFloat("BuildThreeActionExactBurstRise", 0.5f) > 0f,
+                "A three-action exact burst must expand and lift before fading.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunChannelAnchorX", GreedLastRunChannel.Left), 0.2f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunChannelAnchorX", GreedLastRunChannel.Center), 0.5f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunChannelAnchorX", GreedLastRunChannel.Right), 0.8f),
+                "Run channel anchor positions must keep three-action burst feedback lane-aligned.");
             Require(cleanSnapshot.FocusStateActive, "The clean bundle sequence must reach focus state.");
             Require(cleanSnapshot.LastCompletedSegment == "1장", "The first completed bundle must expose chapter one as the latest segment.");
             Require(
@@ -210,14 +440,528 @@ namespace GreedLast.Editor
             Require(practiceSnapshot.PracticeMode, "Practice entry must publish an explicit practice mode snapshot.");
             Require(!practiceSnapshot.ChoiceActive, "Practice must skip gifts and route choices.");
             Require(practiceSnapshot.StartCountdownActive, "Practice must provide the same start buffer as a real run.");
+            string practiceOpeningContext = InvokeRuntimeUiLabel("BuildStartCountdownContext", practiceSnapshot);
+            Require(
+                practiceOpeningContext.Contains("정확→집중", StringComparison.Ordinal)
+                    && practiceOpeningContext.Contains("정확→반격", StringComparison.Ordinal)
+                    && practiceOpeningContext.Contains("정확→연쇄", StringComparison.Ordinal),
+                "Practice opening countdown text must teach exact-input payoff goals before the first trap.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunObjectiveLine", practiceSnapshot).Contains("정확→집중", StringComparison.Ordinal),
+                "Practice objective text must keep the current exact-input payoff goal visible during the drill.");
 
             practiceCore.Tick(practiceNow + 2f);
             practiceCore.Tick(practiceNow + 3f);
             float practicePatternStart = practiceNow + 3f;
+            string practiceFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", practiceSnapshot);
+            Require(
+                practiceFeelStatus.Contains("체감 연습", StringComparison.Ordinal)
+                    && !practiceFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                    && practiceFeelStatus.Contains("→정확", StringComparison.Ordinal),
+                "A practice active trap must expose the practice feel token instead of looking like a normal run. Actual: "
+                    + practiceFeelStatus);
             Require(
                 Mathf.Approximately(InvokeRuntimeUiFloat("BuildStageMotionScale", practiceSnapshot), 0.82f)
                     && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStageDepthScale", practiceSnapshot), 0.88f),
                 "Practice must keep a calm motion and shallow depth while teaching the three responses.");
+            float hiddenFloorTileAlpha = InvokeRuntimeUiFloat("BuildFloorBeatTileAlpha", false, true, 1f, 0.8f, 0f, false, 1f);
+            float idleFloorTileAlpha = InvokeRuntimeUiFloat("BuildFloorBeatTileAlpha", true, false, 0.35f, 0.8f, 0f, false, 1f);
+            float runningFloorTileAlpha = InvokeRuntimeUiFloat("BuildFloorBeatTileAlpha", true, true, 1f, 0.8f, 0f, false, 1f);
+            float boostedFloorTileAlpha = InvokeRuntimeUiFloat("BuildFloorBeatTileAlpha", true, true, 1f, 0.8f, 1f, true, 1f);
+            Require(
+                Mathf.Approximately(hiddenFloorTileAlpha, 0f)
+                    && runningFloorTileAlpha > idleFloorTileAlpha
+                    && boostedFloorTileAlpha > runningFloorTileAlpha,
+                "Floor beat tiles must hide off-run, brighten while running, and lift during focus/payoff bursts.");
+            Require(
+                InvokeRuntimeUiFloat("BuildFloorBeatTileHalfWidth", 0.85f, 1.1f, 0.4f)
+                    > InvokeRuntimeUiFloat("BuildFloorBeatTileHalfWidth", 0.15f, 1.1f, 0.4f)
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileHeight", 0.85f, 1.1f, 0.4f)
+                        > InvokeRuntimeUiFloat("BuildFloorBeatTileHeight", 0.15f, 1.1f, 0.4f),
+                "Floor beat tiles must widen and thicken as they approach the player.");
+            float farFloorCompression = InvokeRuntimeUiFloat(
+                "BuildFloorBeatTileJudgementCompressionForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.925f,
+                0f,
+                1f);
+            float nearFloorCompression = InvokeRuntimeUiFloat(
+                "BuildFloorBeatTileJudgementCompressionForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.925f,
+                0f,
+                1f);
+            float offLineFloorCompression = InvokeRuntimeUiFloat(
+                "BuildFloorBeatTileJudgementCompressionForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.30f,
+                0f,
+                1f);
+            float pausedFloorCompression = InvokeRuntimeUiFloat(
+                "BuildFloorBeatTileJudgementCompressionForValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.925f,
+                0f,
+                1f);
+            float highThreatFloorCompression = InvokeRuntimeUiFloat(
+                "BuildFloorBeatTileJudgementCompressionForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Clutch,
+                true,
+                5,
+                0.925f,
+                0.4f,
+                1f);
+            Require(
+                nearFloorCompression > farFloorCompression
+                    && nearFloorCompression > offLineFloorCompression
+                    && highThreatFloorCompression > nearFloorCompression
+                    && Mathf.Approximately(pausedFloorCompression, 0f),
+                "Floor beat tile compression must peak near the judgement line, disappear while paused, and intensify under high infinite threat.");
+            Require(
+                InvokeRuntimeUiFloat("BuildFloorBeatTileCompressionWidthScale", nearFloorCompression) > 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileCompressionHeightScale", nearFloorCompression) < 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileCompressionAlphaLift", nearFloorCompression) > 0f,
+                "Floor beat tile compression must widen, flatten, and brighten the contact strip.");
+            float nearFloorBeatCueUrgency = InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgency", 1f, 0.925f, 0);
+            float farFloorBeatCueUrgency = InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgency", 1f, 0.30f, 0);
+            float rearFloorBeatCueUrgency = InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgency", 1f, 0.925f, 5);
+            Require(
+                nearFloorBeatCueUrgency > farFloorBeatCueUrgency
+                    && nearFloorBeatCueUrgency > rearFloorBeatCueUrgency
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgency", 0f, 0.925f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyWidthScale", nearFloorBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyHeightScale", nearFloorBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyScaleY", nearFloorBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyScaleY", farFloorBeatCueUrgency)
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyAlphaLift", nearFloorBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyAlphaLift", farFloorBeatCueUrgency)
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyColorBlend", nearFloorBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyColorBlend", farFloorBeatCueUrgency),
+                "Floor beat tiles must receive beat-cue urgency strongest near the judgement line and foreground.");
+            float idleFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", false, 0.20f, 1f, 1.4f, 1f, 0);
+            float baseFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1f, 0f, 0);
+            float boostedFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1.4f, 1f, 0);
+            float staggerFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 0.62f, 0f, 0);
+            Require(
+                Mathf.Approximately(idleFloorTilePhase, 0f)
+                    && boostedFloorTilePhase > baseFloorTilePhase
+                    && staggerFloorTilePhase < baseFloorTilePhase,
+                "Floor beat tile motion must share the forward payoff surge and miss-recovery drag.");
+            float idlePillarPhase = InvokeRuntimeUiFloat("BuildSceneryPillarPhase", false, 0.25f, 1f, 1.4f, 1f, 0, 4);
+            float basePillarPhase = InvokeRuntimeUiFloat("BuildSceneryPillarPhase", true, 0.25f, 1f, 1f, 0f, 0, 4);
+            float boostedPillarPhase = InvokeRuntimeUiFloat("BuildSceneryPillarPhase", true, 0.25f, 1f, 1.4f, 1f, 0, 4);
+            float staggerPillarPhase = InvokeRuntimeUiFloat("BuildSceneryPillarPhase", true, 0.25f, 1f, 0.62f, 0f, 0, 4);
+            Require(
+                Mathf.Approximately(idlePillarPhase, 0f)
+                    && boostedPillarPhase > basePillarPhase
+                    && staggerPillarPhase < basePillarPhase,
+                "Scenery pillars must share the same forward payoff surge and miss-recovery drag.");
+            float nearPillarDownbeat = InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatLift", 1f, 0.84f, 0, 4);
+            float farPillarDownbeat = InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatLift", 1f, 0.18f, 0, 4);
+            float rearPillarDownbeat = InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatLift", 1f, 0.84f, 3, 4);
+            Require(
+                nearPillarDownbeat > farPillarDownbeat
+                    && nearPillarDownbeat > rearPillarDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatLift", 0f, 0.84f, 0, 4), 0f)
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatSpreadScale", nearPillarDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatWidthScale", nearPillarDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatHeightScale", nearPillarDownbeat) > 1f
+                    && InvokeRuntimeUiInt("BuildSceneryPillarDownbeatAlphaLift", nearPillarDownbeat)
+                        > InvokeRuntimeUiInt("BuildSceneryPillarDownbeatAlphaLift", farPillarDownbeat)
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatColorBlend", nearPillarDownbeat)
+                        > InvokeRuntimeUiFloat("BuildSceneryPillarDownbeatColorBlend", farPillarDownbeat),
+                "Scenery pillars must catch the downbeat most clearly near the player and fade it through the depth trail.");
+            float farTunnelContact = InvokeRuntimeUiFloat(
+                "BuildTunnelDepthContactStrengthFromValues",
+                true,
+                false,
+                -0.42f,
+                0.055f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0f,
+                1f);
+            float nearTunnelContact = InvokeRuntimeUiFloat(
+                "BuildTunnelDepthContactStrengthFromValues",
+                true,
+                false,
+                -0.02f,
+                0.055f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0f,
+                1f);
+            float blockedTunnelContact = InvokeRuntimeUiFloat(
+                "BuildTunnelDepthContactStrengthFromValues",
+                true,
+                true,
+                -0.02f,
+                0.055f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0f,
+                1f);
+            float highThreatTunnelContact = InvokeRuntimeUiFloat(
+                "BuildTunnelDepthContactStrengthFromValues",
+                true,
+                false,
+                -0.02f,
+                0.055f,
+                0.10f,
+                GreedLastTimingType.Clutch,
+                true,
+                5,
+                0.4f,
+                1f);
+            Require(
+                nearTunnelContact > farTunnelContact
+                    && highThreatTunnelContact > nearTunnelContact
+                    && Mathf.Approximately(blockedTunnelContact, 0f),
+                "Tunnel depth contact must peak near the judgement line, mute while blocked, and intensify in high-threat infinite mode.");
+            Require(
+                InvokeRuntimeUiFloat("BuildTunnelDepthContactScale", 1.12f, nearTunnelContact) < 1.12f
+                    && InvokeRuntimeUiInt("BuildTunnelDepthContactAlphaLift", nearTunnelContact, true)
+                        > InvokeRuntimeUiInt("BuildTunnelDepthContactAlphaLift", farTunnelContact, true)
+                    && InvokeRuntimeUiInt("BuildTunnelDepthHorizonAlphaLift", nearTunnelContact) > 0
+                    && InvokeRuntimeUiFloat("BuildTunnelDepthContactColorBlend", nearTunnelContact, true)
+                        > InvokeRuntimeUiFloat("BuildTunnelDepthContactColorBlend", farTunnelContact, true)
+                    && InvokeRuntimeUiFloat("BuildTunnelDepthPillarSpreadScale", nearTunnelContact, 3)
+                        > InvokeRuntimeUiFloat("BuildTunnelDepthPillarSpreadScale", farTunnelContact, 3)
+                    && InvokeRuntimeUiFloat("BuildTunnelDepthPillarWidthScale", nearTunnelContact, 0) > 1f
+                    && InvokeRuntimeUiFloat("BuildTunnelDepthPillarHeightScale", nearTunnelContact, 0) < 1f,
+                "Tunnel contact must compress depth, brighten rails, widen the closest pillars, and flatten their hit beat.");
+            float nearTunnelBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelBeatCueUrgency", 1f, nearTunnelContact);
+            float farTunnelBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelBeatCueUrgency", 1f, farTunnelContact);
+            float innerRailBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelRailBeatCueUrgency", nearTunnelBeatCueUrgency, true);
+            float outerRailBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelRailBeatCueUrgency", nearTunnelBeatCueUrgency, false);
+            float nearPillarBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgency", nearTunnelBeatCueUrgency, 0.84f, 0);
+            float farPillarBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgency", nearTunnelBeatCueUrgency, 0.18f, 0);
+            float rearPillarBeatCueUrgency = InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgency", nearTunnelBeatCueUrgency, 0.84f, 3);
+            Require(
+                nearTunnelBeatCueUrgency > farTunnelBeatCueUrgency
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTunnelBeatCueUrgency", 0f, nearTunnelContact), 0f)
+                    && innerRailBeatCueUrgency > outerRailBeatCueUrgency
+                    && InvokeRuntimeUiInt("BuildTunnelBeatCueUrgencyAlphaLift", innerRailBeatCueUrgency, true)
+                        > InvokeRuntimeUiInt("BuildTunnelBeatCueUrgencyAlphaLift", outerRailBeatCueUrgency, false)
+                    && InvokeRuntimeUiFloat("BuildTunnelBeatCueUrgencyScaleLift", innerRailBeatCueUrgency, true) > 0f
+                    && InvokeRuntimeUiInt("BuildTunnelBeatCueUrgencyHorizonAlphaLift", nearTunnelBeatCueUrgency) > 0
+                    && InvokeRuntimeUiFloat("BuildTunnelBeatCueUrgencyHorizonScaleLift", nearTunnelBeatCueUrgency) > 0f
+                    && nearPillarBeatCueUrgency > farPillarBeatCueUrgency
+                    && nearPillarBeatCueUrgency > rearPillarBeatCueUrgency
+                    && InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgencySpreadScale", nearPillarBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgencyWidthScale", nearPillarBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgencyHeightScale", nearPillarBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiInt("BuildTunnelPillarBeatCueUrgencyAlphaLift", nearPillarBeatCueUrgency)
+                        > InvokeRuntimeUiInt("BuildTunnelPillarBeatCueUrgencyAlphaLift", farPillarBeatCueUrgency)
+                    && InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgencyColorBlend", nearPillarBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildTunnelPillarBeatCueUrgencyColorBlend", farPillarBeatCueUrgency),
+                "Tunnel rails and pillars must inherit live beat-cue urgency without turning far depth elements into the main cue.");
+            float neutralHorizonX = InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorX", 0f, 1f);
+            float leftHorizonX = InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorX", -1f, 1f);
+            float rightHorizonX = InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorX", 1f, 1f);
+            float calmHorizonScale = InvokeRuntimeUiFloat("BuildTunnelHorizonScaleX", 0.5f, 1f, 0f, 0f, 0f);
+            float rotationHorizonScale = InvokeRuntimeUiFloat("BuildTunnelHorizonScaleX", 0.5f, 1f, 0f, 0f, 1f);
+            float urgentHorizonScale = InvokeRuntimeUiFloat("BuildTunnelHorizonScaleX", 1f, 1.08f, 1f, nearTunnelBeatCueUrgency, 1f);
+            Require(
+                Mathf.Approximately(neutralHorizonX, 0.5f)
+                    && leftHorizonX < 0.5f
+                    && rightHorizonX > 0.5f
+                    && InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorY", nearTunnelContact, 0f)
+                        < InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorY", farTunnelContact, 0f)
+                    && InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorY", nearTunnelContact, 1f)
+                        > InvokeRuntimeUiFloat("BuildTunnelHorizonAnchorY", nearTunnelContact, 0f)
+                    && InvokeRuntimeUiFloat("BuildTunnelHorizonTiltAngle", -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildTunnelHorizonTiltAngle", 1f, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildTunnelHorizonTiltAngle", 1f, 1f)) <= 2.6f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTunnelHorizonTiltAngle", 0f, 1f), 0f)
+                    && rotationHorizonScale > calmHorizonScale
+                    && urgentHorizonScale > rotationHorizonScale
+                    && InvokeRuntimeUiInt("BuildTunnelHorizonRotationAlphaLift", 1f)
+                        > InvokeRuntimeUiInt("BuildTunnelHorizonRotationAlphaLift", 0f)
+                    && InvokeRuntimeUiFloat("BuildTunnelHorizonRotationColorBlend", 1f)
+                        > InvokeRuntimeUiFloat("BuildTunnelHorizonRotationColorBlend", 0f),
+                "Tunnel horizon must act as a small phone-tilt lock, drifting and tilting only a few degrees during rotation corridors.");
+            int hiddenEntranceArchAlpha = InvokeRuntimeUiInt("BuildTempleEntranceArchPieceAlpha", false, 1f, 1f, 1f, 1f, 1f, true);
+            int calmEntranceArchAlpha = InvokeRuntimeUiInt("BuildTempleEntranceArchPieceAlpha", true, 0.45f, 0.10f, 0f, 0f, 0f, true);
+            int urgentEntranceArchAlpha = InvokeRuntimeUiInt("BuildTempleEntranceArchPieceAlpha", true, 1f, 1f, 1f, 1f, 1f, true);
+            const float launchArchStartedAt = 20f;
+            const float launchArchUntil = 20.30f;
+            float launchArchPeak = InvokeRuntimeUiFloat(
+                "BuildTempleEntranceLaunchPassThroughStrength",
+                true,
+                true,
+                false,
+                launchArchStartedAt,
+                launchArchStartedAt,
+                launchArchUntil);
+            float launchArchMid = InvokeRuntimeUiFloat(
+                "BuildTempleEntranceLaunchPassThroughStrength",
+                true,
+                true,
+                false,
+                20.15f,
+                launchArchStartedAt,
+                launchArchUntil);
+            Require(
+                hiddenEntranceArchAlpha == 0
+                    && urgentEntranceArchAlpha > calmEntranceArchAlpha
+                    && urgentEntranceArchAlpha <= 116
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorX", 0, 0f, 0f)
+                        < InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorX", 1, 0f, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorX", 2, 0f, 0f), 0.5f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorX", 2, -1f, 1f) < 0.5f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorX", 2, 1f, 1f) > 0.5f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorY", 2, 1f, 0f)
+                        < InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAnchorY", 2, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceWidth", 2, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceWidth", 2, 0f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceHeight", 0, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceHeight", 0, 0f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAngle", 2, -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAngle", 2, 1f, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceAngle", 2, 1f, 1f)) <= 5.5f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceColorBlend", 1f, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildTempleEntranceArchPieceColorBlend", 0f, 0f, 0f, 0f)
+                    && launchArchPeak > launchArchMid
+                    && launchArchMid > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildTempleEntranceLaunchPassThroughStrength",
+                        false,
+                        true,
+                        false,
+                        launchArchStartedAt,
+                        launchArchStartedAt,
+                        launchArchUntil), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildTempleEntranceLaunchPassThroughStrength",
+                        true,
+                        false,
+                        false,
+                        launchArchStartedAt,
+                        launchArchStartedAt,
+                        launchArchUntil), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildTempleEntranceLaunchPassThroughStrength",
+                        true,
+                        true,
+                        false,
+                        launchArchUntil,
+                        launchArchStartedAt,
+                        launchArchUntil), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildTempleEntranceLaunchPassThroughStrength",
+                        true,
+                        true,
+                        true,
+                        launchArchStartedAt,
+                        launchArchStartedAt,
+                        launchArchUntil), 0f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchAnchorYOffset", 2, 1f)
+                        < InvokeRuntimeUiFloat("BuildTempleEntranceLaunchAnchorYOffset", 0, 1f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchWidthLift", 2, 1f)
+                        > InvokeRuntimeUiFloat("BuildTempleEntranceLaunchWidthLift", 0, 1f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchHeightLift", 0, 1f)
+                        > InvokeRuntimeUiFloat("BuildTempleEntranceLaunchHeightLift", 2, 1f)
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchScaleX", 2, 1f) > 1f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchScaleX", 2, 1f) <= 1.085f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchScaleY", 0, 1f) > 1f
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchScaleY", 0, 1f) <= 1.065f
+                    && InvokeRuntimeUiInt("BuildTempleEntranceLaunchAlphaLift", 2, 1f) == 36
+                    && InvokeRuntimeUiFloat("BuildTempleEntranceLaunchColorBlend", 1f) <= 0.30f,
+                "Temple entrance arch must stay low-alpha, lean only subtly, and make one bounded pass-through surge during the existing GO release.");
+            float nearPillarRotationCue = InvokeRuntimeUiFloat("BuildSceneryPillarRotationCue", 1f, 0.84f, 0);
+            float farPillarRotationCue = InvokeRuntimeUiFloat("BuildSceneryPillarRotationCue", 1f, 0.18f, 3);
+            Require(
+                nearPillarRotationCue > farPillarRotationCue
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSceneryPillarRotationCue", 0f, 0.84f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationSpreadScale", nearPillarRotationCue) > 1f
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationOffsetX", -1f, nearPillarRotationCue, -1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationOffsetX", 1f, nearPillarRotationCue, 1f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSceneryPillarRotationOffsetX", 0f, nearPillarRotationCue, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationAngle", -1f, nearPillarRotationCue, -1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationAngle", 1f, nearPillarRotationCue, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildSceneryPillarRotationAngle", 1f, nearPillarRotationCue, 1f)) <= 5.2f
+                    && InvokeRuntimeUiInt("BuildSceneryPillarRotationAlphaLift", nearPillarRotationCue)
+                        > InvokeRuntimeUiInt("BuildSceneryPillarRotationAlphaLift", farPillarRotationCue)
+                    && InvokeRuntimeUiFloat("BuildSceneryPillarRotationColorBlend", nearPillarRotationCue)
+                        > InvokeRuntimeUiFloat("BuildSceneryPillarRotationColorBlend", farPillarRotationCue),
+                "Rotation-corridor scenery pillars must lean and drift subtly with the corridor without rotating the whole screen.");
+            float stoppedStridePhase = InvokeRuntimeUiFloat("BuildRunnerStridePhase", false, 0.30f, 1.4f, 1f);
+            float baseStridePhase = InvokeRuntimeUiFloat("BuildRunnerStridePhase", true, 0.30f, 1f, 0f);
+            float boostedStridePhase = InvokeRuntimeUiFloat("BuildRunnerStridePhase", true, 0.30f, 1.4f, 1f);
+            float staggerStridePhase = InvokeRuntimeUiFloat("BuildRunnerStridePhase", true, 0.30f, 0.62f, 0f);
+            Require(
+                Mathf.Approximately(stoppedStridePhase, 0f)
+                    && boostedStridePhase > baseStridePhase
+                    && staggerStridePhase < baseStridePhase,
+                "Runner stride must accelerate with payoff motion and slow during miss recovery.");
+            float stoppedRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                false,
+                true,
+                false,
+                0f,
+                -0.02f,
+                0.10f,
+                0f,
+                0f);
+            float blockedRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                true,
+                true,
+                true,
+                0f,
+                -0.02f,
+                0.10f,
+                0f,
+                0f);
+            float farRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                true,
+                true,
+                false,
+                0f,
+                -0.72f,
+                0.10f,
+                0f,
+                0f);
+            float airborneRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                true,
+                true,
+                false,
+                0.25f,
+                -0.02f,
+                0.10f,
+                0f,
+                0f);
+            float nearRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                true,
+                true,
+                false,
+                0f,
+                -0.02f,
+                0.10f,
+                0f,
+                0f);
+            float recoveryRunnerContact = InvokeRuntimeUiFloat(
+                "BuildRunnerGroundContactStrength",
+                true,
+                true,
+                false,
+                0f,
+                -0.02f,
+                0.10f,
+                0.5f,
+                0.7f);
+            Require(
+                Mathf.Approximately(stoppedRunnerContact, 0f)
+                    && Mathf.Approximately(blockedRunnerContact, 0f)
+                    && nearRunnerContact > farRunnerContact
+                    && nearRunnerContact > airborneRunnerContact
+                    && recoveryRunnerContact > nearRunnerContact,
+                "Runner ground contact must vanish while blocked, peak near planted exact timing, and intensify during payoff/recovery pressure.");
+            Require(
+                InvokeRuntimeUiFloat("BuildRunnerShadowContactScaleX", 1f, nearRunnerContact, 0f) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerShadowContactScaleY", 1f, nearRunnerContact, 0f)
+                        < InvokeRuntimeUiFloat("BuildRunnerShadowContactScaleY", 1f, farRunnerContact, 0f)
+                    && InvokeRuntimeUiFloat("BuildRunnerShadowContactAlpha", 112f, nearRunnerContact, 0f) > 112f
+                    && InvokeRuntimeUiFloat("BuildRunnerContactBodyScaleX", nearRunnerContact) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerContactBodyScaleY", nearRunnerContact) < 1f,
+                "Runner ground contact must widen/darken the shadow and subtly squash the runner on beat contact.");
+            float nearRunnerBeatCueUrgency = InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgency", 1f, nearRunnerContact);
+            float baseRunnerBeatCueUrgency = InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgency", 1f, 0f);
+            float leftFootPlant = InvokeRuntimeUiFloat("BuildRunnerFootfallPipPlant", 0f, 0);
+            float rightFootPlant = InvokeRuntimeUiFloat("BuildRunnerFootfallPipPlant", 0f, 1);
+            float rightFootPlantLater = InvokeRuntimeUiFloat("BuildRunnerFootfallPipPlant", 0.5f, 1);
+            float launchLeftFootPlant = InvokeRuntimeUiFloat("BuildRunnerLaunchFootPlant", 0, 1f);
+            float launchRightFootPlant = InvokeRuntimeUiFloat("BuildRunnerLaunchFootPlant", 1, 1f);
+            Require(
+                leftFootPlant > 0.98f
+                    && Mathf.Approximately(rightFootPlant, 0f)
+                    && rightFootPlantLater > 0.98f
+                    && InvokeRuntimeUiStaticBool("ShouldShowRunnerFootfallPips", true, false, false, 1f)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunnerFootfallPips", true, false, false, 0f)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunnerFootfallPips", false, false, true, 1f)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunnerFootfallPips", true, true, true, 1f)
+                    && launchLeftFootPlant > launchRightFootPlant
+                    && launchRightFootPlant > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchFootfallGroundContact", 0.18f, 1f) > 0.9f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchFootfallDownbeatLift", 0f, 1f) > 0.7f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchFootfallBeatCueUrgency", 0f, 1f) > 0.6f
+                    && InvokeRuntimeUiInt("BuildRunnerFootfallPipAlpha", true, false, leftFootPlant, nearRunnerContact, 1f, 1f, 0f)
+                        > InvokeRuntimeUiInt("BuildRunnerFootfallPipAlpha", true, false, 0.15f, farRunnerContact, 0f, 0f, 0f)
+                    && InvokeRuntimeUiInt("BuildRunnerFootfallPipAlpha", true, true, leftFootPlant, nearRunnerContact, 1f, 1f, 0f) == 0
+                    && InvokeRuntimeUiFloat("BuildRunnerFootfallPipOffsetX", 0, nearRunnerContact, 0f) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerFootfallPipOffsetX", 1, nearRunnerContact, 0f) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerFootfallPipWidth", leftFootPlant, nearRunnerContact, 1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerFootfallPipWidth", 0.15f, farRunnerContact, 0f)
+                    && InvokeRuntimeUiFloat("BuildRunnerFootfallPipScaleX", leftFootPlant, nearRunnerContact, nearRunnerBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerFootfallPipColorBlend", leftFootPlant, 1f, nearRunnerBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildRunnerFootfallPipColorBlend", 0.15f, 0f, 0f),
+                "Runner footfall pips must alternate under each foot, hide while blocked, and intensify on contact/downbeat urgency.");
+            Require(
+                nearRunnerBeatCueUrgency > baseRunnerBeatCueUrgency
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgency", 0f, nearRunnerContact), 0f)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyBodyScaleX", practiceSnapshot.Pattern, nearRunnerBeatCueUrgency) - 1f) > 0.0001f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyBodyScaleY", practiceSnapshot.Pattern, nearRunnerBeatCueUrgency) - 1f) > 0.0001f
+                    && InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyBodyColorBlend", nearRunnerBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyShadowScaleXLift", nearRunnerBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyShadowAlphaLift", nearRunnerBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyCoreScaleLift", nearRunnerBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiInt("BuildRunnerBeatCueUrgencyCoreAlphaLift", nearRunnerBeatCueUrgency) > 0
+                    && InvokeRuntimeUiFloat("BuildRunnerBeatCueUrgencyCoreColorBlend", nearRunnerBeatCueUrgency) > 0f,
+                "Runner avatar and core glow must inherit live beat-cue urgency through body scale, shadow, and glow lifts.");
             for (int i = 0; i < 3; i += 1)
             {
                 if (i > 0)
@@ -239,6 +983,9 @@ namespace GreedLast.Editor
                     practiceSnapshot,
                     practiceSnapshot.ChapterTarget);
                 string practiceLesson = InvokeRuntimeUiLabel("BuildPracticeTimingLesson", practiceSnapshot.Pattern);
+                string practiceGoodPayoffMissLine = InvokeRuntimeUiLabel(
+                    "BuildPracticeGoodPayoffMissLineForPattern",
+                    practiceSnapshot.Pattern);
                 Require(
                     practiceStepTitle.Contains((i + 1) + "/3", StringComparison.Ordinal)
                         && practiceObjective.Contains(BuildPracticeTimingKeyword(expectedLearningTimings[i]), StringComparison.Ordinal)
@@ -249,10 +996,14 @@ namespace GreedLast.Editor
                         && practiceObjective.Contains(expectedPracticeHazards[i], StringComparison.Ordinal)
                         && practiceObjective.Contains(expectedPracticeSymbols[i], StringComparison.Ordinal)
                         && practiceObjective.Contains(expectedPracticeResponses[i], StringComparison.Ordinal)
+                        && practiceObjective.Contains(expectedPracticePayoffGoals[i], StringComparison.Ordinal)
                         && practiceProgress.Contains(expectedPracticeHazards[i], StringComparison.Ordinal)
                         && practiceProgress.Contains(expectedPracticeSymbols[i], StringComparison.Ordinal)
                         && practiceProgress.Contains(expectedPracticeResponses[i], StringComparison.Ordinal)
-                        && practiceLesson.Contains(expectedPracticeHazards[i] + "→" + expectedPracticeSymbols[i] + expectedPracticeResponses[i], StringComparison.Ordinal),
+                        && practiceProgress.Contains(expectedPracticePayoffGoals[i], StringComparison.Ordinal)
+                        && practiceLesson.Contains(expectedPracticeHazards[i] + "→" + expectedPracticeSymbols[i] + expectedPracticeResponses[i], StringComparison.Ordinal)
+                        && practiceLesson.Contains(expectedPracticePayoffGoals[i], StringComparison.Ordinal)
+                        && practiceGoodPayoffMissLine.Contains(expectedPracticePayoffGoals[i], StringComparison.Ordinal),
                     "Every practice step must align its title, objective, progress, and action lesson. Step " + (i + 1)
                         + " title=[" + practiceStepTitle + "] objective=[" + practiceObjective.TrimEnd()
                         + "] progress=[" + practiceProgress + "] lesson=[" + practiceLesson + "] pattern=["
@@ -261,7 +1012,7 @@ namespace GreedLast.Editor
                     InvokeRuntimeUiLabel("BuildRouteCadencePipState", practiceSnapshot, i) == "active"
                         && (i == 0 || InvokeRuntimeUiLabel("BuildRouteCadencePipState", practiceSnapshot, i - 1) == "done"),
                     "Practice cadence pips must mark prior lessons complete and the current lesson active.");
-                RequireTextLayoutBudget(practiceObjective.TrimEnd(), 1, 32, "Practice step objective");
+                RequireTextLayoutBudget(practiceObjective.TrimEnd(), 1, 38, "Practice step objective");
                 if (i == 0)
                 {
                     practiceCore.HandleInput(
@@ -311,13 +1062,44 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildPracticeRestartButtonLabel", practiceSnapshot) == "실수 구간 다시"
                     && InvokeRuntimeUiLabel("BuildPracticeCompletionProgressLabel", practiceSnapshot) == "연습 완료 · 실수 복기",
                 "A missed practice run must offer a miss-focused restart action.");
+            Require(
+                !InvokeAppStaticBool("ShouldContinuePracticeToFirstNormal", practiceSnapshot, false)
+                    && InvokeRuntimeUiLabel(
+                        "BuildPracticeCompletionPrimaryButtonLabel",
+                        practiceSnapshot,
+                        false) == "실수 구간 다시"
+                    && practiceSnapshot.JudgementText.Contains(
+                        "다시 연습하거나 연습을 마친 뒤 일반 런을 시작하세요.",
+                        StringComparison.Ordinal),
+                "A first practice completion with a miss must keep review ahead of the normal-run handoff.");
             practiceCore.RestartPractice(practiceNow + 20f);
             Require(practiceSnapshot.PracticeMode && practiceSnapshot.StartCountdownActive, "Practice restart must return to its buffered opening.");
             Require(practiceSnapshot.SuccessCount == 0 && practiceSnapshot.GoodCount == 0 && practiceSnapshot.MissCount == 0, "Practice restart must clear the previous result counts.");
             VerifyPracticeReviewVariants(practiceNow + 30f);
-            practiceCore.Enter("normal after practice", refillRun: false);
+            string firstNormalOpeningContext = InvokeAppStaticLabel("BuildFirstNormalRunOpeningContext");
+            Require(
+                firstNormalOpeningContext.Contains("기초연습 3축 확인 완료", StringComparison.Ordinal)
+                    && firstNormalOpeningContext.Contains("일반 런 시작", StringComparison.Ordinal),
+                "The first normal-run handoff must keep the completed lesson and next mode explicit.");
+            practiceCore.Enter(firstNormalOpeningContext, refillRun: false);
             Require(!practiceSnapshot.PracticeMode, "A normal run entered after practice must clear practice mode.");
             Require(practiceSnapshot.ChoiceActive, "A normal run entered after practice must restore its start gift choice.");
+            Require(
+                practiceSnapshot.JudgementText.Contains("기초연습 3축 확인 완료", StringComparison.Ordinal),
+                "The first normal-run gift choice must preserve the seamless practice handoff context.");
+            string firstNormalChoiceContext = InvokeRuntimeUiLabel(
+                "BuildChoiceOpeningContextLine",
+                practiceSnapshot.JudgementText);
+            string firstNormalChoiceDetail = InvokeRuntimeUiLabel(
+                "BuildChoiceHeaderDetail",
+                practiceSnapshot);
+            Require(
+                InvokeRuntimeUiLabel("BuildChoiceScreenTitle", practiceSnapshot) == "시작 기프트 선택"
+                    && firstNormalChoiceContext.Contains("기초연습 3축 확인 완료", StringComparison.Ordinal)
+                    && firstNormalChoiceContext.Contains("일반 런 시작:", StringComparison.Ordinal)
+                    && firstNormalChoiceDetail.Contains(firstNormalChoiceContext, StringComparison.Ordinal),
+                "The first normal-run choice screen must name the start gift and keep the practice-to-run handoff visible.");
+            RequireTextLayoutBudget(firstNormalChoiceDetail, 6, 430, "first normal-run choice handoff");
             VerifyInputBoundarySafety(practiceNow + 60f);
             VerifyStoredGiftStackScaling();
             VerifyStoredGiftStacksRestoreIntoRun();
@@ -330,6 +1112,9 @@ namespace GreedLast.Editor
             float fullRunClock = practiceNow + 100f;
             fullRunCore.Enter("full run smoke", refillRun: false);
             Require(fullRunSnapshot.ChoiceKind == GreedLastChoiceKind.StartGift, "A full normal run must start at its gift choice.");
+            Require(
+                InvokeRuntimeUiLabel("BuildChoiceScreenTitle", fullRunSnapshot) == "시작 기프트 선택",
+                "A normal-run opening must identify its first choice as the start gift.");
             fullRunCore.HandleInput(GreedLastRunChannel.Center, fullRunClock);
             float[] expectedChapterMotion = { 0.86f, 1f, 1.16f, 1.08f };
             float[] expectedChapterDepth = { 0.84f, 0.98f, 1.12f, 1.20f };
@@ -371,13 +1156,22 @@ namespace GreedLast.Editor
                 if (chapter <= 3)
                 {
                     Require(fullRunSnapshot.ChoiceKind == GreedLastChoiceKind.Node, "Every direction-building chapter must open a node choice.");
+                    Require(
+                        InvokeRuntimeUiLabel("BuildChoiceScreenTitle", fullRunSnapshot) == "경로 선택",
+                        "A chapter node choice must identify itself as a route choice.");
                     fullRunCore.HandleInput(GreedLastRunChannel.Left, fullRunClock += 0.2f);
                     Require(fullRunSnapshot.ChoiceKind == GreedLastChoiceKind.Gift, "A node choice must lead to its chapter gift.");
+                    Require(
+                        InvokeRuntimeUiLabel("BuildChoiceScreenTitle", fullRunSnapshot) == "기프트 선택",
+                        "A chapter reward choice must identify itself as a gift choice.");
                     fullRunCore.HandleInput(GreedLastRunChannel.Center, fullRunClock += 0.2f);
                     Require(fullRunSnapshot.SurvivalGiftStacks == chapter, "Repeated chapter gifts must accumulate instead of replacing the previous gift.");
                     if (chapter == 2)
                     {
                         Require(fullRunSnapshot.ChoiceKind == GreedLastChoiceKind.Relic, "Chapter two gift must lead to the mid-run relic choice.");
+                        Require(
+                            InvokeRuntimeUiLabel("BuildChoiceScreenTitle", fullRunSnapshot) == "유물 선택",
+                            "The mid-run relic choice must identify itself separately from gifts and routes.");
                         fullRunCore.HandleInput(GreedLastRunChannel.Right, fullRunClock += 0.2f);
                         Require(fullRunSnapshot.ActiveRelic == "파라오의 각인", "The selected relic must remain active for the rest of the normal run.");
                     }
@@ -395,6 +1189,12 @@ namespace GreedLast.Editor
                 Mathf.Approximately(InvokeRuntimeUiFloat("BuildStageMotionScale", fullRunSnapshot), 1.30f)
                     && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStageDepthScale", fullRunSnapshot), 1.28f),
                 "Escape must increase forward motion after the deeper but calmer chapter-four validation.");
+            string escapeFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", fullRunSnapshot);
+            Require(
+                escapeFeelStatus.Contains("체감 탈출", StringComparison.Ordinal)
+                    && escapeFeelStatus.Contains("→정확", StringComparison.Ordinal),
+                "Escape verification must keep the prototype feel status distinct from ordinary chapter running. Actual: "
+                    + escapeFeelStatus);
             ResolveExactBundle(fullRunCore, ref fullRunSnapshot, ref fullRunClock, "escape verification");
             Require(fullRunSnapshot.Stopped, "Completing escape verification must stop the normal run.");
             Require(fullRunSnapshot.EscapeSucceeded, "Completing escape verification must mark escape success.");
@@ -462,6 +1262,9 @@ namespace GreedLast.Editor
                 "A full exact clear must not invent an avoidance weakness.");
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
             VerifyLiveRunCoachLines(now + 720f);
+            VerifyResponsiveDetailPanelSizing();
+            VerifyRuntimeBoardScreenRenderVisibility();
+            VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRecoveryPrecisionPayoff(now + 780f);
             VerifyClutchCounterPayoff(now + 840f);
             VerifyRoutePayoffContracts(now + 900f);
@@ -473,11 +1276,34 @@ namespace GreedLast.Editor
             VerifyReviewTargetFeedback(now + 820f);
             VerifyTrapResponseContracts();
 
-            Debug.Log("Greed Last prototype smoke check passed: focus performance, three timing axes, deterministic three-step practice onboarding, result-specific practice review and calibration, floor/overhead/side trap response contracts, exact/Good/Miss avoidance feedback, segment-driven choices, stable/variation/pressure route payoff contracts, route payoff haptic contracts, route cadence rail and break coaching, chapter-role progress labels, chapter-three variation peak, conservative final-validation tempo, final escape cadence guidance, live and terminal infinite-section settlement, live coaching HUD, prototype feel payoff guide, route-action choice hints, beat-count timing guide, hazard-bound active score-preview guide, active action cue visibility, active action cue hidden states, non-action screen cue suppression, dev shortcut labels, section shortcut labels, section shortcut targets, review shortcut labels, route shortcut maps, profile record-board shortcut, board page button labels, lane key hints, mobile touch lane hints, miss key feedback, sensory settings checklist, pause settings line and backdrop input block, live reward-distance coaching, recovery-pattern precision payoff and Good fallback, Perfect focus charge, Clutch counter, Offbeat chain payoffs, transition payoff preservation, timing-axis profile mastery, combo badge reward cue, three-action exact feedback amplification, stage-transition objective cue, transition progress labels, lobby next-action targets, performance-based result next actions, persistent and latched retry targets, achievement/failure feedback, advanced target ladders, target test shortcuts, focus/threat/section/miss-cap/input-omission/timing-apply goals, pause resume coaching, result review lines and actions, retry opening recommendations, review practice drills, infinite review preparation, compact, comparison-delta-free, and strongly sanitized record boards, profile checklist and save-confirm/skip/reload verification order, auto-clear refill labels, auto-clear reload persistence, fractional save-use labels, input boundaries, practice lifecycle, accumulated gifts, relic-only normal results, legacy migration, segment-weighted save recommendations, run-local infinite preparation, restored infinite passives, full normal clear, two-use auto-clear, and infinite handoff verified.");
+            Debug.Log("Greed Last prototype smoke check passed: focus performance, three timing axes, deterministic three-step practice onboarding, result-specific practice review and calibration, floor/overhead/side trap response contracts, trap-action symbol downbeat lift, exact/Good/Miss avoidance feedback, editor rotation drag input, rotation corridor settle, runner anticipation poses, runner downbeat anticipation, runner preparation cue and symbol, runner footfall pips, lobby entrance portal and runner staging, synchronized normal-run emphasis, start/resume runner crouch, GO launch step, launch footfall, launch beat and haptic, runtime lobby-to-run visual handoff, resolved avoidance trails, resolved judgement impact wakes, trap-ghost downbeat lift, scenery pillar downbeat lift, forward-line downbeat and beat-cue urgency lift, floor-tile, tunnel, tilt horizon lock, straight-run speed streak, straight-run center seam, forward pace marker, trap-pressure corridor squeeze, and runner beat-cue urgency lifts, feedback flash eased fade, judgement cue volume, countdown beat volume and haptics, countdown beat schedule reset, countdown-hidden downbeat visuals, segment-driven choices, stable/variation/pressure route payoff contracts, route payoff haptic contracts, route cadence rail, route cadence readiness pulse, and break coaching, chapter-role progress labels, chapter-three variation peak, conservative final-validation tempo, final escape cadence guidance, escape gate readiness pulse, escape gate pip downbeat lift, live and terminal infinite-section settlement, live coaching HUD, run HUD responsive font, run HUD downbeat pulse, run progress downbeat text pulse, responsive detail panels, runtime board-screen render suppression, runtime refill/candidate lobby button routing, prototype feel payoff guide, route-action choice hints, beat-count timing guide, beat cue threshold contract, timing guide word contract, timing guide downbeat lift, input-trace direction shapes, judgement-history action-symbol colors, recent timing nudge coaching, judgement-line pulse strength, judgement-line downbeat and beat-cue urgency lift, combo-weighted rhythm break line, health-danger edge inset, health-danger edge downbeat squeeze, health-danger pip downbeat lift, focus-ready core downbeat lift, threat-pip directional kick, target-lane pressure glow, target-lane beat, downbeat, and beat-cue urgency glow, target-lane label downbeat and beat-cue urgency lift, beat-cue audio lift, wrong-lane hold warning, trap-marker downbeat and beat-cue urgency lift, trap-danger downbeat lift, trap contact cue, trap corridor shadow, trap-readiness atmosphere, active action cue lane offset, active action cue responsive font, judgement feedback lane offset, active action cue readiness pulse, lane input ripple judgement follow-through, lane input ripple beat-cue lift, lane input ripple visibility gate, rapid lane input guard, lane touch emphasis hierarchy, result-specific lane judgement tag motion, precision reward pip downbeat lift, combo badge reward pulse, combo badge downbeat lift, timing-band readiness and downbeat breath, hazard-bound active score-preview guide, active action cue visibility, active action cue hidden states, non-action screen cue suppression, dev shortcut labels, section shortcut labels, section shortcut targets, review shortcut labels, route shortcut maps, profile record-board shortcut, clean record-board navigation labels, button label compact sizing, lane key hints, mobile touch lane hints, miss key feedback, sensory settings checklist, master sfx volume, mobile haptic duration clamp, judgement haptic profile, pause settings line, pause mode titles, mobile pause header, pause body responsive font, mobile pause body copy, pause soft-blur staging, and backdrop input block, live reward-distance coaching, recovery-pattern precision payoff and Good fallback, Perfect focus charge, focus timer downbeat urgency, Clutch counter, Offbeat chain payoffs, transition payoff preservation, timing-axis profile mastery, combo badge reward cue, three-action exact feedback amplification, stage-transition objective cue, transition progress labels, miss-recovery motion pressure, timing-pip readiness scaling, timing-pip beat, downbeat, and beat-cue urgency pulse, rotation neutral gate, lobby next-action targets, performance-based result next actions, persistent and latched retry targets, achievement/failure feedback, advanced target ladders, target test shortcuts, focus/threat/section/miss-cap/input-omission/timing-apply goals, pause resume coaching, resume countdown feedback staging, live-control motion/audio gate, result review lines and actions, retry opening recommendations, review practice drills, infinite review preparation, compact, comparison-delta-free, reward-point-free, and strongly sanitized record boards, profile checklist remaining-loop hints, completion-check priority and action-only completion routing over review noise, one-time save-draft primary/return labels, slot-control locks, and side-button labels, save-confirm/skip/reload verification order, isolated backend persistence fence, auto-clear refill labels, auto-clear reload persistence, fractional save-use labels, input boundaries, practice lifecycle, accumulated gifts, relic-only normal results, legacy migration, segment-weighted save recommendations, run-local infinite preparation, restored infinite passives, full normal clear, two-use auto-clear, and infinite handoff verified.");
+        }
+
+        private static GreedLastMockBackend CreateIsolatedBackend()
+        {
+            return new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+        }
+
+        private static void VerifyIsolatedBackendDoesNotPersist(GreedLastRunRecord record, string backendSaveKey)
+        {
+            PlayerPrefs.DeleteKey(backendSaveKey);
+            PlayerPrefs.Save();
+
+            var isolatedBackend = CreateIsolatedBackend();
+            isolatedBackend.RegisterClear(record);
+            isolatedBackend.SelectSaveLoadoutSlot(1);
+            isolatedBackend.ConfirmSaveLoadout();
+            isolatedBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
+            Require(
+                !PlayerPrefs.HasKey(backendSaveKey),
+                "An isolated smoke-check backend must not create or mutate the live PlayerPrefs save key.");
         }
 
         private static void VerifyTrapResponseContracts()
         {
+            Require(
+                InvokeRuntimeUiLabel("BuildPrototypeRunnerArtStyleKey") == "도깨비 소녀 실루엣",
+                "The prototype art pass must keep the runner direction anchored to the simplified goblin-girl silhouette.");
             VerifyTrapResponseFamily(
                 "점프",
                 "바닥→↑점프",
@@ -517,6 +1343,1863 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildRunnerResponseLabel", structuredOverride) == "비틀기",
                 "Structured avoidance data must take priority over legacy pattern-id inference.");
+
+            GreedLastPatternModel leftRotation = new GreedLastPatternModel(
+                "left_rotate_corridor_perfect",
+                GreedLastRunChannel.Left,
+                GreedLastTimingType.Perfect,
+                "좌회전 통로 정렬",
+                0.46f,
+                1.05f,
+                0.10f,
+                0.30f,
+                1.48f,
+                GreedLastAvoidanceType.Twist);
+            GreedLastPatternModel rightRotation = new GreedLastPatternModel(
+                "right_rotate_corridor_clutch",
+                GreedLastRunChannel.Right,
+                GreedLastTimingType.Clutch,
+                "우회전 통로 압박",
+                0.52f,
+                1.22f,
+                0.12f,
+                0.34f,
+                1.64f,
+                GreedLastAvoidanceType.Twist);
+            Require(
+                GreedLastRunCore.IsRotationPattern(leftRotation)
+                    && GreedLastRunCore.IsRotationPattern(rightRotation)
+                    && !GreedLastRunCore.IsRotationPattern(structuredOverride),
+                "Only authored rotation-corridor patterns must enter the NOM-style rotation branch.");
+            Require(
+                InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", leftRotation) == "통로→↺회전"
+                    && InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", rightRotation) == "통로→↻회전",
+                "Rotation-corridor traps must read as corridor rotation, not generic side twisting.");
+            Require(
+                InvokeRuntimeUiLabel("BuildActiveActionResponseLabel", leftRotation) == "좌회전"
+                    && InvokeRuntimeUiLabel("BuildActiveActionResponseLabel", rightRotation) == "우회전",
+                "Rotation-corridor active action cues must expand the compact rotation label into a left/right turn.");
+            Require(
+                InvokeRuntimeUiLabel("BuildActiveAvoidanceCoach", leftRotation) == "통로→↺회전 정렬"
+                    && InvokeRuntimeUiLabel("BuildPatternAvoidanceObjectiveSuffix", rightRotation) == " / 통로→↻회전 정렬",
+                "Rotation-corridor coach and objective text must read as alignment instead of generic avoidance.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Success) == "통로→↺회전 정렬"
+                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Good) == "통로→↺회전 보정 정렬"
+                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", rightRotation, GreedLastJudgementResult.Miss) == "통로→↻회전 정렬 실패",
+                "Rotation-corridor judgement feedback must preserve the alignment wording for success, Good, and miss.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRotationInputHintForMode", leftRotation, true) == "Q/A/←"
+                    && InvokeRuntimeUiLabel("BuildRotationInputHintForMode", rightRotation, true) == "E/D/→"
+                    && InvokeRuntimeUiLabel("BuildRotationInputHintForMode", rightRotation, false) == "우 기울임"
+                    && InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForMode", leftRotation, false) == "중립→좌 기울임"
+                    && InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForMode", rightRotation, false) == "중립→우 기울임",
+                "Rotation-corridor input hints must expose editor Q/E while keeping mobile text device-oriented.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRotationInputHintForCapabilities", leftRotation, false, false) == "좌 탭"
+                    && InvokeRuntimeUiLabel("BuildRotationInputHintForCapabilities", rightRotation, false, false) == "우 탭"
+                    && InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForCapabilities", leftRotation, false, false) == "좌 탭"
+                    && InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForCapabilities", rightRotation, false, false) == "우 탭"
+                    && InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForCapabilities", rightRotation, false, true) == "중립→우 기울임"
+                    && InvokeRuntimeUiLabel("BuildRotationInputHintForCapabilities", rightRotation, true, false) == "E/D/→",
+                "Rotation-corridor hints must fall back to lane taps when mobile tilt is unavailable without changing editor controls.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowRotationTiltControl", true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRotationTiltControl", true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRotationTiltControl", false, true),
+                "Tilt-only neutral, cursor, and grip visuals must hide when the runtime falls back to lane taps.");
+            Require(
+                InvokeAppStaticInt("ResolveRotationTiltDirection", -0.50f, 0.42f) == -1
+                    && InvokeAppStaticInt("ResolveRotationTiltDirection", 0.50f, 0.42f) == 1
+                    && InvokeAppStaticInt("ResolveRotationTiltDirection", 0.20f, 0.42f) == 0,
+                "Mobile tilt input must resolve left/right only after a deliberate threshold.");
+            Require(
+                InvokeAppStaticBool("ShouldAllowPrototypeAutoRotation", ScreenOrientation.LandscapeLeft)
+                    && InvokeAppStaticBool("ShouldAllowPrototypeAutoRotation", ScreenOrientation.LandscapeRight)
+                    && !InvokeAppStaticBool("ShouldAllowPrototypeAutoRotation", ScreenOrientation.Portrait)
+                    && !InvokeAppStaticBool("ShouldAllowPrototypeAutoRotation", ScreenOrientation.PortraitUpsideDown),
+                "The mobile prototype must stay landscape while allowing either landscape grip.");
+            Require(
+                InvokeAppStaticBool("ShouldCompensatePrototypeSensors"),
+                "The mobile prototype must let Unity compensate sensors into screen orientation before reading tilt input.");
+            Require(
+                InvokeAppStaticInt(
+                    "ResolveRotationTiltOrientationMode",
+                    ScreenOrientation.Portrait,
+                    DeviceOrientation.Unknown) == 0
+                    && InvokeAppStaticInt(
+                        "ResolveRotationTiltOrientationMode",
+                        ScreenOrientation.AutoRotation,
+                        DeviceOrientation.LandscapeLeft) == 2
+                    && InvokeAppStaticInt(
+                        "ResolveRotationTiltOrientationMode",
+                        ScreenOrientation.AutoRotation,
+                        DeviceOrientation.LandscapeRight) == 3
+                    && InvokeAppStaticInt(
+                        "ResolveRotationTiltOrientationMode",
+                        ScreenOrientation.AutoRotation,
+                        DeviceOrientation.FaceUp) == -1,
+                "Mobile tilt orientation must prefer a concrete device grip and preserve the previous mode while orientation is unknown.");
+            Vector3 tiltProbe = new Vector3(0.55f, 0.70f, -0.15f);
+            Require(
+                Mathf.Approximately(InvokeAppStaticFloat("ResolveCompensatedRotationTiltAxis", tiltProbe), 0.55f),
+                "Mobile tilt input must use Unity's screen-compensated X axis instead of remapping orientation twice.");
+            Require(
+                InvokeAppStaticBool("CanUseRotationTiltSensor", true, true)
+                    && !InvokeAppStaticBool("CanUseRotationTiltSensor", true, false)
+                    && !InvokeAppStaticBool("CanUseRotationTiltSensor", false, true),
+                "Rotation tilt input must require both a mobile runtime and an available accelerometer without affecting editor controls.");
+            Require(
+                InvokeAppStaticBool("CanUseRotationTiltSensorWithPreference", true, true, true)
+                    && !InvokeAppStaticBool("CanUseRotationTiltSensorWithPreference", true, true, false)
+                    && !InvokeAppStaticBool("CanUseRotationTiltSensorWithPreference", true, false, true),
+                "The saved motion preference must disable mobile tilt without pretending unsupported hardware is available.");
+            Require(
+                InvokeAppStaticBool("IsRotationTiltAxisSampleValid", 0.55f)
+                    && !InvokeAppStaticBool("IsRotationTiltAxisSampleValid", float.NaN)
+                    && !InvokeAppStaticBool("IsRotationTiltAxisSampleValid", float.PositiveInfinity),
+                "Rotation tilt input must reject invalid sensor samples before they reach filtering or judgement.");
+            float firstFilteredTilt = InvokeAppStaticFloat(
+                "BuildRotationTiltFilteredAxis",
+                0f,
+                1f,
+                1f / 60f,
+                14f,
+                true);
+            float secondFilteredTilt = InvokeAppStaticFloat(
+                "BuildRotationTiltFilteredAxis",
+                firstFilteredTilt,
+                1f,
+                1f / 60f,
+                14f,
+                true);
+            Require(
+                firstFilteredTilt > 0f
+                    && firstFilteredTilt < 1f
+                    && secondFilteredTilt > firstFilteredTilt
+                    && secondFilteredTilt < 1f
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat(
+                            "BuildRotationTiltFilteredAxis",
+                            0f,
+                            0.65f,
+                            1f / 60f,
+                            14f,
+                            false),
+                        0.65f),
+                "Mobile tilt filtering must smooth live hand jitter without delaying the first orientation sample.");
+            Require(
+                !InvokeAppStaticBool("ShouldConfirmRotationTiltCandidate", -1, -1, 5f, 5.04f, 0.08f)
+                    && InvokeAppStaticBool("ShouldConfirmRotationTiltCandidate", -1, -1, 5f, 5.09f, 0.08f)
+                    && !InvokeAppStaticBool("ShouldConfirmRotationTiltCandidate", 1, -1, 5f, 5.09f, 0.08f)
+                    && !InvokeAppStaticBool("ShouldConfirmRotationTiltCandidate", 0, 0, 5f, 5.09f, 0.08f),
+                "Mobile tilt input must hold one direction briefly and reject one-frame or direction-flip noise.");
+            Require(
+                Mathf.Approximately(
+                    InvokeAppStaticFloat("BuildRotationTiltCandidateProgress", 0, -1f, 5f, 0.08f),
+                    0f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationTiltCandidateProgress", -1, 5f, 5.04f, 0.08f),
+                        0.5f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationTiltCandidateProgress", 1, 5f, 5.10f, 0.08f),
+                        1f),
+                "Mobile tilt candidate progress must expose a clamped visual hold window without inventing progress at neutral.");
+            Require(
+                Mathf.Approximately(
+                    InvokeAppStaticFloat("BuildRotationTiltNormalizedAxis", false, 0.42f, 0.42f),
+                    0f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationTiltNormalizedAxis", true, 0.21f, 0.42f),
+                        0.5f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationTiltNormalizedAxis", true, -0.84f, 0.42f),
+                        -1.25f),
+                "Mobile tilt visual axis must stay hidden before initialization and clamp extreme device movement.");
+            Require(
+                InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorOffsetX", -1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorOffsetX", 1f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorWidth", 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorWidth", 0.25f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorHeight", -1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationInputCursorHeight", -0.25f, 0f),
+                "The mobile tilt cursor must follow the sensor side and grow only as deliberate hold confidence rises.");
+            Require(
+                InvokeRuntimeUiStaticBool("IsStraightRunRotationInputCursorCorrectDirection", -1f, -0.5f, -1)
+                    && InvokeRuntimeUiStaticBool("IsStraightRunRotationInputCursorCorrectDirection", 1f, 0.5f, 1)
+                    && !InvokeRuntimeUiStaticBool("IsStraightRunRotationInputCursorCorrectDirection", -1f, 0.5f, 1)
+                    && !InvokeRuntimeUiStaticBool("IsStraightRunRotationInputCursorCorrectDirection", 0f, 0.5f, 1),
+                "The mobile tilt cursor must distinguish target-side movement from a wrong-side tilt without rotating the HUD.");
+            Require(
+                InvokeRuntimeUiInt("BuildStraightRunRotationInputCursorAlpha", true, -1f, 0.8f, -0.7f, 0.5f) > 0
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationInputCursorAlpha", true, -1f, 0.8f, -0.02f, 0f) == 0
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationInputCursorAlpha", false, -1f, 0.8f, -0.7f, 0.5f) == 0,
+                "The mobile tilt cursor must appear only for meaningful movement inside a visible rotation corridor.");
+            Require(
+                InvokeAppStaticBool("ShouldArmRotationTiltFromAcceleration", 0.05f, 0.18f)
+                    && !InvokeAppStaticBool("ShouldArmRotationTiltFromAcceleration", 0.28f, 0.18f),
+                "Mobile tilt input must require a neutral release before the next rotation attempt.");
+            Require(
+                InvokeAppStaticBool("ShouldAcceptRotationTiltInputForValues", true, false, true, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationTiltInputForValues", true, false, false, -1, -1, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationTiltInputForValues", false, false, true, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationTiltInputForValues", true, true, true, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationTiltInputForValues", true, false, true, -1, -1, 5.05f, 5.0f, 0.22f),
+                "Mobile tilt input must stay one-shot, rotation-pattern-only, pause-gated, and repeat-guarded.");
+            Require(
+                InvokeAppStaticInt("ResolveRotationDragDirection", -90f, 1000f, 0.08f) == -1
+                    && InvokeAppStaticInt("ResolveRotationDragDirection", 90f, 1000f, 0.08f) == 1
+                    && InvokeAppStaticInt("ResolveRotationDragDirection", 40f, 1000f, 0.08f) == 0
+                    && InvokeAppStaticInt("ResolveRotationDragDirection", 20f, 100f, 0.08f) == 1,
+                "Editor rotation drag input must resolve only deliberate horizontal swipes, with a small-screen minimum.");
+            Require(
+                Mathf.Approximately(
+                    InvokeAppStaticFloat("BuildRotationDragNormalizedAxis", -40f, 1000f, 0.08f),
+                    -0.5f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationDragNormalizedAxis", 80f, 1000f, 0.08f),
+                        1f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationDragNormalizedAxis", 400f, 1000f, 0.08f),
+                        1.25f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat("BuildRotationDragNormalizedAxis", 9f, 100f, 0.08f),
+                        0.5f),
+                "Editor rotation drag preview must mirror the mobile sensor cursor continuously before the swipe threshold.");
+            Require(
+                InvokeAppStaticBool("ShouldAcceptRotationDragInputForValues", true, false, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationDragInputForValues", false, false, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationDragInputForValues", true, true, -1, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationDragInputForValues", true, false, 0, 0, 5.0f, 4.0f, 0.22f)
+                    && !InvokeAppStaticBool("ShouldAcceptRotationDragInputForValues", true, false, -1, -1, 5.05f, 5.0f, 0.22f),
+                "Editor rotation drag input must stay rotation-pattern-only, pause-gated, directional, and repeat-guarded.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildRotationPatternDirection", leftRotation), -1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRotationPatternDirection", rightRotation), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRotationPatternDirection", structuredOverride), 0f),
+                "Rotation direction must be explicit for left/right corridor turns and neutral for ordinary twist hazards.");
+            float noRotationRoll = InvokeRuntimeUiFloat("BuildStraightRunPathRollAngle", 0f, 1f, 1f, 1f);
+            float leftRotationRoll = InvokeRuntimeUiFloat("BuildStraightRunPathRollAngle", -1f, 1f, 1f, 1f);
+            float rightRotationRoll = InvokeRuntimeUiFloat("BuildStraightRunPathRollAngle", 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(noRotationRoll, 0f)
+                    && leftRotationRoll < 0f
+                    && rightRotationRoll > 0f
+                    && Mathf.Abs(leftRotationRoll) <= 12f
+                    && Mathf.Abs(rightRotationRoll) <= 12f,
+                "Straight-run rotation must stay directional and capped so the prototype does not become dizzy.");
+            float correctLeftTiltAlignment = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationInputAlignment",
+                -1f,
+                1f,
+                -0.8f);
+            float wrongLeftTiltAlignment = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationInputAlignment",
+                -1f,
+                1f,
+                0.8f);
+            Require(
+                correctLeftTiltAlignment > 0f
+                    && wrongLeftTiltAlignment < 0f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStraightRunRotationInputAlignment", 0f, 1f, -0.8f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStraightRunRotationInputAlignment", -1f, 0f, -0.8f),
+                        0f),
+                "Live phone tilt must become alignment only inside an active rotation corridor.");
+            float correctAlignedPathRoll = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationInputResponsivePathRoll",
+                leftRotationRoll,
+                correctLeftTiltAlignment);
+            float wrongAlignedPathRoll = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationInputResponsivePathRoll",
+                leftRotationRoll,
+                wrongLeftTiltAlignment);
+            Require(
+                Mathf.Abs(correctAlignedPathRoll) < Mathf.Abs(leftRotationRoll)
+                    && Mathf.Abs(wrongAlignedPathRoll) >= Mathf.Abs(leftRotationRoll)
+                    && Mathf.Abs(correctAlignedPathRoll) <= 12f
+                    && Mathf.Abs(wrongAlignedPathRoll) <= 12f,
+                "Correct phone tilt must subtly straighten the corridor while wrong tilt keeps more lean without exceeding the comfort cap.");
+            float baseHorizonTilt = InvokeRuntimeUiFloat("BuildTunnelHorizonTiltAngle", -1f, 1f);
+            Require(
+                Mathf.Abs(InvokeRuntimeUiFloat(
+                    "BuildTunnelHorizonInputResponsiveTiltAngle",
+                    baseHorizonTilt,
+                    correctLeftTiltAlignment)) < Mathf.Abs(baseHorizonTilt)
+                    && Mathf.Abs(InvokeRuntimeUiFloat(
+                        "BuildTunnelHorizonInputResponsiveTiltAngle",
+                        baseHorizonTilt,
+                        wrongLeftTiltAlignment)) > Mathf.Abs(baseHorizonTilt),
+                "The fixed-view horizon must acknowledge correct/wrong phone tilt with a small alignment response instead of rolling the HUD.");
+            Color32 neutralTiltRailColor = new Color32(86, 156, 149, 255);
+            Color32 correctTiltRailColor = InvokeRuntimeUiColor(
+                "BuildStraightRunRotationInputResponsiveColor",
+                neutralTiltRailColor,
+                correctLeftTiltAlignment);
+            Color32 wrongTiltRailColor = InvokeRuntimeUiColor(
+                "BuildStraightRunRotationInputResponsiveColor",
+                neutralTiltRailColor,
+                wrongLeftTiltAlignment);
+            Require(
+                correctTiltRailColor.r > neutralTiltRailColor.r
+                    && wrongTiltRailColor.g < neutralTiltRailColor.g,
+                "Correct tilt must warm the corridor toward gold while wrong tilt adds a restrained vermilion warning.");
+            float farPathWidth = InvokeRuntimeUiFloat("BuildStraightRunPathSegmentHalfWidth", 0.10f, 1f, 0f);
+            float nearPathWidth = InvokeRuntimeUiFloat("BuildStraightRunPathSegmentHalfWidth", 0.90f, 1f, 0f);
+            int calmPathAlpha = InvokeRuntimeUiInt("BuildStraightRunPathSegmentAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f);
+            int rotationPathAlpha = InvokeRuntimeUiInt("BuildStraightRunPathSegmentAlpha", true, 0.65f, 0.70f, 0f, 0f, 1f);
+            Require(
+                nearPathWidth > farPathWidth
+                    && rotationPathAlpha > calmPathAlpha
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationGuideAlpha", true, 1f, 1f)
+                        > InvokeRuntimeUiInt("BuildStraightRunRotationGuideAlpha", true, 0f, 1f),
+                "Straight-run path segments must widen toward the player and brighten only for rotation-corridor reads.");
+            float hiddenTrapPressure = InvokeRuntimeUiFloat(
+                "BuildStraightRunTrapPressureForValues",
+                false,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                true,
+                5,
+                1f,
+                0.4f);
+            float pausedTrapPressure = InvokeRuntimeUiFloat(
+                "BuildStraightRunTrapPressureForValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                true,
+                5,
+                1f,
+                0.4f);
+            float farTrapPressure = InvokeRuntimeUiFloat(
+                "BuildStraightRunTrapPressureForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0f,
+                0f);
+            float nearTrapPressure = InvokeRuntimeUiFloat(
+                "BuildStraightRunTrapPressureForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.3f,
+                0f);
+            float highTrapPressure = InvokeRuntimeUiFloat(
+                "BuildStraightRunTrapPressureForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.02f,
+                0.10f,
+                GreedLastTimingType.Clutch,
+                true,
+                5,
+                1f,
+                0.4f);
+            Require(
+                Mathf.Approximately(hiddenTrapPressure, 0f)
+                    && Mathf.Approximately(pausedTrapPressure, 0f)
+                    && nearTrapPressure > farTrapPressure
+                    && highTrapPressure > nearTrapPressure
+                    && InvokeRuntimeUiFloat("BuildStraightRunTrapPressureTimingWeight", GreedLastTimingType.Clutch)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTrapPressureTimingWeight", GreedLastTimingType.Perfect),
+                "Straight-run trap pressure must appear only for active traps, peak near the judgement line, and rise under high-pressure timing.");
+            Require(
+                InvokeRuntimeUiFloat("BuildStraightRunTrapPressureWidthScale", highTrapPressure, 0.90f)
+                    > InvokeRuntimeUiFloat("BuildStraightRunTrapPressureWidthScale", farTrapPressure, 0.10f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTrapPressureHeightScale", highTrapPressure, 0.90f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTrapPressureHeightScale", farTrapPressure, 0.10f)
+                    && InvokeRuntimeUiInt("BuildStraightRunTrapPressureAlphaLift", highTrapPressure, 0.90f, 22)
+                        > InvokeRuntimeUiInt("BuildStraightRunTrapPressureAlphaLift", farTrapPressure, 0.10f, 22)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTrapPressureColorBlend", highTrapPressure, 0.90f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTrapPressureColorBlend", farTrapPressure, 0.10f),
+                "Straight-run trap pressure must subtly widen, thicken, brighten, and tint the corridor near the active hit.");
+            float idleCorridorGatePhase = InvokeRuntimeUiFloat("BuildStraightRunCorridorGatePhase", false, 0.60f, 1f, 1f, 0f, 4);
+            float baseCorridorGatePhase = InvokeRuntimeUiFloat("BuildStraightRunCorridorGatePhase", true, 0.50f, 1f, 1f, 0f, 0);
+            float payoffCorridorGatePhase = InvokeRuntimeUiFloat("BuildStraightRunCorridorGatePhase", true, 0.50f, 1f, 1f, 1f, 0);
+            float farCorridorGateWidth = InvokeRuntimeUiFloat("BuildStraightRunCorridorGateWidth", 0.10f, 1f, 0f);
+            float nearCorridorGateWidth = InvokeRuntimeUiFloat("BuildStraightRunCorridorGateWidth", 0.90f, 1f, 0f);
+            float farCorridorGatePulse = InvokeRuntimeUiFloat("BuildStraightRunCorridorGatePulse", 0.10f, 1f);
+            float nearCorridorGatePulse = InvokeRuntimeUiFloat("BuildStraightRunCorridorGatePulse", 0.90f, 1f);
+            int hiddenCorridorGateAlpha = InvokeRuntimeUiInt("BuildStraightRunCorridorGateAlpha", false, 1f, 0.90f, 1f, 1f, 1f, 1f);
+            int calmCorridorGateAlpha = InvokeRuntimeUiInt("BuildStraightRunCorridorGateAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f, 0f);
+            int urgentCorridorGateAlpha = InvokeRuntimeUiInt("BuildStraightRunCorridorGateAlpha", true, 0.65f, 0.70f, 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(idleCorridorGatePhase, 4f / 5f)
+                    && payoffCorridorGatePhase > baseCorridorGatePhase
+                    && nearCorridorGateWidth > farCorridorGateWidth
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateAnchorY", 0.10f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCorridorGateAnchorY", 0.90f)
+                    && nearCorridorGatePulse > farCorridorGatePulse
+                    && hiddenCorridorGateAlpha == 0
+                    && urgentCorridorGateAlpha > calmCorridorGateAlpha
+                    && urgentCorridorGateAlpha <= 105
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateHeight", 0.90f, nearCorridorGatePulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCorridorGateHeight", 0.10f, farCorridorGatePulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateOffsetX", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateOffsetX", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunCorridorGateOffsetX", 0f, 1f, 0.90f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateAngle", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateAngle", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunCorridorGateAngle", 1f, 1f, 0.90f)) <= 10.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCorridorGateColorBlend", 0.90f, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCorridorGateColorBlend", 0.10f, 0f, 0f, 0f),
+                "Straight-run corridor gates must sell one-line forward motion, react to rhythm payoff, and only skew the tunnel during rotation reads.");
+            float idleSideWallStripePhase = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripePhase", false, 0.60f, 1f, 1f, 0f, 4);
+            float baseSideWallStripePhase = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripePhase", true, 0.50f, 1f, 1f, 0f, 0);
+            float payoffSideWallStripePhase = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripePhase", true, 0.50f, 1f, 1f, 1f, 0);
+            float leftFarSideWallX = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAnchorX", -1f, 0.10f, 0f, 0f);
+            float leftNearSideWallX = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAnchorX", -1f, 0.90f, 0f, 0f);
+            float rightNearSideWallX = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAnchorX", 1f, 0.90f, 0f, 0f);
+            float nearSideWallPulse = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripePulse", 0.90f, 1f);
+            float farSideWallPulse = InvokeRuntimeUiFloat("BuildStraightRunSideWallStripePulse", 0.10f, 1f);
+            int hiddenSideWallAlpha = InvokeRuntimeUiInt("BuildStraightRunSideWallStripeAlpha", false, 1f, 0.90f, 1f, 1f, 1f, 1f);
+            int calmSideWallAlpha = InvokeRuntimeUiInt("BuildStraightRunSideWallStripeAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f, 0f);
+            int urgentSideWallAlpha = InvokeRuntimeUiInt("BuildStraightRunSideWallStripeAlpha", true, 0.65f, 0.70f, 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(idleSideWallStripePhase, 4f / 5f)
+                    && payoffSideWallStripePhase > baseSideWallStripePhase
+                    && leftNearSideWallX < leftFarSideWallX
+                    && leftNearSideWallX < 0.5f
+                    && rightNearSideWallX > 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAnchorY", 0.10f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAnchorY", 0.90f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeWidth", 0.90f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeWidth", 0.10f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeHeight", 0.90f, nearSideWallPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeHeight", 0.10f, farSideWallPulse, 0f)
+                    && nearSideWallPulse > farSideWallPulse
+                    && hiddenSideWallAlpha == 0
+                    && urgentSideWallAlpha > calmSideWallAlpha
+                    && urgentSideWallAlpha <= 94
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAngle", -1f, 0f, 0f, 0.90f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAngle", 1f, 0f, 0f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAngle", 1f, 1f, 1f, 0.90f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAngle", 1f, 0f, 1f, 0.90f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAtmosphereBlend", 0.90f, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSideWallStripeAtmosphereBlend", 0.10f, 0f, 0f, 0f),
+                "Straight-run side-wall stripes must add side speed only inside the corridor, stay low-alpha, and lean gently during rotation reads.");
+            float idleSpeedStreakPhase = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakPhase", false, 0.60f, 1f, 1f, 0f, 3);
+            float baseSpeedStreakPhase = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakPhase", true, 0.50f, 1f, 1f, 0f, 0);
+            float payoffSpeedStreakPhase = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakPhase", true, 0.50f, 1f, 1f, 1f, 0);
+            float leftFarSpeedStreakX = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAnchorX", -1f, 0.10f, 0f, 0f);
+            float leftNearSpeedStreakX = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAnchorX", -1f, 0.90f, 0f, 0f);
+            float rightNearSpeedStreakX = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAnchorX", 1f, 0.90f, 0f, 0f);
+            float nearSpeedStreakPulse = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakPulse", 0.90f, 1f, 1f);
+            float farSpeedStreakPulse = InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakPulse", 0.10f, 1f, 0f);
+            int hiddenSpeedStreakAlpha = InvokeRuntimeUiInt("BuildStraightRunSpeedStreakAlpha", false, 1f, 0.90f, 1f, 1f, 1f, 1f);
+            int calmSpeedStreakAlpha = InvokeRuntimeUiInt("BuildStraightRunSpeedStreakAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f, 0f);
+            int urgentSpeedStreakAlpha = InvokeRuntimeUiInt("BuildStraightRunSpeedStreakAlpha", true, 0.65f, 0.90f, 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(idleSpeedStreakPhase, 3f / 4f)
+                    && payoffSpeedStreakPhase > baseSpeedStreakPhase
+                    && leftNearSpeedStreakX < leftFarSpeedStreakX
+                    && leftNearSpeedStreakX < 0.5f
+                    && rightNearSpeedStreakX > 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAnchorY", 0.10f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAnchorY", 0.90f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakWidth", 0.90f, 1f, nearSpeedStreakPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakWidth", 0.10f, 0f, farSpeedStreakPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakHeight", 0.90f, nearSpeedStreakPulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakHeight", 0.10f, farSpeedStreakPulse)
+                    && nearSpeedStreakPulse > farSpeedStreakPulse
+                    && hiddenSpeedStreakAlpha == 0
+                    && urgentSpeedStreakAlpha > calmSpeedStreakAlpha
+                    && urgentSpeedStreakAlpha <= 82
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAngle", -1f, 0f, 0f, 0.90f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAngle", 1f, 0f, 0f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAngle", 1f, 1f, 1f, 0.90f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAngle", 1f, 0f, 1f, 0.90f)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakAngle", 1f, 1f, 1f, 0.90f)) <= 32f
+                    && InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakColorBlend", 0.90f, 1f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunSpeedStreakColorBlend", 0.10f, 0f, 0f, 0f),
+                "Straight-run speed streaks must sell one-way runner velocity without becoming a full-screen tilt effect.");
+            float idleCenterSeamDashPhase = InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashPhase", false, 0.60f, 1f, 1f, 0f, 5);
+            float baseCenterSeamDashPhase = InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashPhase", true, 0.50f, 1f, 1f, 0f, 0);
+            float payoffCenterSeamDashPhase = InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashPhase", true, 0.50f, 1f, 1f, 1f, 0);
+            float nearCenterSeamDashPulse = InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashPulse", 0.90f, 1f);
+            float farCenterSeamDashPulse = InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashPulse", 0.10f, 1f);
+            int hiddenCenterSeamDashAlpha = InvokeRuntimeUiInt("BuildStraightRunCenterSeamDashAlpha", false, 1f, 0.90f, 1f, 1f, 1f, 1f);
+            int calmCenterSeamDashAlpha = InvokeRuntimeUiInt("BuildStraightRunCenterSeamDashAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f, 0f);
+            int urgentCenterSeamDashAlpha = InvokeRuntimeUiInt("BuildStraightRunCenterSeamDashAlpha", true, 0.65f, 0.90f, 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(idleCenterSeamDashPhase, 5f / 6f)
+                    && payoffCenterSeamDashPhase > baseCenterSeamDashPhase
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAnchorY", 0.10f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAnchorY", 0.90f)
+                    && nearCenterSeamDashPulse > farCenterSeamDashPulse
+                    && hiddenCenterSeamDashAlpha == 0
+                    && urgentCenterSeamDashAlpha > calmCenterSeamDashAlpha
+                    && urgentCenterSeamDashAlpha <= 88
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashWidth", 0.90f, nearCenterSeamDashPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashWidth", 0.10f, farCenterSeamDashPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashHeight", 0.90f, 1f, nearCenterSeamDashPulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashHeight", 0.10f, 0f, farCenterSeamDashPulse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashOffsetX", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashOffsetX", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashOffsetX", 0f, 1f, 0.90f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAngle", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAngle", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAngle", 1f, 1f, 0.90f)) <= 5.4f
+                    && InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAtmosphereBlend", 0.90f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunCenterSeamDashAtmosphereBlend", 0.10f, 0f, 0f),
+                "Straight-run center seam dashes must add a low-alpha forward axis, brighten on rhythm motion, and drift only subtly during rotation reads.");
+            float idleForwardPaceMarkerPhase = InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerPhase", false, 0.60f, 1f, 1f, 0f, 3);
+            float baseForwardPaceMarkerPhase = InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerPhase", true, 0.50f, 1f, 1f, 0f, 0);
+            float payoffForwardPaceMarkerPhase = InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerPhase", true, 0.50f, 1f, 1f, 1f, 0);
+            float nearForwardPaceMarkerPulse = InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerPulse", 0.90f, 1f, 1f);
+            float farForwardPaceMarkerPulse = InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerPulse", 0.10f, 1f, 0f);
+            int hiddenForwardPaceMarkerAlpha = InvokeRuntimeUiInt("BuildStraightRunForwardPaceMarkerAlpha", false, 1f, 0.90f, 1f, 1f, 1f, 1f);
+            int calmForwardPaceMarkerAlpha = InvokeRuntimeUiInt("BuildStraightRunForwardPaceMarkerAlpha", true, 0.65f, 0.70f, 0f, 0f, 0f, 0f);
+            int urgentForwardPaceMarkerAlpha = InvokeRuntimeUiInt("BuildStraightRunForwardPaceMarkerAlpha", true, 0.65f, 0.90f, 1f, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(idleForwardPaceMarkerPhase, 3f / 4f)
+                    && payoffForwardPaceMarkerPhase > baseForwardPaceMarkerPhase
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerAnchorY", 0.10f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerAnchorY", 0.90f)
+                    && nearForwardPaceMarkerPulse > farForwardPaceMarkerPulse
+                    && hiddenForwardPaceMarkerAlpha == 0
+                    && urgentForwardPaceMarkerAlpha > calmForwardPaceMarkerAlpha
+                    && urgentForwardPaceMarkerAlpha <= 76
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerWidth", 0.90f, 1f, nearForwardPaceMarkerPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerWidth", 0.10f, 0f, farForwardPaceMarkerPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerHeight", 0.90f, nearForwardPaceMarkerPulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerHeight", 0.10f, farForwardPaceMarkerPulse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerOffsetX", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerOffsetX", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerOffsetX", 0f, 1f, 0.90f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerAngle", -1f, 1f, 0.90f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerAngle", 1f, 1f, 0.90f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerAngle", 1f, 1f, 0.90f)) <= 4.2f
+                    && InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerColorBlend", 0.90f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunForwardPaceMarkerColorBlend", 0.10f, 0f, 0f),
+                "Straight-run forward pace markers must add subtle run-tempo ticks, brighten near the beat, and keep rotation drift readable but mild.");
+            float idleFocusRingPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusRingPulse", false, 1f, 1f, 1f, 1f, 1f, 0);
+            float calmFocusRingPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusRingPulse", true, 0.45f, 0f, 0f, 0f, 0f, 0);
+            float boostedFocusRingPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusRingPulse", true, 1f, 1f, 1f, 1f, 1f, 0);
+            int hiddenFocusRingAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusRingAlpha", false, 1f, 1f, 0f, 0);
+            int activeFocusRingAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusRingAlpha", true, 1f, boostedFocusRingPulse, 0f, 0);
+            int recoveryFocusRingAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusRingAlpha", true, 1f, boostedFocusRingPulse, 1f, 0);
+            Require(
+                Mathf.Approximately(idleFocusRingPulse, 0f)
+                    && boostedFocusRingPulse > calmFocusRingPulse
+                    && hiddenFocusRingAlpha == 0
+                    && activeFocusRingAlpha > InvokeRuntimeUiInt("BuildStraightRunFocusRingAlpha", true, 0.35f, calmFocusRingPulse, 0f, 0)
+                    && activeFocusRingAlpha <= 82
+                    && recoveryFocusRingAlpha < activeFocusRingAlpha
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingAnchorY", 1f, 2)
+                        > InvokeRuntimeUiFloat("BuildStraightRunFocusRingAnchorY", 0f, 0)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingSize", boostedFocusRingPulse, 1f, 0)
+                        > InvokeRuntimeUiFloat("BuildStraightRunFocusRingSize", boostedFocusRingPulse, 1f, 2)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingOffsetX", -1f, 1f, 0) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingOffsetX", 1f, 1f, 0) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunFocusRingOffsetX", 0f, 1f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingAngle", -1f, 1f, 0) < 45f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingAngle", 1f, 1f, 0) > 45f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingAngle", 1f, 1f, 0) <= 51f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusRingColorBlend", boostedFocusRingPulse, 1f, 0)
+                        > InvokeRuntimeUiFloat("BuildStraightRunFocusRingColorBlend", calmFocusRingPulse, 0f, 2),
+                "Straight-run focus rings must add a low-alpha forward target around the beacon without covering lanes or rolling the UI.");
+            float idleTargetFramePulse = InvokeRuntimeUiFloat("BuildStraightRunTargetFramePulse", false, 1f, 1f, 1f, 1f, 1f);
+            float calmTargetFramePulse = InvokeRuntimeUiFloat("BuildStraightRunTargetFramePulse", true, 0.45f, 0f, 0f, 0f, 0f);
+            float boostedTargetFramePulse = InvokeRuntimeUiFloat("BuildStraightRunTargetFramePulse", true, 1f, 1f, 1f, 1f, 1f);
+            int hiddenTargetFrameAlpha = InvokeRuntimeUiInt("BuildStraightRunTargetFramePieceAlpha", false, 1f, 1f, 0f, 0);
+            int activeTargetFrameAlpha = InvokeRuntimeUiInt("BuildStraightRunTargetFramePieceAlpha", true, 1f, boostedTargetFramePulse, 0f, 0);
+            int recoveryTargetFrameAlpha = InvokeRuntimeUiInt("BuildStraightRunTargetFramePieceAlpha", true, 1f, boostedTargetFramePulse, 1f, 0);
+            Require(
+                Mathf.Approximately(idleTargetFramePulse, 0f)
+                    && boostedTargetFramePulse > calmTargetFramePulse
+                    && hiddenTargetFrameAlpha == 0
+                    && activeTargetFrameAlpha > InvokeRuntimeUiInt("BuildStraightRunTargetFramePieceAlpha", true, 0.35f, calmTargetFramePulse, 0f, 0)
+                    && activeTargetFrameAlpha <= 92
+                    && recoveryTargetFrameAlpha < activeTargetFrameAlpha
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFrameHalfSpread", 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFrameHalfSpread", 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFrameOffsetX", -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFrameOffsetX", 1f, 1f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunTargetFrameOffsetX", 0f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorX", 2, 0f, 0f) < 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorX", 3, 0f, 0f) > 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorX", 0, -1f, 1f) < 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorX", 0, 1f, 1f) > 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorY", 0, 0f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorY", 1, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorY", 0, 1f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAnchorY", 0, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceWidth", 0, boostedTargetFramePulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceWidth", 0, calmTargetFramePulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceHeight", 2, boostedTargetFramePulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceHeight", 2, calmTargetFramePulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceWidth", 0, boostedTargetFramePulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceWidth", 2, boostedTargetFramePulse, 1f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceHeight", 2, boostedTargetFramePulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceHeight", 0, boostedTargetFramePulse, 1f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAngle", 0, -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAngle", 0, 1f, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceAngle", 0, 1f, 1f)) <= 4.8f
+                    && InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceColorBlend", boostedTargetFramePulse, 1f, 0)
+                        > InvokeRuntimeUiFloat("BuildStraightRunTargetFramePieceColorBlend", calmTargetFramePulse, 0f, 2),
+                "Straight-run target frame must sit behind the beacon as a low-alpha destination cue and drift only mildly during rotation corridors.");
+            float hiddenLobbyPortalPulse = InvokeRuntimeUiFloat("BuildLobbyRunPortalPulse", false, true, 1f);
+            float idleLobbyPortalPulse = InvokeRuntimeUiFloat("BuildLobbyRunPortalPulse", true, false, 1f);
+            float readyLobbyPortalPulse = InvokeRuntimeUiFloat("BuildLobbyRunPortalPulse", true, true, 1f);
+            int practiceLobbyPortalAlpha = InvokeRuntimeUiInt(
+                "BuildLobbyRunPortalPieceAlpha",
+                3,
+                true,
+                false,
+                true,
+                1f);
+            int readyLobbyPortalAlpha = InvokeRuntimeUiInt(
+                "BuildLobbyRunPortalPieceAlpha",
+                3,
+                true,
+                true,
+                false,
+                1f);
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowLobbyRunPortal", GreedLastScreenState.LobbyReady)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLobbyRunPortal", GreedLastScreenState.ReSyncPending)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLobbyRunPortal", GreedLastScreenState.RunCoreTest)
+                    && InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        true,
+                        true,
+                        false,
+                        string.Empty)
+                    && InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        true,
+                        true,
+                        false,
+                        "일반")
+                    && !InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        false,
+                        true,
+                        false,
+                        string.Empty)
+                    && !InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        true,
+                        false,
+                        false,
+                        string.Empty)
+                    && !InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        true,
+                        true,
+                        true,
+                        "일반")
+                    && !InvokeRuntimeUiStaticBool(
+                        "BuildLobbyRunPortalReady",
+                        true,
+                        true,
+                        true,
+                        false,
+                        "저장")
+                    && Mathf.Approximately(hiddenLobbyPortalPulse, 0f)
+                    && readyLobbyPortalPulse > idleLobbyPortalPulse
+                    && readyLobbyPortalAlpha > practiceLobbyPortalAlpha
+                    && readyLobbyPortalAlpha <= 168
+                    && InvokeRuntimeUiInt(
+                        "BuildLobbyRunPortalPieceAlpha",
+                        0,
+                        false,
+                        true,
+                        false,
+                        1f) == 0
+                    && InvokeRuntimeUiInt(
+                        "BuildLobbyRunPortalPipAlpha",
+                        0,
+                        true,
+                        false,
+                        0.5f) == 0
+                    && InvokeRuntimeUiInt(
+                        "BuildLobbyRunPortalPipAlpha",
+                        0,
+                        true,
+                        true,
+                        0.5f) > 0
+                    && InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", true, true, 1f)
+                        > InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", true, true, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", true, false, 1f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", false, true, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildLobbyPracticeButtonEmphasis", true, true, 1f)
+                        > InvokeRuntimeUiFloat("BuildLobbyPracticeButtonEmphasis", true, true, 0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildLobbyPracticeButtonEmphasis", true, false, 1f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildLobbyPracticeButtonEmphasis", false, true, 1f),
+                        0f)
+                    && InvokeRuntimeUiFloat(
+                            "BuildLobbyRunButtonScale",
+                            InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", true, true, 1f))
+                        > 1f
+                    && InvokeRuntimeUiFloat(
+                            "BuildLobbyRunButtonScale",
+                            InvokeRuntimeUiFloat("BuildLobbyRunButtonEmphasis", true, true, 1f))
+                        <= 1.015f,
+                "The lobby entrance portal must pulse practice first, then point into a fresh normal run without competing with sync or save-candidate handling.");
+            float lobbyRevealMid = InvokeRuntimeUiFloat(
+                "BuildLobbyEntranceRevealProgress",
+                true,
+                10.24f,
+                10f,
+                10.48f);
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldStartLobbyEntranceReveal",
+                    true,
+                    GreedLastScreenState.LobbyLoading,
+                    GreedLastScreenState.LobbyReady)
+                    && InvokeRuntimeUiStaticBool(
+                        "ShouldStartLobbyEntranceReveal",
+                        true,
+                        GreedLastScreenState.RunCoreTest,
+                        GreedLastScreenState.LobbyReady)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartLobbyEntranceReveal",
+                        true,
+                        GreedLastScreenState.LobbyReady,
+                        GreedLastScreenState.LobbyReady)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartLobbyEntranceReveal",
+                        false,
+                        GreedLastScreenState.BootInit,
+                        GreedLastScreenState.LobbyReady)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartLobbyEntranceReveal",
+                        true,
+                        GreedLastScreenState.LobbyLoading,
+                        GreedLastScreenState.RunCoreTest)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildLobbyEntranceRevealProgress", false, 10.24f, 10f, 10.48f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildLobbyEntranceRevealProgress", true, 10f, 10f, 10.48f),
+                        0f)
+                    && lobbyRevealMid > 0f
+                    && lobbyRevealMid < 1f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildLobbyEntranceRevealProgress", true, 10.5f, 10f, 10.48f),
+                        1f)
+                    && InvokeRuntimeUiInt("BuildLobbyEntranceRevealAlpha", 200, 0.5f) == 100
+                    && InvokeRuntimeUiFloat("BuildLobbyRunnerRevealYOffset", 0f)
+                        < InvokeRuntimeUiFloat("BuildLobbyRunnerRevealYOffset", 1f),
+                "The lobby portal, runner, and button emphasis must share one short entrance reveal that does not restart for repeated lobby snapshots.");
+            float runEntranceHandoffMid = InvokeRuntimeUiFloat(
+                "BuildRunEntranceHandoffProgress",
+                true,
+                20.17f,
+                20f,
+                20.34f);
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldStartRunEntranceHandoff",
+                    true,
+                    GreedLastScreenState.LobbyReady,
+                    GreedLastScreenState.RunCoreTest)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartRunEntranceHandoff",
+                        true,
+                        GreedLastScreenState.LobbyReady,
+                        GreedLastScreenState.InfiniteRun)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartRunEntranceHandoff",
+                        false,
+                        GreedLastScreenState.LobbyReady,
+                        GreedLastScreenState.RunCoreTest)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldStartRunEntranceHandoff",
+                        true,
+                        GreedLastScreenState.LobbyReady,
+                        GreedLastScreenState.SaveLoadoutDraft)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceHandoffProgress", false, 20.17f, 20f, 20.34f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceHandoffProgress", true, 20f, 20f, 20.34f),
+                        0f)
+                    && runEntranceHandoffMid > 0f
+                    && runEntranceHandoffMid < 1f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceHandoffProgress", true, 20.35f, 20f, 20.34f),
+                        1f)
+                    && InvokeRuntimeUiFloat("BuildRunEntrancePortalVisibility", 0f)
+                        > InvokeRuntimeUiFloat("BuildRunEntrancePortalVisibility", runEntranceHandoffMid)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunEntrancePortalVisibility", 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunEntranceRunnerScale", 0f)
+                        < InvokeRuntimeUiFloat("BuildRunEntranceRunnerScale", 1f)
+                    && InvokeRuntimeUiFloat("BuildRunEntranceRunnerOffsetY", 0f)
+                        < InvokeRuntimeUiFloat("BuildRunEntranceRunnerOffsetY", 1f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceRunnerAlpha", 0f, true, false),
+                        0.88f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceRunnerAlpha", 0f, false, true),
+                        0.68f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunEntranceRunnerAlpha", 1f, false, true),
+                        1f)
+                    && InvokeRuntimeUiFloat("BuildLobbyEntranceCueVolume") > 0f
+                    && InvokeRuntimeUiFloat("BuildLobbyEntranceCueVolume")
+                        < InvokeRuntimeUiFloat("BuildRunEntranceCueVolume", true, false)
+                    && InvokeRuntimeUiFloat("BuildRunEntranceCueVolume", true, false)
+                        > InvokeRuntimeUiFloat("BuildRunEntranceCueVolume", false, true)
+                    && InvokeRuntimeUiFloat("BuildRunEntranceCueVolume", false, true)
+                        > InvokeRuntimeUiFloat("BuildRunEntranceCueVolume", false, false)
+                    && InvokeRuntimeUiFloat("BuildRunEntranceHapticDuration") > 0f
+                    && InvokeRuntimeUiFloat("BuildRunEntranceHapticDuration") < 0.03f,
+                "A lobby-to-normal/practice handoff must carry the small runner forward while the entrance portal fades, without skipping the separate infinite preparation flow or affecting management screens.");
+            float lobbyRunnerPulseLow = InvokeRuntimeUiFloat("BuildLobbyRunnerPulse", 0.75f);
+            float lobbyRunnerPulseHigh = InvokeRuntimeUiFloat("BuildLobbyRunnerPulse", 0.25f);
+            float lobbyRunnerPracticeScale = InvokeRuntimeUiFloat("BuildLobbyRunnerScale", false, lobbyRunnerPulseHigh);
+            float lobbyRunnerReadyScale = InvokeRuntimeUiFloat("BuildLobbyRunnerScale", true, lobbyRunnerPulseHigh);
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowLobbyRunner", true, false, true, false)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLobbyRunner", true, false, false, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLobbyRunner", false, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLobbyRunner", true, true, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLobbyRunner", true, false, false, false)
+                    && lobbyRunnerPulseHigh > lobbyRunnerPulseLow
+                    && lobbyRunnerReadyScale > lobbyRunnerPracticeScale
+                    && lobbyRunnerReadyScale < 0.7f
+                    && InvokeRuntimeUiFloat("BuildLobbyRunnerBob", true, lobbyRunnerPulseHigh)
+                        > InvokeRuntimeUiFloat("BuildLobbyRunnerBob", true, lobbyRunnerPulseLow)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLobbyRunnerBob", false, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildLobbyRunnerAlpha", true, true, false)
+                        > InvokeRuntimeUiFloat("BuildLobbyRunnerAlpha", true, false, true)
+                    && InvokeRuntimeUiFloat("BuildLobbyRunnerAlpha", true, false, true)
+                        > InvokeRuntimeUiFloat("BuildLobbyRunnerAlpha", true, false, false)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLobbyRunnerAlpha", false, true, false), 0f),
+                "The lobby runner must remain a small breathing silhouette, strengthen only with a ready portal, and yield completely to a live run or blocked lobby.");
+            float earlyExitSlotStrength = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSlotEscapeStrengthForValues",
+                false,
+                GreedLastRunPhase.RunPlaying,
+                1,
+                false,
+                false);
+            float chapterFourExitSlotStrength = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSlotEscapeStrengthForValues",
+                false,
+                GreedLastRunPhase.RunPlaying,
+                4,
+                false,
+                false);
+            float coreExitSlotStrength = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSlotEscapeStrengthForValues",
+                true,
+                GreedLastRunPhase.CoreRetrieve,
+                4,
+                false,
+                false);
+            float escapeExitSlotStrength = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSlotEscapeStrengthForValues",
+                true,
+                GreedLastRunPhase.EscapeRunning,
+                4,
+                false,
+                false);
+            float stoppedClearExitSlotStrength = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSlotEscapeStrengthForValues",
+                true,
+                GreedLastRunPhase.ClearResolving,
+                4,
+                true,
+                true);
+            float calmExitSlotPulse = InvokeRuntimeUiFloat("BuildStraightRunExitSlotPulse", true, 0.45f, 0f, 0f, 0f, earlyExitSlotStrength, 0f);
+            float escapeExitSlotPulse = InvokeRuntimeUiFloat("BuildStraightRunExitSlotPulse", true, 1f, 1f, 1f, 1f, escapeExitSlotStrength, 0.5f);
+            int hiddenExitSlotAlpha = InvokeRuntimeUiInt("BuildStraightRunExitSlotPieceAlpha", false, 1f, escapeExitSlotPulse, escapeExitSlotStrength, 0f, 0);
+            int calmExitSlotAlpha = InvokeRuntimeUiInt("BuildStraightRunExitSlotPieceAlpha", true, 0.45f, calmExitSlotPulse, earlyExitSlotStrength, 0f, 0);
+            int escapeExitSlotAlpha = InvokeRuntimeUiInt("BuildStraightRunExitSlotPieceAlpha", true, 1f, escapeExitSlotPulse, escapeExitSlotStrength, 0f, 0);
+            float chapterFourExitSprint = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSprintStrength",
+                true,
+                true,
+                chapterFourExitSlotStrength);
+            float coreExitSprint = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSprintStrength",
+                true,
+                true,
+                coreExitSlotStrength);
+            float escapeExitSprint = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitSprintStrength",
+                true,
+                true,
+                escapeExitSlotStrength);
+            Require(
+                Mathf.Approximately(earlyExitSlotStrength, 0f)
+                    && chapterFourExitSlotStrength > earlyExitSlotStrength
+                    && coreExitSlotStrength > chapterFourExitSlotStrength
+                    && escapeExitSlotStrength > coreExitSlotStrength
+                    && stoppedClearExitSlotStrength < escapeExitSlotStrength
+                    && hiddenExitSlotAlpha == 0
+                    && escapeExitSlotPulse > calmExitSlotPulse
+                    && escapeExitSlotAlpha > calmExitSlotAlpha
+                    && escapeExitSlotAlpha <= 142
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAnchorX", 1, -1f, 1f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAnchorX", 2, -1f, 1f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAnchorX", 0, 1f, 1f) > 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAnchorY", 0, escapeExitSlotStrength, 1f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAnchorY", 0, earlyExitSlotStrength, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceWidth", 0, escapeExitSlotPulse, escapeExitSlotStrength, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceWidth", 0, calmExitSlotPulse, earlyExitSlotStrength, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceHeight", 0, escapeExitSlotPulse, escapeExitSlotStrength, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceHeight", 0, calmExitSlotPulse, earlyExitSlotStrength, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAngle", 1, -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAngle", 2, 1f, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceAngle", 2, 1f, 1f)) <= 3.4f
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceColorBlend", escapeExitSlotPulse, escapeExitSlotStrength, 1f, 0)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitSlotPieceColorBlend", calmExitSlotPulse, earlyExitSlotStrength, 0f, 1)
+                    && Mathf.Approximately(chapterFourExitSprint, 0f)
+                    && coreExitSprint > chapterFourExitSprint
+                    && escapeExitSprint > coreExitSprint
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitSprintPulse", escapeExitSprint, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitSprintPulse", escapeExitSprint, 0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunExitSprintStrength",
+                            false,
+                            true,
+                            escapeExitSlotStrength),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunExitSprintStrength",
+                            true,
+                            false,
+                            escapeExitSlotStrength),
+                        0f),
+                "Straight-run exit slot must stay subtle early, brighten toward core retrieval and escape, and drift only slightly inside the entrance arch.");
+            float hiddenExitApproachPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitApproachRailPulse",
+                true,
+                1f,
+                1f,
+                1f,
+                1f,
+                earlyExitSlotStrength,
+                1f);
+            float chapterFourExitApproachPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitApproachRailPulse",
+                true,
+                0.7f,
+                0.4f,
+                0.5f,
+                0.5f,
+                chapterFourExitSlotStrength,
+                0f);
+            float escapeExitApproachPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunExitApproachRailPulse",
+                true,
+                1f,
+                1f,
+                1f,
+                1f,
+                escapeExitSlotStrength,
+                0.5f);
+            int hiddenExitApproachAlpha = InvokeRuntimeUiInt(
+                "BuildStraightRunExitApproachRailAlpha",
+                true,
+                1f,
+                hiddenExitApproachPulse,
+                earlyExitSlotStrength,
+                0f);
+            int escapeExitApproachAlpha = InvokeRuntimeUiInt(
+                "BuildStraightRunExitApproachRailAlpha",
+                true,
+                1f,
+                escapeExitApproachPulse,
+                escapeExitSlotStrength,
+                0f);
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailSide", 0), -1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailSide", 1), 1f)
+                    && Mathf.Approximately(hiddenExitApproachPulse, 0f)
+                    && chapterFourExitApproachPulse > hiddenExitApproachPulse
+                    && escapeExitApproachPulse > chapterFourExitApproachPulse
+                    && hiddenExitApproachAlpha == 0
+                    && escapeExitApproachAlpha > 0
+                    && escapeExitApproachAlpha <= 116
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorX", 0, escapeExitSlotStrength, 0f, 0f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorX", 1, escapeExitSlotStrength, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorX", 0, escapeExitSlotStrength, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorX", 0, escapeExitSlotStrength, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorY", escapeExitSlotStrength, escapeExitApproachPulse)
+                        < InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAnchorY", chapterFourExitSlotStrength, chapterFourExitApproachPulse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailWidth", escapeExitApproachPulse, escapeExitSlotStrength)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailWidth", chapterFourExitApproachPulse, chapterFourExitSlotStrength)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailHeight", escapeExitApproachPulse, escapeExitSlotStrength)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailHeight", chapterFourExitApproachPulse, chapterFourExitSlotStrength)
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAngle", 0, escapeExitSlotStrength, 0f, 0f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAngle", 1, escapeExitSlotStrength, 0f, 0f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailAngle", 1, escapeExitSlotStrength, 1f, 1f)) <= 7f
+                    && InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailColorBlend", escapeExitApproachPulse, escapeExitSlotStrength, 0.5f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunExitApproachRailColorBlend", chapterFourExitApproachPulse, chapterFourExitSlotStrength, 0f),
+                "Exit approach rails must stay hidden early, converge toward the destination in chapter four, and brighten without overpowering the timing field during escape.");
+            bool launchGateVisible = InvokeRuntimeUiStaticBool(
+                "BuildStraightRunLaunchGateVisible",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false);
+            float closedLaunchGateProgress = InvokeRuntimeUiFloat("BuildStraightRunLaunchGateOpenProgress", true, 1.2f);
+            float halfLaunchGateProgress = InvokeRuntimeUiFloat("BuildStraightRunLaunchGateOpenProgress", true, 0.6f);
+            float goLaunchGateProgress = InvokeRuntimeUiFloat("BuildStraightRunLaunchGateOpenProgress", true, 0.2f);
+            float calmLaunchGatePulse = InvokeRuntimeUiFloat("BuildStraightRunLaunchGateBeatPulse", true, 1.2f);
+            float beatLaunchGatePulse = InvokeRuntimeUiFloat("BuildStraightRunLaunchGateBeatPulse", true, 0.9f);
+            Require(
+                launchGateVisible
+                    && InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", true, true, true, false, false, true)
+                    && !InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", false, true, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", true, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", true, true, true, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", true, true, false, true, false, false)
+                    && !InvokeRuntimeUiStaticBool("BuildStraightRunLaunchGateVisible", true, true, false, false, true, false)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateSide", 0), -1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateSide", 1), 1f)
+                    && Mathf.Approximately(closedLaunchGateProgress, 0f)
+                    && halfLaunchGateProgress > closedLaunchGateProgress
+                    && goLaunchGateProgress > halfLaunchGateProgress
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateOpenProgress", false, 0.6f), 1f)
+                    && Mathf.Approximately(calmLaunchGatePulse, 0f)
+                    && beatLaunchGatePulse > calmLaunchGatePulse
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateBeatPulse", false, 0.9f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorX", 0, goLaunchGateProgress)
+                        < InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorX", 0, closedLaunchGateProgress)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorX", 1, goLaunchGateProgress)
+                        > InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorX", 1, closedLaunchGateProgress)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorY", goLaunchGateProgress, beatLaunchGatePulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAnchorY", closedLaunchGateProgress, calmLaunchGatePulse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateWidth", goLaunchGateProgress, 0f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunLaunchGateWidth", closedLaunchGateProgress, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateHeight", goLaunchGateProgress, beatLaunchGatePulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunLaunchGateHeight", closedLaunchGateProgress, calmLaunchGatePulse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAngle", 0, goLaunchGateProgress) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAngle", 1, goLaunchGateProgress) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateAngle", 1, goLaunchGateProgress)) <= 7.5f
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateAlpha", false, goLaunchGateProgress, beatLaunchGatePulse) == 0
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateAlpha", true, goLaunchGateProgress, beatLaunchGatePulse)
+                        > InvokeRuntimeUiInt("BuildStraightRunLaunchGateAlpha", true, goLaunchGateProgress, calmLaunchGatePulse)
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateAlpha", true, goLaunchGateProgress, beatLaunchGatePulse) <= 132
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateColorBlend", goLaunchGateProgress, beatLaunchGatePulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunLaunchGateColorBlend", closedLaunchGateProgress, calmLaunchGatePulse),
+                "The opening and resume countdowns must show a two-piece launch gate that opens outward on the 2-1-GO lead-in and disappears before live control resumes.");
+            float launchReleaseStart = 10f;
+            float launchReleaseUntil = launchReleaseStart + 0.30f;
+            float launchReleaseStartProgress = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleaseProgress",
+                launchReleaseStart,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchReleaseMidProgress = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleaseProgress",
+                launchReleaseStart + 0.15f,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchReleaseEndProgress = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleaseProgress",
+                launchReleaseUntil,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchReleaseStartPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleasePulse",
+                launchReleaseStart,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchReleaseMidPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleasePulse",
+                launchReleaseStart + 0.15f,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchReleaseEndPulse = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchGateReleasePulse",
+                launchReleaseUntil,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchForwardStartBurst = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchForwardBurst",
+                true,
+                true,
+                launchReleaseStart,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchForwardMidBurst = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchForwardBurst",
+                true,
+                true,
+                launchReleaseStart + 0.15f,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float entryThresholdStartStrength = InvokeRuntimeUiFloat(
+                "BuildRunEntryThresholdSweepStrength",
+                true,
+                true,
+                false,
+                launchReleaseStart,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float entryThresholdMidStrength = InvokeRuntimeUiFloat(
+                "BuildRunEntryThresholdSweepStrength",
+                true,
+                true,
+                false,
+                launchReleaseStart + 0.15f,
+                launchReleaseStart,
+                launchReleaseUntil);
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldStartStraightRunLaunchRelease", true, false, true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldStartStraightRunLaunchRelease", false, false, true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldStartStraightRunLaunchRelease", true, true, true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldStartStraightRunLaunchRelease", true, false, false, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldStartStraightRunLaunchRelease", true, false, true, false)
+                    && Mathf.Approximately(launchReleaseStartProgress, 0f)
+                    && launchReleaseMidProgress > launchReleaseStartProgress
+                    && launchReleaseEndProgress > launchReleaseMidProgress
+                    && Mathf.Approximately(launchReleaseEndProgress, 1f)
+                    && launchReleaseStartPulse > launchReleaseMidPulse
+                    && launchReleaseMidPulse > launchReleaseEndPulse
+                    && Mathf.Approximately(launchReleaseEndPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateReleaseOffset", launchReleaseStartProgress, launchReleaseStartPulse) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunLaunchGateReleaseOffset", launchReleaseEndProgress, launchReleaseEndPulse), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateReleaseAngleLift", launchReleaseStartProgress, launchReleaseStartPulse) > 0f
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateReleaseAlpha", true, launchReleaseStartPulse) > 0
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateReleaseAlpha", true, launchReleaseStartPulse) <= 118
+                    && InvokeRuntimeUiInt("BuildStraightRunLaunchGateReleaseAlpha", false, launchReleaseStartPulse) == 0
+                    && InvokeRuntimeUiFloat("BuildStraightRunLaunchGateReleaseColorLift", launchReleaseStartPulse)
+                        > InvokeRuntimeUiFloat("BuildStraightRunLaunchGateReleaseColorLift", launchReleaseEndPulse)
+                    && launchForwardStartBurst > launchForwardMidBurst
+                    && launchForwardMidBurst > 0f
+                    && entryThresholdStartStrength > entryThresholdMidStrength
+                    && entryThresholdMidStrength > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildRunEntryThresholdSweepStrength",
+                        true,
+                        true,
+                        true,
+                        launchReleaseStart,
+                        launchReleaseStart,
+                        launchReleaseUntil), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepAnchorY", launchReleaseStartProgress)
+                        > InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepAnchorY", launchReleaseMidProgress)
+                    && InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepWidth", launchReleaseMidProgress)
+                        > InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepWidth", launchReleaseStartProgress)
+                    && InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepHeight", entryThresholdStartStrength) > 6f
+                    && InvokeRuntimeUiInt(
+                        "BuildRunEntryThresholdSweepAlpha",
+                        entryThresholdStartStrength,
+                        launchReleaseStartProgress) > 0
+                    && InvokeRuntimeUiInt(
+                        "BuildRunEntryThresholdSweepAlpha",
+                        0f,
+                        launchReleaseEndProgress) == 0
+                    && InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepColorBlend", launchReleaseMidProgress)
+                        > InvokeRuntimeUiFloat("BuildRunEntryThresholdSweepColorBlend", launchReleaseStartProgress)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunLaunchForwardBurst",
+                            false,
+                            true,
+                            launchReleaseStart,
+                            launchReleaseStart,
+                            launchReleaseUntil),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunLaunchForwardBurst",
+                            true,
+                            false,
+                            launchReleaseStart,
+                            launchReleaseStart,
+                            launchReleaseUntil),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunLaunchForwardBurst",
+                            true,
+                            true,
+                            launchReleaseUntil,
+                            launchReleaseStart,
+                            launchReleaseUntil),
+                        0f),
+                "A completed countdown must emit one short launch-gate release only when live control actually resumes, while cancelled or paused countdowns stay quiet.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", true, false, 0, 0, 0)
+                    && !InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", true, true, 0, 0, 0)
+                    && !InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", true, false, 1, 0, 0)
+                    && !InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", true, false, 0, 1, 0)
+                    && !InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", true, false, 0, 0, 1)
+                    && !InvokeRuntimeUiStaticBool("ShouldQueueRunEntryTrapReveal", false, false, 0, 0, 0),
+                "The first-trap reveal must queue only for a fresh run before any judgement and never for resume or later chapter countdowns.");
+            float startCountdownReady = InvokeRuntimeUiFloat(
+                "BuildRunnerCountdownReadyStrength",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                1.2f);
+            float goCountdownReady = InvokeRuntimeUiFloat(
+                "BuildRunnerCountdownReadyStrength",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                0.2f);
+            float resumeCountdownReady = InvokeRuntimeUiFloat(
+                "BuildRunnerCountdownReadyStrength",
+                true,
+                true,
+                true,
+                true,
+                false,
+                false,
+                0.6f);
+            float launchStepStart = InvokeRuntimeUiFloat(
+                "BuildRunnerLaunchStepStrength",
+                true,
+                true,
+                launchReleaseStart,
+                launchReleaseStart,
+                launchReleaseUntil);
+            float launchStepEnd = InvokeRuntimeUiFloat(
+                "BuildRunnerLaunchStepStrength",
+                true,
+                true,
+                launchReleaseUntil,
+                launchReleaseStart,
+                launchReleaseUntil);
+            Require(
+                startCountdownReady > 0f
+                    && goCountdownReady > startCountdownReady
+                    && resumeCountdownReady > 0f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildRunnerCountdownReadyStrength",
+                            true,
+                            true,
+                            true,
+                            false,
+                            false,
+                            false,
+                            0.6f),
+                        0f)
+                    && InvokeRuntimeUiFloat("BuildRunnerCountdownReadyOffsetY", goCountdownReady) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerCountdownReadyScaleX", goCountdownReady) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerCountdownReadyScaleY", goCountdownReady) < 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerCountdownReadyShadowScaleXLift", goCountdownReady) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerCountdownReadyShadowAlphaLift", goCountdownReady) > 0f
+                    && launchStepStart > launchStepEnd
+                    && Mathf.Approximately(launchStepEnd, 0f)
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepLift", launchStepStart) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepScaleX", launchStepStart) < 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepScaleY", launchStepStart) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepAngle", launchStepStart) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepColorBlend", launchStepStart) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepShadowScaleXLift", launchStepStart) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerLaunchStepShadowAlphaLift", launchStepStart) > 0f,
+                "The runner must crouch through both start and resume countdowns, then take one visible first step during the existing GO release without changing control timing.");
+            float runEntryRevealMid = InvokeRuntimeUiFloat(
+                "BuildRunEntryTrapRevealStrengthForValues",
+                true,
+                false,
+                false,
+                false,
+                false,
+                10.31f,
+                10f,
+                10.62f);
+            Vector4 runEntryTopOuter = InvokeRuntimeUiVector4(
+                "BuildRunEntryTrapRevealPieceLayout",
+                0,
+                160f,
+                90f,
+                0.2f);
+            Vector4 runEntryTopLocked = InvokeRuntimeUiVector4(
+                "BuildRunEntryTrapRevealPieceLayout",
+                0,
+                160f,
+                90f,
+                1f);
+            Vector4 runEntryRightLocked = InvokeRuntimeUiVector4(
+                "BuildRunEntryTrapRevealPieceLayout",
+                1,
+                160f,
+                90f,
+                1f);
+            Vector4 runEntryBottomLocked = InvokeRuntimeUiVector4(
+                "BuildRunEntryTrapRevealPieceLayout",
+                2,
+                160f,
+                90f,
+                1f);
+            Vector4 runEntryLeftLocked = InvokeRuntimeUiVector4(
+                "BuildRunEntryTrapRevealPieceLayout",
+                3,
+                160f,
+                90f,
+                1f);
+            float leftEntryDirection = InvokeRuntimeUiFloat(
+                "BuildRunnerEntryThreatDirection",
+                GreedLastRunChannel.Left);
+            float rightEntryDirection = InvokeRuntimeUiFloat(
+                "BuildRunnerEntryThreatDirection",
+                GreedLastRunChannel.Right);
+            Require(
+                runEntryRevealMid > 0.98f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildRunEntryTrapRevealStrengthForValues",
+                            true,
+                            true,
+                            false,
+                            false,
+                            false,
+                            10.31f,
+                            10f,
+                            10.62f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildRunEntryTrapRevealStrengthForValues",
+                            true,
+                            false,
+                            false,
+                            true,
+                            false,
+                            10.31f,
+                            10f,
+                            10.62f),
+                        0f)
+                    && runEntryTopLocked.y < runEntryTopOuter.y
+                    && runEntryTopLocked.z > runEntryTopOuter.z
+                    && runEntryRightLocked.x > 0f
+                    && runEntryBottomLocked.y < 0f
+                    && runEntryLeftLocked.x < 0f
+                    && leftEntryDirection < 0f
+                    && rightEntryDirection > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerEntryThreatOffsetX", leftEntryDirection, 1f) >= -6f
+                    && InvokeRuntimeUiFloat("BuildRunnerEntryThreatOffsetX", rightEntryDirection, 1f) <= 6f
+                    && InvokeRuntimeUiFloat("BuildRunnerEntryThreatSilhouetteStrength", 1f) <= 0.58f,
+                "The first live trap must receive one bounded four-piece lock-on and a subtle lane-facing runner handoff, while pause and countdown states suppress the reveal.");
+            float leftComfortAnchorSide = InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorSide", 1);
+            float rightComfortAnchorSide = InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorSide", 2);
+            float leftComfortAnchorTarget = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationComfortAnchorTargetStrength",
+                leftComfortAnchorSide,
+                -1f,
+                1f);
+            float rightComfortAnchorOffTarget = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationComfortAnchorTargetStrength",
+                rightComfortAnchorSide,
+                -1f,
+                1f);
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldShowStraightRunRotationComfortAnchor",
+                    true,
+                    -1f,
+                    0.8f,
+                    0f,
+                    0f)
+                    && InvokeRuntimeUiStaticBool(
+                        "ShouldShowStraightRunRotationComfortAnchor",
+                        true,
+                        0f,
+                        0f,
+                        1f,
+                        0.8f)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldShowStraightRunRotationComfortAnchor",
+                        false,
+                        -1f,
+                        1f,
+                        0f,
+                        0f)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldShowStraightRunRotationComfortAnchor",
+                        true,
+                        0f,
+                        0f,
+                        0f,
+                        0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorSide", 0), 0f)
+                    && Mathf.Approximately(leftComfortAnchorSide, -1f)
+                    && Mathf.Approximately(rightComfortAnchorSide, 1f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunRotationComfortAnchorDirection",
+                            -1f,
+                            0.8f,
+                            1f,
+                            1f),
+                        -1f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildStraightRunRotationComfortAnchorDirection",
+                            0f,
+                            0f,
+                            1f,
+                            0.8f),
+                        1f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorAnchorX", 0),
+                        0.5f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorAnchorX", 1) < 0.5f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationComfortAnchorAnchorX", 2) > 0.5f
+                    && leftComfortAnchorTarget > rightComfortAnchorOffTarget
+                    && InvokeRuntimeUiFloat(
+                        "BuildStraightRunRotationComfortAnchorWidth",
+                        1,
+                        leftComfortAnchorTarget,
+                        1f)
+                        > InvokeRuntimeUiFloat(
+                            "BuildStraightRunRotationComfortAnchorWidth",
+                            2,
+                            rightComfortAnchorOffTarget,
+                            0f)
+                    && InvokeRuntimeUiFloat(
+                        "BuildStraightRunRotationComfortAnchorHeight",
+                        0,
+                        1f,
+                        0.62f,
+                        1f)
+                        > InvokeRuntimeUiFloat(
+                            "BuildStraightRunRotationComfortAnchorHeight",
+                            0,
+                            0.2f,
+                            0.12f,
+                            0f)
+                    && InvokeRuntimeUiInt(
+                        "BuildStraightRunRotationComfortAnchorAlpha",
+                        false,
+                        false,
+                        leftComfortAnchorTarget,
+                        1f,
+                        1f) == 0
+                    && InvokeRuntimeUiInt(
+                        "BuildStraightRunRotationComfortAnchorAlpha",
+                        true,
+                        false,
+                        leftComfortAnchorTarget,
+                        1f,
+                        1f)
+                        > InvokeRuntimeUiInt(
+                            "BuildStraightRunRotationComfortAnchorAlpha",
+                            true,
+                            false,
+                            rightComfortAnchorOffTarget,
+                            1f,
+                            0f)
+                    && InvokeRuntimeUiInt(
+                        "BuildStraightRunRotationComfortAnchorAlpha",
+                        true,
+                        false,
+                        leftComfortAnchorTarget,
+                        1f,
+                        1f) <= 108,
+                "Rotation corridors must keep a fixed center comfort anchor while only the requested side bar gains width, brightness, and downbeat emphasis.");
+            float idleFocusBeaconPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconPulse", false, 1f, 1f, 1f, 1f, 1f);
+            float calmFocusBeaconPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconPulse", true, 0.45f, 0f, 0f, 0f, 0f);
+            float boostedFocusBeaconPulse = InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconPulse", true, 1f, 1f, 1f, 1f, 1f);
+            int hiddenFocusBeaconAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusBeaconAlpha", false, 1f, 1f, 0f);
+            int activeFocusBeaconAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusBeaconAlpha", true, 1f, boostedFocusBeaconPulse, 0f);
+            int recoveryFocusBeaconAlpha = InvokeRuntimeUiInt("BuildStraightRunFocusBeaconAlpha", true, 1f, boostedFocusBeaconPulse, 1f);
+            Require(
+                Mathf.Approximately(idleFocusBeaconPulse, 0f)
+                    && boostedFocusBeaconPulse > calmFocusBeaconPulse
+                    && hiddenFocusBeaconAlpha == 0
+                    && activeFocusBeaconAlpha > InvokeRuntimeUiInt("BuildStraightRunFocusBeaconAlpha", true, 0.35f, calmFocusBeaconPulse, 0f)
+                    && activeFocusBeaconAlpha <= 118
+                    && recoveryFocusBeaconAlpha < activeFocusBeaconAlpha
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconOffsetX", -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconOffsetX", 1f, 1f) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconOffsetX", 0f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconAnchorY", 1f)
+                        < InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconAnchorY", 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconSize", boostedFocusBeaconPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconSize", calmFocusBeaconPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconAngle", -1f, 1f) < 45f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconAngle", 1f, 1f) > 45f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconAngle", 1f, 1f) <= 52f
+                    && InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconColorBlend", boostedFocusBeaconPulse, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunFocusBeaconColorBlend", calmFocusBeaconPulse, 0f),
+                "Straight-run focus beacon must stay subtle, brighten on rhythm-forward motion, and drift only as a small rotation-corridor focal cue.");
+            int noRotationNeedleAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGuideNeedleAlpha", true, 0f, 1f, 1f, 0.5f);
+            int calmRotationNeedleAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGuideNeedleAlpha", true, -1f, 0.35f, 0f, 0.5f);
+            int urgentRotationNeedleAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGuideNeedleAlpha", true, -1f, 1f, 1f, 0.5f);
+            Require(
+                noRotationNeedleAlpha == 0
+                    && urgentRotationNeedleAlpha > calmRotationNeedleAlpha
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleOffset", -1f, 1f, 0.5f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleOffset", 1f, 1f, 0.5f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleAngle", -1f, 1f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleAngle", 1f, 1f) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleAngle", 1f, 1f)) <= 43f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleWidth", 1f, 1f, 0.8f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleWidth", 0.2f, 0f, 0.8f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleHeight", 1f, 1f, 0.8f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGuideNeedleHeight", 0.2f, 0f, 0.8f),
+                "Rotation-corridor guide needles must point left/right and intensify near the hit window without appearing on ordinary straight-run hazards.");
+            int noTiltPipAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationTiltPipAlpha", true, 0f, 1f, 1f, 4);
+            int targetTiltPipAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationTiltPipAlpha", true, 1f, 1f, 1f, 4);
+            int oppositeTiltPipAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationTiltPipAlpha", true, 1f, 1f, 1f, 0);
+            int centerTiltPipAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationTiltPipAlpha", true, 1f, 0.65f, 0f, 2);
+            Require(
+                noTiltPipAlpha == 0
+                    && targetTiltPipAlpha > oppositeTiltPipAlpha
+                    && centerTiltPipAlpha > 0
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipOffsetX", -1f, 1f, 0) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipOffsetX", 1f, 1f, 4) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipWidth", 1f, 1f, 1f, 4)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipWidth", 1f, 0.25f, 0f, 4)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipHeight", 1f, 1f, 1f, 4)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipHeight", 1f, 0.25f, 0f, 4)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipAngle", -1f, 1f, 0) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipAngle", 1f, 1f, 4) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipAngle", 1f, 1f, 4)) <= 14f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipColorBlend", 1f, 1f, 4)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationTiltPipColorBlend", 1f, 1f, 0),
+                "Rotation-corridor tilt pips must stay hidden outside rotation reads and emphasize the requested phone-tilt side without rolling the whole UI.");
+            float heldNeutralRelease = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationNeutralGateReleasePressure",
+                false,
+                1,
+                1f,
+                0f);
+            float afterglowNeutralRelease = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationNeutralGateReleasePressure",
+                false,
+                1,
+                1f,
+                1f);
+            int readyNeutralGateAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationNeutralGateAlpha", true, 1f, 0.65f, 0f, 0f);
+            int heldNeutralGateAlpha = InvokeRuntimeUiInt(
+                "BuildStraightRunRotationNeutralGateAlpha",
+                true,
+                1f,
+                0.65f,
+                heldNeutralRelease,
+                0f);
+            Require(
+                Mathf.Approximately(
+                    InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateReleasePressure", true, 1, 1f, 0f),
+                    0f)
+                    && heldNeutralRelease > afterglowNeutralRelease
+                    && heldNeutralRelease > 0.98f
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationNeutralGateAlpha", true, 0f, 1f, 1f, 1f) == 0
+                    && heldNeutralGateAlpha > readyNeutralGateAlpha
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationNeutralGateAlpha", true, 1f, 0.65f, heldNeutralRelease, 1f)
+                        > heldNeutralGateAlpha
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateOffsetX", 1f, 1f, heldNeutralRelease))
+                        < Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateOffsetX", 1f, 1f, 0f))
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateOffsetX", -1f, 1f, 0f) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateOffsetX", 1f, 1f, 0f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateAnchorY", 1f, heldNeutralRelease)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateAnchorY", 1f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateWidth", 1f, heldNeutralRelease, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateWidth", 1f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateHeight", 1f, heldNeutralRelease, 1f)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateHeight", 1f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateAngle", 1f, 1f, heldNeutralRelease)
+                        < InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateAngle", 1f, 1f, 0f)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateColorBlend", 1f, heldNeutralRelease)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationNeutralGateColorBlend", 1f, 0f),
+                "Rotation-corridor neutral gate must mark the center-return checkpoint after a phone tilt without changing the input contract.");
+            int noGripBarAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGripBarAlpha", true, 0f, 1f, 1f, 1);
+            int targetGripBarAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGripBarAlpha", true, 1f, 1f, 1f, 1);
+            int oppositeGripBarAlpha = InvokeRuntimeUiInt("BuildStraightRunRotationGripBarAlpha", true, 1f, 1f, 1f, 0);
+            Require(
+                noGripBarAlpha == 0
+                    && targetGripBarAlpha > oppositeGripBarAlpha
+                    && targetGripBarAlpha <= 146
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarOffsetX", -1f, 1f, 0) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarOffsetX", 1f, 1f, 1) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarAnchorY", 1f, 1f, 1)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarAnchorY", 1f, 1f, 0)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarWidth", 1f, 1f, 1f, 1)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarWidth", 1f, 1f, 1f, 0)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarHeight", 1f, 1f, 1f, 1)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarHeight", 1f, 1f, 1f, 0)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarAngle", -1f, 1f, 0) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarAngle", 1f, 1f, 1) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarAngle", 1f, 1f, 1)) <= 11.2f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarColorBlend", 1f, 1f, 1)
+                        > InvokeRuntimeUiFloat("BuildStraightRunRotationGripBarColorBlend", 1f, 1f, 0),
+                "Rotation-corridor grip bars must make the target phone-tilt side longer and brighter without moving the main UI.");
+            float successRotationResponse = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationResponsePulse",
+                true,
+                GreedLastJudgementResult.Success,
+                0.30f,
+                0.44f);
+            float goodRotationResponse = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationResponsePulse",
+                true,
+                GreedLastJudgementResult.Good,
+                0.30f,
+                0.44f);
+            float missRotationResponse = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationResponsePulse",
+                true,
+                GreedLastJudgementResult.Miss,
+                0.30f,
+                0.44f);
+            Require(
+                successRotationResponse > goodRotationResponse
+                    && goodRotationResponse > missRotationResponse
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationResponsePulse", false, GreedLastJudgementResult.Success, 0.30f, 0.44f) == 0f
+                    && InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", true, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", true, true, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", true, false, true, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", true, false, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStraightRunRotationResponsePips", true, false, false, false, true)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationResponsePulse", true, GreedLastJudgementResult.Success, 0.05f, 0.44f)
+                        < successRotationResponse
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltDisplayReadiness", 0.32f, successRotationResponse)
+                        == Mathf.Max(0.32f, successRotationResponse)
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltDisplayDirection", 0f, 0f, -1f, successRotationResponse) < 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltDisplayDirection", 1f, 0.90f, -1f, 0.20f) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationTiltDisplayDirection", 1f, 0.10f, -1f, 0.70f) < 0f,
+                "Rotation-corridor tilt pips must keep a short result afterglow without overriding the live corridor direction too early.");
+            float settledRotationReadiness = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationCorridorSettleReadiness",
+                0f,
+                successRotationResponse);
+            float liveRotationReadiness = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationCorridorSettleReadiness",
+                0.90f,
+                successRotationResponse * 0.20f);
+            float settledLeftDirection = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationCorridorSettleDirection",
+                0f,
+                0f,
+                -1f,
+                successRotationResponse);
+            float settledRightDirection = InvokeRuntimeUiFloat(
+                "BuildStraightRunRotationCorridorSettleDirection",
+                0f,
+                0f,
+                1f,
+                successRotationResponse);
+            Require(
+                settledRotationReadiness > 0f
+                    && settledRotationReadiness < successRotationResponse
+                    && Mathf.Approximately(liveRotationReadiness, 0.90f)
+                    && settledLeftDirection < 0f
+                    && settledRightDirection > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunRotationCorridorSettleDirection", 1f, 0.90f, -1f, successRotationResponse * 0.20f) > 0f
+                    && InvokeRuntimeUiFloat("BuildRotationResponseDirection", GreedLastRunChannel.Left) < 0f
+                    && InvokeRuntimeUiFloat("BuildRotationResponseDirection", GreedLastRunChannel.Right) > 0f
+                    && InvokeRuntimeUiFloat("BuildStraightRunPathRollAngle", settledLeftDirection, settledRotationReadiness, 0f, 0f) < 0f
+                    && InvokeRuntimeUiInt("BuildStraightRunRotationGuideAlpha", true, settledRotationReadiness, 0f)
+                        > InvokeRuntimeUiInt("BuildStraightRunRotationGuideAlpha", true, 0f, 0f),
+                "Rotation-corridor path visuals must keep a short, direction-correct settle after judgement without overpowering a live corridor.");
+            Color32 successRotationSettleColor = InvokeRuntimeUiColor(
+                "BuildStraightRunRotationCorridorSettleColor",
+                successRotationResponse,
+                GreedLastJudgementResult.Success);
+            Color32 goodRotationSettleColor = InvokeRuntimeUiColor(
+                "BuildStraightRunRotationCorridorSettleColor",
+                goodRotationResponse,
+                GreedLastJudgementResult.Good);
+            Color32 missRotationSettleColor = InvokeRuntimeUiColor(
+                "BuildStraightRunRotationCorridorSettleColor",
+                missRotationResponse,
+                GreedLastJudgementResult.Miss);
+            Require(
+                InvokeRuntimeUiFloat("BuildStraightRunRotationCorridorSettleColorBlend", successRotationResponse) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildStraightRunRotationCorridorSettleColorBlend", 0f), 0f)
+                    && successRotationSettleColor.g > goodRotationSettleColor.g
+                    && goodRotationSettleColor.g > missRotationSettleColor.g
+                    && goodRotationSettleColor.b > missRotationSettleColor.b
+                    && missRotationSettleColor.r > missRotationSettleColor.g,
+                "Rotation-corridor settle colors must separate exact gold, Good correction, and Miss wobble without needing extra text.");
+            float farRotationBrace = InvokeRuntimeUiFloat(
+                "BuildRunnerRotationCorridorBraceStrengthForValues",
+                true,
+                false,
+                true,
+                -0.90f,
+                0.30f,
+                0f);
+            float nearRotationBrace = InvokeRuntimeUiFloat(
+                "BuildRunnerRotationCorridorBraceStrengthForValues",
+                true,
+                false,
+                true,
+                0.02f,
+                0.30f,
+                1f);
+            Require(
+                nearRotationBrace > farRotationBrace
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceStrengthForValues", true, true, true, 0f, 0.30f, 1f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceStrengthForValues", true, false, false, 0f, 0.30f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceOffsetX", -1f, nearRotationBrace) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceOffsetX", 1f, nearRotationBrace) > 0f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceAngle", 1f, nearRotationBrace)) <= 4.8f
+                    && InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceScaleX", nearRotationBrace) < 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceScaleY", nearRotationBrace) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerRotationCorridorBraceShadowScaleXLift", nearRotationBrace) > 0f,
+                "The runner must add a small directional brace only near active rotation corridors, without rotating the whole UI.");
+            GreedLastPatternModel centerSlideTrail = new GreedLastPatternModel(
+                "center_gate_clutch",
+                GreedLastRunChannel.Center,
+                GreedLastTimingType.Clutch,
+                "정면 압박문",
+                0.55f,
+                1.28f,
+                0.13f,
+                0.36f,
+                1.72f,
+                GreedLastAvoidanceType.Slide);
+            GreedLastPatternModel leftJumpTrail = new GreedLastPatternModel(
+                "left_floor_perfect",
+                GreedLastRunChannel.Left,
+                GreedLastTimingType.Perfect,
+                "좌측 바닥 창살",
+                0.45f,
+                1.05f,
+                0.10f,
+                0.30f,
+                1.48f,
+                GreedLastAvoidanceType.Jump);
+            Require(
+                InvokeRuntimeUiInt("BuildRunnerActionTrailAlpha", GreedLastJudgementResult.None, 0.10f, 0.25f) == 0
+                    && InvokeRuntimeUiInt("BuildRunnerActionTrailAlpha", GreedLastJudgementResult.Success, 0.10f, 0.25f)
+                        > InvokeRuntimeUiInt("BuildRunnerActionTrailAlpha", GreedLastJudgementResult.Good, 0.10f, 0.25f)
+                    && InvokeRuntimeUiInt("BuildRunnerActionTrailAlpha", GreedLastJudgementResult.Success, 0.10f, 0.25f)
+                        > InvokeRuntimeUiInt("BuildRunnerActionTrailAlpha", GreedLastJudgementResult.Success, 0.82f, 0.25f)
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailOffsetYForPattern",
+                        leftJumpTrail,
+                        GreedLastJudgementResult.Success,
+                        0.18f,
+                        0.75f) < 0f
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailOffsetYForPattern",
+                        centerSlideTrail,
+                        GreedLastJudgementResult.Success,
+                        0.18f,
+                        0.75f) > 0f,
+                "Runner action trails must stay hidden without a result, fade over time, and keep jump/slide response directions readable.");
+            Require(
+                InvokeRuntimeUiFloat(
+                    "BuildRunnerActionTrailOffsetXForPattern",
+                    leftRotation,
+                    GreedLastJudgementResult.Success,
+                    0.18f,
+                    0.75f)
+                    > 0f
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailOffsetXForPattern",
+                        rightRotation,
+                        GreedLastJudgementResult.Success,
+                        0.18f,
+                        0.75f)
+                    < 0f
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailAngleForPattern",
+                        leftRotation,
+                        GreedLastJudgementResult.Success,
+                        0.18f,
+                        0.75f)
+                    < 0f
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailAngleForPattern",
+                        rightRotation,
+                        GreedLastJudgementResult.Success,
+                        0.18f,
+                        0.75f)
+                    > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerActionTrailHeightForPattern", leftJumpTrail, 0.75f)
+                        > InvokeRuntimeUiFloat("BuildRunnerActionTrailHeightForPattern", centerSlideTrail, 0.75f)
+                    && InvokeRuntimeUiFloat("BuildRunnerActionTrailWidthForPattern", centerSlideTrail, 0.75f)
+                        > InvokeRuntimeUiFloat("BuildRunnerActionTrailWidthForPattern", leftRotation, 0.75f)
+                    && InvokeRuntimeUiFloat(
+                        "BuildRunnerActionTrailScaleXForPattern",
+                        centerSlideTrail,
+                        GreedLastJudgementResult.Success,
+                        0.50f,
+                        0.75f)
+                        > InvokeRuntimeUiFloat(
+                            "BuildRunnerActionTrailScaleXForPattern",
+                            leftJumpTrail,
+                            GreedLastJudgementResult.Success,
+                            0.50f,
+                            0.75f),
+                "Runner action trails must distinguish wide slide traces, tall jump traces, and directional rotation/twist traces.");
+            float leftRotationDirection = InvokeRuntimeUiFloat("BuildRotationPatternDirection", leftRotation);
+            float rightRotationDirection = InvokeRuntimeUiFloat("BuildRotationPatternDirection", rightRotation);
+            Require(
+                InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairOffsetYForPattern", leftJumpTrail, 1f, 0f) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairOffsetYForPattern", centerSlideTrail, 1f, 0f) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairScaleYForPattern", leftJumpTrail, 1f) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairScaleYForPattern", centerSlideTrail, 1f) < 1f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairScaleXForPattern", centerSlideTrail, 1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairScaleXForPattern", leftJumpTrail, 1f)
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashWidthForPattern", centerSlideTrail, 1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashWidthForPattern", leftJumpTrail, 1f),
+                "Prototype runner silhouette must make jump read upward and slide read low/wide before final art arrives.");
+            Require(
+                InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairOffsetXForPattern", leftRotation, 1f, leftRotationDirection) < 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairOffsetXForPattern", rightRotation, 1f, rightRotationDirection) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashAngleForPattern", leftRotation, 1f, leftRotationDirection)
+                        < InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashAngleForPattern", rightRotation, 1f, rightRotationDirection)
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetYForPattern", leftJumpTrail, 1f, -1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetYForPattern", centerSlideTrail, 1f, -1f)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornAngleForPattern", leftJumpTrail, 1f, 1f, -1f))
+                        > Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornAngleForPattern", centerSlideTrail, 1f, 1f, -1f))
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetXForPattern", rightRotation, 1f, rightRotationDirection, 1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetXForPattern", leftRotation, 1f, leftRotationDirection, 1f),
+                "Prototype runner hair, sash, and horn accents must carry directional rotation/twist reads without changing control rules.");
+            Require(
+                InvokeRuntimeUiLabel("BuildPrototypeTrapArtStyleKey", leftRotation) == "통로:금색-청록",
+                "Rotation-corridor traps must get a distinct prototype art key for the later graphic pass.");
             Require(
                 InvokeMockBackendStaticLabel(
                     "BuildAvoidancePerformanceSummary",
@@ -543,6 +3226,11 @@ namespace GreedLast.Editor
             float expectedStrikeAngle,
             string[] patternFamilies)
         {
+            string expectedArtStyleKey = expectedResponse == "점프"
+                ? "바닥:흙빛-금색"
+                : expectedResponse == "숙이기"
+                    ? "상단:청록"
+                    : "측면:주홍";
             for (int i = 0; i < patternFamilies.Length; i += 1)
             {
                 GreedLastPatternModel pattern = new GreedLastPatternModel(
@@ -564,6 +3252,60 @@ namespace GreedLast.Editor
                 Require(
                     InvokeRuntimeUiLabel("BuildRunnerResponseSymbol", pattern) == expectedSymbol,
                     patternFamilies[i] + " must keep its authored action symbol in judgement history.");
+                Require(
+                    InvokeRuntimeUiLabel("BuildPrototypeTrapArtStyleKey", pattern) == expectedArtStyleKey,
+                    patternFamilies[i] + " must keep the prototype trap art keyed to the hazard family.");
+                float inactiveActionSymbolAlpha = InvokeRuntimeUiFloat("BuildTrapActionSymbolAlpha", false, 1f, 1f);
+                float entryActionSymbolAlpha = InvokeRuntimeUiFloat("BuildTrapActionSymbolAlpha", true, 0f, 1f);
+                float coreActionSymbolAlpha = InvokeRuntimeUiFloat("BuildTrapActionSymbolAlpha", true, 1f, 0f);
+                float inactiveActionSymbolLock = InvokeRuntimeUiFloat("BuildTrapActionSymbolExactLock", 1f, 0f);
+                float exactActionSymbolLock = InvokeRuntimeUiFloat("BuildTrapActionSymbolExactLock", 1f, 1f);
+                float exactActionSymbolBaseScale = InvokeRuntimeUiFloat("BuildTrapActionSymbolScale", 1f, 0f);
+                float exactActionSymbolScaleX = InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleXWithExactLock", exactActionSymbolBaseScale, exactActionSymbolLock);
+                float exactActionSymbolScaleY = InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleYWithExactLock", exactActionSymbolBaseScale, exactActionSymbolLock);
+                Require(
+                    Mathf.Approximately(inactiveActionSymbolAlpha, 0f)
+                        && entryActionSymbolAlpha > 0f
+                        && coreActionSymbolAlpha > entryActionSymbolAlpha
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolScale", 1f, 1f)
+                            > InvokeRuntimeUiFloat("BuildTrapActionSymbolScale", 0f, 0f),
+                    patternFamilies[i] + " trap marker action symbol must appear on active traps and intensify near the core timing.");
+                Require(
+                    Mathf.Approximately(inactiveActionSymbolLock, 0f)
+                        && exactActionSymbolLock > inactiveActionSymbolLock
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolExactLockAlphaLift", exactActionSymbolLock) > 0f
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolExactLockColorBlend", exactActionSymbolLock) > 0f
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleWithExactLock", 1f, 0f, exactActionSymbolLock)
+                            > InvokeRuntimeUiFloat("BuildTrapActionSymbolScale", 1f, 0f),
+                    patternFamilies[i] + " trap marker action symbol must lock brighter and larger only during exact timing.");
+                float readyActionSymbolDownbeat = InvokeRuntimeUiFloat("BuildTrapActionSymbolDownbeatLift", 1f, exactActionSymbolLock);
+                float weakActionSymbolDownbeat = InvokeRuntimeUiFloat("BuildTrapActionSymbolDownbeatLift", 0.18f, inactiveActionSymbolLock);
+                float readyActionSymbolScaleX = InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleXWithDownbeat", exactActionSymbolScaleX, readyActionSymbolDownbeat);
+                float readyActionSymbolScaleY = InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleYWithDownbeat", exactActionSymbolScaleY, readyActionSymbolDownbeat);
+                Require(
+                    readyActionSymbolDownbeat > weakActionSymbolDownbeat
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapActionSymbolDownbeatLift", 0f, exactActionSymbolLock), 0f)
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolDownbeatAlphaLift", readyActionSymbolDownbeat) > 0f
+                        && InvokeRuntimeUiFloat("BuildTrapActionSymbolDownbeatColorBlend", readyActionSymbolDownbeat) > 0f
+                        && exactActionSymbolScaleY > exactActionSymbolScaleX
+                        && exactActionSymbolScaleY - exactActionSymbolScaleX > 0.040f
+                        && InvokeRuntimeUiFloat(
+                            "BuildTrapActionSymbolScaleWithDownbeat",
+                            InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleWithExactLock", 1f, 0f, exactActionSymbolLock),
+                            readyActionSymbolDownbeat)
+                            > InvokeRuntimeUiFloat("BuildTrapActionSymbolScaleWithExactLock", 1f, 0f, exactActionSymbolLock)
+                        && readyActionSymbolScaleY > readyActionSymbolScaleX
+                        && readyActionSymbolScaleY - readyActionSymbolScaleX > 0.060f,
+                    patternFamilies[i] + " trap marker action symbol must share the downbeat lift without appearing when the pulse is gone.");
+                float farTrapMarkerBeatCueUrgency = InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgency", 1f, 0f);
+                float nearTrapMarkerBeatCueUrgency = InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgency", 1f, 1f);
+                Require(
+                    nearTrapMarkerBeatCueUrgency > farTrapMarkerBeatCueUrgency
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgency", 0f, 1f), 0f)
+                        && InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgencyColorBlend", nearTrapMarkerBeatCueUrgency) > 0f
+                        && InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgencyScaleXLift", pattern, nearTrapMarkerBeatCueUrgency) > 0f
+                        && InvokeRuntimeUiFloat("BuildTrapMarkerBeatCueUrgencyScaleYLift", pattern, nearTrapMarkerBeatCueUrgency) > 0f,
+                    patternFamilies[i] + " trap marker must receive a subtle live beat-cue urgency lift without changing timing.");
                 Require(
                     InvokeRuntimeUiLabel("BuildActiveAvoidanceCoach", pattern) == expectedCue + " 회피",
                     patternFamilies[i] + " must expose its hazard-bound response in the live coach line.");
@@ -598,6 +3340,17 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot pausedSnapshot = default;
             pausedCore.SnapshotChanged += value => pausedSnapshot = value;
             pausedCore.Enter("복기 재도전\n재도전 목표: 1장 무실수 / 현재 1", refillRun: false);
+            Require(
+                !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "Start gift selection must not be treated as a live control or motion window.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot),
+                "Start gift selection must not play the normal live beat click.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "Start gift selection must keep runner and forward motion in a held state.");
             pausedCore.HandleInput(GreedLastRunChannel.Center, now);
             pausedCore.HandleInput(GreedLastRunChannel.Left, now + 0.1f);
             Require(pausedSnapshot.IgnoreReason == "start_countdown", "Input during the start countdown must be ignored explicitly.");
@@ -605,29 +3358,194 @@ namespace GreedLast.Editor
             Require(pausedSnapshot.SuccessCount == 0 && pausedSnapshot.GoodCount == 0 && pausedSnapshot.MissCount == 0, "Countdown input must not alter run totals.");
             Require(pausedSnapshot.TimingProfile.Contains("1장 정확 0회", StringComparison.Ordinal), "Countdown input must not alter chapter analytics.");
             Require(
+                !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "Opening countdown must keep live control, downbeat visuals, and forward motion locked.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("BuildCountdownBeatActive", pausedSnapshot),
+                "Opening countdown must use countdown beat scheduling instead of the normal live beat click.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "Opening countdown must not advance runner stride or forward motion before GO.");
+            Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowActiveActionCue", pausedSnapshot),
                 "The active action cue must stay hidden during the start countdown.");
+
+            var backgroundStartCore = new GreedLastRunCore();
+            GreedLastRunSnapshot backgroundStartSnapshot = default;
+            backgroundStartCore.SnapshotChanged += value => backgroundStartSnapshot = value;
+            float backgroundStartClock = now + 8f;
+            backgroundStartCore.Enter("background start boundary smoke", refillRun: false);
+            backgroundStartCore.HandleInput(GreedLastRunChannel.Center, backgroundStartClock + 0.01f);
+            Require(backgroundStartSnapshot.StartCountdownActive && !backgroundStartSnapshot.Paused, "The background start test must begin from the opening countdown.");
+            backgroundStartCore.PauseForAppBackground(backgroundStartClock + 0.3f);
+            float heldStartCountdownSeconds = backgroundStartSnapshot.StartCountdownRemainingSeconds;
+            Require(
+                backgroundStartSnapshot.Paused
+                    && backgroundStartSnapshot.StartCountdownActive
+                    && !backgroundStartSnapshot.ResumeCountdownActive,
+                "Backgrounding during the opening countdown must pause the countdown instead of letting the run begin.");
+            backgroundStartCore.Tick(backgroundStartClock + 3f);
+            Require(
+                backgroundStartSnapshot.Paused
+                    && backgroundStartSnapshot.StartCountdownActive
+                    && Mathf.Approximately(backgroundStartSnapshot.StartCountdownRemainingSeconds, heldStartCountdownSeconds),
+                "A background-paused opening countdown must not continue ticking while the app is away.");
+            Require(
+                !InvokeRuntimeUiStaticBool("BuildCountdownBeatActive", backgroundStartSnapshot),
+                "A background-paused opening countdown must not keep the countdown beat schedule armed.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseTitle", backgroundStartSnapshot) == "시작 대기",
+                "A paused opening countdown must keep the pause title on start-waiting state.");
 
             pausedCore.Tick(now + 2f);
             pausedCore.Tick(now + 3f);
             Require(pausedSnapshot.ActivePattern, "The pause boundary test must expose an active trap.");
+            GreedLastRunChannel nonTargetLane = pausedSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+                ? GreedLastRunChannel.Right
+                : GreedLastRunChannel.Left;
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel)
+                    && !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, nonTargetLane),
+                "A live active trap must tint only its target lane before pause.");
+            Require(
+                InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot),
+                "A live active trap must share the same live-control gate for downbeat visuals, forward motion, and live beat clicks.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "A live active trap must allow runner stride and forward motion.");
             Require(pausedSnapshot.AutoFlow, "The pause boundary test must begin from auto-flow so resume restoration is observable.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForMode", pausedSnapshot, true) == "ESC/P 메뉴"
+                    && InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForMode", pausedSnapshot, false) == "일시정지",
+                "The run pause button must expose the ESC/P shortcut only in editor/dev playtests.");
             pausedCore.TogglePause(now + 3.1f);
             Require(pausedSnapshot.Paused, "The pause boundary test must enter pause on an active trap.");
+            Require(
+                !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "A paused active trap must lock live control, downbeat visuals, and forward motion behind the pause overlay.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot),
+                "A paused active trap must not keep the normal live beat click running behind the pause overlay.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "A paused active trap must hold runner stride and forward motion behind the pause overlay.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForMode", pausedSnapshot, true) == "재개",
+                "The pause button helper must switch to resume copy while paused.");
+            Require(
+                pausedSnapshot.JudgementText.Contains("2-1-GO", StringComparison.Ordinal)
+                    && pausedSnapshot.JudgementText.Contains("앞 박자 여유", StringComparison.Ordinal),
+                "Pausing an active trap must explain the counted resume buffer, not an instant same-beat return.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunObjectiveLine", pausedSnapshot).Contains("앞 박자 여유", StringComparison.Ordinal),
+                "The paused run objective must match the counted resume-buffer contract.");
             Require(!pausedSnapshot.AutoFlow, "Pause must suspend auto-flow while keeping its resume intent latched.");
             Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowActiveActionCue", pausedSnapshot),
                 "The active action cue must stay hidden behind the pause menu.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowActivePatternVisuals", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunWaitingTimingGuide", pausedSnapshot),
+                "A paused active trap must suppress trap/timing visuals and must not fall back to the idle waiting guide.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                "A paused active trap must not leave its target lane tinted as if it were still hittable.");
+            Require(
+                string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", pausedSnapshot)),
+                "Prototype feel status must hide while the pause menu owns the screen.");
             string pauseCoach = GreedLastRuntimeUi.BuildPauseCoachLine(pausedSnapshot);
             Require(pauseCoach.Contains("재개 목표:", StringComparison.Ordinal), "A paused active trap must expose a resume target line.");
+            Require(pauseCoach.Contains("정확→", StringComparison.Ordinal), "A paused active trap must keep the exact-input payoff goal visible.");
             Require(pauseCoach.Contains("바닥→↑점프 회피", StringComparison.Ordinal), "A paused active trap must preserve the required hazard-bound avoidance action.");
             Require(pauseCoach.Contains("정박 타이밍", StringComparison.Ordinal), "A paused active trap must preserve the live timing coach.");
             Require(pauseCoach.Contains("목표 유지", StringComparison.Ordinal), "A paused review retry must keep its target status visible in the pause coach.");
             string pauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", pausedSnapshot);
             Require(
-                pauseHeader.Contains("카운트 뒤", StringComparison.Ordinal)
+                pauseHeader.Contains("카운트", StringComparison.Ordinal)
+                    && pauseHeader.Contains("앞 박자 여유", StringComparison.Ordinal)
                     && pauseHeader.Contains("중단 기록", StringComparison.Ordinal),
                 "The pause header must explain both counted resume and lobby-exit consequence.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseTitle", pausedSnapshot) == "일시정지 메뉴",
+                "A paused normal run must keep the generic pause-menu title.");
+            var practicePauseCore = new GreedLastRunCore();
+            GreedLastRunSnapshot practicePauseSnapshot = default;
+            practicePauseCore.SnapshotChanged += value => practicePauseSnapshot = value;
+            float practicePauseClock = now + 12f;
+            practicePauseCore.EnterPractice("기초연습 점프 단계");
+            StartBufferedPattern(practicePauseCore, ref practicePauseSnapshot, ref practicePauseClock);
+            practicePauseCore.TogglePause(practicePauseClock + 0.1f);
+            Require(
+                practicePauseSnapshot.Paused
+                    && InvokeRuntimeUiLabel("BuildRunPauseTitle", practicePauseSnapshot) == "기초연습 메뉴"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", practicePauseSnapshot, false) == "연습 그만두기"
+                    && InvokeRuntimeUiLabel("BuildPauseExitHintLine", practicePauseSnapshot).Contains("저장 기회", StringComparison.Ordinal),
+                "A paused practice drill must keep its own menu title and explain that leaving will not affect save chances.");
+            string practicePauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", practicePauseSnapshot);
+            Require(
+                practicePauseHeader.Contains("일반 런 기록", StringComparison.Ordinal)
+                    && practicePauseHeader.Contains("저장 기회", StringComparison.Ordinal)
+                    && !practicePauseHeader.Contains("중단 기록", StringComparison.Ordinal)
+                    && !practicePauseHeader.Contains("무한 기록", StringComparison.Ordinal),
+                "A paused practice drill header must say that lobby return keeps normal-run records and save chances untouched.");
+            var refillPauseCore = new GreedLastRunCore();
+            GreedLastRunSnapshot refillPauseSnapshot = default;
+            refillPauseCore.SnapshotChanged += value => refillPauseSnapshot = value;
+            float refillPauseClock = now + 18f;
+            refillPauseCore.Enter("보충 런 - 저장 조합을 다시 만들기 위한 일반 런입니다.", refillRun: true);
+            refillPauseCore.HandleInput(GreedLastRunChannel.Center, refillPauseClock + 0.01f);
+            StartBufferedPattern(refillPauseCore, ref refillPauseSnapshot, ref refillPauseClock);
+            refillPauseCore.TogglePause(refillPauseClock + 0.1f);
+            Require(
+                refillPauseSnapshot.Paused
+                    && InvokeRuntimeUiLabel("BuildRunPauseTitle", refillPauseSnapshot) == "보충 런 메뉴"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", refillPauseSnapshot, false) == "보충 중단"
+                    && InvokeRuntimeUiLabel("BuildPauseExitHintLine", refillPauseSnapshot).Contains("보충 런 중단 기록", StringComparison.Ordinal),
+                "A paused refill run must keep its refill menu title and refill-abandonment exit copy.");
+            string refillPauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", refillPauseSnapshot);
+            Require(
+                refillPauseHeader.Contains("보충 런", StringComparison.Ordinal)
+                    && refillPauseHeader.Contains("중단 기록", StringComparison.Ordinal)
+                    && !refillPauseHeader.Contains("저장 기회", StringComparison.Ordinal),
+                "A paused refill run header must keep refill-specific stopped-record consequences without practice save-chance copy.");
+            var infinitePauseCore = new GreedLastRunCore();
+            GreedLastRunSnapshot infinitePauseSnapshot = default;
+            infinitePauseCore.SnapshotChanged += value => infinitePauseSnapshot = value;
+            float infinitePauseClock = now + 24f;
+            infinitePauseCore.EnterInfiniteRun(BuildStoredGiftRecord("안정 축", "안정 축"));
+            StartBufferedPattern(infinitePauseCore, ref infinitePauseSnapshot, ref infinitePauseClock);
+            infinitePauseCore.TogglePause(infinitePauseClock + 0.1f);
+            Require(
+                infinitePauseSnapshot.Paused
+                    && InvokeRuntimeUiLabel("BuildRunPauseTitle", infinitePauseSnapshot) == "무한모드 메뉴"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", infinitePauseSnapshot, false) == "정산 후 로비"
+                    && InvokeRuntimeUiLabel("BuildPauseExitHintLine", infinitePauseSnapshot).Contains("무한 기록", StringComparison.Ordinal),
+                "A paused infinite run must keep its infinite menu title and settlement exit copy.");
+            string infinitePauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", infinitePauseSnapshot);
+            Require(
+                infinitePauseHeader.Contains("무한 기록", StringComparison.Ordinal)
+                    && infinitePauseHeader.Contains("정산", StringComparison.Ordinal)
+                    && !infinitePauseHeader.Contains("저장 기회", StringComparison.Ordinal),
+                "A paused infinite run header must keep infinite-record settlement consequences without practice save-chance copy.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseHeaderDetailForMode", pausedSnapshot, true)
+                    .Contains("ESC/P 또는 재개", StringComparison.Ordinal),
+                "The editor pause header must keep the ESC/P shortcut visible for PC playtesting.");
+            string mobilePauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetailForMode", pausedSnapshot, false);
+            Require(
+                mobilePauseHeader.Contains("재개 버튼", StringComparison.Ordinal)
+                    && !mobilePauseHeader.Contains("ESC", StringComparison.Ordinal)
+                    && !mobilePauseHeader.Contains("P 또는", StringComparison.Ordinal)
+                    && mobilePauseHeader.Contains("중단 기록", StringComparison.Ordinal),
+                "The mobile/release pause header must avoid PC shortcut names while preserving the resume and exit consequences.");
             string pauseSettings = InvokeRuntimeUiLabel("BuildPauseSettingsLineText", pausedSnapshot, 0.6f, false);
             Require(
                 pauseSettings.Contains("설정: 소리 60%", StringComparison.Ordinal)
@@ -635,9 +3553,63 @@ namespace GreedLast.Editor
                     && pauseSettings.Contains("추천", StringComparison.Ordinal)
                     && pauseSettings.Contains("진동 OFF", StringComparison.Ordinal),
                 "The pause settings line must preserve volume, calibration, recommendation, and haptic states.");
+            string pauseSettingsWithTilt = InvokeRuntimeUiLabel(
+                "BuildPauseSettingsLineTextWithTilt",
+                pausedSnapshot,
+                0.6f,
+                false,
+                false,
+                true);
+            Require(
+                pauseSettingsWithTilt.Contains("기울임 OFF", StringComparison.Ordinal)
+                    && !InvokeRuntimeUiLabel(
+                        "BuildPauseSettingsLineTextWithTilt",
+                        pausedSnapshot,
+                        0.6f,
+                        false,
+                        false,
+                        false).Contains("기울임", StringComparison.Ordinal),
+                "The pause settings line must show the motion preference only where a tilt setting is available.");
+            int compactPauseBodyFont = InvokeRuntimeUiInt(
+                "BuildPauseMenuBodyFontSize",
+                "Resume after count\nExit creates a stopped record\nSettings remain visible");
+            int densePauseBodyFont = InvokeRuntimeUiInt(
+                "BuildPauseMenuBodyFontSize",
+                "Resume target: lane left timing clutch / review target visible / counted restart buffer\n"
+                    + "Exit creates a stopped record and keeps the save candidate state readable\n"
+                    + "Settings: sound 60 percent / correction recommended / resume 2.0 seconds / haptics off\n"
+                    + "Coach: first trap baseline, route payoff, weak avoidance, and next action stay visible\n"
+                    + "Release copy hides PC shortcuts while editor copy keeps keyboard playtest help");
+            Require(
+                compactPauseBodyFont == 29
+                    && densePauseBodyFont < compactPauseBodyFont
+                    && densePauseBodyFont >= 21,
+                "The pause menu body must shrink dense review and settings text without becoming unreadable.");
+            string editorPauseBodyResumeLine = InvokeRuntimeUiLabel("BuildPauseMenuResumeLineForMode", true);
+            string mobilePauseBodyResumeLine = InvokeRuntimeUiLabel("BuildPauseMenuResumeLineForMode", false);
+            Require(
+                editorPauseBodyResumeLine.Contains("ESC/P", StringComparison.Ordinal)
+                    && mobilePauseBodyResumeLine.Contains("재개 버튼", StringComparison.Ordinal)
+                    && !mobilePauseBodyResumeLine.Contains("ESC", StringComparison.Ordinal)
+                    && !mobilePauseBodyResumeLine.Contains("P 또는", StringComparison.Ordinal),
+                "The mobile/release pause body must avoid PC shortcut names while editor playtests keep ESC/P visible.");
             Require(
                 RuntimePauseBackdropBlocksInput(),
                 "The pause menu backdrop must block touches from reaching the run lanes underneath.");
+            int pausedBlurEdgeAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", false, 0);
+            int pausedBlurSideAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", false, 2);
+            int pausedBlurFocusAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", false, 4);
+            int resumeBlurEdgeAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", true, 0);
+            int resumeBlurSideAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", true, 2);
+            int resumeBlurFocusAlpha = InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", true, 4);
+            Require(
+                pausedBlurEdgeAlpha > pausedBlurSideAlpha
+                    && pausedBlurSideAlpha > pausedBlurFocusAlpha
+                    && resumeBlurEdgeAlpha > pausedBlurEdgeAlpha
+                    && resumeBlurSideAlpha > pausedBlurSideAlpha
+                    && resumeBlurFocusAlpha > pausedBlurFocusAlpha
+                    && InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", true, 99) == 0,
+                "The pause blur bands must dim the edges and grow slightly stronger during the resume countdown.");
             pausedCore.HandleInput(pausedSnapshot.Pattern.Channel, now + 3.2f);
             Require(pausedSnapshot.IgnoreReason == "paused", "Input while paused must report the pause boundary before any countdown state.");
             Require(pausedSnapshot.LastResult == GreedLastJudgementResult.None, "Paused input must not replay a stale judgement.");
@@ -646,11 +3618,50 @@ namespace GreedLast.Editor
             pausedCore.TogglePause(now + 3.4f);
             Require(pausedSnapshot.ResumeCountdownActive, "Tapping resume must enter a countdown instead of instantly unpausing.");
             Require(
+                InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForMode", pausedSnapshot, true) == "재개 준비",
+                "The pause button helper must expose the resume countdown state.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPauseTitle", pausedSnapshot) == "재개 준비",
+                "The pause title helper must expose the resume countdown state for the overlay panel.");
+            Require(
+                InvokeRuntimeUiStaticBool("BuildCountdownBeatActive", pausedSnapshot),
+                "A live resume countdown must arm the countdown beat schedule.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot),
+                "A resume countdown must keep live downbeat visual pulses hidden until GO releases play.");
+            Require(
+                !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "The resume countdown must keep live control, downbeat visuals, and forward motion held until GO.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("BuildCountdownBeatActive", pausedSnapshot),
+                "The resume countdown must use countdown beat scheduling instead of the normal live beat click.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "The resume countdown must keep runner stride and forward motion held until GO releases play.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldResetCountdownBeatSchedule", false, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldResetCountdownBeatSchedule", true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldResetCountdownBeatSchedule", false, false),
+                "Countdown beat scheduling must reset only on the first frame of a fresh countdown.");
+            Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowActiveActionCue", pausedSnapshot),
                 "The active action cue must stay hidden during the resume countdown.");
             Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowActivePatternVisuals", pausedSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunWaitingTimingGuide", pausedSnapshot),
+                "The resume countdown must hide the held trap visuals and avoid showing an idle waiting guide before GO.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                "The resume countdown must keep the held trap lane tint hidden until GO releases control.");
+            Require(
                 GreedLastRuntimeUi.BuildPauseCoachLine(pausedSnapshot).Contains("첫 함정 기준선", StringComparison.Ordinal),
                 "A resume countdown must tell the player to read the first trap baseline again.");
+            Require(
+                GreedLastRuntimeUi.BuildPauseCoachLine(pausedSnapshot).Contains("정확→", StringComparison.Ordinal),
+                "A resume countdown pause coach must keep the exact-input payoff goal visible.");
             string resumeSettings = InvokeRuntimeUiLabel("BuildPauseSettingsLineText", pausedSnapshot, 0.8f, true);
             Require(
                 resumeSettings.Contains("설정: 소리 80%", StringComparison.Ordinal)
@@ -660,6 +3671,20 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildResumeCountdownFeedbackText", pausedSnapshot) == "2",
                 "The resume countdown must begin with the rhythm-game 2 count.");
+            float waitingCountdownScale = InvokeRuntimeUiFloat("BuildResumeCountdownFeedbackScaleFromValues", true, 1.2f);
+            float twoCountdownScale = InvokeRuntimeUiFloat("BuildResumeCountdownFeedbackScaleFromValues", false, 1.2f);
+            float oneCountdownScale = InvokeRuntimeUiFloat("BuildResumeCountdownFeedbackScaleFromValues", false, 0.6f);
+            float goCountdownScale = InvokeRuntimeUiFloat("BuildResumeCountdownFeedbackScaleFromValues", false, 0.2f);
+            Color32 waitingCountdownColor = InvokeRuntimeUiColor("BuildResumeCountdownFeedbackColorFromValues", true, 1.2f);
+            Color32 oneCountdownColor = InvokeRuntimeUiColor("BuildResumeCountdownFeedbackColorFromValues", false, 0.6f);
+            Color32 goCountdownColor = InvokeRuntimeUiColor("BuildResumeCountdownFeedbackColorFromValues", false, 0.2f);
+            Require(
+                waitingCountdownScale < twoCountdownScale
+                    && oneCountdownScale >= twoCountdownScale
+                    && goCountdownScale > oneCountdownScale
+                    && waitingCountdownColor.a < goCountdownColor.a
+                    && goCountdownColor.g > oneCountdownColor.g,
+                "The resume countdown must visibly swell and brighten from waiting through GO.");
             pausedCore.Tick(now + 4.15f);
             Require(
                 pausedSnapshot.ResumeCountdownActive
@@ -675,6 +3700,66 @@ namespace GreedLast.Editor
             Require(pausedSnapshot.AutoFlow, "Resume after a paused auto-flow run must restore automatic progression.");
             Require(pausedSnapshot.JudgementText.Contains("앞 박자 여유", StringComparison.Ordinal), "Resuming must report the pre-beat buffer.");
             Require(pausedSnapshot.ActivePattern, "The active trap must survive resume buffering for the player to re-read it.");
+            Require(
+                InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedSnapshot),
+                "After GO, live control, downbeat visuals, forward motion, and live beat clicks must return together.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedSnapshot),
+                "After GO, runner stride and forward motion must return with live play.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowActivePatternVisuals", pausedSnapshot),
+                "After GO, the held trap must become visible again as a readable active pattern.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                "After GO, the held trap target lane tint must return with the active pattern visuals.");
+            float resumedCoreDelta = pausedSnapshot.CoreDeltaSeconds;
+            Require(
+                resumedCoreDelta <= -0.55f,
+                "GO release must place the active trap before its core beat, giving the player a readable pre-beat buffer. Actual delta: "
+                    + resumedCoreDelta.ToString("0.00"));
+            string resumedTimingGuide = InvokeRuntimeUiLabel("BuildTimingGuideLabel", pausedSnapshot);
+            Require(
+                resumedTimingGuide.Contains("박 전", StringComparison.Ordinal)
+                    || resumedTimingGuide.Contains("준비", StringComparison.Ordinal),
+                "After resume GO, the timing guide must still read like an upcoming beat instead of an already-missed trap. Actual: "
+                    + resumedTimingGuide);
+            float resumedExactAt = (now + 5.0f) - resumedCoreDelta - pausedCore.InputTimingOffsetSeconds;
+            pausedCore.HandleInput(pausedSnapshot.Pattern.Channel, resumedExactAt);
+            Require(
+                pausedSnapshot.LastResult == GreedLastJudgementResult.Success
+                    && pausedSnapshot.SuccessCount == 1
+                    && pausedSnapshot.MissCount == 0,
+                "A correctly timed tap after the resume buffer must still score exact instead of being consumed as an immediate miss.");
+
+            var backgroundResumeCore = new GreedLastRunCore();
+            GreedLastRunSnapshot backgroundResumeSnapshot = default;
+            backgroundResumeCore.SnapshotChanged += value => backgroundResumeSnapshot = value;
+            float backgroundResumeClock = now + 12f;
+            backgroundResumeCore.Enter("background resume boundary smoke", refillRun: false);
+            backgroundResumeCore.HandleInput(GreedLastRunChannel.Center, backgroundResumeClock);
+            backgroundResumeCore.Tick(backgroundResumeClock + 2f);
+            backgroundResumeCore.Tick(backgroundResumeClock + 3f);
+            Require(backgroundResumeSnapshot.ActivePattern, "The background resume test must expose an active trap.");
+            backgroundResumeCore.TogglePause(backgroundResumeClock + 3.1f);
+            backgroundResumeCore.TogglePause(backgroundResumeClock + 3.2f);
+            Require(backgroundResumeSnapshot.Paused && backgroundResumeSnapshot.ResumeCountdownActive, "The background resume test must enter the 2-1-GO resume countdown.");
+            backgroundResumeCore.PauseForAppBackground(backgroundResumeClock + 3.3f);
+            Require(backgroundResumeSnapshot.Paused, "Backgrounding during resume countdown must keep the run paused.");
+            Require(!backgroundResumeSnapshot.ResumeCountdownActive, "Backgrounding during resume countdown must cancel the active countdown.");
+            Require(backgroundResumeSnapshot.JudgementText.Contains("앱 전환", StringComparison.Ordinal), "Background-cancelled resume must explain why it stopped.");
+            backgroundResumeCore.Tick(backgroundResumeClock + 6f);
+            Require(backgroundResumeSnapshot.Paused, "A cancelled resume countdown must not auto-release while the app is away.");
+            backgroundResumeCore.TogglePause(backgroundResumeClock + 6.1f);
+            Require(
+                backgroundResumeSnapshot.ResumeCountdownActive
+                    && InvokeRuntimeUiLabel("BuildResumeCountdownFeedbackText", backgroundResumeSnapshot) == "2",
+                "Returning from app background must require a fresh 2-1-GO resume.");
+            Require(
+                InvokeRuntimeUiStaticBool("BuildCountdownBeatActive", backgroundResumeSnapshot),
+                "A freshly restarted resume countdown must re-arm countdown beat audio after background cancellation.");
 
             var staggerCore = new GreedLastRunCore();
             GreedLastRunSnapshot staggerSnapshot = default;
@@ -748,6 +3833,27 @@ namespace GreedLast.Editor
 
         private static void VerifyPracticeReviewVariants(float now)
         {
+            var practiceGoodDirectionCore = new GreedLastRunCore();
+            GreedLastRunSnapshot practiceGoodDirectionSnapshot = default;
+            practiceGoodDirectionCore.SnapshotChanged += value => practiceGoodDirectionSnapshot = value;
+            float practiceGoodDirectionClock = now - 15f;
+            practiceGoodDirectionCore.RestartPractice(practiceGoodDirectionClock);
+            StartBufferedPattern(practiceGoodDirectionCore, ref practiceGoodDirectionSnapshot, ref practiceGoodDirectionClock);
+            float practiceGoodDelta = (practiceGoodDirectionSnapshot.Pattern.SuccessWindowSeconds
+                + practiceGoodDirectionSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
+            practiceGoodDirectionCore.HandleInput(
+                practiceGoodDirectionSnapshot.Pattern.Channel,
+                practiceGoodDirectionClock
+                    + practiceGoodDirectionSnapshot.Pattern.CoreSeconds
+                    + practiceGoodDelta
+                    - practiceGoodDirectionCore.InputTimingOffsetSeconds);
+            Require(
+                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", practiceGoodDirectionSnapshot)
+                    .Contains("다음은 살짝 빠르게", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildJudgementFeedbackText", practiceGoodDirectionSnapshot)
+                        .Contains("정확→집중 보상은 발동하지 않음", StringComparison.Ordinal),
+                "A late practice Good judgement must preserve the next-input direction hint.");
+
             GreedLastRunSnapshot goodSnapshot = RunPracticeReviewSample(
                 now,
                 new[]
@@ -775,6 +3881,13 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildPracticeRestartButtonLabel", goodSnapshot) == "정확권 다시"
                     && InvokeRuntimeUiLabel("BuildPracticeCompletionProgressLabel", goodSnapshot) == "연습 완료 · 정확권 복기",
                 "A Good-only practice run must offer an exact-window restart action.");
+            Require(
+                !InvokeAppStaticBool("ShouldContinuePracticeToFirstNormal", goodSnapshot, false)
+                    && InvokeRuntimeUiLabel(
+                        "BuildPracticeCompletionPrimaryButtonLabel",
+                        goodSnapshot,
+                        false) == "정확권 다시",
+                "A first practice completion with Good timing must keep exact-window review ahead of the normal run.");
 
             GreedLastRunSnapshot exactSnapshot = RunPracticeReviewSample(
                 now + 30f,
@@ -801,6 +3914,21 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildPracticeRestartButtonLabel", exactSnapshot) == "3축 다시 확인"
                     && InvokeRuntimeUiLabel("BuildPracticeCompletionProgressLabel", exactSnapshot) == "연습 완료 · 일반 런 준비",
                 "A clean practice run must offer a neutral three-axis replay action.");
+            Require(
+                InvokeAppStaticBool("ShouldContinuePracticeToFirstNormal", exactSnapshot, false)
+                    && !InvokeAppStaticBool("ShouldContinuePracticeToFirstNormal", exactSnapshot, true)
+                    && InvokeRuntimeUiLabel(
+                        "BuildPracticeCompletionPrimaryButtonLabel",
+                        exactSnapshot,
+                        false) == "일반 런으로"
+                    && InvokeRuntimeUiLabel(
+                        "BuildPracticeCompletionPrimaryButtonLabel",
+                        exactSnapshot,
+                        true) == "3축 다시 확인"
+                    && exactSnapshot.JudgementText.Contains(
+                        "일반 런으로 바로 이어가거나 3축을 다시 확인하세요.",
+                        StringComparison.Ordinal),
+                "Only a clean first practice completion must turn its primary action into a seamless normal-run handoff.");
         }
 
         private static GreedLastRunSnapshot RunPracticeReviewSample(
@@ -862,6 +3990,34 @@ namespace GreedLast.Editor
             string activeGuide = InvokeRuntimeUiLabel("BuildTimingGuideLabel", goodSnapshot);
             Require(activeGuide.Contains("박 전", StringComparison.Ordinal), "The active timing guide must expose how many beats remain.");
             Require(activeGuide.Contains("바닥→↑점프", StringComparison.Ordinal), "The active timing guide must bind hazard, action symbol, and action name.");
+            float farTimingGuideLock = InvokeRuntimeUiFloat("BuildTimingGuideExactLock", 0.1f, 0f);
+            float exactTimingGuideLock = InvokeRuntimeUiFloat("BuildTimingGuideExactLock", 0.9f, 1f);
+            float exactTimingGuideScaleX = InvokeRuntimeUiFloat("BuildTimingGuideScaleX", 1f, exactTimingGuideLock);
+            float exactTimingGuideScaleY = InvokeRuntimeUiFloat("BuildTimingGuideScaleY", 1f, exactTimingGuideLock);
+            Require(
+                Mathf.Approximately(farTimingGuideLock, 0f)
+                    && exactTimingGuideLock > farTimingGuideLock
+                    && InvokeRuntimeUiFloat("BuildTimingGuideExactColorBlend", 1f, exactTimingGuideLock) > 0.46f
+                    && InvokeRuntimeUiInt("BuildTimingGuideExactAlpha", 220, exactTimingGuideLock) > 220
+                    && exactTimingGuideScaleX > 1f
+                    && exactTimingGuideScaleY > exactTimingGuideScaleX
+                    && exactTimingGuideScaleY - exactTimingGuideScaleX > 0.044f,
+                "The timing guide label must lock brighter and taller only inside the exact timing moment.");
+            float readyTimingGuideDownbeat = InvokeRuntimeUiFloat("BuildTimingGuideDownbeatLift", 1f, 0.85f, exactTimingGuideLock);
+            float weakTimingGuideDownbeat = InvokeRuntimeUiFloat("BuildTimingGuideDownbeatLift", 1f, 0.15f, farTimingGuideLock);
+            Require(
+                readyTimingGuideDownbeat > weakTimingGuideDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTimingGuideDownbeatLift", 0f, 0.85f, exactTimingGuideLock), 0f)
+                    && InvokeRuntimeUiFloat("BuildTimingGuideDownbeatColorBlend", readyTimingGuideDownbeat) > 0f
+                    && InvokeRuntimeUiInt("BuildTimingGuideAlphaWithDownbeat", 220, readyTimingGuideDownbeat) > 220
+                    && InvokeRuntimeUiFloat("BuildTimingGuideScaleYWithDownbeat", 1f, readyTimingGuideDownbeat)
+                        > InvokeRuntimeUiFloat("BuildTimingGuideScaleXWithDownbeat", 1f, readyTimingGuideDownbeat),
+                "The timing guide label must share the downbeat lift most clearly near the exact input window.");
+            string activeLaneTimingHint = InvokeRuntimeUiLabel("BuildLaneTimingHint", goodSnapshot);
+            Require(
+                activeLaneTimingHint.Contains("박 전", StringComparison.Ordinal),
+                "The active target lane must expose the same beat-count timing cue as the central guide. Actual: "
+                    + activeLaneTimingHint);
             string activeActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueText", goodSnapshot);
             Require(
                 activeActionCue.Contains("바닥 위험 → ↑ 점프 회피", StringComparison.Ordinal),
@@ -881,6 +4037,7 @@ namespace GreedLast.Editor
             RequireTextLayoutBudget(mobileActiveActionCue, 1, 72, "mobile active action cue payoff");
             Require(
                 activeActionCue.Contains("정확+", StringComparison.Ordinal)
+                    && activeActionCue.Contains("→집중", StringComparison.Ordinal)
                     && activeActionCue.Contains("보정+", StringComparison.Ordinal)
                     && activeActionCue.Contains("집중+" + GreedLastRunCore.PerfectFocusChargeBonus, StringComparison.Ordinal),
                 "The active action cue must bind the current trap to exact, Good, and timing payoff previews. Actual: "
@@ -905,6 +4062,834 @@ namespace GreedLast.Editor
             Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowActiveActionCue", default(GreedLastRunSnapshot)),
                 "The active action cue must stay hidden outside a real active trap.");
+            int compactHudFont = InvokeRuntimeUiInt(
+                "BuildRunHudFontSize",
+                goodSnapshot,
+                "상태: 자동 진행\n거리 12.0m\n점수 100\n콤보 1");
+            int denseHudFont = InvokeRuntimeUiInt(
+                "BuildRunHudFontSize",
+                goodSnapshot,
+                "상태: 자동 진행\n목표: 위협 생존 / 무한 기록 갱신\n거리 105.5m 점수 2890 체력 2 집중 3\n채널: 좌 / 타이밍: Perfect\n가이드: 좌 / 준비 0.47s / 성공 +0.09s\n상태줄 보상: 정확+120 보정+30 체감 일반 바닥→↑점프→정확→집중\n코칭: 정확→집중 / 정박 타이밍 / 바닥→↑점프 회피");
+            Require(
+                compactHudFont >= 30
+                    && denseHudFont < compactHudFont
+                    && denseHudFont >= 22,
+                "The live run HUD must shrink dense prototype status text without becoming unreadable.");
+            float farHudLift = InvokeRuntimeUiFloat(
+                "BuildRunHudDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0.5f);
+            float exactHudLift = InvokeRuntimeUiFloat(
+                "BuildRunHudDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                0f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0.5f);
+            float pausedHudLift = InvokeRuntimeUiFloat(
+                "BuildRunHudDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                true,
+                false,
+                false,
+                0f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0.5f);
+            float pressuredFarHudLift = InvokeRuntimeUiFloat(
+                "BuildRunHudDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.18f,
+                0.08f,
+                1,
+                true,
+                5,
+                1f,
+                0.5f);
+            Require(
+                exactHudLift > farHudLift
+                    && pressuredFarHudLift > farHudLift
+                    && Mathf.Approximately(pausedHudLift, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildRunHudDownbeatLiftFromValues",
+                        true,
+                        true,
+                        false,
+                        false,
+                        false,
+                        false,
+                        0f,
+                        0.18f,
+                        0.08f,
+                        3,
+                        false,
+                        1,
+                        0f,
+                        0.5f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunHudDownbeatLift", default(GreedLastRunSnapshot), 1f, 0.5f), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunHudDownbeatColorBlend", exactHudLift) > 0f
+                    && InvokeRuntimeUiInt("BuildRunHudAlphaWithDownbeat", 230, exactHudLift) > 230
+                    && InvokeRuntimeUiFloat("BuildRunHudScaleWithDownbeat", 1f, exactHudLift) > 1f,
+                "The live run HUD must breathe on downbeat most clearly near the exact input window without waking on non-run screens.");
+            float farProgressLift = InvokeRuntimeUiFloat(
+                "BuildRunProgressDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0f);
+            float exactProgressLift = InvokeRuntimeUiFloat(
+                "BuildRunProgressDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                0f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0f);
+            float pausedProgressLift = InvokeRuntimeUiFloat(
+                "BuildRunProgressDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                true,
+                false,
+                false,
+                0f,
+                0.18f,
+                0.08f,
+                3,
+                false,
+                1,
+                1f,
+                0f);
+            float pressuredProgressLift = InvokeRuntimeUiFloat(
+                "BuildRunProgressDownbeatLiftFromValues",
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                -0.42f,
+                0.18f,
+                0.08f,
+                1,
+                true,
+                5,
+                1f,
+                0f);
+            Require(
+                exactProgressLift > farProgressLift
+                    && pressuredProgressLift > farProgressLift
+                    && Mathf.Approximately(pausedProgressLift, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat(
+                        "BuildRunProgressDownbeatLiftFromValues",
+                        true,
+                        true,
+                        false,
+                        false,
+                        false,
+                        false,
+                        0f,
+                        0.18f,
+                        0.08f,
+                        3,
+                        false,
+                        1,
+                        0f,
+                        0f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunProgressDownbeatLift", default(GreedLastRunSnapshot), 1f, 0f), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunProgressDownbeatColorBlend", exactProgressLift) > 0f
+                    && InvokeRuntimeUiInt("BuildRunProgressTextAlpha", 230, exactProgressLift) > 230
+                    && InvokeRuntimeUiFloat("BuildRunProgressTextScale", 0f, exactProgressLift) > 1f
+                    && InvokeRuntimeUiFloat("BuildRunProgressTextScale", 1f, 0f) > 1f,
+                "The top run-progress label must share exact-window downbeat and stage pulses without waking on non-run screens.");
+            float leftCueOffset = InvokeRuntimeUiFloat("BuildActiveActionCueOffsetX", GreedLastRunChannel.Left, 0.85f, 0f);
+            float centerCueOffset = InvokeRuntimeUiFloat("BuildActiveActionCueOffsetX", GreedLastRunChannel.Center, 0.85f, 1f);
+            float rightCueOffset = InvokeRuntimeUiFloat("BuildActiveActionCueOffsetX", GreedLastRunChannel.Right, 0.85f, 0f);
+            float rightExactCueOffset = InvokeRuntimeUiFloat("BuildActiveActionCueOffsetX", GreedLastRunChannel.Right, 0.85f, 1f);
+            Require(
+                leftCueOffset < 0f
+                    && Mathf.Approximately(centerCueOffset, 0f)
+                    && rightCueOffset > 0f
+                    && rightExactCueOffset > rightCueOffset,
+                "The active action cue must lean toward the target lane and gain a tiny extra nudge on exact pulse.");
+            float leftFeedbackOffset = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackLaneOffsetX",
+                GreedLastRunChannel.Left,
+                GreedLastJudgementResult.Success,
+                false);
+            float centerFeedbackOffset = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackLaneOffsetX",
+                GreedLastRunChannel.Center,
+                GreedLastJudgementResult.Success,
+                false);
+            float rightFeedbackOffset = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackLaneOffsetX",
+                GreedLastRunChannel.Right,
+                GreedLastJudgementResult.Success,
+                false);
+            float rightMissFeedbackOffset = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackLaneOffsetX",
+                GreedLastRunChannel.Right,
+                GreedLastJudgementResult.Miss,
+                false);
+            float poppedRightFeedbackOffset = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackAnimatedOffsetX",
+                rightFeedbackOffset,
+                1f);
+            Require(
+                leftFeedbackOffset < 0f
+                    && Mathf.Approximately(centerFeedbackOffset, 0f)
+                    && rightFeedbackOffset > 0f
+                    && rightMissFeedbackOffset > rightFeedbackOffset
+                    && poppedRightFeedbackOffset > rightFeedbackOffset,
+                "Judgement feedback must briefly lean toward the resolved lane and pop slightly outward on impact.");
+            float exactFeedbackPop = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackPopScale",
+                GreedLastJudgementResult.Success,
+                false);
+            float goodFeedbackPop = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackPopScale",
+                GreedLastJudgementResult.Good,
+                false);
+            float missFeedbackPop = InvokeRuntimeUiFloat(
+                "BuildJudgementFeedbackPopScale",
+                GreedLastJudgementResult.Miss,
+                false);
+            Require(
+                exactFeedbackPop > missFeedbackPop
+                    && missFeedbackPop > goodFeedbackPop
+                    && InvokeRuntimeUiFloat("BuildJudgementFeedbackPopScale", GreedLastJudgementResult.Success, true)
+                        > exactFeedbackPop,
+                "Judgement feedback pop scale must make exact the brightest pop, Good restrained, and achievements stronger.");
+            Require(
+                InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Miss, false)
+                    > InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Success, false)
+                    && InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Success, false)
+                        > InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Good, false)
+                    && InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Success, true)
+                        > InvokeRuntimeUiFloat("BuildJudgementFeedbackPopDuration", GreedLastJudgementResult.Miss, false),
+                "Judgement feedback pop duration must leave Miss heavier, exact snappier, Good shortest, and achievements longest.");
+            float idleCuePulse = InvokeRuntimeUiFloat("BuildActiveActionCueReadinessPulse", 0f, 0f, 1f);
+            float readyCuePulse = InvokeRuntimeUiFloat("BuildActiveActionCueReadinessPulse", 0.85f, 0f, 1f);
+            float exactCuePulse = InvokeRuntimeUiFloat("BuildActiveActionCueReadinessPulse", 0.85f, 1f, 0f);
+            Require(
+                Mathf.Approximately(idleCuePulse, 0f)
+                    && readyCuePulse > idleCuePulse
+                    && exactCuePulse > readyCuePulse * 0.85f
+                    && InvokeRuntimeUiInt("BuildActiveActionCueAlpha", 0.85f, readyCuePulse)
+                        > InvokeRuntimeUiInt("BuildActiveActionCueAlpha", 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildActiveActionCueScale", 0.85f, 1f, exactCuePulse)
+                        > InvokeRuntimeUiFloat("BuildActiveActionCueScale", 0.85f, 0f, readyCuePulse),
+                "The active action cue must brighten and breathe as the target timing window approaches.");
+            Require(
+                InvokeRuntimeUiInt("BuildActiveActionCueDownbeatAlphaLift", 1f) > 0
+                    && InvokeRuntimeUiFloat("BuildActiveActionCueDownbeatScaleLift", 1f, 0.85f)
+                        > InvokeRuntimeUiFloat("BuildActiveActionCueDownbeatScaleLift", 1f, 0.15f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveActionCueDownbeatScaleLift", 0f, 0.85f), 0f),
+                "The active action cue must share the downbeat lift only while the pulse is alive, with stronger lift near the judgement line.");
+            const float beatCueSuccessWindow = 0.09f;
+            const float beatCueGoodWindow = 0.20f;
+            const float beatCueInterval = 0.50f;
+            string exactBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                0.00f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            string nextBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                -0.14f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            string oneBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                -0.48f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            string twoBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                -0.74f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            string lateBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                0.14f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            string pastBeatCue = InvokeRuntimeUiLabel(
+                "BuildActivePatternBeatCueFromValues",
+                0.24f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float exactBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                0.00f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float nextBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                -0.14f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float oneBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                -0.48f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float twoBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                -0.74f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float lateBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                0.14f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            float pastBeatCueUrgency = InvokeRuntimeUiFloat(
+                "BuildActiveBeatCueUrgencyFromValues",
+                0.24f,
+                beatCueSuccessWindow,
+                beatCueGoodWindow,
+                beatCueInterval);
+            Require(
+                exactBeatCue == "지금 박"
+                    && nextBeatCue == "다음 박"
+                    && oneBeatCue == "1박 전"
+                    && twoBeatCue == "2박 전"
+                    && lateBeatCue == "늦은 박"
+                    && pastBeatCue == "지난 박"
+                    && Mathf.Approximately(exactBeatCueUrgency, 1f)
+                    && exactBeatCueUrgency > lateBeatCueUrgency
+                    && Mathf.Approximately(lateBeatCueUrgency, nextBeatCueUrgency)
+                    && nextBeatCueUrgency > oneBeatCueUrgency
+                    && oneBeatCueUrgency > twoBeatCueUrgency
+                    && Mathf.Approximately(pastBeatCueUrgency, 0f),
+                "Beat cue labels and urgency must share the same exact, symmetric Good, upcoming-beat, and past-beat thresholds.");
+            const float timingGuideCenterHitWindow = 0.030f;
+            Require(
+                InvokeRuntimeUiLabel(
+                    "BuildTimingGuideWordFromValues",
+                    0.00f,
+                    timingGuideCenterHitWindow,
+                    beatCueSuccessWindow,
+                    beatCueGoodWindow) == "정박"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        0.06f,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "지금 누르기"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        beatCueSuccessWindow,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "지금 누르기"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        -0.14f,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "곧 정확권 0.14s"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        -beatCueGoodWindow,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "곧 정확권 0.20s"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        0.14f,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "보정권 / 늦음 0.14s"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        beatCueGoodWindow,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "보정권 / 늦음 0.20s"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        0.24f,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "놓침 0.24s"
+                    && InvokeRuntimeUiLabel(
+                        "BuildTimingGuideWordFromValues",
+                        -0.48f,
+                        timingGuideCenterHitWindow,
+                        beatCueSuccessWindow,
+                        beatCueGoodWindow) == "준비 0.48s",
+                "The timing guide word must keep exact, success, Good, late, miss, and prep labels on stable thresholds.");
+            int compactCueFont = InvokeRuntimeUiInt("BuildActiveActionCueFontSize", "바닥 위험 → ↑ 점프 회피 · A/← · 1박 전", 0.1f, 0f);
+            int exactCueFont = InvokeRuntimeUiInt("BuildActiveActionCueFontSize", "바닥 위험 → ↑ 점프 회피 · A/← · 지금", 0.85f, 1f);
+            int longCueFont = InvokeRuntimeUiInt(
+                "BuildActiveActionCueFontSize",
+                "측면 위험 → ↔ 비틀기 회피 · D/→ · 1박 전 · 정확+120 압박 반격+50 보정+30",
+                0.85f,
+                1f);
+            Require(
+                exactCueFont > compactCueFont
+                    && longCueFont < exactCueFont
+                    && longCueFont >= 34,
+                "The active action cue font must lift near exact timing while shrinking long payoff text enough to stay readable.");
+            float baseSuccessBandHalfWidth = InvokeRuntimeUiFloat("BuildSuccessTimingBandLaneHalfWidth", 0f, 0f);
+            float readySuccessBandHalfWidth = InvokeRuntimeUiFloat("BuildSuccessTimingBandLaneHalfWidth", 0f, 0.75f);
+            float exactSuccessBandHalfWidth = InvokeRuntimeUiFloat("BuildSuccessTimingBandLaneHalfWidth", 1f, 0.75f);
+            int baseGoodBandAlpha = InvokeRuntimeUiInt("BuildGoodTimingBandAlpha", 0f);
+            int readyGoodBandAlpha = InvokeRuntimeUiInt("BuildGoodTimingBandAlpha", 0.75f);
+            int baseSuccessBandAlpha = InvokeRuntimeUiInt("BuildSuccessTimingBandAlpha", 0f, 0f);
+            int exactSuccessBandAlpha = InvokeRuntimeUiInt("BuildSuccessTimingBandAlpha", 1f, 0.75f);
+            float inactiveSuccessBandLock = InvokeRuntimeUiFloat("BuildSuccessTimingBandExactLock", 0f, 0.75f);
+            float exactSuccessBandLock = InvokeRuntimeUiFloat("BuildSuccessTimingBandExactLock", 1f, 0.75f);
+            float baseTimingBandScale = InvokeRuntimeUiFloat("BuildTimingBandScale", 1f, 0.75f, true);
+            float inactiveCenterBandLock = InvokeRuntimeUiFloat("BuildCenterTimingBandExactLock", 0f);
+            float weakCenterBandLock = InvokeRuntimeUiFloat("BuildCenterTimingBandExactLock", 0.24f);
+            float exactCenterBandLock = InvokeRuntimeUiFloat("BuildCenterTimingBandExactLock", 1f);
+            float baseCenterBandScale = InvokeRuntimeUiFloat("BuildCenterTimingBandScale", 1f);
+            Require(
+                readySuccessBandHalfWidth > baseSuccessBandHalfWidth
+                    && exactSuccessBandHalfWidth > readySuccessBandHalfWidth
+                    && readyGoodBandAlpha > baseGoodBandAlpha
+                    && exactSuccessBandAlpha > baseSuccessBandAlpha
+                    && baseTimingBandScale > InvokeRuntimeUiFloat("BuildTimingBandScale", 0f, 0f, true)
+                    && baseCenterBandScale
+                        > InvokeRuntimeUiFloat("BuildCenterTimingBandScale", 0f),
+                "Timing bands must widen, brighten, and breathe slightly as the active trap reaches its success window.");
+            float exactBandDownbeatLift = InvokeRuntimeUiFloat("BuildTimingBandDownbeatLift", 1f, 0.75f, true);
+            float goodBandDownbeatLift = InvokeRuntimeUiFloat("BuildTimingBandDownbeatLift", 1f, 0.75f, false);
+            Require(
+                exactBandDownbeatLift > goodBandDownbeatLift
+                    && InvokeRuntimeUiInt("BuildTimingBandDownbeatAlphaLift", exactBandDownbeatLift, true)
+                        > InvokeRuntimeUiInt("BuildTimingBandDownbeatAlphaLift", goodBandDownbeatLift, false)
+                    && InvokeRuntimeUiFloat("BuildTimingBandDownbeatColorBlend", exactBandDownbeatLift, true)
+                        > InvokeRuntimeUiFloat("BuildTimingBandDownbeatColorBlend", goodBandDownbeatLift, false)
+                    && InvokeRuntimeUiFloat("BuildTimingBandScaleWithDownbeat", baseTimingBandScale, exactBandDownbeatLift)
+                        > baseTimingBandScale
+                    && InvokeRuntimeUiFloat("BuildTimingBandDownbeatScaleYLift", exactBandDownbeatLift, true)
+                        > InvokeRuntimeUiFloat("BuildTimingBandDownbeatScaleYLift", goodBandDownbeatLift, false),
+                "Downbeat timing bands must pulse the exact-input window more strongly than the wider Good band.");
+            float exactSuccessBandScaleX = InvokeRuntimeUiFloat("BuildTimingBandScaleXWithExactLock", baseTimingBandScale, exactSuccessBandLock);
+            float exactSuccessBandScaleY = InvokeRuntimeUiFloat("BuildTimingBandScaleYWithExactLock", baseTimingBandScale, exactSuccessBandLock);
+            Require(
+                Mathf.Approximately(inactiveSuccessBandLock, 0f)
+                    && exactSuccessBandLock > inactiveSuccessBandLock
+                    && InvokeRuntimeUiInt("BuildSuccessTimingBandExactLockAlphaLift", exactSuccessBandLock) > 0
+                    && InvokeRuntimeUiFloat("BuildSuccessTimingBandExactLockColorBlend", exactSuccessBandLock) > 0f
+                    && exactSuccessBandScaleX > baseTimingBandScale
+                    && exactSuccessBandScaleY > exactSuccessBandScaleX
+                    && exactSuccessBandScaleY - exactSuccessBandScaleX > 0.052f,
+                "Success timing band exact lock must stay off away from exact timing and brighten/tall-sharpen inside the actionable window.");
+            float exactCenterBandScaleX = InvokeRuntimeUiFloat("BuildCenterTimingBandScaleXWithExactLock", baseCenterBandScale, exactCenterBandLock);
+            float exactCenterBandScaleY = InvokeRuntimeUiFloat("BuildCenterTimingBandScaleYWithExactLock", baseCenterBandScale, exactCenterBandLock);
+            Require(
+                Mathf.Approximately(inactiveCenterBandLock, 0f)
+                    && exactCenterBandLock > weakCenterBandLock
+                    && InvokeRuntimeUiInt("BuildCenterTimingBandExactLockAlphaLift", exactCenterBandLock) > 0
+                    && exactCenterBandScaleX > baseCenterBandScale
+                    && exactCenterBandScaleY > exactCenterBandScaleX
+                    && exactCenterBandScaleY - exactCenterBandScaleX > 0.048f,
+                "Center timing band exact lock must stay quiet early and brighten/tall-sharpen at exact timing.");
+            int targetLaneIndex = Mathf.Clamp((int)goodSnapshot.Pattern.Channel - 1, 0, 2);
+            float targetLaneGlow = InvokeRuntimeUiFloat("BuildTargetLaneReadinessGlow", targetLaneIndex, goodSnapshot);
+            float offTargetLaneGlow = InvokeRuntimeUiFloat("BuildTargetLaneReadinessGlow", (targetLaneIndex + 1) % 3, goodSnapshot);
+            Require(
+                targetLaneGlow > 0f
+                    && Mathf.Approximately(offTargetLaneGlow, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTargetLaneReadinessGlow", targetLaneIndex, default(GreedLastRunSnapshot)), 0f),
+                "Only the active target lane may show the readiness glow.");
+            Require(
+                InvokeRuntimeUiFloat("BuildTargetLaneBeatCueGlowBonus", 1f)
+                    > InvokeRuntimeUiFloat("BuildTargetLaneBeatCueGlowBonus", 0.25f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTargetLaneBeatCueGlowBonus", 0f), 0f),
+                "Target-lane readiness glow must inherit the live beat-cue urgency as a restrained bonus.");
+            float readyLaneDownbeat = InvokeRuntimeUiFloat("BuildLaneTargetGlowDownbeatLift", 1f, 0.85f);
+            float weakLaneDownbeat = InvokeRuntimeUiFloat("BuildLaneTargetGlowDownbeatLift", 1f, 0.15f);
+            Require(
+                readyLaneDownbeat > weakLaneDownbeat
+                    && InvokeRuntimeUiInt("BuildLaneTargetGlowDownbeatAlphaLift", readyLaneDownbeat) > 0
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowDownbeatColorBlend", readyLaneDownbeat) > 0f
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowDownbeatScaleYLift", readyLaneDownbeat)
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowDownbeatScaleXLift", readyLaneDownbeat),
+                "Target-lane glow must share the live downbeat pulse most clearly on the ready lane.");
+            float safeTargetLanePressureGlow = InvokeRuntimeUiFloat("BuildTargetLanePressureGlowBonus", 0f, false, 1);
+            float lowHealthTargetLanePressureGlow = InvokeRuntimeUiFloat("BuildTargetLanePressureGlowBonus", 0.72f, false, 1);
+            float highThreatTargetLanePressureGlow = InvokeRuntimeUiFloat("BuildTargetLanePressureGlowBonus", 0.72f, true, 5);
+            Require(
+                Mathf.Approximately(safeTargetLanePressureGlow, 0f)
+                    && lowHealthTargetLanePressureGlow > 0f
+                    && highThreatTargetLanePressureGlow > lowHealthTargetLanePressureGlow,
+                "Target-lane readiness glow must gain a restrained bonus under low-health and high-threat pressure.");
+            int baseLaneTargetGlowAlpha = InvokeRuntimeUiInt("BuildLaneTargetGlowAlpha", 0.25f, 0f, 0f);
+            int readyLaneTargetGlowAlpha = InvokeRuntimeUiInt("BuildLaneTargetGlowAlpha", 0.78f, 1f, 0f);
+            int judgedLaneTargetGlowAlpha = InvokeRuntimeUiInt("BuildLaneTargetGlowAlpha", 0.78f, 1f, 1f);
+            float weakLaneTargetLock = InvokeRuntimeUiFloat("BuildLaneTargetGlowExactLock", 0.30f, 1f, 0f);
+            float readyLaneTargetLock = InvokeRuntimeUiFloat("BuildLaneTargetGlowExactLock", 0.78f, 1f, 0f);
+            float judgedLaneTargetLock = InvokeRuntimeUiFloat("BuildLaneTargetGlowExactLock", 0.78f, 1f, 1f);
+            float readyLaneTargetExactScaleX = InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleXWithExactLock", 0.78f, 1f, 0f, readyLaneTargetLock);
+            float readyLaneTargetExactScaleY = InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleYWithExactLock", 0.78f, 1f, 0f, readyLaneTargetLock);
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildLaneTargetGlowBeatPulse", 0.10f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowBeatPulse", 0.78f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowBeatPulse", 0.78f, 0f)
+                    && readyLaneTargetGlowAlpha > baseLaneTargetGlowAlpha
+                    && judgedLaneTargetGlowAlpha > readyLaneTargetGlowAlpha
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleX", 0.78f, 1f, 0f)
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleX", 0.78f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleY", 0.78f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleY", 0.78f, 0f, 0f),
+                "Target-lane readiness glow must breathe on beat and react slightly after judgement feedback.");
+            Require(
+                Mathf.Approximately(weakLaneTargetLock, 0f)
+                    && readyLaneTargetLock > weakLaneTargetLock
+                    && judgedLaneTargetLock >= readyLaneTargetLock
+                    && InvokeRuntimeUiInt("BuildLaneTargetGlowExactLockAlphaLift", readyLaneTargetLock) > 0
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowExactLockColorBlend", readyLaneTargetLock) > 0f
+                    && readyLaneTargetExactScaleX
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleX", 0.78f, 1f, 0f)
+                    && readyLaneTargetExactScaleY
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowScaleY", 0.78f, 1f, 0f)
+                    && readyLaneTargetExactScaleY > readyLaneTargetExactScaleX
+                    && readyLaneTargetExactScaleY - readyLaneTargetExactScaleX > 0.018f,
+                "Target-lane exact lock must stay hidden while far away and tighten/brighten only as the input window becomes actionable.");
+            float fullHealthDanger = InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 3, 3, true, false, false, false, false, 1);
+            float lowHealthDanger = InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 1, 3, true, false, false, false, false, 1);
+            float highThreatLowHealthDanger = InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 1, 3, true, false, false, false, true, 5);
+            var countdownDangerCore = new GreedLastRunCore();
+            GreedLastRunSnapshot countdownDangerSnapshot = default;
+            countdownDangerCore.SnapshotChanged += value => countdownDangerSnapshot = value;
+            countdownDangerCore.Enter("health countdown smoke", refillRun: false);
+            countdownDangerCore.HandleInput(GreedLastRunChannel.Center, now + 0.04f);
+            Require(countdownDangerSnapshot.CountdownActive, "The health danger smoke must create a countdown snapshot.");
+            Require(
+                Mathf.Approximately(fullHealthDanger, 0f)
+                    && lowHealthDanger >= 0.72f
+                    && highThreatLowHealthDanger > lowHealthDanger,
+                "The edge danger vignette must stay hidden at full health and intensify at low health/high threat.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 1, 3, true, false, true, false, false, 1), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 1, 3, true, true, false, false, false, 1), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerStrengthFromValues", 1, 3, true, false, false, true, false, 1), 0f),
+                "The edge danger vignette must hide during pause, stopped, and choice screens.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowHealthDangerPips", goodSnapshot, lowHealthDanger)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowHealthDangerPips", countdownDangerSnapshot, lowHealthDanger),
+                "The health danger pips and edge vignette must share the same countdown visibility gate.");
+            float lowHealthEdgeAlpha = InvokeRuntimeUiFloat("BuildHealthDangerEdgeAlpha", lowHealthDanger, 1f, 0f);
+            float lowHealthRestAlpha = InvokeRuntimeUiFloat("BuildHealthDangerEdgeAlpha", lowHealthDanger, 0f, 0f);
+            float lowHealthHitAlpha = InvokeRuntimeUiFloat("BuildHealthDangerEdgeAlpha", lowHealthDanger, 0.5f, 1f);
+            float lowHealthEdgeThickness = InvokeRuntimeUiFloat("BuildHealthDangerEdgeThickness", lowHealthDanger, 1f, 0f);
+            float lowHealthRestInset = InvokeRuntimeUiFloat("BuildHealthDangerEdgeInset", lowHealthDanger, 0f, 0f);
+            float lowHealthBeatInset = InvokeRuntimeUiFloat("BuildHealthDangerEdgeInset", lowHealthDanger, 1f, 0f);
+            float lowHealthHitInset = InvokeRuntimeUiFloat("BuildHealthDangerEdgeInset", lowHealthDanger, 0.5f, 1f);
+            float highThreatHealthInset = InvokeRuntimeUiFloat("BuildHealthDangerEdgeInset", highThreatLowHealthDanger, 1f, 1f);
+            Require(
+                lowHealthEdgeAlpha > lowHealthRestAlpha
+                    && lowHealthHitAlpha > lowHealthRestAlpha
+                    && lowHealthEdgeThickness > 1f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerEdgeAlpha", 0f, 1f, 1f), 0f),
+                "The edge danger vignette must pulse on beat/hit and collapse cleanly when danger is inactive.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerEdgeInset", 0f, 1f, 1f), 0f)
+                    && lowHealthRestInset > 0f
+                    && lowHealthBeatInset > lowHealthRestInset
+                    && lowHealthHitInset > lowHealthBeatInset
+                    && highThreatHealthInset > lowHealthHitInset,
+                "The edge danger vignette must press inward more on beat, hit, and high-threat low-health states.");
+            float lowHealthEdgeDownbeat = InvokeRuntimeUiFloat("BuildHealthDangerEdgeDownbeatLift", 1f, lowHealthDanger);
+            float highThreatHealthEdgeDownbeat = InvokeRuntimeUiFloat("BuildHealthDangerEdgeDownbeatLift", 1f, highThreatLowHealthDanger);
+            Require(
+                highThreatHealthEdgeDownbeat > lowHealthEdgeDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerEdgeDownbeatLift", 0f, lowHealthDanger), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerEdgeDownbeatLift", 1f, 0f), 0f)
+                    && InvokeRuntimeUiFloat("BuildHealthDangerEdgeAlphaWithDownbeat", lowHealthEdgeAlpha, lowHealthEdgeDownbeat)
+                        > lowHealthEdgeAlpha
+                    && InvokeRuntimeUiFloat("BuildHealthDangerEdgeThicknessWithDownbeat", lowHealthEdgeThickness, lowHealthEdgeDownbeat)
+                        > lowHealthEdgeThickness
+                    && InvokeRuntimeUiFloat("BuildHealthDangerEdgeInsetWithDownbeat", lowHealthBeatInset, lowHealthEdgeDownbeat)
+                        > lowHealthBeatInset
+                    && InvokeRuntimeUiFloat("BuildHealthDangerEdgeDownbeatColorBlend", lowHealthEdgeDownbeat) > 0f,
+                "The edge danger vignette must share a short downbeat survival squeeze with the health danger pips.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerPipFillAmount", 0f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipFillAmount", lowHealthDanger, 0) > 0f
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipFillAmount", highThreatLowHealthDanger, 2)
+                        >= InvokeRuntimeUiFloat("BuildHealthDangerPipFillAmount", lowHealthDanger, 2),
+                "The health danger gauge pips must stay empty when safe and fill further under low health/high threat.");
+            float hiddenHealthPipAlpha = InvokeRuntimeUiFloat("BuildHealthDangerPipAlpha", false, 1f, lowHealthDanger, 1f, 1f);
+            float emptyHealthPipAlpha = InvokeRuntimeUiFloat("BuildHealthDangerPipAlpha", true, 0f, lowHealthDanger, 0f, 0f);
+            float filledHealthPipAlpha = InvokeRuntimeUiFloat("BuildHealthDangerPipAlpha", true, 1f, lowHealthDanger, 0f, 0f);
+            float pulsedHealthPipAlpha = InvokeRuntimeUiFloat("BuildHealthDangerPipAlpha", true, 1f, lowHealthDanger, 1f, 1f);
+            Require(
+                Mathf.Approximately(hiddenHealthPipAlpha, 0f)
+                    && filledHealthPipAlpha > emptyHealthPipAlpha
+                    && pulsedHealthPipAlpha > filledHealthPipAlpha,
+                "The health danger gauge pips must brighten by fill amount and intensify on beat/hit.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerPipScale", false, 1f, lowHealthDanger, 1f, 1f), 1f)
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipScale", true, 0.5f, lowHealthDanger, 0f, 0f) > 1f
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipScale", true, 1f, lowHealthDanger, 1f, 1f) > 1f,
+                "The health danger gauge pips must scale only on active partial pips or danger pulses.");
+            float lowHealthPipDownbeat = InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatLift", 1f, 1f, lowHealthDanger, 0);
+            float highThreatHealthPipDownbeat = InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatLift", 1f, 1f, highThreatLowHealthDanger, 0);
+            float tailHealthPipDownbeat = InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatLift", 1f, 0.4f, lowHealthDanger, 2);
+            Require(
+                highThreatHealthPipDownbeat > lowHealthPipDownbeat
+                    && lowHealthPipDownbeat > tailHealthPipDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatLift", 0f, 1f, lowHealthDanger, 0), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatLift", 1f, 0f, lowHealthDanger, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipAlphaWithDownbeat", filledHealthPipAlpha, lowHealthPipDownbeat)
+                        > filledHealthPipAlpha
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipScaleWithDownbeat", 1f, lowHealthPipDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildHealthDangerPipDownbeatColorBlend", lowHealthPipDownbeat) > 0f,
+                "Health danger pips must add a short downbeat lift that is strongest at low-health/high-threat survival pressure.");
+            float focusReadyIdleGlow = InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, false, false, false, false, false, false);
+            float focusReadyPatternGlow = InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 2, true, false, false, false, false, false);
+            Require(
+                focusReadyIdleGlow > 0f
+                    && focusReadyPatternGlow > focusReadyIdleGlow
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 1, 3, 0, false, false, false, false, false, false), 0f),
+                "The runner core must glow only when focus is nearly ready, with stronger glow under active pattern pressure.");
+            float focusReadyIdleDownbeat = InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatLift", 1f, focusReadyIdleGlow, false);
+            float focusReadyPatternDownbeat = InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatLift", 1f, focusReadyPatternGlow, true);
+            Require(
+                focusReadyPatternDownbeat > focusReadyIdleDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatLift", 0f, focusReadyPatternGlow, true), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatLift", 1f, 0f, true), 0f)
+                    && InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatScaleLift", focusReadyPatternDownbeat) > 0f
+                    && InvokeRuntimeUiInt("BuildFocusReadyCoreDownbeatAlphaLift", focusReadyPatternDownbeat) > 0
+                    && InvokeRuntimeUiFloat("BuildFocusReadyCoreDownbeatColorBlend", focusReadyPatternDownbeat) > 0f,
+                "The focus-ready runner core must add a brighter downbeat lift when the next accurate hit can trigger focus.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, true, true, false, false, false, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, true, false, true, false, false, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, true, false, false, true, false, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, true, false, false, false, true, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusReadyCoreGlowFromValues", 2, 3, 0, true, false, false, false, false, true), 0f),
+                "The runner core focus-ready glow must hide during focus state, stopped, pause, choice, and countdown states.");
+            var focusTimerCore = new GreedLastRunCore();
+            GreedLastRunSnapshot focusTimerSnapshot = default;
+            focusTimerCore.SnapshotChanged += value => focusTimerSnapshot = value;
+            float focusTimerNow = now + 180f;
+            focusTimerCore.Enter("focus timer pip smoke", refillRun: false);
+            focusTimerCore.HandleInput(GreedLastRunChannel.Center, focusTimerNow);
+            focusTimerCore.Tick(focusTimerNow + 2f);
+            focusTimerCore.Tick(focusTimerNow + 3f);
+            focusTimerCore.FillFocusForTest();
+            Require(focusTimerSnapshot.FocusStateActive, "The focus timer smoke state must activate focus state through the test command.");
+            GreedLastRunSnapshot activeFocusTimerSnapshot = focusTimerSnapshot;
+            Require(
+                InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", activeFocusTimerSnapshot)
+                    && !InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", default),
+                "Focus timer pips must show only during a live active focus state.");
+            focusTimerCore.TogglePause(focusTimerNow + 3.1f);
+            GreedLastRunSnapshot pausedFocusTimerSnapshot = focusTimerSnapshot;
+            Require(
+                pausedFocusTimerSnapshot.FocusStateActive
+                    && pausedFocusTimerSnapshot.Paused
+                    && !InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", pausedFocusTimerSnapshot),
+                "Focus timer pips must hide while a focused run is paused.");
+            Require(
+                GreedLastRuntimeUi.BuildPauseCoachLine(pausedFocusTimerSnapshot).Contains("정확→고점", StringComparison.Ordinal),
+                "A focused paused run must keep the high-score exact-input goal in its resume target.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 5f, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 5f, 4), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 2.5f, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 2.5f, 1), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 2.5f, 2), 0.5f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 2.5f, 3), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipFillAmount", 0f, 0), 0f),
+                "Focus timer pip fill amounts must shrink from five seconds into partial remaining pips.");
+            float emptyFocusTimerPipAlpha = InvokeRuntimeUiFloat("BuildFocusStateTimerPipAlpha", true, 0f, 4f, 0f);
+            float filledFocusTimerPipAlpha = InvokeRuntimeUiFloat("BuildFocusStateTimerPipAlpha", true, 1f, 4f, 0f);
+            float urgentFocusTimerPipAlpha = InvokeRuntimeUiFloat("BuildFocusStateTimerPipAlpha", true, 1f, 1f, 1f);
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipAlpha", false, 1f, 4f, 1f), 0f)
+                    && filledFocusTimerPipAlpha > emptyFocusTimerPipAlpha
+                    && urgentFocusTimerPipAlpha > filledFocusTimerPipAlpha,
+                "Focus timer pips must brighten by fill amount and add a low-time beat pulse.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipScale", false, 1f, 4f, 1f), 1f)
+                    && InvokeRuntimeUiFloat("BuildFocusStateTimerPipScale", true, 0.5f, 4f, 0f) > 1f
+                    && InvokeRuntimeUiFloat("BuildFocusStateTimerPipScale", true, 1f, 1f, 1f) > 1f,
+                "Focus timer pips must scale only on the active edge or low-time pulse.");
+            float calmFocusTimerDownbeat = InvokeRuntimeUiFloat("BuildFocusStateTimerPipDownbeatLift", 1f, 1f, 4f, 0);
+            float urgentFocusTimerDownbeat = InvokeRuntimeUiFloat("BuildFocusStateTimerPipDownbeatLift", 1f, 1f, 1f, 0);
+            Require(
+                urgentFocusTimerDownbeat > calmFocusTimerDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipDownbeatLift", 0f, 1f, 1f, 0), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateTimerPipDownbeatLift", 1f, 0f, 1f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildFocusStateTimerPipAlphaWithDownbeat", filledFocusTimerPipAlpha, urgentFocusTimerDownbeat)
+                        > filledFocusTimerPipAlpha
+                    && InvokeRuntimeUiFloat(
+                        "BuildFocusStateTimerPipScaleWithDownbeat",
+                        InvokeRuntimeUiFloat("BuildFocusStateTimerPipScale", true, 1f, 1f, 1f),
+                        urgentFocusTimerDownbeat)
+                        > InvokeRuntimeUiFloat("BuildFocusStateTimerPipScale", true, 1f, 1f, 1f)
+                    && InvokeRuntimeUiFloat("BuildFocusStateTimerPipDownbeatColorBlend", urgentFocusTimerDownbeat) > 0f,
+                "Focus timer pips must make low-time downbeats brighter and larger than calm focus beats.");
+            float noFocusUrgency = InvokeRuntimeUiFloat("BuildFocusStateUrgencyPulse", 2f, 1f);
+            float lowFocusUrgency = InvokeRuntimeUiFloat("BuildFocusStateUrgencyPulse", 1f, 0f);
+            float beatFocusUrgency = InvokeRuntimeUiFloat("BuildFocusStateUrgencyPulse", 1f, 1f);
+            Require(
+                Mathf.Approximately(noFocusUrgency, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildFocusStateUrgencyPulse", 0f, 1f), 0f)
+                    && lowFocusUrgency > 0f
+                    && beatFocusUrgency > lowFocusUrgency,
+                "Focus-state urgency pulse must appear only in the last beat range and brighten on beat.");
+            float markerBaseLow = InvokeRuntimeUiFloat("BuildBeatMarkerBaseScale", 0f);
+            float markerBaseMid = InvokeRuntimeUiFloat("BuildBeatMarkerBaseScale", 0.5f);
+            float markerBaseHigh = InvokeRuntimeUiFloat("BuildBeatMarkerBaseScale", 1f);
+            float markerGoodScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 0f, 1f, 0f, 0f, 0f, 0f, 0f);
+            float markerSuccessScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 1f, 0f, 0f, 0f, 0f, 0f, 0f);
+            float markerMissScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 0f, 0f, 0f, 0f, 1f, 0f, 0f);
+            float markerFocusGuardScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 0f, 0f, 0f, 0f, 0f, 1f, 0f);
+            float markerComboTierScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 0f, 0f, 1f, 0f, 0f, 0f, 0f);
+            float markerComboBreakScale = InvokeRuntimeUiFloat("BuildBeatMarkerScaleWithImpacts", 0.5f, 0f, 0f, 0f, 0f, 0f, 0f, 1f);
+            Require(
+                markerBaseHigh > markerBaseMid
+                    && markerBaseMid > markerBaseLow
+                    && markerFocusGuardScale > markerComboTierScale
+                    && markerComboTierScale > markerMissScale
+                    && markerMissScale > markerSuccessScale
+                    && markerSuccessScale > markerGoodScale
+                    && markerComboBreakScale < markerBaseMid,
+                "The beat marker must scale strongest for guard/tier/miss feedback, gently for good hits, and shrink on combo breaks.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildBeatMarkerColorBlend", 0f, 0.88f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildBeatMarkerColorBlend", 1f, 0.58f), 0.58f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildBeatMarkerColorBlend", 2f, 0.88f), 0.88f),
+                "The beat marker color blend must clamp impact while preserving per-result strength.");
+            float hiddenDownbeatPulse = InvokeRuntimeUiFloat("BuildDownbeatPulse", 0f);
+            float midDownbeatPulse = InvokeRuntimeUiFloat("BuildDownbeatPulse", 0.12f);
+            Require(
+                Mathf.Approximately(hiddenDownbeatPulse, 0f)
+                    && midDownbeatPulse > 0.90f
+                    && InvokeRuntimeUiFloat("BuildDownbeatColorBlend", 1.4f, 0.44f) <= 0.44f
+                    && InvokeRuntimeUiFloat("BuildBeatMarkerDownbeatScaleLift", midDownbeatPulse) > 0f,
+                "A downbeat pulse must be a short clamped visual lift for the beat marker.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", goodSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", countdownDangerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", pausedFocusTimerSnapshot),
+                "Downbeat visual pulses must stay live-only and disappear from countdown/pause/menu states.");
+            float foregroundDownbeat = InvokeRuntimeUiFloat("BuildFloorBeatTileDownbeatPulse", midDownbeatPulse, 0.92f);
+            float backgroundDownbeat = InvokeRuntimeUiFloat("BuildFloorBeatTileDownbeatPulse", midDownbeatPulse, 0.12f);
+            Require(
+                foregroundDownbeat > backgroundDownbeat
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileDownbeatWidthScale", foregroundDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileDownbeatHeightScale", foregroundDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildFloorBeatTileDownbeatAlphaLift", foregroundDownbeat) > 0f,
+                "Downbeat floor tiles must react more strongly near the judgement line than in the far background.");
+            Require(
+                InvokeRuntimeUiInt("BuildTunnelDownbeatAlphaLift", midDownbeatPulse, true)
+                    > InvokeRuntimeUiInt("BuildTunnelDownbeatAlphaLift", midDownbeatPulse, false)
+                    && InvokeRuntimeUiFloat("BuildTunnelDownbeatScaleLift", midDownbeatPulse, true)
+                        > InvokeRuntimeUiFloat("BuildTunnelDownbeatScaleLift", midDownbeatPulse, false),
+                "Downbeat tunnel rails must pulse the inner read line more strongly than outer scenery rails.");
+            float nearestPipDownbeatLift = InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatLift", midDownbeatPulse, 1f, 0);
+            float tailPipDownbeatLift = InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatLift", midDownbeatPulse, 0.2f, 2);
+            Require(
+                nearestPipDownbeatLift > tailPipDownbeatLift
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipAlphaWithDownbeat", 0.52f, nearestPipDownbeatLift) > 0.52f
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipScaleWithDownbeat", 1.08f, nearestPipDownbeatLift) > 1.08f
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatWidthLift", nearestPipDownbeatLift, 0)
+                        > InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatWidthLift", nearestPipDownbeatLift, 2)
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatHeightLift", nearestPipDownbeatLift, 0)
+                        > InvokeRuntimeUiFloat("BuildTimingBeatPipDownbeatHeightLift", nearestPipDownbeatLift, 2),
+                "Downbeat timing pips must give the nearest hit-read marker the strongest short lift.");
+            float nearestPipBeatCueUrgency = InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgency", 1f, 1f, 0);
+            float tailPipBeatCueUrgency = InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgency", 1f, 0.2f, 2);
+            Require(
+                nearestPipBeatCueUrgency > tailPipBeatCueUrgency
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgency", 0f, 1f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipAlphaWithBeatCueUrgency", 0.52f, nearestPipBeatCueUrgency) > 0.52f
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyColorBlend", nearestPipBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyScaleYLift", nearestPipBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyScaleXLift", nearestPipBeatCueUrgency)
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyWidthLift", nearestPipBeatCueUrgency, 0)
+                        > InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyWidthLift", nearestPipBeatCueUrgency, 2)
+                    && InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyHeightLift", nearestPipBeatCueUrgency, 0)
+                        > InvokeRuntimeUiFloat("BuildTimingBeatPipBeatCueUrgencyHeightLift", nearestPipBeatCueUrgency, 2),
+                "Beat-cue urgency timing pips must sharpen the nearest upcoming beat marker more than the tail marker.");
+            float freshFlashAlpha = InvokeRuntimeUiFloat("BuildFeedbackFlashAlphaScale", 10f, 10.2f, 10f);
+            float earlyFlashAlpha = InvokeRuntimeUiFloat("BuildFeedbackFlashAlphaScale", 10f, 10.2f, 10.01f);
+            float midFlashAlpha = InvokeRuntimeUiFloat("BuildFeedbackFlashAlphaScale", 10f, 10.2f, 10.1f);
+            float lateFlashAlpha = InvokeRuntimeUiFloat("BuildFeedbackFlashAlphaScale", 10f, 10.2f, 10.16f);
+            float fadedFlashAlpha = InvokeRuntimeUiFloat("BuildFeedbackFlashAlphaScale", 10f, 10.2f, 10.2f);
+            Require(
+                freshFlashAlpha >= 0.999f
+                    && earlyFlashAlpha >= 0.995f
+                    && midFlashAlpha > lateFlashAlpha
+                    && lateFlashAlpha > fadedFlashAlpha
+                    && midFlashAlpha < earlyFlashAlpha
+                    && fadedFlashAlpha <= 0.001f,
+                "Feedback flash alpha must hold briefly, then fade smoothly from the original flash strength to zero.");
 
             var choiceCueCore = new GreedLastRunCore();
             GreedLastRunSnapshot choiceCueSnapshot = default;
@@ -936,6 +4921,107 @@ namespace GreedLast.Editor
                     && string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildActiveActionCueText", stoppedCueSnapshot)),
                 "Forced infinite settlement must read like a result state and keep active action cues hidden.");
             Require(
+                InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", activeFocusTimerSnapshot)
+                    && !InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", choiceCueSnapshot)
+                    && !InvokeRuntimeUiBool("ShouldShowFocusStateTimerPips", stoppedCueSnapshot),
+                "The focus-state aura band must share the same live-only visibility gate as the focus timer pips.");
+            Require(
+                InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", goodSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldShowDownbeatPulse", goodSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", goodSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", goodSnapshot)
+                    && !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", countdownDangerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", countdownDangerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", countdownDangerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("IsLiveRunControlWindow", stoppedCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldAdvanceRunMotion", stoppedCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayLiveBeatClick", stoppedCueSnapshot),
+                "Live-control, downbeat, forward-motion, and live-beat audio gates must agree across active, countdown, pause, choice, and result states.");
+            Require(
+                InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", goodSnapshot) > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", countdownDangerSnapshot), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", pausedFocusTimerSnapshot), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", choiceCueSnapshot), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", stoppedCueSnapshot), 0f),
+                "Beat-cue urgency must share the same live-control gate as downbeat, motion, and live beat clicks.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowStageTransitionBanner", goodSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldTrackStagePresentation", countdownDangerSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldTrackStagePresentation", goodSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldTrackStagePresentation", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldTrackStagePresentation", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldTrackStagePresentation", stoppedCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStageTransitionBanner", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStageTransitionBanner", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowStageTransitionBanner", stoppedCueSnapshot),
+                "Stage transitions must not consume their key on pause, choice, or result screens and must begin from the post-choice countdown or live play.");
+            float transitionHiddenAtStart = InvokeRuntimeUiFloat("BuildStageTransitionVisibility", 0f, 1.0f);
+            float transitionVisibleMid = InvokeRuntimeUiFloat("BuildStageTransitionVisibility", 0.24f, 1.0f);
+            float transitionFadingOut = InvokeRuntimeUiFloat("BuildStageTransitionVisibility", 0.80f, 0.12f);
+            Require(
+                Mathf.Approximately(transitionHiddenAtStart, 0f)
+                    && transitionVisibleMid > transitionHiddenAtStart
+                    && transitionVisibleMid > transitionFadingOut
+                    && InvokeRuntimeUiFloat("BuildStageTransitionTextScale", 0f)
+                        > InvokeRuntimeUiFloat("BuildStageTransitionTextScale", 0.28f)
+                    && InvokeRuntimeUiFloat("BuildStageTransitionLineScaleX", 1f)
+                        > InvokeRuntimeUiFloat("BuildStageTransitionLineScaleX", 0f)
+                    && InvokeRuntimeUiInt("BuildStageTransitionDetailAlpha", 0f) == 255
+                    && InvokeRuntimeUiInt("BuildStageTransitionDetailAlpha", 1f) < 20,
+                "Stage transition banner visibility, text scale, line scale, and underlying-detail suppression must ease predictably without overlapping copy.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldPlayStageTransitionCue", true, true, 10.10f, 10.14f)
+                    && InvokeRuntimeUiStaticBool("ShouldPlayStageTransitionCue", true, true, 10.14f, 10.14f)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayStageTransitionCue", false, true, 10.20f, 10.14f)
+                    && !InvokeRuntimeUiStaticBool("ShouldPlayStageTransitionCue", true, false, 10.20f, 10.14f),
+                "A deferred stage cue must fire once only after its presentation begins and must be cancelled outside a visible run state.");
+            Require(
+                InvokeRuntimeUiStaticBool(
+                    "ShouldRearmStagePresentationAfterInterruption",
+                    pausedFocusTimerSnapshot,
+                    0.8f,
+                    true)
+                    && InvokeRuntimeUiStaticBool(
+                        "ShouldRearmStagePresentationAfterInterruption",
+                        choiceCueSnapshot,
+                        0.8f,
+                        true)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldRearmStagePresentationAfterInterruption",
+                        stoppedCueSnapshot,
+                        0.8f,
+                        true)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldRearmStagePresentationAfterInterruption",
+                        goodSnapshot,
+                        0.8f,
+                        true)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldRearmStagePresentationAfterInterruption",
+                        pausedFocusTimerSnapshot,
+                        0f,
+                        true)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldRearmStagePresentationAfterInterruption",
+                        pausedFocusTimerSnapshot,
+                        0.8f,
+                        false),
+                "A pending chapter cue interrupted by pause or choice must re-arm without replaying after it already sounded, results, or expiry.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRouteCadencePipState", goodSnapshot, 0) != "hidden"
+                    && InvokeRuntimeUiLabel("BuildRouteCadencePipState", pausedFocusTimerSnapshot, 0) == "hidden"
+                    && InvokeRuntimeUiLabel("BuildRouteCadencePipState", countdownDangerSnapshot, 0) == "hidden"
+                    && InvokeRuntimeUiLabel("BuildRouteCadencePipState", choiceCueSnapshot, 0) == "hidden"
+                    && InvokeRuntimeUiLabel("BuildRouteCadencePipState", stoppedCueSnapshot, 0) == "hidden",
+                "Route cadence pips must stay visible only during active normal-route reading.");
+            Require(
                 InvokeRuntimeUiLabel("PrefixDevShortcut", "F6", "집중 발동") == "F6 집중 발동",
                 "Run dev-tool labels must expose their matching keyboard shortcut.");
             Require(
@@ -960,20 +5046,1124 @@ namespace GreedLast.Editor
                     && InvokeRuntimeUiLabel("BuildRunLaneBaseLabelForMode", 2, false, false) == "우\n탭",
                 "Release/mobile run lane labels must keep touch targets obvious without editor key hints.");
             Require(
+                InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", false, true, true, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, false, true, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, false, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, true, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, false, true, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, false, false, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, false, false, true, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldUseKeyboardLaneHoldVisualsForMode", true, true, true, false, false, false, false, true),
+                "Keyboard lane-hold visuals must be editor/dev run-only and hide during pause, choice, countdown, and save-slot modes.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldEnableInfinitePreparationLane", true, 0)
+                    && InvokeRuntimeUiStaticBool("ShouldEnableInfinitePreparationLane", true, 1)
+                    && InvokeRuntimeUiStaticBool("ShouldEnableInfinitePreparationLane", true, 2),
+                "Completed infinite preparation must keep every labelled lane tappable, including the right keep-current lane.");
+            Require(
                 InvokeRuntimeUiLabel("BuildSfxVolumeButtonLabel", 0.6f) == "소리 60%"
                     && InvokeRuntimeUiLabel("BuildSfxVolumeButtonLabel", 1.4f) == "소리 100%"
                     && InvokeRuntimeUiLabel("BuildSfxVolumeButtonLabel", -0.5f) == "소리 0%"
                     && InvokeRuntimeUiLabel("BuildHapticsButtonLabel", true) == "진동 ON"
-                    && InvokeRuntimeUiLabel("BuildHapticsButtonLabel", false) == "진동 OFF",
-                "Run sensory setting labels must expose stable volume and haptic states.");
+                    && InvokeRuntimeUiLabel("BuildHapticsButtonLabel", false) == "진동 OFF"
+                    && InvokeRuntimeUiLabel("BuildRotationTiltButtonLabel", true) == "기울임 ON"
+                    && InvokeRuntimeUiLabel("BuildRotationTiltButtonLabel", false) == "기울임 OFF",
+                "Run sensory setting labels must expose stable volume, haptic, and tilt states.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", true, false, false)
+                    && InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", false, true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", false, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", false, false, true),
+                "The tilt preference must remain available to editor testing and supported mobile devices only.");
+            Require(
+                InvokeRuntimeUiInt("BuildButtonLabelMaxFontSize", "로비로", 33) == 33
+                    && InvokeRuntimeUiInt("BuildButtonLabelMaxFontSize", "저장 슬롯 선택 추천 S1", 33) == 28
+                    && InvokeRuntimeUiInt("BuildButtonLabelMaxFontSize", "저장 후보 소모 완료 같은 클리어 재저장 불가", 33) == 26
+                    && InvokeRuntimeUiInt("BuildButtonLabelMaxFontSize", "다음: 4/4 무한 랭킹", 24) == 21
+                    && InvokeRuntimeUiInt("BuildButtonLabelMaxFontSize", "좌\n현재 선택\n유지", 33) == 28
+                    && InvokeRuntimeUiInt("BuildButtonLabelMinFontSize", 26) == 18
+                    && InvokeRuntimeUiInt("BuildButtonLabelMinFontSize", 19) == 16
+                    && InvokeRuntimeUiInt("BuildButtonLabelMinFontSize", 33) == 22,
+                "Button label compact sizing must keep long and multi-line prototype action labels inside their buttons.");
+            Require(
+                InvokeRuntimeUiLabel("NormalizeButtonLabel", "  저장 슬롯 선택 추천 S1  ") == "저장 슬롯 선택 추천 S1"
+                    && InvokeRuntimeUiLabel("NormalizeButtonLabel", "\r\n무한 재도전 \r\n") == "무한 재도전"
+                    && InvokeRuntimeUiLabel("NormalizeButtonLabel", "좌\r\n현재 선택\r\n유지") == "좌\n현재 선택\n유지"
+                    && InvokeRuntimeUiLabel("NormalizeButtonLabel", "   ") == string.Empty,
+                "Button labels must be trimmed and newline-normalized before they are rendered or fitted.");
+            GreedLastStateSnapshot slotPrefixGuardSnapshot = BuildUiScreenSnapshot(
+                GreedLastScreenState.LobbyReady,
+                "Lobby",
+                "slot prefix guard",
+                0,
+                saveCandidateAvailable: true,
+                saveSlotLabels: new[] { "추천 S1", "S2", "S3" });
+            GreedLastStateSnapshot compactSlotPrefixGuardSnapshot = BuildUiScreenSnapshot(
+                GreedLastScreenState.LobbyReady,
+                "Lobby",
+                "compact slot prefix guard",
+                0,
+                saveSlotLabels: new[] { "추천·S1", "S2", "S3" });
+            GreedLastStateSnapshot compactCandidateSlotPrefixGuardSnapshot = BuildUiScreenSnapshot(
+                GreedLastScreenState.LobbyReady,
+                "Lobby",
+                "compact candidate slot prefix guard",
+                0,
+                saveCandidateAvailable: true,
+                saveSlotLabels: new[] { "추천·S1", "S2", "S3" });
+            Require(
+                InvokeRuntimeUiLabel("BuildSelectedSaveSlotButtonSummary", slotPrefixGuardSnapshot) == "추천 S1"
+                    && InvokeRuntimeUiLabel("BuildSelectedSaveSlotButtonSummary", compactSlotPrefixGuardSnapshot) == "추천·S1"
+                    && InvokeRuntimeUiLabel("BuildSelectedSaveSlotButtonSummary", compactCandidateSlotPrefixGuardSnapshot) == "추천 S1"
+                    && InvokeRuntimeUiLabel("BuildLobbySaveLoadoutButtonLabel", slotPrefixGuardSnapshot, "추천 S1") == "저장 슬롯 선택 추천 S1"
+                    && InvokeRuntimeUiLabel("BuildLobbySaveLoadoutButtonLabel", slotPrefixGuardSnapshot, " ") == "저장 슬롯 선택",
+                "Lobby save-slot button summaries must not duplicate a slot prefix when the compact label already contains S1.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildEffectiveSfxVolume", 0.40f, 0.50f), 0.20f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEffectiveSfxVolume", 0.40f, 0f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEffectiveSfxVolume", 2f, 2f), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildAudioSourceBaseVolume"), 1f),
+                "The master sound setting must scale every runtime clip volume once and keep the source volume from double-scaling.");
+            Require(
+                InvokeRuntimeUiInt("BuildAndroidHapticMilliseconds", 0f) == 1
+                    && InvokeRuntimeUiInt("BuildAndroidHapticMilliseconds", 0.03f) == 30
+                    && InvokeRuntimeUiInt("BuildAndroidHapticMilliseconds", 0.2f) == 120,
+                "Mobile haptic durations must clamp tiny and excessive pulses while preserving authored mid pulses.");
+            float noPatternJudgementUrgency = InvokeRuntimeUiFloat(
+                "BuildJudgementBeatCueUrgencyFromValues",
+                false,
+                0f,
+                0.05f,
+                0.12f,
+                0.35f);
+            float exactJudgementUrgency = InvokeRuntimeUiFloat(
+                "BuildJudgementBeatCueUrgencyFromValues",
+                true,
+                0.00f,
+                0.05f,
+                0.12f,
+                0f);
+            float goodJudgementUrgency = InvokeRuntimeUiFloat(
+                "BuildJudgementBeatCueUrgencyFromValues",
+                true,
+                0.11f,
+                0.05f,
+                0.12f,
+                0f);
+            float missedJudgementUrgency = InvokeRuntimeUiFloat(
+                "BuildJudgementBeatCueUrgencyFromValues",
+                true,
+                0.20f,
+                0.05f,
+                0.12f,
+                0.35f);
+            Require(
+                Mathf.Approximately(noPatternJudgementUrgency, 0.35f)
+                    && Mathf.Approximately(exactJudgementUrgency, 1f)
+                    && exactJudgementUrgency > goodJudgementUrgency
+                    && Mathf.Approximately(missedJudgementUrgency, 0.35f),
+                "Judgement haptic urgency must keep exact hits crisp, Good hits softer, and fall back to the live cue outside timing windows.");
+            float baseExactHaptic = InvokeRuntimeUiFloat(
+                "BuildJudgementHapticDurationFromValues",
+                0.018f,
+                GreedLastJudgementResult.Success,
+                false,
+                0,
+                false,
+                false,
+                1,
+                false,
+                0f,
+                false);
+            float centeredExactHaptic = InvokeRuntimeUiFloat(
+                "BuildJudgementHapticDurationFromValues",
+                0.018f,
+                GreedLastJudgementResult.Success,
+                true,
+                0,
+                false,
+                false,
+                1,
+                false,
+                0f,
+                false);
+            float highRewardExactHaptic = InvokeRuntimeUiFloat(
+                "BuildJudgementHapticDurationFromValues",
+                0.018f,
+                GreedLastJudgementResult.Success,
+                true,
+                12,
+                true,
+                true,
+                5,
+                true,
+                1f,
+                true);
+            float goodHaptic = InvokeRuntimeUiFloat(
+                "BuildJudgementHapticDurationFromValues",
+                0.012f,
+                GreedLastJudgementResult.Good,
+                true,
+                0,
+                true,
+                true,
+                5,
+                false,
+                1f,
+                false);
+            float highThreatMissHaptic = InvokeRuntimeUiFloat(
+                "BuildJudgementHapticDurationFromValues",
+                0.060f,
+                GreedLastJudgementResult.Miss,
+                true,
+                12,
+                false,
+                true,
+                5,
+                true,
+                1f,
+                false);
+            Require(
+                centeredExactHaptic > baseExactHaptic
+                    && highRewardExactHaptic > centeredExactHaptic
+                    && goodHaptic > 0.012f
+                    && highRewardExactHaptic >= 0.050f
+                    && highRewardExactHaptic > goodHaptic
+                    && highThreatMissHaptic > highRewardExactHaptic
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildJudgementHapticDurationFromValues",
+                            0.018f,
+                            GreedLastJudgementResult.None,
+                            true,
+                            12,
+                            true,
+                            true,
+                            5,
+                            true,
+                            1f,
+                            true),
+                        0f),
+                "Judgement haptic duration must scale from Good to exact reward and reserve the heaviest pulse for high-threat misses.");
+            float baseExactCueVolume = InvokeRuntimeUiFloat(
+                "BuildJudgementCueVolumeFromValues",
+                GreedLastJudgementResult.Success,
+                false,
+                0,
+                false,
+                false,
+                1,
+                false);
+            float centeredExactCueVolume = InvokeRuntimeUiFloat(
+                "BuildJudgementCueVolumeFromValues",
+                GreedLastJudgementResult.Success,
+                true,
+                0,
+                false,
+                false,
+                1,
+                false);
+            float highRewardExactCueVolume = InvokeRuntimeUiFloat(
+                "BuildJudgementCueVolumeFromValues",
+                GreedLastJudgementResult.Success,
+                true,
+                12,
+                true,
+                true,
+                5,
+                true);
+            float goodCueVolume = InvokeRuntimeUiFloat(
+                "BuildJudgementCueVolumeFromValues",
+                GreedLastJudgementResult.Good,
+                true,
+                0,
+                false,
+                false,
+                1,
+                false);
+            float highThreatMissCueVolume = InvokeRuntimeUiFloat(
+                "BuildJudgementCueVolumeFromValues",
+                GreedLastJudgementResult.Miss,
+                true,
+                10,
+                false,
+                true,
+                5,
+                true);
+            Require(
+                centeredExactCueVolume > baseExactCueVolume
+                    && highRewardExactCueVolume > centeredExactCueVolume
+                    && baseExactCueVolume > goodCueVolume
+                    && highThreatMissCueVolume > goodCueVolume
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildJudgementCueVolumeFromValues",
+                            GreedLastJudgementResult.None,
+                            true,
+                            12,
+                            true,
+                            true,
+                            5,
+                            true),
+                        0f),
+                "Judgement cue volume must make exact rewards brighter, Good softer, and high-threat misses heavier.");
             Require(
                 GreedLastRuntimeUi.BuildSensorySettingsChecklistText(-0.5f, true) == "감각: 소리 0%·진동 ON"
                     && GreedLastRuntimeUi.BuildSensorySettingsChecklistText(1.4f, false) == "감각: 소리 100%·진동 OFF",
                 "The sensory checklist must clamp volume while preserving the haptic state.");
+            Require(
+                GreedLastRuntimeUi.BuildSensorySettingsChecklistTextWithTilt(0.6f, false, false, true)
+                    == "감각: 소리 60%·진동 OFF·기울임 OFF"
+                    && GreedLastRuntimeUi.BuildSensorySettingsChecklistTextWithTilt(0.6f, false, false, false)
+                        == "감각: 소리 60%·진동 OFF",
+                "The sensory checklist must include the persisted tilt choice only where that setting is exposed.");
+            float freshRippleAlpha = InvokeRuntimeUiFloat("BuildLaneInputRippleAlpha", 0.34f);
+            float midRippleAlpha = InvokeRuntimeUiFloat("BuildLaneInputRippleAlpha", 0.17f);
+            float fadedRippleAlpha = InvokeRuntimeUiFloat("BuildLaneInputRippleAlpha", 0f);
+            float freshRippleScale = InvokeRuntimeUiFloat("BuildLaneInputRippleScale", 0.34f);
+            float midRippleScale = InvokeRuntimeUiFloat("BuildLaneInputRippleScale", 0.17f);
+            float lateRippleScale = InvokeRuntimeUiFloat("BuildLaneInputRippleScale", 0.02f);
+            Require(
+                freshRippleAlpha > midRippleAlpha
+                    && midRippleAlpha > fadedRippleAlpha
+                    && Mathf.Approximately(fadedRippleAlpha, 0f)
+                    && freshRippleScale < midRippleScale
+                    && midRippleScale < lateRippleScale,
+                "Lane input ripples must start bright and compact, then expand while fading.");
+            Require(
+                InvokeRuntimeUiInt("BuildLaneInputRippleAlphaWithJudgement", 0.20f, 0f, 1f)
+                    > InvokeRuntimeUiInt("BuildLaneInputRippleAlphaWithJudgement", 0.20f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgement", 0.20f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgement", 0.20f, 0f),
+                "Lane input ripples must carry the resolved judgement pulse into a stronger follow-through.");
+            Require(
+                InvokeRuntimeUiInt("BuildLaneInputRippleAlphaWithJudgementAndBeatCue", 0.20f, 0f, 0f, 1f)
+                    > InvokeRuntimeUiInt("BuildLaneInputRippleAlphaWithJudgementAndBeatCue", 0.20f, 0f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgementAndBeatCue", 0.20f, 0f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgementAndBeatCue", 0.20f, 0f, 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgementAndBeatCue", 0.20f, 1f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneInputRippleScaleWithJudgement", 0.20f, 1f)
+                    && InvokeRuntimeUiFloat("BuildLaneInputRippleBeatCueColorBlend", 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneInputRippleBeatCueColorBlend", 0.25f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLaneInputRippleBeatCueColorBlend", 0f), 0f),
+                "Target-lane input ripples must brighten with beat-cue urgency before judgement and stack cleanly with resolved judgement pulses.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", goodSnapshot)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", countdownDangerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", stoppedCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLaneInputRipple", default(GreedLastRunSnapshot)),
+                "Lane input ripples must remain available for live and choice taps while hiding during pause, countdown, and result screens.");
+            float laneGuardClock = 10f;
+            Require(
+                !InvokeAppStaticBool(
+                    "ShouldBlockRapidRunLaneInputFromValues",
+                    GreedLastRunChannel.Left,
+                    laneGuardClock,
+                    0f,
+                    GreedLastRunChannel.None,
+                    0f)
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRapidRunLaneInputFromValues",
+                        GreedLastRunChannel.Center,
+                        laneGuardClock + 0.020f,
+                        laneGuardClock,
+                        GreedLastRunChannel.Left,
+                        laneGuardClock)
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRapidRunLaneInputFromValues",
+                        GreedLastRunChannel.Left,
+                        laneGuardClock + 0.060f,
+                        laneGuardClock,
+                        GreedLastRunChannel.Left,
+                        laneGuardClock)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRapidRunLaneInputFromValues",
+                        GreedLastRunChannel.Right,
+                        laneGuardClock + 0.040f,
+                        laneGuardClock,
+                        GreedLastRunChannel.Left,
+                        laneGuardClock)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRapidRunLaneInputFromValues",
+                        GreedLastRunChannel.Left,
+                        laneGuardClock + 0.080f,
+                        laneGuardClock,
+                        GreedLastRunChannel.Left,
+                        laneGuardClock)
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRapidRunLaneInputFromValues",
+                        GreedLastRunChannel.None,
+                        laneGuardClock + 0.100f,
+                        laneGuardClock,
+                        GreedLastRunChannel.Left,
+                    laneGuardClock),
+                "Rapid lane input guard must reject duplicate bursts, keep same-lane repeat protection, and allow lane changes after the global duplicate window.");
+            Require(
+                !InvokeAppStaticBool(
+                    "ShouldBlockRunEntryLaneInput",
+                    laneGuardClock,
+                    0f)
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRunEntryLaneInput",
+                        laneGuardClock + 0.12f,
+                        laneGuardClock + 0.34f)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRunEntryLaneInput",
+                        laneGuardClock + 0.34f,
+                        laneGuardClock + 0.34f),
+                "Lobby-to-run input guard must block all lane input during the visual handoff and release exactly when the handoff ends.");
+            Require(
+                !InvokeAppStaticBool(
+                    "ShouldBlockRunChoiceInput",
+                    true,
+                    laneGuardClock,
+                    0f)
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRunChoiceInput",
+                        true,
+                        laneGuardClock + 0.12f,
+                        laneGuardClock + 0.34f)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRunChoiceInput",
+                        true,
+                        laneGuardClock + 0.34f,
+                        laneGuardClock + 0.34f)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRunChoiceInput",
+                        false,
+                        laneGuardClock + 0.12f,
+                        laneGuardClock + 0.34f),
+                "Choice input guard must apply only while a choice is active.");
+            float chainedChoiceBlockUntil = InvokeAppStaticFloat(
+                "BuildRunChoiceInputBlockUntil",
+                true,
+                true,
+                laneGuardClock,
+                0f);
+            Require(
+                chainedChoiceBlockUntil > laneGuardClock
+                    && InvokeAppStaticBool(
+                        "ShouldBlockRunChoiceInput",
+                        true,
+                        laneGuardClock + 0.10f,
+                        chainedChoiceBlockUntil)
+                    && !InvokeAppStaticBool(
+                        "ShouldBlockRunChoiceInput",
+                        true,
+                        chainedChoiceBlockUntil,
+                        chainedChoiceBlockUntil)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat(
+                            "BuildRunChoiceInputBlockUntil",
+                            true,
+                            false,
+                            laneGuardClock,
+                            0f),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeAppStaticFloat(
+                            "BuildRunChoiceInputBlockUntil",
+                            false,
+                            true,
+                            laneGuardClock,
+                            0f),
+                        0f),
+                "Consecutive choice screens must get a short second-tap guard while a final choice may continue into countdown without added blocking.");
+            Require(
+                InvokeRuntimeUiFloat("BuildLanePressColorBlend", 1f)
+                    > InvokeRuntimeUiFloat("BuildLaneHoldColorBlend", 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLaneHoldColorBlend", 2f), 0.24f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLanePressColorBlend", 2f), 0.72f),
+                "Lane touch emphasis must keep held fingers quieter than fresh taps and clamp both blends.");
+            int activeTargetLaneIndex = InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", goodSnapshot);
+            float idleWrongHold = InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 0, 1, 0f, 0.82f);
+            float farWrongHold = InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 0, 1, 1f, 0.20f);
+            float readyWrongHold = InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 0, 1, 1f, 0.82f);
+            float oppositeWrongHold = InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 0, 2, 1f, 0.82f);
+            Require(
+                activeTargetLaneIndex >= 0
+                    && InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", default(GreedLastRunSnapshot)) == -1
+                    && InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", countdownDangerSnapshot) == -1
+                    && InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", pausedFocusTimerSnapshot) == -1
+                    && InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", choiceCueSnapshot) == -1
+                    && InvokeRuntimeUiInt("BuildActiveRunTargetLaneIndex", stoppedCueSnapshot) == -1
+                    && readyWrongHold > farWrongHold
+                    && oppositeWrongHold > readyWrongHold
+                    && farWrongHold > idleWrongHold
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 1, 1, 1f, 0.82f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildLaneWrongHoldWarning", 0, -1, 1f, 0.82f), 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneWrongHoldColorBlend", readyWrongHold) > 0f
+                    && InvokeRuntimeUiFloat("BuildLaneWrongHoldScaleLift", readyWrongHold) > 0f
+                    && InvokeRuntimeUiFloat("BuildLaneWrongHoldLabelColorBlend", readyWrongHold) > 0f
+                    && InvokeRuntimeUiFloat("BuildLaneWrongHoldLabelScaleLift", readyWrongHold) > 0f,
+                "Held off-target lanes must warn only during active trap reading and grow clearer as the target lane approaches.");
+            float idleLaneScale = InvokeRuntimeUiFloat("BuildRunLaneSurfaceScale", 0f, 0f, 0f, 0f, 0f, 0f);
+            float heldLaneScale = InvokeRuntimeUiFloat("BuildRunLaneSurfaceScale", 0f, 1f, 0f, 0f, 0f, 0f);
+            float tappedLaneScale = InvokeRuntimeUiFloat("BuildRunLaneSurfaceScale", 0f, 0f, 1f, 0f, 0f, 0f);
+            float judgedLaneScale = InvokeRuntimeUiFloat("BuildRunLaneSurfaceScale", 0f, 0f, 0f, 1f, 0f, 0f);
+            Require(
+                heldLaneScale > idleLaneScale
+                    && tappedLaneScale > heldLaneScale
+                    && judgedLaneScale > tappedLaneScale,
+                "Run lane surface scale must read as hold < tap < judgement emphasis.");
+            Require(
+                InvokeRuntimeUiFloat("BuildRunLaneLabelScale", 1f, 0f, 0f, 0f)
+                    > InvokeRuntimeUiFloat("BuildRunLaneLabelScale", 0f, 0f, 1f, 0f)
+                    && InvokeRuntimeUiFloat("BuildRunLaneLabelScale", 0f, 0f, 1f, 0f)
+                        > InvokeRuntimeUiFloat("BuildRunLaneLabelScale", 0f, 1f, 0f, 0f),
+                "Run lane labels must prioritize exact-window readability over tap and hold emphasis.");
+            float exactLaneLabelBaseScale = InvokeRuntimeUiFloat("BuildRunLaneLabelScale", 1f, 0f, 0f, 0f);
+            float exactLaneLabelScaleX = InvokeRuntimeUiFloat("BuildRunLaneLabelScaleX", exactLaneLabelBaseScale, 1f);
+            float exactLaneLabelScaleY = InvokeRuntimeUiFloat("BuildRunLaneLabelScaleY", exactLaneLabelBaseScale, 1f);
+            Require(
+                exactLaneLabelScaleX > exactLaneLabelBaseScale
+                    && exactLaneLabelScaleY > exactLaneLabelScaleX
+                    && exactLaneLabelScaleY - exactLaneLabelScaleX > 0.026f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildRunLaneLabelScaleY", exactLaneLabelBaseScale, 0f),
+                        exactLaneLabelBaseScale),
+                "Run lane labels must tall-sharpen only on the exact target-lane pulse.");
+            float readyLaneLabelDownbeat = InvokeRuntimeUiFloat("BuildRunLaneLabelDownbeatLift", 1f, 0.78f, 1f);
+            float weakLaneLabelDownbeat = InvokeRuntimeUiFloat("BuildRunLaneLabelDownbeatLift", 1f, 0.12f, 0f);
+            float readyLaneLabelScaleX = InvokeRuntimeUiFloat("BuildRunLaneLabelScaleXWithDownbeat", exactLaneLabelBaseScale, readyLaneLabelDownbeat);
+            float readyLaneLabelScaleY = InvokeRuntimeUiFloat("BuildRunLaneLabelScaleYWithDownbeat", exactLaneLabelBaseScale, readyLaneLabelDownbeat);
+            Require(
+                readyLaneLabelDownbeat > weakLaneLabelDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunLaneLabelDownbeatLift", 0f, 0.78f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildRunLaneLabelDownbeatColorBlend", readyLaneLabelDownbeat) > 0f
+                    && InvokeRuntimeUiFloat("BuildRunLaneLabelScaleWithDownbeat", exactLaneLabelBaseScale, readyLaneLabelDownbeat)
+                        > exactLaneLabelBaseScale
+                    && readyLaneLabelScaleY > readyLaneLabelScaleX
+                    && readyLaneLabelScaleY - readyLaneLabelScaleX > 0.017f,
+                "Run target-lane labels must share the downbeat lift most clearly near the exact target window.");
+            Require(
+                InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyColorBlend", 1f)
+                    > InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyColorBlend", 0.25f)
+                    && InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyScaleLift", 1f)
+                        > InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyScaleLift", 0.25f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyColorBlend", 0f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunLaneLabelBeatCueUrgencyScaleLift", 0f), 0f),
+                "Run target-lane labels must inherit beat-cue urgency without waking when urgency is zero.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLaneJudgementTagLabel", GreedLastJudgementResult.Success, false) == "정확"
+                    && InvokeRuntimeUiLabel("BuildLaneJudgementTagLabel", GreedLastJudgementResult.Good, false) == "Good"
+                    && InvokeRuntimeUiLabel("BuildLaneJudgementTagLabel", GreedLastJudgementResult.Miss, false) == "Miss"
+                    && InvokeRuntimeUiLabel("BuildLaneJudgementTagLabel", GreedLastJudgementResult.Miss, true) == "정답",
+                "Lane judgement tags must distinguish exact, Good, miss, and wrong-channel target cues.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowRunTransientFeedback", goodSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunTransientFeedback", default(GreedLastRunSnapshot))
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunTransientFeedback", pausedFocusTimerSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunTransientFeedback", choiceCueSnapshot)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowRunTransientFeedback", stoppedCueSnapshot),
+                "Lane judgement tags, lane result pulses, miss shakes, input traces, marker impacts, screen flashes, afterimages, break lines, and judgement-line pulses must only survive during live run feedback windows.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowJudgementHistory", goodSnapshot, 1)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowJudgementHistory", goodSnapshot, 0)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowJudgementHistory", pausedFocusTimerSnapshot, 1)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowJudgementHistory", choiceCueSnapshot, 1)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowJudgementHistory", stoppedCueSnapshot, 1),
+                "Judgement-history afterimages must reuse the live transient-feedback visibility gate.");
+            float exactHistoryWeight = InvokeRuntimeUiFloat(
+                "BuildJudgementHistoryResultWeight",
+                GreedLastJudgementResult.Success,
+                false,
+                false);
+            float goodHistoryWeight = InvokeRuntimeUiFloat(
+                "BuildJudgementHistoryResultWeight",
+                GreedLastJudgementResult.Good,
+                false,
+                false);
+            float missHistoryWeight = InvokeRuntimeUiFloat(
+                "BuildJudgementHistoryResultWeight",
+                GreedLastJudgementResult.Miss,
+                false,
+                false);
+            Require(
+                exactHistoryWeight > missHistoryWeight
+                    && missHistoryWeight > goodHistoryWeight
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildJudgementHistoryResultWeight", GreedLastJudgementResult.None, false, false),
+                        0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementHistoryResultWeight", GreedLastJudgementResult.Success, true, true)
+                        >= exactHistoryWeight,
+                "Judgement-history result weights must rank exact, Miss, Good, and empty entries distinctly.");
+            Require(
+                InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.Success, false, false, true, true, 1f)
+                    > InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.Success, false, false, true, false, 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.Success, false, false, true, false, 0f)
+                        > InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.Good, false, false, true, false, 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.Good, false, false, true, false, 0f)
+                        > InvokeRuntimeUiFloat("BuildJudgementHistoryDotScale", GreedLastJudgementResult.None, false, false, false, false, 0f),
+                "Judgement-history dots must keep newest and exact entries visibly stronger than Good and empty slots.");
+            Require(
+                InvokeRuntimeUiInt("BuildJudgementHistoryActionLabelAlpha", GreedLastJudgementResult.Success, false, false, true, 1f)
+                    > InvokeRuntimeUiInt("BuildJudgementHistoryActionLabelAlpha", GreedLastJudgementResult.Good, false, false, false, 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementHistoryActionLabelScale", GreedLastJudgementResult.Miss, false, false, true, false, 0f)
+                        > InvokeRuntimeUiFloat("BuildJudgementHistoryActionLabelScale", GreedLastJudgementResult.Good, false, false, true, false, 0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildJudgementHistoryActionLabelScale", GreedLastJudgementResult.None, false, false, false, false, 0f),
+                        0.86f),
+                "Judgement-history action symbols must inherit result weight and keep empty slots quiet.");
+            Color32 exactHistoryActionColor = InvokeRuntimeUiColor("BuildJudgementHistoryActionLabelColor", GreedLastJudgementResult.Success, false, true, true, false, 0f);
+            Color32 goodHistoryActionColor = InvokeRuntimeUiColor("BuildJudgementHistoryActionLabelColor", GreedLastJudgementResult.Good, false, false, true, false, 0f);
+            Color32 missHistoryActionColor = InvokeRuntimeUiColor("BuildJudgementHistoryActionLabelColor", GreedLastJudgementResult.Miss, false, false, true, false, 0f);
+            Color32 emptyHistoryActionColor = InvokeRuntimeUiColor("BuildJudgementHistoryActionLabelColor", GreedLastJudgementResult.None, false, false, false, false, 0f);
+            Color32 focusHistoryActionColor = InvokeRuntimeUiColor("BuildJudgementHistoryActionLabelColor", GreedLastJudgementResult.Success, true, true, true, false, 0f);
+            Require(
+                exactHistoryActionColor.a > goodHistoryActionColor.a
+                    && goodHistoryActionColor.b > goodHistoryActionColor.r
+                    && missHistoryActionColor.r > missHistoryActionColor.g
+                    && emptyHistoryActionColor.a == 0
+                    && focusHistoryActionColor.r > exactHistoryActionColor.r,
+                "Judgement-history action-symbol colors must separate exact, Good, Miss, focus, and empty slots.");
+            int exactAfterimageAlpha = InvokeRuntimeUiInt("BuildResolvedTrapAfterimageAlpha", GreedLastJudgementResult.Success, 1f);
+            int goodAfterimageAlpha = InvokeRuntimeUiInt("BuildResolvedTrapAfterimageAlpha", GreedLastJudgementResult.Good, 1f);
+            int missAfterimageAlpha = InvokeRuntimeUiInt("BuildResolvedTrapAfterimageAlpha", GreedLastJudgementResult.Miss, 1f);
+            int exactTrailAlpha = InvokeRuntimeUiInt("BuildResolvedAvoidanceTrailAlpha", GreedLastJudgementResult.Success, 0.5f, 1f);
+            int goodTrailAlpha = InvokeRuntimeUiInt("BuildResolvedAvoidanceTrailAlpha", GreedLastJudgementResult.Good, 0.5f, 1f);
+            Require(
+                missAfterimageAlpha > exactAfterimageAlpha
+                    && exactAfterimageAlpha > goodAfterimageAlpha
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildResolvedTrapAvoidanceStrength", GreedLastJudgementResult.Success), 1f)
+                    && InvokeRuntimeUiFloat("BuildResolvedTrapAvoidanceStrength", GreedLastJudgementResult.Good)
+                        < InvokeRuntimeUiFloat("BuildResolvedTrapAvoidanceStrength", GreedLastJudgementResult.Success)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildResolvedTrapAvoidanceStrength", GreedLastJudgementResult.Miss), 0f),
+                "Resolved trap afterimages must separate exact, Good, and Miss intensity.");
+            Require(
+                exactTrailAlpha > goodTrailAlpha
+                    && goodTrailAlpha > InvokeRuntimeUiInt("BuildResolvedAvoidanceTrailAlpha", GreedLastJudgementResult.Miss, 0.5f, 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiInt("BuildResolvedAvoidanceTrailAlpha", GreedLastJudgementResult.Success, 0.5f, 0f), 0)
+                    && InvokeRuntimeUiFloat("BuildResolvedAvoidanceTrailScale", GreedLastJudgementResult.Success, 0.5f)
+                        > InvokeRuntimeUiFloat("BuildResolvedAvoidanceTrailScale", GreedLastJudgementResult.Good, 0.5f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildResolvedAvoidanceTrailScale", GreedLastJudgementResult.Miss, 0.5f), 1f),
+                "Resolved avoidance trails must appear for exact/Good only and remain stronger on exact clears.");
+            GreedLastPatternModel wakeJumpPattern = new GreedLastPatternModel(
+                "center_floor_perfect",
+                GreedLastRunChannel.Center,
+                GreedLastTimingType.Perfect,
+                "정면 바닥 회피",
+                0.45f,
+                1.05f,
+                0.10f,
+                0.30f,
+                1.48f,
+                GreedLastAvoidanceType.Jump);
+            GreedLastPatternModel wakeSlidePattern = new GreedLastPatternModel(
+                "center_gate_clutch",
+                GreedLastRunChannel.Center,
+                GreedLastTimingType.Clutch,
+                "정면 상단 회피",
+                0.55f,
+                1.28f,
+                0.13f,
+                0.36f,
+                1.72f,
+                GreedLastAvoidanceType.Slide);
+            GreedLastPatternModel wakeTwistPattern = new GreedLastPatternModel(
+                "right_rotate_corridor_perfect",
+                GreedLastRunChannel.Right,
+                GreedLastTimingType.Perfect,
+                "우회전 통로 회피",
+                0.48f,
+                1.12f,
+                0.11f,
+                0.32f,
+                1.54f,
+                GreedLastAvoidanceType.Twist);
+            int exactWakeAlpha = InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Success, 0.5f, 1f);
+            int goodWakeAlpha = InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Good, 0.5f, 1f);
+            int missWakeAlpha = InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Miss, 0.5f, 1f);
+            Color32 exactWakeColor = InvokeRuntimeUiColor("BuildResolvedJudgementImpactWakeColor", GreedLastJudgementResult.Success);
+            Color32 goodWakeColor = InvokeRuntimeUiColor("BuildResolvedJudgementImpactWakeColor", GreedLastJudgementResult.Good);
+            Color32 missWakeColor = InvokeRuntimeUiColor("BuildResolvedJudgementImpactWakeColor", GreedLastJudgementResult.Miss);
+            Vector4 jumpWake = InvokeRuntimeUiVector4("BuildResolvedJudgementImpactWakeLayout", wakeJumpPattern, GreedLastJudgementResult.Success, 0.5f);
+            Vector4 slideWake = InvokeRuntimeUiVector4("BuildResolvedJudgementImpactWakeLayout", wakeSlidePattern, GreedLastJudgementResult.Success, 0.5f);
+            Vector4 twistWake = InvokeRuntimeUiVector4("BuildResolvedJudgementImpactWakeLayout", wakeTwistPattern, GreedLastJudgementResult.Success, 0.5f);
+            Require(
+                exactWakeAlpha > goodWakeAlpha
+                    && missWakeAlpha > goodWakeAlpha
+                    && InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.None, 0.5f, 1f) == 0
+                    && InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Success, 0.5f, 0f) == 0
+                    && InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Miss, 0.5f)
+                        > InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Success, 0.5f)
+                    && InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Success, 0.5f)
+                        > InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Good, 0.5f)
+                    && InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeColorBlend", GreedLastJudgementResult.Success, 0.5f)
+                        > InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeColorBlend", GreedLastJudgementResult.Good, 0.5f)
+                    && exactWakeColor.g > goodWakeColor.g
+                    && goodWakeColor.b > goodWakeColor.r
+                    && missWakeColor.r > missWakeColor.g,
+                "Resolved judgement impact wakes must separate exact, Good, Miss, fade gates, and result colors.");
+            Require(
+                jumpWake.z > jumpWake.w * 7f
+                    && jumpWake.y < slideWake.y
+                    && slideWake.w > jumpWake.w
+                    && twistWake.w > twistWake.z * 4f
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeAngle", wakeTwistPattern, GreedLastJudgementResult.Success, 0.5f)) > 20f,
+                "Resolved judgement impact wakes must keep jump floor sweeps, slide overhead pads, and twist side columns distinct.");
+            float freshJudgementTagAlpha = InvokeRuntimeUiFloat("BuildLaneJudgementTagAlpha", 0.46f, 0f);
+            float midJudgementTagAlpha = InvokeRuntimeUiFloat("BuildLaneJudgementTagAlpha", 0.23f, 0f);
+            float fadedJudgementTagAlpha = InvokeRuntimeUiFloat("BuildLaneJudgementTagAlpha", 0f, 0f);
+            Require(
+                freshJudgementTagAlpha > midJudgementTagAlpha
+                    && midJudgementTagAlpha > fadedJudgementTagAlpha
+                    && InvokeRuntimeUiFloat("BuildLaneJudgementTagScale", 0.23f, 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneJudgementTagScale", 0.46f, 0f)
+                    && InvokeRuntimeUiFloat("BuildLaneJudgementTagRise", 0.02f)
+                        > InvokeRuntimeUiFloat("BuildLaneJudgementTagRise", 0.46f),
+                "Lane judgement tags must fade, pop, and rise after each lane result.");
+            float exactTagScale = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagScaleForResult",
+                0.23f,
+                0.5f,
+                GreedLastJudgementResult.Success);
+            float goodTagScale = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagScaleForResult",
+                0.23f,
+                0.5f,
+                GreedLastJudgementResult.Good);
+            float missTagScale = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagScaleForResult",
+                0.23f,
+                0.5f,
+                GreedLastJudgementResult.Miss);
+            float exactTagRise = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagRiseForResult",
+                0.08f,
+                GreedLastJudgementResult.Success);
+            float goodTagRise = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagRiseForResult",
+                0.08f,
+                GreedLastJudgementResult.Good);
+            float missTagRise = InvokeRuntimeUiFloat(
+                "BuildLaneJudgementTagRiseForResult",
+                0.08f,
+                GreedLastJudgementResult.Miss);
+            Require(
+                exactTagScale > missTagScale
+                    && missTagScale > goodTagScale
+                    && exactTagRise > goodTagRise
+                    && goodTagRise > missTagRise,
+                "Lane judgement tags must give exact results the highest pop and leave misses heavier/closer to the lane.");
+            float exactLinePulseStrength = InvokeRuntimeUiFloat("BuildJudgementLinePulseStrength", GreedLastJudgementResult.Success);
+            float goodLinePulseStrength = InvokeRuntimeUiFloat("BuildJudgementLinePulseStrength", GreedLastJudgementResult.Good);
+            float missLinePulseStrength = InvokeRuntimeUiFloat("BuildJudgementLinePulseStrength", GreedLastJudgementResult.Miss);
+            Require(
+                exactLinePulseStrength > missLinePulseStrength
+                    && missLinePulseStrength > goodLinePulseStrength
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildJudgementLinePulseStrength", GreedLastJudgementResult.None), 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementLineScaleY", 1f, exactLinePulseStrength)
+                        > InvokeRuntimeUiFloat("BuildJudgementLineScaleY", 0f, goodLinePulseStrength),
+                "Judgement-line pulses must separate exact reward, miss impact, and Good fallback strength.");
+            float inactiveLineExactLock = InvokeRuntimeUiFloat("BuildJudgementLineExactLock", 0f, 1f);
+            float exactLineLock = InvokeRuntimeUiFloat("BuildJudgementLineExactLock", 1f, 1f);
+            float exactLineScaleXLift = InvokeRuntimeUiFloat("BuildJudgementLineScaleX", 1f, 0f, exactLineLock)
+                - InvokeRuntimeUiFloat("BuildJudgementLineContactScaleX", 1f, 0f);
+            float exactLineScaleYLift = InvokeRuntimeUiFloat("BuildJudgementLineExactScaleYLift", exactLineLock);
+            Require(
+                Mathf.Approximately(inactiveLineExactLock, 0f)
+                    && exactLineLock > inactiveLineExactLock
+                    && InvokeRuntimeUiFloat("BuildJudgementLineExactColorBlend", 1f, exactLineLock) > 0.38f
+                    && InvokeRuntimeUiFloat("BuildJudgementLineScaleX", 1f, 0f, exactLineLock)
+                        > InvokeRuntimeUiFloat("BuildJudgementLineContactScaleX", 1f, 0f)
+                    && exactLineScaleYLift > exactLineScaleXLift
+                    && exactLineScaleYLift > 0.060f,
+                "Judgement-line exact lock must add a small color and tall-sharpen lift only at exact timing.");
+            float farLineContact = InvokeRuntimeUiFloat(
+                "BuildJudgementLineContactStrength",
+                true,
+                false,
+                -0.40f,
+                0.08f,
+                0.18f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                0.5f);
+            float nearLineContact = InvokeRuntimeUiFloat(
+                "BuildJudgementLineContactStrength",
+                true,
+                false,
+                -0.015f,
+                0.08f,
+                0.18f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                1f);
+            float blockedLineContact = InvokeRuntimeUiFloat(
+                "BuildJudgementLineContactStrength",
+                true,
+                true,
+                -0.015f,
+                0.08f,
+                0.18f,
+                GreedLastTimingType.Perfect,
+                false,
+                1,
+                1f);
+            float threatLineContact = InvokeRuntimeUiFloat(
+                "BuildJudgementLineContactStrength",
+                true,
+                false,
+                -0.015f,
+                0.08f,
+                0.18f,
+                GreedLastTimingType.Clutch,
+                true,
+                5,
+                1f);
+            Require(
+                nearLineContact > farLineContact
+                    && threatLineContact > nearLineContact
+                    && Mathf.Approximately(blockedLineContact, 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementLineContactScaleX", nearLineContact, exactLinePulseStrength) > 1f
+                    && InvokeRuntimeUiFloat("BuildJudgementLineContactScaleYLift", nearLineContact) > 0f
+                    && InvokeRuntimeUiFloat("BuildJudgementLineContactColorBlend", nearLineContact) > 0f,
+                "Judgement-line contact must brighten and widen near the exact window, then disappear while blocked.");
+            float readyLineDownbeatLift = InvokeRuntimeUiFloat("BuildJudgementLineDownbeatLift", 1f, nearLineContact, exactLineLock);
+            float weakLineDownbeatLift = InvokeRuntimeUiFloat("BuildJudgementLineDownbeatLift", 1f, farLineContact, inactiveLineExactLock);
+            Require(
+                readyLineDownbeatLift > weakLineDownbeatLift
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildJudgementLineDownbeatLift", 0f, nearLineContact, exactLineLock), 0f)
+                    && InvokeRuntimeUiFloat("BuildJudgementLineDownbeatColorBlend", readyLineDownbeatLift) > 0f
+                    && InvokeRuntimeUiFloat("BuildJudgementLineScaleXWithDownbeat", 1f, readyLineDownbeatLift) > 1f
+                    && InvokeRuntimeUiFloat("BuildJudgementLineDownbeatScaleYLift", readyLineDownbeatLift)
+                        > InvokeRuntimeUiFloat("BuildJudgementLineDownbeatScaleYLift", weakLineDownbeatLift),
+                "Judgement-line downbeat lift must be strongest when the trap is close to the input line.");
+            Require(
+                InvokeRuntimeUiInt("BuildJudgementLineBeatCueUrgencyAlphaLift", 1f)
+                    > InvokeRuntimeUiInt("BuildJudgementLineBeatCueUrgencyAlphaLift", 0.25f)
+                    && InvokeRuntimeUiFloat("BuildJudgementLineBeatCueUrgencyColorBlend", 1f)
+                        > InvokeRuntimeUiFloat("BuildJudgementLineBeatCueUrgencyColorBlend", 0.25f)
+                    && InvokeRuntimeUiFloat("BuildJudgementLineBeatCueUrgencyScaleYLift", 1f)
+                        > InvokeRuntimeUiFloat("BuildJudgementLineBeatCueUrgencyScaleXLift", 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiInt("BuildJudgementLineBeatCueUrgencyAlphaLift", 0f), 0)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildJudgementLineBeatCueUrgencyColorBlend", 0f), 0f),
+                "Judgement-line beat-cue urgency must sharpen the input line only when the live beat cue is urgent.");
+            float freshBreakLineAlpha = InvokeRuntimeUiFloat("BuildRhythmBreakLineAlpha", 0.30f);
+            float midBreakLineAlpha = InvokeRuntimeUiFloat("BuildRhythmBreakLineAlpha", 0.15f);
+            float fadedBreakLineAlpha = InvokeRuntimeUiFloat("BuildRhythmBreakLineAlpha", 0f);
+            Require(
+                freshBreakLineAlpha > midBreakLineAlpha
+                    && midBreakLineAlpha > fadedBreakLineAlpha
+                    && Mathf.Approximately(fadedBreakLineAlpha, 0f)
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineWidth", 1f)
+                        > InvokeRuntimeUiFloat("BuildRhythmBreakLineWidth", 0f)
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineThickness", 1f)
+                        > InvokeRuntimeUiFloat("BuildRhythmBreakLineThickness", 0f)
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineAngle", 1f)
+                        != InvokeRuntimeUiFloat("BuildRhythmBreakLineAngle", 0f)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRhythmBreakLineShake", 0.5f)) > 0f,
+                "Rhythm-break lines must flash wide and red on misses, then thin and fade while shaking.");
+            float weakComboBreakStrength = InvokeRuntimeUiFloat("BuildRhythmBreakLineComboStrength", 2);
+            float chainComboBreakStrength = InvokeRuntimeUiFloat("BuildRhythmBreakLineComboStrength", 5);
+            float highComboBreakStrength = InvokeRuntimeUiFloat("BuildRhythmBreakLineComboStrength", 12);
+            Require(
+                Mathf.Approximately(weakComboBreakStrength, 0f)
+                    && chainComboBreakStrength > weakComboBreakStrength
+                    && highComboBreakStrength > chainComboBreakStrength
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineWidthWithStrength", 1f, highComboBreakStrength)
+                        > InvokeRuntimeUiFloat("BuildRhythmBreakLineWidthWithStrength", 1f, weakComboBreakStrength)
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineThicknessWithStrength", 1f, highComboBreakStrength)
+                        > InvokeRuntimeUiFloat("BuildRhythmBreakLineThicknessWithStrength", 1f, weakComboBreakStrength)
+                    && InvokeRuntimeUiFloat("BuildRhythmBreakLineAlphaWithStrength", 0.30f, highComboBreakStrength)
+                        >= InvokeRuntimeUiFloat("BuildRhythmBreakLineAlphaWithStrength", 0.30f, weakComboBreakStrength)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRhythmBreakLineShakeWithStrength", 0.5f, highComboBreakStrength))
+                        > Mathf.Abs(InvokeRuntimeUiFloat("BuildRhythmBreakLineShakeWithStrength", 0.5f, weakComboBreakStrength)),
+                "Rhythm-break lines must hit wider, thicker, and shakier when a Miss breaks a real chain.");
+            var burstCore = new GreedLastRunCore();
+            GreedLastRunSnapshot burstSnapshot = default;
+            float burstClock = now + 12f;
+            burstCore.SnapshotChanged += value => burstSnapshot = value;
+            burstCore.Enter("forward payoff burst smoke", refillRun: false);
+            burstCore.HandleInput(GreedLastRunChannel.Center, burstClock += 0.01f);
+            StartBufferedPattern(burstCore, ref burstSnapshot, ref burstClock);
+            burstCore.HandleInput(
+                burstSnapshot.Pattern.Channel,
+                burstClock + burstSnapshot.Pattern.CoreSeconds - burstCore.InputTimingOffsetSeconds);
+            Require(burstSnapshot.LastResult == GreedLastJudgementResult.Success, "The forward burst smoke must create an exact success snapshot.");
+            float successBurstStrength = InvokeRuntimeUiFloat("BuildForwardPayoffBurstStrength", burstSnapshot);
+            float freshForwardBurst = InvokeRuntimeUiFloat("BuildForwardPayoffBurstPulse", 0.38f, successBurstStrength);
+            float midForwardBurst = InvokeRuntimeUiFloat("BuildForwardPayoffBurstPulse", 0.19f, successBurstStrength);
+            float fadedForwardBurst = InvokeRuntimeUiFloat("BuildForwardPayoffBurstPulse", 0f, successBurstStrength);
+
+            var goodBurstCore = new GreedLastRunCore();
+            GreedLastRunSnapshot goodBurstSnapshot = default;
+            float goodBurstClock = now + 20f;
+            goodBurstCore.SnapshotChanged += value => goodBurstSnapshot = value;
+            goodBurstCore.Enter("forward Good burst smoke", refillRun: false);
+            goodBurstCore.HandleInput(GreedLastRunChannel.Center, goodBurstClock += 0.01f);
+            StartBufferedPattern(goodBurstCore, ref goodBurstSnapshot, ref goodBurstClock);
+            float goodOffset = (goodBurstSnapshot.Pattern.SuccessWindowSeconds + goodBurstSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
+            goodBurstCore.HandleInput(
+                goodBurstSnapshot.Pattern.Channel,
+                goodBurstClock + goodBurstSnapshot.Pattern.CoreSeconds - goodBurstCore.InputTimingOffsetSeconds + goodOffset);
+            Require(goodBurstSnapshot.LastResult == GreedLastJudgementResult.Good, "The forward burst smoke must create a Good snapshot.");
+            float goodBurstStrength = InvokeRuntimeUiFloat("BuildForwardPayoffBurstStrength", goodBurstSnapshot);
+            Require(
+                successBurstStrength > goodBurstStrength
+                    && goodBurstStrength > 0f
+                    && freshForwardBurst > midForwardBurst
+                    && midForwardBurst > fadedForwardBurst
+                    && Mathf.Approximately(fadedForwardBurst, 0f),
+                "Forward payoff bursts must reward exact hits more than Good hits and then decay cleanly.");
+            float freshGoodForwardBurst = InvokeRuntimeUiFloat("BuildForwardPayoffBurstPulse", 0.38f, goodBurstStrength);
+            float baseMotionBias = InvokeRuntimeUiFloat("BuildForwardMotionSpeedBias", goodBurstSnapshot, 0.5f, 0f);
+            float goodMotionBias = InvokeRuntimeUiFloat("BuildForwardMotionSpeedBias", goodBurstSnapshot, 0.5f, freshGoodForwardBurst);
+            float exactMotionBias = InvokeRuntimeUiFloat("BuildForwardMotionSpeedBias", goodBurstSnapshot, 0.5f, freshForwardBurst);
+
+            var missDragCore = new GreedLastRunCore();
+            GreedLastRunSnapshot missDragSnapshot = default;
+            float missDragClock = now + 28f;
+            missDragCore.SnapshotChanged += value => missDragSnapshot = value;
+            missDragCore.Enter("forward miss drag smoke", refillRun: false);
+            missDragCore.HandleInput(GreedLastRunChannel.Center, missDragClock += 0.01f);
+            StartBufferedPattern(missDragCore, ref missDragSnapshot, ref missDragClock);
+            GreedLastRunChannel missDragWrongChannel = missDragSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+                ? GreedLastRunChannel.Right
+                : GreedLastRunChannel.Left;
+            missDragCore.HandleInput(
+                missDragWrongChannel,
+                missDragClock + missDragSnapshot.Pattern.CoreSeconds - missDragCore.InputTimingOffsetSeconds);
+            Require(
+                missDragSnapshot.LastResult == GreedLastJudgementResult.Miss
+                    && missDragSnapshot.StaggerRemainingSeconds > 0f,
+                "The forward drag smoke must create a real staggered miss snapshot.");
+            float staggerMotionBias = InvokeRuntimeUiFloat("BuildForwardMotionSpeedBias", missDragSnapshot, 0.5f, 0f);
+            Require(
+                exactMotionBias > goodMotionBias
+                    && goodMotionBias > baseMotionBias
+                    && staggerMotionBias < baseMotionBias,
+                "Forward motion must surge on exact/Good payoff and slow during miss recovery.");
+            float missRecoveryPressure = InvokeRuntimeUiFloat("BuildMissRecoveryMotionPressure", missDragSnapshot);
+            float safeRecoveryPressure = InvokeRuntimeUiFloat("BuildMissRecoveryMotionPressure", goodBurstSnapshot);
+            float exactLineSurge = InvokeRuntimeUiFloat(
+                "BuildForwardMotionLineResultSurge",
+                GreedLastJudgementResult.Success,
+                freshForwardBurst,
+                true,
+                0.75f);
+            float goodLineSurge = InvokeRuntimeUiFloat(
+                "BuildForwardMotionLineResultSurge",
+                GreedLastJudgementResult.Good,
+                freshGoodForwardBurst,
+                false,
+                0.5f);
+            float missLineSurge = InvokeRuntimeUiFloat(
+                "BuildForwardMotionLineResultSurge",
+                GreedLastJudgementResult.Miss,
+                freshForwardBurst,
+                false,
+                0.5f);
+            float missLineDrag = InvokeRuntimeUiFloat(
+                "BuildForwardMotionLineDrag",
+                GreedLastJudgementResult.Miss,
+                missRecoveryPressure);
+            float safeLineDrag = InvokeRuntimeUiFloat(
+                "BuildForwardMotionLineDrag",
+                GreedLastJudgementResult.Success,
+                0f);
+            Require(
+                exactLineSurge > goodLineSurge
+                    && goodLineSurge > missLineSurge
+                    && Mathf.Approximately(missLineSurge, 0f)
+                    && missLineDrag > 0f
+                    && Mathf.Approximately(safeLineDrag, 0f),
+                "Forward motion lines must distinguish exact surge, Good surge, and miss drag.");
+            Require(
+                InvokeRuntimeUiFloat("BuildForwardMotionLineWidthScale", exactLineSurge, 0f, 0) > 1f
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineHeightScale", exactLineSurge, 0f, 0) > 1f
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineHeightScale", 0f, missLineDrag, 0) < 1f
+                    && InvokeRuntimeUiInt("BuildForwardMotionLineAlphaLift", exactLineSurge, 0f, 0)
+                        > InvokeRuntimeUiInt("BuildForwardMotionLineAlphaLift", 0f, 0f, 0)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineColorBlend", exactLineSurge, 0f, 0)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineColorBlend", goodLineSurge, missLineDrag, 0),
+                "Forward motion lines must stretch/brighten on exact payoff and shorten under miss drag.");
+            float nearLineDownbeat = InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 1f, true, -0.02f, 0.10f, 0.86f, 0);
+            float farLineDownbeat = InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 1f, true, -0.60f, 0.10f, 0.86f, 0);
+            float shallowLineDownbeat = InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 1f, true, -0.02f, 0.10f, 0.18f, 0);
+            float rearLineDownbeat = InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 1f, true, -0.02f, 0.10f, 0.86f, 8);
+            Require(
+                nearLineDownbeat > farLineDownbeat
+                    && nearLineDownbeat > shallowLineDownbeat
+                    && nearLineDownbeat > rearLineDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 1f, false, -0.02f, 0.10f, 0.86f, 0), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatLift", 0f, true, -0.02f, 0.10f, 0.86f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatWidthScale", nearLineDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatHeightScale", nearLineDownbeat) > 1f
+                    && InvokeRuntimeUiInt("BuildForwardMotionLineDownbeatAlphaLift", nearLineDownbeat)
+                        > InvokeRuntimeUiInt("BuildForwardMotionLineDownbeatAlphaLift", farLineDownbeat)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatColorBlend", nearLineDownbeat)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineDownbeatColorBlend", farLineDownbeat),
+                "Forward motion lines must catch downbeat breath strongest near the judgement moment and the foreground.");
+            float nearLineBeatCueUrgency = InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgency", 1f, 0.86f, 0);
+            float shallowLineBeatCueUrgency = InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgency", 1f, 0.18f, 0);
+            float rearLineBeatCueUrgency = InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgency", 1f, 0.86f, 8);
+            Require(
+                nearLineBeatCueUrgency > shallowLineBeatCueUrgency
+                    && nearLineBeatCueUrgency > rearLineBeatCueUrgency
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgency", 0f, 0.86f, 0), 0f)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgencyWidthScale", nearLineBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgencyHeightScale", nearLineBeatCueUrgency) > 1f
+                    && InvokeRuntimeUiInt("BuildForwardMotionLineBeatCueUrgencyAlphaLift", nearLineBeatCueUrgency)
+                        > InvokeRuntimeUiInt("BuildForwardMotionLineBeatCueUrgencyAlphaLift", shallowLineBeatCueUrgency)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgencyColorBlend", nearLineBeatCueUrgency)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineBeatCueUrgencyColorBlend", shallowLineBeatCueUrgency),
+                "Forward motion lines must receive beat-cue urgency strongest near the live judgement foreground.");
+            float leftRotationLineDrift = InvokeRuntimeUiFloat("BuildForwardMotionLineRotationDrift", -1f, 1f, 0.86f, 0);
+            float rightRotationLineDrift = InvokeRuntimeUiFloat("BuildForwardMotionLineRotationDrift", 1f, 1f, 0.86f, 0);
+            float neutralRotationLineDrift = InvokeRuntimeUiFloat("BuildForwardMotionLineRotationDrift", 0f, 1f, 0.86f, 0);
+            float nearRotationLineAngle = InvokeRuntimeUiFloat("BuildForwardMotionLineRotationAngle", 1f, 1f, 0.86f, 0);
+            float farRotationLineAngle = InvokeRuntimeUiFloat("BuildForwardMotionLineRotationAngle", 1f, 0.25f, 0.86f, 0);
+            Require(
+                leftRotationLineDrift < 0f
+                    && rightRotationLineDrift > 0f
+                    && Mathf.Approximately(neutralRotationLineDrift, 0f)
+                    && nearRotationLineAngle > farRotationLineAngle
+                    && nearRotationLineAngle <= 4.2f
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineRotationWidthScale", 1f, 0.86f, 0)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineRotationWidthScale", 0f, 0.86f, 0)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineRotationHeightScale", 1f, 0.86f, 0)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineRotationHeightScale", 0f, 0.86f, 0)
+                    && InvokeRuntimeUiInt("BuildForwardMotionLineRotationAlphaLift", 1f, 0.86f, 0)
+                        > InvokeRuntimeUiInt("BuildForwardMotionLineRotationAlphaLift", 0.25f, 0.86f, 0)
+                    && InvokeRuntimeUiFloat("BuildForwardMotionLineRotationColorBlend", 1f, 0.86f, 0)
+                        > InvokeRuntimeUiFloat("BuildForwardMotionLineRotationColorBlend", 0.25f, 0.86f, 0),
+                "Forward motion lines must lean subtly into rotation corridors without moving during ordinary straight-run hazards.");
+            int baseRecoveryAlpha = InvokeRuntimeUiInt("BuildMissRecoveryMotionAlpha", 100, 0f, 0.25f);
+            int dimmedRecoveryAlpha = InvokeRuntimeUiInt("BuildMissRecoveryMotionAlpha", 100, missRecoveryPressure, 0.25f);
+            Color32 neutralMotionColor = new Color32(100, 150, 140, 255);
+            Color32 pressuredMotionColor = InvokeRuntimeUiColor(
+                "BuildMissRecoveryMotionTint",
+                neutralMotionColor,
+                missRecoveryPressure,
+                0.5f);
+            Require(
+                missRecoveryPressure > 0f
+                    && Mathf.Approximately(safeRecoveryPressure, 0f)
+                    && baseRecoveryAlpha == 100
+                    && dimmedRecoveryAlpha < baseRecoveryAlpha
+                    && pressuredMotionColor.r > neutralMotionColor.r
+                    && pressuredMotionColor.g < neutralMotionColor.g
+                    && pressuredMotionColor.b < neutralMotionColor.b,
+                "Miss recovery must expose a shared motion-pressure tint and dimming contract.");
             float normalTargetActionVolume = InvokeRuntimeUiFloat("BuildTargetActionCueVolume", goodSnapshot);
             Require(
                 normalTargetActionVolume > 0.105f && normalTargetActionVolume < 0.12f,
                 "The normal-run target action cue must keep a slight payoff accent while staying quieter than the timing cue.");
+            float startCountdownBeatVolume = InvokeRuntimeUiFloat("BuildCountdownBeatVolumeFromValues", false, false, 1.2f, false, 1);
+            float resumeCountdownBeatVolume = InvokeRuntimeUiFloat("BuildCountdownBeatVolumeFromValues", true, false, 1.2f, false, 1);
+            float activeResumeCountdownBeatVolume = InvokeRuntimeUiFloat("BuildCountdownBeatVolumeFromValues", true, true, 1.2f, false, 1);
+            float goThreatCountdownBeatVolume = InvokeRuntimeUiFloat("BuildCountdownBeatVolumeFromValues", true, true, 0.2f, true, 5);
+            Require(
+                resumeCountdownBeatVolume > startCountdownBeatVolume
+                    && activeResumeCountdownBeatVolume > resumeCountdownBeatVolume
+                    && goThreatCountdownBeatVolume > activeResumeCountdownBeatVolume
+                    && goThreatCountdownBeatVolume <= 0.24f,
+                "Countdown beat volume must make resume, active-trap re-entry, and high-threat GO progressively clearer without clipping.");
+            float startCountdownHaptic = InvokeRuntimeUiFloat("BuildCountdownBeatHapticDurationFromValues", false, false, 1.2f, false, 1);
+            float resumeCountdownHaptic = InvokeRuntimeUiFloat("BuildCountdownBeatHapticDurationFromValues", true, false, 1.2f, false, 1);
+            float activeResumeCountdownHaptic = InvokeRuntimeUiFloat("BuildCountdownBeatHapticDurationFromValues", true, true, 1.2f, false, 1);
+            float goThreatCountdownHaptic = InvokeRuntimeUiFloat("BuildCountdownBeatHapticDurationFromValues", true, true, 0.2f, true, 5);
+            Require(
+                resumeCountdownHaptic > startCountdownHaptic
+                    && activeResumeCountdownHaptic > resumeCountdownHaptic
+                    && goThreatCountdownHaptic > activeResumeCountdownHaptic
+                    && goThreatCountdownHaptic <= 0.045f,
+                "Countdown beat haptics must keep start taps subtle, resume taps clearer, and high-threat GO strongest without becoming a live metronome.");
+            float startLaunchCueVolume = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchCueVolume",
+                true,
+                false,
+                false,
+                false,
+                1);
+            float resumeLaunchCueVolume = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchCueVolume",
+                true,
+                true,
+                true,
+                false,
+                1);
+            float infiniteLaunchCueVolume = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchCueVolume",
+                true,
+                true,
+                true,
+                true,
+                5);
+            float startLaunchHaptic = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchHapticDuration",
+                true,
+                false,
+                false,
+                false,
+                1);
+            float resumeLaunchHaptic = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchHapticDuration",
+                true,
+                true,
+                true,
+                false,
+                1);
+            float infiniteLaunchHaptic = InvokeRuntimeUiFloat(
+                "BuildStraightRunLaunchHapticDuration",
+                true,
+                true,
+                true,
+                true,
+                5);
+            Require(
+                startLaunchCueVolume > startCountdownBeatVolume
+                    && resumeLaunchCueVolume > startLaunchCueVolume
+                    && infiniteLaunchCueVolume > resumeLaunchCueVolume
+                    && infiniteLaunchCueVolume <= 0.25f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStraightRunLaunchCueVolume", false, true, true, true, 5),
+                        0f)
+                    && resumeLaunchHaptic > startLaunchHaptic
+                    && infiniteLaunchHaptic > resumeLaunchHaptic
+                    && infiniteLaunchHaptic <= 0.032f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildStraightRunLaunchHapticDuration", false, true, true, true, 5),
+                        0f),
+                "A real GO release must play one bounded launch beat and haptic, with resume and infinite pressure slightly stronger while cancelled countdowns stay silent.");
+            float normalTrapLaneCueVolume = InvokeRuntimeUiFloat(
+                "BuildTrapEntryLaneCueVolume",
+                false,
+                false,
+                false,
+                1);
+            float practiceFirstTrapLaneCueVolume = InvokeRuntimeUiFloat(
+                "BuildTrapEntryLaneCueVolume",
+                true,
+                true,
+                false,
+                1);
+            float normalFirstTrapLaneCueVolume = InvokeRuntimeUiFloat(
+                "BuildTrapEntryLaneCueVolume",
+                true,
+                false,
+                false,
+                1);
+            float infiniteFirstTrapLaneCueVolume = InvokeRuntimeUiFloat(
+                "BuildTrapEntryLaneCueVolume",
+                true,
+                false,
+                true,
+                5);
+            Require(
+                Mathf.Approximately(normalTrapLaneCueVolume, 0.24f)
+                    && practiceFirstTrapLaneCueVolume > normalTrapLaneCueVolume
+                    && normalFirstTrapLaneCueVolume > practiceFirstTrapLaneCueVolume
+                    && infiniteFirstTrapLaneCueVolume > normalFirstTrapLaneCueVolume
+                    && infiniteFirstTrapLaneCueVolume <= 0.29f,
+                "Only the first trap of a fresh run may lift the directional lane cue, with practice softer and infinite threat still bounded.");
             var highThreatCueCore = new GreedLastRunCore();
             GreedLastRunSnapshot highThreatCueSnapshot = default;
             highThreatCueCore.SnapshotChanged += value => highThreatCueSnapshot = value;
@@ -1051,17 +6241,114 @@ namespace GreedLast.Editor
                     && highThreatProgressLine != lowThreatProgressLine,
                 "High-threat infinite progress must visibly change with threat pressure. Actual: "
                     + highThreatProgressLine);
+            var activeInfiniteFeelCore = new GreedLastRunCore();
+            GreedLastRunSnapshot activeInfiniteFeelSnapshot = default;
+            float activeInfiniteFeelClock = now + 62f;
+            activeInfiniteFeelCore.SnapshotChanged += value => activeInfiniteFeelSnapshot = value;
+            activeInfiniteFeelCore.EnterInfiniteRun(BuildStoredGiftRecord("연쇄 축", "연쇄 축"));
+            StartBufferedPattern(activeInfiniteFeelCore, ref activeInfiniteFeelSnapshot, ref activeInfiniteFeelClock);
+            string activeInfiniteFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", activeInfiniteFeelSnapshot);
+            string activeInfinitePressureStatus = InvokeRuntimeUiLabel("BuildRunPressureStatus", activeInfiniteFeelSnapshot);
+            Require(
+                activeInfiniteFeelStatus.Contains("체감 무한", StringComparison.Ordinal)
+                    && activeInfiniteFeelStatus.Contains("→정확", StringComparison.Ordinal)
+                    && activeInfinitePressureStatus.Contains("정확 +", StringComparison.Ordinal)
+                    && activeInfinitePressureStatus.Contains("체감 무한", StringComparison.Ordinal),
+                "Infinite active status must keep the prototype feel goal visible beside threat pressure. Actual: "
+                    + activeInfinitePressureStatus);
+            RequireTextLayoutBudget(activeInfinitePressureStatus, 1, 64, "infinite prototype-feel pressure status");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", false, false, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, true, false, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, false, true, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, false, false, true, false, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, false, false, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowInfiniteThreatPipsForValues", true, false, false, false, false, true),
+                "Infinite threat pips must show only in live infinite-mode progress states, not pause or result states.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipFillAmount", 3, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipFillAmount", 3, 2), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipFillAmount", 3, 3), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipFillAmount", 8, 4), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipFillAmount", 1, 1), 0f),
+                "Infinite threat pip fill must mirror the clamped five-step threat level.");
+            float hiddenThreatPipAlpha = InvokeRuntimeUiFloat("BuildInfiniteThreatPipAlpha", false, 5, 4, 1f);
+            float emptyThreatPipAlpha = InvokeRuntimeUiFloat("BuildInfiniteThreatPipAlpha", true, 2, 4, 0f);
+            float filledThreatPipAlpha = InvokeRuntimeUiFloat("BuildInfiniteThreatPipAlpha", true, 2, 1, 0f);
+            float activeThreatPipAlpha = InvokeRuntimeUiFloat("BuildInfiniteThreatPipAlpha", true, 2, 1, 1f);
+            float highThreatPipAlpha = InvokeRuntimeUiFloat("BuildInfiniteThreatPipAlpha", true, 5, 4, 0f);
+            Require(
+                Mathf.Approximately(hiddenThreatPipAlpha, 0f)
+                    && filledThreatPipAlpha > emptyThreatPipAlpha
+                    && activeThreatPipAlpha > filledThreatPipAlpha
+                    && highThreatPipAlpha > filledThreatPipAlpha,
+                "Infinite threat pips must brighten by fill, threat-change pulse, and high-threat pressure.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipScale", false, 5, 4, 1f), 1f)
+                    && InvokeRuntimeUiFloat("BuildInfiniteThreatPipScale", true, 3, 2, 1f) > InvokeRuntimeUiFloat("BuildInfiniteThreatPipScale", true, 3, 1, 1f)
+                    && InvokeRuntimeUiFloat("BuildInfiniteThreatPipScale", true, 5, 4, 0f) > 1f,
+                "Infinite threat pips must scale on the changed level and stay slightly pressured at high threat.");
+            float risingThreatPipOffset = InvokeRuntimeUiFloat("BuildInfiniteThreatPipOffsetY", true, 3, 2, 1f, 1);
+            float fallingThreatPipOffset = InvokeRuntimeUiFloat("BuildInfiniteThreatPipOffsetY", true, 3, 2, 1f, -1);
+            float inactiveThreatPipOffset = InvokeRuntimeUiFloat("BuildInfiniteThreatPipOffsetY", true, 3, 1, 1f, 1);
+            float highThreatPipOffset = InvokeRuntimeUiFloat("BuildInfiniteThreatPipOffsetY", true, 5, 4, 1f, 1);
+            Require(
+                risingThreatPipOffset > 0f
+                    && fallingThreatPipOffset < 0f
+                    && Mathf.Approximately(inactiveThreatPipOffset, 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildInfiniteThreatPipOffsetY", false, 3, 2, 1f, 1), 0f)
+                    && highThreatPipOffset > risingThreatPipOffset,
+                "Infinite threat pips must kick upward on threat rise, downward on threat drop, and only move the active threat step.");
             string activeRunGuide = InvokeRuntimeUiLabel("BuildRunGuideLine", goodSnapshot);
             Require(activeRunGuide.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal), "The active run guide must bind the avoidance action to the exact payoff.");
             Require(activeRunGuide.Contains("정확 +", StringComparison.Ordinal), "The active run guide must preview exact-score payoff.");
             Require(activeRunGuide.Contains("보정 +", StringComparison.Ordinal), "The active run guide must preview Good-score fallback payoff.");
+            float activeBeatCueUrgency = InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", goodSnapshot);
+            Require(
+                activeBeatCueUrgency > 0f
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", default(GreedLastRunSnapshot)), 0f)
+                    && InvokeRuntimeUiInt("BuildBeatCueUrgencyAlphaLift", activeBeatCueUrgency) > 0
+                    && InvokeRuntimeUiFloat("BuildBeatCueUrgencyScaleLift", activeBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildBeatCueUrgencyColorBlend", activeBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildBeatCueUrgencyScaleLift", 1f)
+                        > InvokeRuntimeUiFloat("BuildBeatCueUrgencyScaleLift", 0.25f)
+                    && InvokeRuntimeUiInt("BuildBeatCueUrgencyAlphaLift", 1f)
+                        > InvokeRuntimeUiInt("BuildBeatCueUrgencyAlphaLift", 0.25f)
+                    && InvokeRuntimeUiFloat("BuildBeatCueUrgencyVolumeLift", activeBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildBeatCueUrgencyVolumeLift", 1f)
+                        > InvokeRuntimeUiFloat("BuildBeatCueUrgencyVolumeLift", 0.25f)
+                    && InvokeRuntimeUiInt("BuildLaneTargetGlowUrgencyAlphaLift", activeBeatCueUrgency) > 0
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowUrgencyColorBlend", activeBeatCueUrgency) > 0f
+                    && InvokeRuntimeUiFloat("BuildLaneTargetGlowUrgencyScaleYLift", 1f)
+                        > InvokeRuntimeUiFloat("BuildLaneTargetGlowUrgencyScaleXLift", 1f),
+                "Active beat cue urgency must brighten, scale, and subtly lift guide/cue/audio feedback and the target-lane glow only for live active patterns.");
             string activeScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", goodSnapshot);
             Require(
                 activeScorePreview.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal)
+                    && activeScorePreview.Contains("→집중", StringComparison.Ordinal)
                     && activeScorePreview.Contains("보정 +", StringComparison.Ordinal),
                 "The compact active score preview must keep the hazard-bound exact payoff. Actual: "
                     + activeScorePreview);
             RequireTextLayoutBudget(activeScorePreview, 1, 64, "hazard-bound active score preview");
+            string activeFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", goodSnapshot);
+            string activePressureStatus = InvokeRuntimeUiLabel("BuildRunPressureStatus", goodSnapshot);
+            string activeCoachPreview = GreedLastRuntimeUi.BuildLiveRunCoachLine(goodSnapshot);
+            Require(
+                activeFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                    && activeFeelStatus.Contains("바닥→↑점프→정확", StringComparison.Ordinal)
+                    && activeFeelStatus.Contains("→집중", StringComparison.Ordinal)
+                    && activePressureStatus.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal)
+                    && activePressureStatus.Contains("체감 일반", StringComparison.Ordinal),
+                "The active status line must keep the prototype feel goal visible without replacing the scoring preview. Actual: "
+                    + activePressureStatus);
+            RequireTextLayoutBudget(activePressureStatus, 1, 64, "active prototype-feel pressure status");
+            Require(
+                activeCoachPreview.Contains("정확→집중", StringComparison.Ordinal)
+                    && activeCoachPreview.IndexOf("정확→집중", StringComparison.Ordinal)
+                        < activeCoachPreview.IndexOf("정박 타이밍", StringComparison.Ordinal),
+                "The live coach must lead with the active exact-input payoff goal. Actual: "
+                    + activeCoachPreview);
             string activeObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", goodSnapshot);
             Require(activeObjective.Contains("바닥→↑점프 회피", StringComparison.Ordinal), "The active objective must bind the hazard to the required avoidance action.");
             float goodDelta = (goodSnapshot.Pattern.SuccessWindowSeconds + goodSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
@@ -1069,7 +6356,27 @@ namespace GreedLast.Editor
                 goodSnapshot.Pattern.Channel,
                 now + 3f + goodSnapshot.Pattern.CoreSeconds + goodDelta - goodCore.InputTimingOffsetSeconds);
             string goodCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(goodSnapshot);
-            Require(goodCoach.Contains("보정권 생존", StringComparison.Ordinal), "A Good judgement must coach the player toward the exact window.");
+            string goodJudgementFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", goodSnapshot);
+            Require(
+                goodCoach.Contains("보정권 생존", StringComparison.Ordinal)
+                    && goodCoach.Contains("정확→집중 미발동", StringComparison.Ordinal),
+                "A Good judgement must coach the player toward the exact window and missed exact payoff.");
+            Require(
+                goodCoach.Contains("늦음 ", StringComparison.Ordinal)
+                    && goodCoach.Contains("살짝 빠르게", StringComparison.Ordinal),
+                "A late Good judgement must keep its timing nudge in the live coach. Actual: " + goodCoach);
+            Require(
+                goodJudgementFeedback.Contains("다음은 살짝 빠르게", StringComparison.Ordinal),
+                "A late Good judgement must tell the player to nudge the next input slightly earlier.");
+            Require(
+                goodJudgementFeedback.Contains("정확→집중 미발동", StringComparison.Ordinal),
+                "A normal Good judgement must show that the exact-input focus payoff did not trigger.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunObjectiveLine", goodSnapshot).Contains("다음은 살짝 빠르게", StringComparison.Ordinal),
+                "A late Good judgement must keep the same timing correction visible in the run objective line.");
+            Require(
+                InvokeRuntimeUiLabel("BuildInputTimingTraceLabel", goodSnapshot, goodDelta).StartsWith("늦음 ", StringComparison.Ordinal),
+                "A late Good judgement must label its on-lane timing trace as late.");
 
             var earlyCore = new GreedLastRunCore();
             GreedLastRunSnapshot earlySnapshot = default;
@@ -1083,6 +6390,52 @@ namespace GreedLast.Editor
                 now + 23f + earlySnapshot.Pattern.CoreSeconds - earlySnapshot.Pattern.GoodWindowSeconds - 0.08f - earlyCore.InputTimingOffsetSeconds);
             string earlyCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(earlySnapshot);
             Require(earlyCoach.Contains("살짝 늦게", StringComparison.Ordinal), "An early miss must tell the player to input slightly later.");
+            Require(
+                earlyCoach.Contains("빠름 ", StringComparison.Ordinal),
+                "An early miss must expose the early timing trace in the live coach. Actual: " + earlyCoach);
+            Require(
+                InvokeRuntimeUiLabel("BuildRunObjectiveLine", earlySnapshot).Contains("다음은 조금 늦게", StringComparison.Ordinal),
+                "An early miss must keep the next-input correction visible in the run objective line.");
+            Require(
+                InvokeRuntimeUiLabel("BuildInputTimingTraceLabel", earlySnapshot, -0.12f).StartsWith("빠름 ", StringComparison.Ordinal),
+                "An early miss must label its on-lane timing trace as early.");
+
+            var dangerCorrectionCore = new GreedLastRunCore();
+            GreedLastRunSnapshot dangerCorrectionSnapshot = default;
+            dangerCorrectionCore.SnapshotChanged += value => dangerCorrectionSnapshot = value;
+            float dangerClock = now + 30f;
+            dangerCorrectionCore.Enter("danger correction objective smoke", refillRun: false);
+            dangerCorrectionCore.HandleInput(GreedLastRunChannel.Center, dangerClock);
+            for (int i = 0; i < 8 && dangerCorrectionSnapshot.Health > 1; i += 1)
+            {
+                dangerCorrectionCore.DropHealthForDangerTest();
+            }
+
+            Require(dangerCorrectionSnapshot.Health == 1, "The danger correction setup must start from exactly one health.");
+            dangerCorrectionCore.Tick(dangerClock + 2f);
+            dangerCorrectionCore.Tick(dangerClock + 3f);
+            float dangerGoodDelta = (dangerCorrectionSnapshot.Pattern.SuccessWindowSeconds
+                + dangerCorrectionSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
+            dangerCorrectionCore.HandleInput(
+                dangerCorrectionSnapshot.Pattern.Channel,
+                dangerClock + 3f + dangerCorrectionSnapshot.Pattern.CoreSeconds + dangerGoodDelta - dangerCorrectionCore.InputTimingOffsetSeconds);
+            string dangerCorrectionObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", dangerCorrectionSnapshot);
+            string dangerCorrectionFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", dangerCorrectionSnapshot);
+            string dangerCorrectionCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(dangerCorrectionSnapshot);
+            Require(
+                dangerCorrectionObjective.Contains("생존 우선", StringComparison.Ordinal)
+                    && dangerCorrectionObjective.Contains("회피", StringComparison.Ordinal)
+                    && dangerCorrectionObjective.Contains("다음은 살짝 빠르게", StringComparison.Ordinal),
+                "The one-health objective must keep survival priority, the current avoidance action, and the next timing correction together. Actual: "
+                    + dangerCorrectionObjective);
+            Require(
+                dangerCorrectionFeedback.Contains("Good 생존", StringComparison.Ordinal)
+                    && dangerCorrectionFeedback.Contains("정확 보상 미발동", StringComparison.Ordinal),
+                "A one-health Good judgement must distinguish survival from the missed exact payoff.");
+            Require(
+                dangerCorrectionCoach.Contains("Good 생존", StringComparison.Ordinal)
+                    && dangerCorrectionCoach.Contains("정확 보상 미발동", StringComparison.Ordinal),
+                "A one-health Good coach must distinguish survival from the missed exact payoff.");
 
             var wrongChannelCore = new GreedLastRunCore();
             GreedLastRunSnapshot wrongChannelSnapshot = default;
@@ -1100,8 +6453,30 @@ namespace GreedLast.Editor
             string wrongChannelCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(wrongChannelSnapshot);
             Require(wrongChannelCoach.Contains("채널 먼저 확인", StringComparison.Ordinal), "A wrong-channel miss must coach channel confirmation first.");
             Require(
+                InvokeRuntimeUiLabel("BuildRunObjectiveLine", wrongChannelSnapshot).Contains("정답 채널 확인", StringComparison.Ordinal),
+                "A wrong-channel miss must keep channel correction visible in the run objective line.");
+            Require(
                 InvokeRuntimeUiLabel("BuildJudgementFeedbackText", wrongChannelSnapshot).Contains("정답키", StringComparison.Ordinal),
                 "A wrong-channel miss feedback must expose the target editor key.");
+            string mobileWrongChannelFeedback = InvokeRuntimeUiLabel(
+                "BuildJudgementFeedbackTextForMode",
+                wrongChannelSnapshot,
+                false);
+            string expectedMobileTargetFeedback = InvokeRuntimeUiLabel(
+                "BuildTargetChannelInputFeedback",
+                wrongChannelSnapshot.Pattern.Channel,
+                false);
+            Require(
+                mobileWrongChannelFeedback.Contains(expectedMobileTargetFeedback, StringComparison.Ordinal)
+                    && !mobileWrongChannelFeedback.Contains("정답키", StringComparison.Ordinal)
+                    && !mobileWrongChannelFeedback.Contains("A/←", StringComparison.Ordinal)
+                    && !mobileWrongChannelFeedback.Contains("S/Space", StringComparison.Ordinal)
+                    && !mobileWrongChannelFeedback.Contains("D/→", StringComparison.Ordinal),
+                "A mobile/release wrong-channel miss must expose the target tap lane without editor key names. Actual: "
+                    + mobileWrongChannelFeedback);
+            Require(
+                InvokeRuntimeUiLabel("BuildInputTimingTraceLabel", wrongChannelSnapshot, 0f) == "오입력",
+                "A wrong-channel miss must label its on-lane timing trace as a channel error.");
 
             var rewardCore = new GreedLastRunCore();
             GreedLastRunSnapshot rewardSnapshot = default;
@@ -1119,11 +6494,201 @@ namespace GreedLast.Editor
             string rewardGuide = InvokeRuntimeUiLabel("BuildRunGuideLine", rewardSnapshot);
             Require(rewardGuide.Contains("정박 보상까지 2", StringComparison.Ordinal), "The live guide must show the next precision reward distance.");
             Require(rewardGuide.Contains("연쇄 보너스 x1까지 2", StringComparison.Ordinal), "The live guide must show the next chain reward distance.");
+            Require(
+                InvokeRuntimeUiLabel("BuildInputTimingTraceLabel", rewardSnapshot, 0f) == "정확",
+                "An exact judgement must label its on-lane timing trace as exact.");
+            float freshTimingTraceLabelAlpha = InvokeRuntimeUiFloat("BuildInputTimingTraceLabelAlpha", 0.58f);
+            float midTimingTraceLabelAlpha = InvokeRuntimeUiFloat("BuildInputTimingTraceLabelAlpha", 0.29f);
+            float fadedTimingTraceLabelAlpha = InvokeRuntimeUiFloat("BuildInputTimingTraceLabelAlpha", 0f);
+            Require(
+                freshTimingTraceLabelAlpha > midTimingTraceLabelAlpha
+                    && midTimingTraceLabelAlpha > fadedTimingTraceLabelAlpha
+                    && Mathf.Approximately(fadedTimingTraceLabelAlpha, 0f)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceLabelScale", 1f)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceLabelScale", 0f),
+                "Input timing trace labels must fade out and settle from a readable pop scale.");
+            Vector4 exactTraceLayout = InvokeRuntimeUiVector4(
+                "BuildInputTimingTraceMarkerLayout",
+                GreedLastJudgementResult.Success,
+                0f,
+                1f);
+            Vector4 earlyTraceLayout = InvokeRuntimeUiVector4(
+                "BuildInputTimingTraceMarkerLayout",
+                GreedLastJudgementResult.Good,
+                -0.12f,
+                1f);
+            Vector4 lateTraceLayout = InvokeRuntimeUiVector4(
+                "BuildInputTimingTraceMarkerLayout",
+                GreedLastJudgementResult.Good,
+                0.12f,
+                1f);
+            Vector4 missTraceLayout = InvokeRuntimeUiVector4(
+                "BuildInputTimingTraceMarkerLayout",
+                GreedLastJudgementResult.Miss,
+                0.12f,
+                1f);
+            Vector4 fadedTraceLayout = InvokeRuntimeUiVector4(
+                "BuildInputTimingTraceMarkerLayout",
+                GreedLastJudgementResult.Good,
+                0.12f,
+                0f);
+            Require(
+                exactTraceLayout.x > lateTraceLayout.x
+                    && missTraceLayout.y > lateTraceLayout.y
+                    && earlyTraceLayout.z > 0f
+                    && lateTraceLayout.z < 0f
+                    && earlyTraceLayout.w < 0f
+                    && lateTraceLayout.w > 0f
+                    && lateTraceLayout.x > fadedTraceLayout.x,
+                "Input timing traces must shape exact, early, late, and miss timing without relying only on labels.");
+            float exactTraceIntensity = InvokeRuntimeUiFloat(
+                "BuildInputTimingTraceResultIntensity",
+                GreedLastJudgementResult.Success,
+                0f);
+            float goodTraceIntensity = InvokeRuntimeUiFloat(
+                "BuildInputTimingTraceResultIntensity",
+                GreedLastJudgementResult.Good,
+                0.12f);
+            float missTraceIntensity = InvokeRuntimeUiFloat(
+                "BuildInputTimingTraceResultIntensity",
+                GreedLastJudgementResult.Miss,
+                0.12f);
+            Require(
+                exactTraceIntensity > missTraceIntensity
+                    && missTraceIntensity > goodTraceIntensity
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildInputTimingTraceResultIntensity", GreedLastJudgementResult.None, 0f),
+                        0f)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceAlphaWithResult", 0.50f, exactTraceIntensity)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceAlphaWithResult", 0.50f, goodTraceIntensity)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceLabelScaleWithResult", 1f, exactTraceIntensity)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceLabelScaleWithResult", 1f, goodTraceIntensity),
+                "Input timing trace result intensity must keep exact brightest, miss heavier than Good, and inactive traces quiet.");
+            Require(
+                InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerWidthScale", GreedLastJudgementResult.Success, exactTraceIntensity)
+                    > InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerWidthScale", GreedLastJudgementResult.Good, goodTraceIntensity)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerWidthScale", GreedLastJudgementResult.Good, goodTraceIntensity)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerWidthScale", GreedLastJudgementResult.Miss, missTraceIntensity)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerHeightScale", GreedLastJudgementResult.Miss, missTraceIntensity)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerHeightScale", GreedLastJudgementResult.Success, exactTraceIntensity)
+                    && InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerHeightScale", GreedLastJudgementResult.Success, exactTraceIntensity)
+                        > InvokeRuntimeUiFloat("BuildInputTimingTraceMarkerHeightScale", GreedLastJudgementResult.Good, goodTraceIntensity),
+                "Input timing trace result sizing must keep exact broad, Good restrained, and Miss visibly heavier.");
             string rewardCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(rewardSnapshot);
             Require(rewardCoach.Contains("정박 보상까지 2회", StringComparison.Ordinal), "An exact hit must coach the next precision reward distance.");
             Require(!rewardCoach.Contains("정박 보상 2회", StringComparison.Ordinal), "The exact-hit reward coach must avoid duplicate reward pressure text.");
             string rewardBadge = InvokeRuntimeUiLabel("BuildPrecisionBadgeSuffix", rewardSnapshot);
             Require(rewardBadge.Contains("집중 2회", StringComparison.Ordinal), "The combo badge must expose the near precision-focus reward distance.");
+            Require(
+                InvokeRuntimeUiBool("ShouldShowPrecisionRewardPips", rewardSnapshot),
+                "The precision reward pips must appear during a live run after the first exact hit.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 1, 0, false, false, false, false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 1, 1, false, false, false, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 2, 0, false, false, false, false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 2, 1, false, false, false, false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 3, 2, false, false, false, false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 4, 0, false, false, false, false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 4, 1, false, false, false, false), 0f),
+                "Precision reward pips must fill one, two, then all three exact-step slots before cycling.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 2, 0, false, false, false, true), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 2, 0, false, true, false, false), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipFillAmountFromValues", 2, 0, false, false, true, false), 0f),
+                "Precision reward pips must hide during choice, pause, and countdown states.");
+            float inactivePrecisionPipAlpha = InvokeRuntimeUiFloat("BuildPrecisionRewardPipAlpha", false, 1f, false, 0.5f);
+            float emptyPrecisionPipAlpha = InvokeRuntimeUiFloat("BuildPrecisionRewardPipAlpha", true, 0f, false, 0.5f);
+            float filledPrecisionPipAlpha = InvokeRuntimeUiFloat("BuildPrecisionRewardPipAlpha", true, 1f, false, 0.5f);
+            float readyPrecisionPipAlpha = InvokeRuntimeUiFloat("BuildPrecisionRewardPipAlpha", true, 1f, true, 1f);
+            Require(
+                Mathf.Approximately(inactivePrecisionPipAlpha, 0f)
+                    && emptyPrecisionPipAlpha > inactivePrecisionPipAlpha
+                    && filledPrecisionPipAlpha > emptyPrecisionPipAlpha
+                    && readyPrecisionPipAlpha > filledPrecisionPipAlpha
+                    && InvokeRuntimeUiFloat("BuildPrecisionRewardPipScale", 1f, true, 1f)
+                        > InvokeRuntimeUiFloat("BuildPrecisionRewardPipScale", 1f, false, 0f),
+                "Precision reward pips must brighten as they fill and pulse when focus reward is ready.");
+            float firstPrecisionPipDownbeat = InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatLift", 1f, 1f, false, 0);
+            float readyFirstPrecisionPipDownbeat = InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatLift", 1f, 1f, true, 0);
+            float readyFinalPrecisionPipDownbeat = InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatLift", 1f, 1f, true, 2);
+            Require(
+                readyFinalPrecisionPipDownbeat > readyFirstPrecisionPipDownbeat
+                    && readyFirstPrecisionPipDownbeat > firstPrecisionPipDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatLift", 0f, 1f, true, 2), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatLift", 1f, 0f, true, 2), 0f)
+                    && InvokeRuntimeUiFloat("BuildPrecisionRewardPipAlphaWithDownbeat", filledPrecisionPipAlpha, readyFinalPrecisionPipDownbeat)
+                        > filledPrecisionPipAlpha
+                    && InvokeRuntimeUiFloat(
+                        "BuildPrecisionRewardPipScaleWithDownbeat",
+                        InvokeRuntimeUiFloat("BuildPrecisionRewardPipScale", 1f, true, 1f),
+                        readyFinalPrecisionPipDownbeat)
+                        > InvokeRuntimeUiFloat("BuildPrecisionRewardPipScale", 1f, true, 1f)
+                    && InvokeRuntimeUiFloat("BuildPrecisionRewardPipDownbeatColorBlend", readyFinalPrecisionPipDownbeat) > 0f,
+                "Precision reward pips must reserve the strongest downbeat lift for the final ready reward pip.");
+            float oneStepRewardReadiness = InvokeRuntimeUiFloat("BuildComboBadgeRewardReadiness", 1, 1, false, false, false, false);
+            float twoStepRewardReadiness = InvokeRuntimeUiFloat("BuildComboBadgeRewardReadiness", 2, 2, false, false, false, false);
+            float readyRewardReadiness = InvokeRuntimeUiFloat("BuildComboBadgeRewardReadiness", 3, 3, false, false, false, false);
+            float pausedRewardReadiness = InvokeRuntimeUiFloat("BuildComboBadgeRewardReadiness", 3, 3, false, true, false, false);
+            float baseRewardPulse = InvokeRuntimeUiFloat("BuildComboBadgeRewardPulse", oneStepRewardReadiness, false, false, false);
+            float activeRewardPulse = InvokeRuntimeUiFloat("BuildComboBadgeRewardPulse", oneStepRewardReadiness, true, false, false);
+            float tierRewardPulse = InvokeRuntimeUiFloat("BuildComboBadgeRewardPulse", twoStepRewardReadiness, false, true, false);
+            float breakRewardPulse = InvokeRuntimeUiFloat("BuildComboBadgeRewardPulse", readyRewardReadiness, true, false, true);
+            Require(
+                twoStepRewardReadiness > oneStepRewardReadiness
+                    && readyRewardReadiness > twoStepRewardReadiness
+                    && Mathf.Approximately(pausedRewardReadiness, 0f)
+                    && activeRewardPulse > baseRewardPulse
+                    && tierRewardPulse > activeRewardPulse
+                    && Mathf.Approximately(breakRewardPulse, 0f)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeRewardScaleLift", tierRewardPulse)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeRewardScaleLift", baseRewardPulse)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeRewardAccentBlend", tierRewardPulse)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeRewardBackBlend", tierRewardPulse)
+                    && InvokeRuntimeUiInt("BuildComboBadgeRewardFlashAlphaLift", tierRewardPulse)
+                        > InvokeRuntimeUiInt("BuildComboBadgeRewardFlashAlphaLift", baseRewardPulse)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeRewardFlashDurationLift", tierRewardPulse)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeRewardFlashDurationLift", baseRewardPulse),
+                "Combo badge reward pulses must scale with precision/chain readiness while hiding during pause and break states.");
+            float idleComboBadgeHitPulse = InvokeRuntimeUiFloat("BuildComboBadgeHitPulse", false, 0f);
+            float activeComboBadgeHitPulse = InvokeRuntimeUiFloat("BuildComboBadgeHitPulse", true, 0f);
+            Require(
+                Mathf.Approximately(idleComboBadgeHitPulse, 1f)
+                    && activeComboBadgeHitPulse > idleComboBadgeHitPulse
+                    && InvokeRuntimeUiFloat("BuildComboBadgeScale", activeComboBadgeHitPulse, 1f, tierRewardPulse)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeScale", activeComboBadgeHitPulse, 0f, baseRewardPulse)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeScale", 0f, 0f, 0f) >= 0.1f,
+                "Combo badge total scale must combine hit, profile, and reward pulses without collapsing.");
+            float weakComboBadgeDownbeat = InvokeRuntimeUiFloat(
+                "BuildComboBadgeDownbeatLift",
+                1f,
+                oneStepRewardReadiness,
+                1,
+                1,
+                true);
+            float readyComboBadgeDownbeat = InvokeRuntimeUiFloat(
+                "BuildComboBadgeDownbeatLift",
+                1f,
+                readyRewardReadiness,
+                3,
+                3,
+                true);
+            Require(
+                readyComboBadgeDownbeat > weakComboBadgeDownbeat
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildComboBadgeDownbeatLift", 0f, readyRewardReadiness, 3, 3, true),
+                        0f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildComboBadgeDownbeatLift", 1f, readyRewardReadiness, 0, 0, false),
+                        0f)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeDownbeatAccentBlend", readyComboBadgeDownbeat)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeDownbeatBackBlend", readyComboBadgeDownbeat)
+                    && InvokeRuntimeUiFloat("BuildComboBadgeDownbeatTextBlend", readyComboBadgeDownbeat) > 0f
+                    && InvokeRuntimeUiFloat(
+                        "BuildComboBadgeScaleWithDownbeat",
+                        InvokeRuntimeUiFloat("BuildComboBadgeScale", activeComboBadgeHitPulse, 1f, tierRewardPulse),
+                        readyComboBadgeDownbeat)
+                        > InvokeRuntimeUiFloat("BuildComboBadgeScale", activeComboBadgeHitPulse, 1f, tierRewardPulse),
+                "Combo badge downbeat lift must strengthen the badge when reward readiness and rhythmic activity are high.");
             Require(
                 rewardSnapshot.RecentPatternFlow.Contains("바→점", StringComparison.Ordinal),
                 "The recent pattern flow must include the compact hazard-to-avoidance token.");
@@ -1171,6 +6736,88 @@ namespace GreedLast.Editor
                 "The progress label must show that a chapter choice is one pass away.");
         }
 
+        private static void VerifyResponsiveDetailPanelSizing()
+        {
+            string compactRecordBoard = "normal best\ninfinite best\nrecent attempt";
+            string denseRecordBoard =
+                "summary normal best score 1740 distance 82.1 combo 12\n"
+                + "summary infinite best score 2890 distance 105.5 combo 20\n"
+                + "recent attempt score 910 distance 24.0 combo 4\n"
+                + "normal page score 1400 distance 60.0 combo 9\n"
+                + "infinite page score 1880 distance 75.2 combo 11\n"
+                + "ranking page score 2020 distance 88.8 combo 13\n"
+                + "record helper line\nrecord helper line\nrecord helper line\nrecord helper line\nrecord helper line";
+            int compactRecordFont = InvokeRuntimeUiInt("BuildRecordBoardFontSize", compactRecordBoard);
+            int denseRecordFont = InvokeRuntimeUiInt("BuildRecordBoardFontSize", denseRecordBoard);
+            int veryLongRecordFont = InvokeRuntimeUiInt(
+                "BuildRecordBoardFontSize",
+                "[S] 2890점 / 105.5m / 5구간 / 위협 5 / 콤보 20 / 실수 0 / 일반 최고 대비 +820 / 무한 최고 대비 +1440 / 최근 시도 대비 +620 / 기록 비교");
+            Require(
+                compactRecordFont >= 34
+                    && denseRecordFont < compactRecordFont
+                    && denseRecordFont >= 22
+                    && veryLongRecordFont == 30,
+                "Record boards must shrink dense lists and extra-long score rows while keeping readable minimum size.");
+
+            string compactProfileBoard = "checklist\nsave\ninfinite\nrecord";
+            string denseProfileBoard =
+                "checklist\nsave\ninfinite\nrecord\nreview\ncalibration\ngrowth\n"
+                + "verification\nroute\navoidance\nsound\nhaptics\nmobile\npause\n"
+                + "completion\nnext action\nrecord shortcut\nfinal loop\nsummary";
+            int compactProfileFont = InvokeRuntimeUiInt("BuildProfileBoardFontSize", compactProfileBoard);
+            int denseProfileFont = InvokeRuntimeUiInt("BuildProfileBoardFontSize", denseProfileBoard);
+            Require(
+                compactProfileFont >= 30
+                    && denseProfileFont < compactProfileFont
+                    && denseProfileFont >= 21,
+                "Profile boards must shrink long prototype checklists without dropping below the readable floor.");
+
+            string compactGrowthBoard = "growth points\njump\nslide\ntwist";
+            string denseGrowthBoard =
+                "growth points\njump\nslide\ntwist\nfocus\nhealth\ncalibration\n"
+                + "sound\nhaptics\nrecord\nsave\ninfinite\nreview\nroute\n"
+                + "warning\ncompletion\nnext";
+            int compactGrowthFont = InvokeRuntimeUiInt("BuildGrowthBoardFontSize", compactGrowthBoard);
+            int denseGrowthFont = InvokeRuntimeUiInt("BuildGrowthBoardFontSize", denseGrowthBoard);
+            Require(
+                compactGrowthFont >= 28
+                    && denseGrowthFont < compactGrowthFont
+                    && denseGrowthFont >= 20,
+                "Growth boards must scale down dense upgrade and settings summaries.");
+
+            string compactLobbyNotice = "save complete\nnext: infinite";
+            string denseLobbyNotice =
+                "save complete\nslot summary\ncandidate consumed\nsame clear blocked\n"
+                + "next: infinite\nrecord: score distance combo\nreview: weakness\n"
+                + "calibration: recommendation\nsound setting\nhaptics setting\n"
+                + "profile checklist\nstorage refill\ninfinite prep\nmobile hint\n"
+                + "pause check\ncompletion loop\nrecord board";
+            int compactLobbyFont = InvokeRuntimeUiInt("BuildLobbyNoticeFontSize", compactLobbyNotice);
+            int denseLobbyFont = InvokeRuntimeUiInt("BuildLobbyNoticeFontSize", denseLobbyNotice);
+            float compactLobbyHeight = InvokeRuntimeUiFloat("BuildLobbyNoticeHeight", compactLobbyNotice);
+            float denseLobbyHeight = InvokeRuntimeUiFloat("BuildLobbyNoticeHeight", denseLobbyNotice);
+            Require(
+                compactLobbyFont > denseLobbyFont
+                    && denseLobbyFont >= 17
+                    && denseLobbyHeight > compactLobbyHeight,
+                "Lobby notices must add height and reduce font size as completion/refill notices become dense.");
+
+            string compactManagementDetail = "slot one\nslot two\nslot three\nnext action";
+            string denseManagementDetail =
+                "slot one\nslot two\nslot three\ncandidate\ncurrent\ncomparison\n"
+                + "gift\nrelic\nroute\nstatus\npreview\nentry check\n"
+                + "next action\nwarning\nbutton label\nfooter";
+            int compactManagementFont = InvokeRuntimeUiInt("BuildManagementDetailFontSize", compactManagementDetail);
+            int denseManagementFont = InvokeRuntimeUiInt("BuildManagementDetailFontSize", denseManagementDetail);
+            float compactManagementHeight = InvokeRuntimeUiFloat("BuildManagementDetailHeight", compactManagementDetail);
+            float denseManagementHeight = InvokeRuntimeUiFloat("BuildManagementDetailHeight", denseManagementDetail);
+            Require(
+                compactManagementFont > denseManagementFont
+                    && denseManagementFont >= 19
+                    && denseManagementHeight > compactManagementHeight,
+                "Save/infinite management details must scale text and height for dense slot guidance.");
+        }
+
         private static void VerifyRecoveryPrecisionPayoff(float now)
         {
             now = Time.realtimeSinceStartup;
@@ -1200,6 +6847,9 @@ namespace GreedLast.Editor
                 GreedLastRuntimeUi.BuildLiveRunCoachLine(exactSnapshot).Contains("복구 패턴", StringComparison.Ordinal),
                 "An active recovery pattern must explain its recovery purpose before input.");
             Require(
+                GreedLastRuntimeUi.BuildLiveRunCoachLine(exactSnapshot).Contains("정확→회복", StringComparison.Ordinal),
+                "An active recovery pattern must lead the live coach with its exact-input recovery goal.");
+            Require(
                 InvokeRuntimeUiLabel("BuildRunObjectiveLine", exactSnapshot)
                     .Contains("복구 정박 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus, StringComparison.Ordinal)
                     && InvokeRuntimeUiLabel("BuildRunObjectiveLine", exactSnapshot)
@@ -1209,6 +6859,25 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildRunGuideLine", exactSnapshot)
                     .Contains("정확 +", StringComparison.Ordinal),
                 "The recovery guide must keep its exact-score preview visible.");
+            string recoveryScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", exactSnapshot);
+            Require(
+                recoveryScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                    && recoveryScorePreview.Contains("→회복", StringComparison.Ordinal),
+                "The recovery score preview must keep the recovery exact-input goal beside the score. Actual: "
+                    + recoveryScorePreview);
+            string recoveryFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", exactSnapshot);
+            Require(
+                recoveryFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                    && recoveryFeelStatus.Contains("→정확→회복", StringComparison.Ordinal),
+                "A live recovery pattern must name recovery as the exact-input payoff goal. Actual: "
+                    + recoveryFeelStatus);
+            string recoveryActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueText", exactSnapshot);
+            Require(
+                recoveryActionCue.Contains("회복", StringComparison.Ordinal)
+                    && recoveryActionCue.Contains("→회복", StringComparison.Ordinal)
+                    && recoveryActionCue.Contains("정확+", StringComparison.Ordinal),
+                "A recovery active action cue must show the recovery exact-input goal beside the payoff. Actual: "
+                    + recoveryActionCue);
 
             int scoreBeforeRecovery = exactSnapshot.Score;
             int focusBeforeRecovery = exactSnapshot.Focus;
@@ -1229,10 +6898,12 @@ namespace GreedLast.Editor
                 GreedLastRuntimeUi.BuildLiveRunCoachLine(exactSnapshot).Contains("흐름 회복 완료", StringComparison.Ordinal),
                 "Recovery precision must coach that the run flow is restored.");
             Require(
-                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", exactSnapshot).Contains("흐름 회복 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus, StringComparison.Ordinal),
+                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", exactSnapshot).Contains("정확→회복", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildJudgementFeedbackText", exactSnapshot).Contains("흐름 회복 +" + GreedLastRunCore.RecoveryPrecisionScoreBonus, StringComparison.Ordinal),
                 "Recovery precision must have distinct central judgement feedback.");
             Require(
-                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", exactSnapshot).Contains("복구 정박", StringComparison.Ordinal),
+                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", exactSnapshot).Contains("정확→회복", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", exactSnapshot).Contains("복구 정박", StringComparison.Ordinal),
                 "Practice feedback must be able to explain the recovery payoff directly.");
             Require(exactSnapshot.TimingProfile.Contains("복구 정박 1회", StringComparison.Ordinal), "Recovery precision count must survive into the timing profile.");
             Require(
@@ -1342,7 +7013,8 @@ namespace GreedLast.Editor
                     .Contains("정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus, StringComparison.Ordinal),
                 "A successful Perfect focus input must have distinct central feedback.");
             Require(
-                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("정박 충전", StringComparison.Ordinal),
+                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("정확→집중", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("정박 충전", StringComparison.Ordinal),
                 "Practice feedback must be able to explain the Perfect focus payoff directly.");
             Require(snapshot.TimingProfile.Contains("정박 충전 1회", StringComparison.Ordinal), "Perfect focus-charge count must survive into the timing profile.");
             Require(
@@ -1369,6 +7041,10 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildActiveActionCueText", snapshot)
                     .Contains("반격+" + GreedLastRunCore.ClutchCounterScoreBonus, StringComparison.Ordinal),
                 "The active Clutch action cue must preview the counter payoff.");
+            Require(
+                InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", snapshot)
+                    .Contains("→반격", StringComparison.Ordinal),
+                "The active Clutch score preview must keep counter as the exact-input goal.");
 
             int scoreBeforeCounter = snapshot.Score;
             core.HandleInput(
@@ -1388,7 +7064,8 @@ namespace GreedLast.Editor
                     .Contains("압박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus, StringComparison.Ordinal),
                 "A successful Clutch counter must have distinct central feedback.");
             Require(
-                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("압박 반격", StringComparison.Ordinal),
+                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("정확→반격", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("압박 반격", StringComparison.Ordinal),
                 "Practice feedback must be able to explain the Clutch payoff directly.");
             Require(snapshot.TimingProfile.Contains("압박 반격 1회", StringComparison.Ordinal), "Clutch counter count must survive into the timing profile.");
             Require(
@@ -1416,6 +7093,11 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildActiveActionCueText", snapshot)
                     .Contains("연쇄+" + GreedLastRunCore.OffbeatFlowComboBonus, StringComparison.Ordinal),
                 "The active Offbeat action cue must preview the chain payoff.");
+            string offbeatScoreGoal = snapshot.FocusStateActive ? "→고점" : "→연쇄";
+            Require(
+                InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", snapshot)
+                    .Contains(offbeatScoreGoal, StringComparison.Ordinal),
+                "The active Offbeat score preview must keep the current exact-input goal, with focus-state high score taking priority when active.");
 
             int comboBeforeOffbeat = snapshot.Combo;
             core.HandleInput(
@@ -1432,6 +7114,10 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot)
                     .Contains("엇박 정박 - 연쇄 가속", StringComparison.Ordinal),
                 "A successful Offbeat flow input must have distinct central feedback.");
+            Require(
+                InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("정확→연쇄", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildPracticeSuccessPayoffLine", snapshot).Contains("엇박 포착", StringComparison.Ordinal),
+                "Practice feedback must be able to explain the Offbeat chain payoff directly.");
             Require(snapshot.TimingProfile.Contains("엇박 연쇄 1회", StringComparison.Ordinal), "Offbeat flow count must survive into the timing profile.");
             Require(
                 InvokeMockBackendStaticLabel(
@@ -1465,6 +7151,16 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", failedSnapshot.Detail) == "복기 기록",
                 "A failed normal result must route the record button toward review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "결과\n탈출 실패 기록 저장\n복기: 채널 확인") == "복기 기록",
+                "A prefixed failed normal result must still route the record button toward review.");
+            string prefixedFailedRetryContext = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(
+                "결과\n탈출 실패 기록 저장\n복기: 채널 확인 / 1장 실수 1회");
+            Require(
+                prefixedFailedRetryContext.Contains("복기 재도전", StringComparison.Ordinal)
+                    && prefixedFailedRetryContext.Contains("탈출 실패 기록 저장", StringComparison.Ordinal)
+                    && !prefixedFailedRetryContext.StartsWith("복기 재도전\n결과", StringComparison.Ordinal),
+                "A prefixed failed-result notice must still restart as a clean review retry.");
             GreedLastStateSnapshot failedTargetSnapshot = BuildLobbyLabelSnapshot(
                 "탈출 실패 기록 저장\n복기: 채널 확인 / 1장 실수 1회\n복기 목표: 1장 무실수 / 현재 1 / 실패 실수 1\n재도전 목표: 1장 무실수 / 현재 1",
                 saveCandidateAvailable: false,
@@ -1562,8 +7258,64 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", candidateSnapshot, "추천 S1") == "무한 후보 저장 필요",
                 "A pending save candidate must keep the infinite button pointed at saving the candidate first.");
             Require(
+                InvokeStateMachineStaticLabel("BuildSaveLoadoutHeadline", true, true, false, false, false, false, false) == "저장 슬롯 선택"
+                    && InvokeStateMachineStaticLabel("BuildSaveLoadoutHeadline", true, false, false, false, false, false, false) == "저장 슬롯 선택"
+                    && InvokeStateMachineStaticLabel("BuildSaveLoadoutHeadline", true, true, false, true, false, false, false) == "저장 후보 포기"
+                    && InvokeStateMachineStaticLabel("BuildSaveLoadoutHeadline", true, true, true, false, false, false, false) == "저장 조합 덮어쓰기"
+                    && InvokeStateMachineStaticLabel("BuildSaveLoadoutHeadline", false, false, false, false, false, false, false) == "저장 조합 관리",
+                "Save-loadout headlines must keep pending candidates on slot selection while preserving confirmation titles.");
+            Require(
                 InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "보충 런 클리어 / 기록 저장\n점수 200 / 거리 30.0m") == "보충 기록",
                 "A refill-run result must distinguish its record review button from normal clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "결과\n탈출 성공 / 기록 저장\n[S] 1200점 / 80.0m") == "클리어 복기",
+                "A prefixed normal clear result must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "클리어 요약\n이번 기록: [S] 1200점 / 80.0m") == "클리어 복기",
+                "A compact clear-summary result must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료 [S] 1200점 / 80.0m / 콤9") == "클리어 복기",
+                "A shortened entrance-exit result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료: [S] 1200점 / 80.0m / 콤9") == "클리어 복기",
+                "A colon-separated entrance-exit result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료 - [S] 1200점 / 80.0m / 콤9") == "클리어 복기",
+                "A dash-separated entrance-exit result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료/[S] 1200점/80.0m/콤9") == "클리어 복기",
+                "A tightly slash-separated entrance-exit result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료 [A] 980점 / 64.0m / 콤7") == "클리어 복기",
+                "A shortened clear-complete result without the entrance label must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료: [A] 980점 / 64.0m / 콤7") == "클리어 복기",
+                "A colon-separated clear-complete result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료 - [A] 980점 / 64.0m / 콤7") == "클리어 복기",
+                "A dash-separated clear-complete result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료/[A] 980점/64.0m/콤7") == "클리어 복기",
+                "A tightly slash-separated clear-complete result with a score must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료\n목표 점수 800점 / 다음: 기록 보드") == "기록 보기",
+                "An entrance-exit title plus a target-score guide must not be mistaken for a clear review score row.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "입구 탈출 완료: 목표 점수 800점 / 다음: 기록 보드") == "기록 보기",
+                "An entrance-exit title plus colon-separated target-score guidance must not be mistaken for a clear review score row.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료\n목표 점수 800점 / 다음: 기록 보드") == "기록 보기",
+                "A clear-complete title plus target-score guidance must not be mistaken for a clear review score row.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "탈출 완료: 목표 점수 800점 / 다음: 기록 보드") == "기록 보기",
+                "A clear-complete title plus colon-separated target-score guidance must not be mistaken for a clear review score row.");
+            string clearSaveDraftRoutingMessage = "클리어 요약\n탈출 성공 / 기록 저장\n[S] 1430점 / 72.0m / 콤9\n저장 후보: 집중 축 S1\n저장 기회: 1회 / 저장하거나 포기하면 소모\n다음: 슬롯 선택 후 저장 또는 포기";
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", clearSaveDraftRoutingMessage) == "클리어 복기",
+                "A clear-to-save-draft summary must still route the record button to clear review.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "결과\n보충 런 저장 안 함\n기록: [S] 1200점 / 80.0m") == "보충 기록",
+                "A prefixed refill skip-save result must still route the record button to refill review.");
 
             GreedLastStateSnapshot infiniteSnapshot = BuildLobbyLabelSnapshot(
                 "무한모드 종료 / 기록 저장\n복기: 무한 1구간",
@@ -1572,6 +7324,9 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", infiniteSnapshot, "S1 마지막 A").StartsWith("무한 재도전", StringComparison.Ordinal),
                 "An infinite result must make the infinite button read as a retry action.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", infiniteSnapshot, " ") == "무한 재도전",
+                "An infinite retry button must not keep a trailing space when the selected slot summary is empty.");
             GreedLastStateSnapshot settlementReentrySnapshot = BuildLobbyLabelSnapshot(
                 "무한모드 종료 / 기록 저장\n힌트: 정산 종료 기록\n다음: 정산 종료 확인 후 무한모드 실전 재개",
                 saveCandidateAvailable: false,
@@ -1579,6 +7334,9 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", settlementReentrySnapshot, "S1 마지막 A").StartsWith("무한 실전 재개", StringComparison.Ordinal),
                 "A forced settlement real-reentry result must label the infinite button as real play resumption.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", settlementReentrySnapshot, " ") == "무한 실전 재개",
+                "A forced settlement real-reentry button must not keep a trailing space when the selected slot summary is empty.");
             string settlementPracticeLabel = InvokeRuntimeUiLabel("BuildLobbyPracticeButtonLabel", settlementReentrySnapshot);
             Require(
                 !settlementPracticeLabel.Contains("복기", StringComparison.Ordinal)
@@ -1609,6 +7367,9 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildSaveSlotDetailButtonLabel", emptyLoadoutInfiniteSnapshot, true, false) == "보충 안내",
                 "The auxiliary detail button must read as refill guidance when every infinite loadout slot is empty.");
             Require(
+                InvokeRuntimeUiLabel("BuildSaveSlotDetailButtonLabel", emptyLoadoutInfiniteSnapshot, false, false) == "보충 안내",
+                "The save-loadout management detail button must read as refill guidance when every stored loadout slot is empty.");
+            Require(
                 InvokeRuntimeUiLabel("BuildSaveSlotModeText", emptyLoadoutInfiniteSnapshot, false, false, false) == "보충 안내\n보충 런"
                     && InvokeRuntimeUiLabel("BuildSaveSlotModeText", emptyLoadoutInfiniteSnapshot, true, false, false) == "보충 안내\n보충 런",
                 "The save-slot side mode label must point to refill instead of empty-slot management when every slot is empty.");
@@ -1618,11 +7379,115 @@ namespace GreedLast.Editor
             Require(
                 !InvokeRuntimeUiStaticBool("ShouldSaveDraftOfferRefill", emptyLoadoutInfiniteSnapshot, true, false),
                 "The refill primary shortcut must stay out of the infinite loadout selection action path.");
+            GreedLastStateSnapshot slotChoiceRequiredSnapshot = BuildLobbyLabelSnapshot(
+                "저장 후보 선택 전",
+                saveCandidateAvailable: true,
+                infiniteUnlocked: true,
+                saveSlotChoiceRequired: true);
+            GreedLastStateSnapshot overwriteConfirmationSnapshot = BuildLobbyLabelSnapshot(
+                "덮어쓰기 확인",
+                saveCandidateAvailable: true,
+                infiniteUnlocked: true,
+                selectedSaveSlotIndex: 2,
+                saveSlotOverwriteConfirmationPending: true);
+            GreedLastStateSnapshot deleteConfirmationSnapshot = BuildLobbyLabelSnapshot(
+                "삭제 확인",
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                saveSlotDeleteConfirmationPending: true);
+            GreedLastStateSnapshot renameConfirmationSnapshot = BuildLobbyLabelSnapshot(
+                "이름 확인",
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                saveSlotRenameConfirmationPending: true);
+            GreedLastStateSnapshot skipConfirmationSnapshot = BuildLobbyLabelSnapshot(
+                "포기 확인",
+                saveCandidateAvailable: true,
+                infiniteUnlocked: true,
+                saveLoadoutSkipConfirmationPending: true);
+            GreedLastStateSnapshot skipSlotChoiceRequiredSnapshot = BuildLobbyLabelSnapshot(
+                "포기 확인\n좌 / 중 / 우 슬롯 선택 전",
+                saveCandidateAvailable: true,
+                infiniteUnlocked: true,
+                saveSlotChoiceRequired: true,
+                saveLoadoutSkipConfirmationPending: true);
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", slotChoiceRequiredSnapshot, false, false, true, false) == "좌·중·우 선택"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", candidateSnapshot, false, true, true, false) == "슬롯 1에 저장"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", skipConfirmationSnapshot, false, true, true, false) == "포기 취소 저장"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", skipSlotChoiceRequiredSnapshot, false, false, true, false) == "좌·중·우 선택"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", overwriteConfirmationSnapshot, false, true, true, false) == "덮어쓰기 확정"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", deleteConfirmationSnapshot, false, true, false, false) == "삭제 확인 중"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", renameConfirmationSnapshot, false, true, false, false) == "이름 확인 중"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", emptyLoadoutInfiniteSnapshot, false, false, false, true) == "보충 런"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", infiniteSnapshot, false, true, false, false) == "저장 후보 없음"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", emptyLoadoutInfiniteSnapshot, true, false, false, false) == "보충 런",
+                "Save-draft primary labels must match slot-choice, confirmation, candidate, and refill states.");
+            Require(
+                !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", slotChoiceRequiredSnapshot, false, true, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", candidateSnapshot, false, true, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", skipConfirmationSnapshot, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", skipSlotChoiceRequiredSnapshot, false, true, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", overwriteConfirmationSnapshot, false, true, false)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", deleteConfirmationSnapshot, false, false, false)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", renameConfirmationSnapshot, false, false, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", emptyLoadoutInfiniteSnapshot, false, false, true)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", infiniteSnapshot, false, false, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", emptyLoadoutInfiniteSnapshot, true, false, false),
+                "Save-draft primary availability must lock slot-choice and confirmation states while keeping refill and loadout selection available.");
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", slotChoiceRequiredSnapshot, false, true) == "저장 포기"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", candidateSnapshot, false, true) == "저장 포기"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", skipConfirmationSnapshot, false, true) == "포기 확정"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", skipSlotChoiceRequiredSnapshot, false, true) == "포기 확정"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", infiniteSnapshot, false, false) == "로비로"
+                    && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", emptyLoadoutInfiniteSnapshot, true, false) == "로비로",
+                "Save-draft return labels must distinguish destructive candidate skipping from ordinary lobby return.");
+            Require(
+                InvokeAppStaticLabel("BuildSaveDraftSkipConfirmationNotice", false, true)
+                    == "저장 후보를 버릴까요?\n다시 포기: 후보 소모 / 저장: 좌·중·우 선택 후 저장"
+                    && InvokeAppStaticLabel("BuildSaveDraftSkipConfirmationNotice", false, false)
+                        == "저장 후보를 버릴까요?\n다시 포기: 후보 소모 / 저장: 포기 취소 후 선택 슬롯 저장"
+                    && InvokeAppStaticLabel("BuildSaveDraftSkipConfirmationNotice", true, false)
+                        == "보충 런 저장 후보를 버릴까요?\n다시 포기: 후보 소모 / 저장: 포기 취소 후 선택 슬롯 저장",
+                "Save-draft skip confirmation copy must distinguish slot-choice-before-save from cancelling back into a selected-slot save.");
+            Require(
+                !InvokeRuntimeUiStaticBool("BuildSaveSlotDetailActionEnabled", slotChoiceRequiredSnapshot, false, false, true)
+                    && InvokeRuntimeUiStaticBool("BuildSaveSlotDetailActionEnabled", candidateSnapshot, false, false, true)
+                    && InvokeRuntimeUiStaticBool("BuildSaveSlotDetailActionEnabled", slotChoiceRequiredSnapshot, true, false, false)
+                    && InvokeRuntimeUiStaticBool("BuildSaveSlotDetailActionEnabled", slotChoiceRequiredSnapshot, false, true, false),
+                "Save-draft detail controls must stay locked until a slot is chosen, while record/profile boards keep detail navigation available.");
+            Require(
+                !InvokeRuntimeUiStaticBool("BuildSaveSlotRenameOrDeleteActionEnabled", slotChoiceRequiredSnapshot, true, true)
+                    && InvokeRuntimeUiStaticBool("BuildSaveSlotRenameOrDeleteActionEnabled", candidateSnapshot, true, true)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveSlotRenameOrDeleteActionEnabled", candidateSnapshot, true, false)
+                    && !InvokeRuntimeUiStaticBool("BuildSaveSlotRenameOrDeleteActionEnabled", candidateSnapshot, false, true),
+                "Save-slot rename/delete controls must require save-draft mode, a chosen slot, and an occupied slot.");
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveSlotDetailButtonLabel", slotChoiceRequiredSnapshot, false, true) == "선택 후 비교"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotDetailButtonLabel", candidateSnapshot, false, true) == "상세 비교"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotRenameButtonLabel", slotChoiceRequiredSnapshot, true) == "선택 후 이름"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotRenameButtonLabel", candidateSnapshot, true) == "이름 변경"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotRenameButtonLabel", candidateSnapshot, false) == "이름 없음"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotRenameButtonLabel", renameConfirmationSnapshot, true) == "이름 확정"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotDeleteButtonLabel", slotChoiceRequiredSnapshot, true) == "선택 후 삭제"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotDeleteButtonLabel", candidateSnapshot, true) == "슬롯 삭제"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotDeleteButtonLabel", candidateSnapshot, false) == "삭제 없음"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotDeleteButtonLabel", deleteConfirmationSnapshot, true) == "삭제 확정",
+                "Save-slot side labels must explain slot-choice locks and preserve occupied/empty/confirmation wording.");
             GreedLastLobbySnapshot emptyLoadoutLobbySnapshot = BuildAppLobbySnapshot(
                 saveCandidateAvailable: false,
                 infiniteUnlocked: true,
                 hasUsableSaveSlot: false,
                 hasOccupiedSaveSlot: false);
+            GreedLastLobbySnapshot candidateEmptyLoadoutLobbySnapshot = BuildAppLobbySnapshot(
+                saveCandidateAvailable: true,
+                infiniteUnlocked: true,
+                hasUsableSaveSlot: false,
+                hasOccupiedSaveSlot: false);
+            Require(
+                !InvokeAppStaticBool("ShouldStartLobbyNormalAsRefillRun", candidateEmptyLoadoutLobbySnapshot),
+                "A pending save candidate must stay ahead of refill routing even when every saved loadout slot is empty.");
             string emptyInfiniteSlotNotice = InvokeAppStaticLabel(
                 "BuildInfiniteLoadoutSlotSelectionNotice",
                 emptyLoadoutLobbySnapshot,
@@ -1642,6 +7507,89 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildCompactSaveSlotLaneState", "빈 슬롯", true).Contains("보충", StringComparison.Ordinal)
                     && InvokeRuntimeUiLabel("BuildCompactSaveSlotLaneState", "빈 슬롯", false) == "빈 슬롯",
                 "Empty save-loadout lane labels must switch from empty-slot copy to refill-needed copy only when every slot is empty.");
+            Require(
+                InvokeRuntimeUiLabel("BuildCompactSaveUseStatusFromSlotLabel", "2/2 · 2회 남음 / 집중형 / S", 8) == "2/2 2회"
+                    && InvokeRuntimeUiLabel("BuildCompactSaveUseStatusFromSlotLabel", "마지막 1회 (1/2) / 안정형 / A", 8) == "1/2 마지막",
+                "Compact save-use status labels must preserve the two-use fraction in narrow buttons.");
+            Require(
+                InvokeRuntimeUiLabel("BuildCompactSaveUseStatusFromSlotLabel", "S1 마지막 1회 / 안정형 / A", 8) == "1/2 마지막"
+                    && InvokeRuntimeUiLabel("BuildCompactSaveUseStatusFromSlotLabel", "S2 1회 남음 / 안정형 / A", 8) == "1/2 마지막"
+                    && InvokeRuntimeUiLabel("BuildCompactSaveUseStatusFromSlotLabel", "S3 2회 남음 / 집중형 / S", 8) == "2/2 2회",
+                "Compact save-use labels must parse slot-prefixed final-use and two-use strings.");
+            Require(
+                InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", "2/2 · 2회 남음 / 집중형 / S") == "2/2 2회 S"
+                    && InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", "마지막 1회 (1/2) / 안정형 / A") == "1/2 마지막 A",
+                "Compact lobby save-loadout labels must not mistake 1/2 or 2/2 fractions for grade/profile separators.");
+            Require(
+                InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", "S1 마지막 1회 / 안정형 / A") == "1/2 마지막 A"
+                    && InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", "S2 1회 남음 / 안정형 / A") == "1/2 마지막 A"
+                    && InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", "S3 2회 남음 / 집중형 / S") == "2/2 2회 S",
+                "Compact lobby save-loadout labels must keep slot-prefixed use counts from leaking into the button copy.");
+            Require(
+                InvokeRuntimeUiLabel("BuildCompactLobbySaveSlotLabel", " ") == "빈칸",
+                "Whitespace-only save-slot labels must collapse to an empty-slot summary.");
+            Require(
+                InvokeRuntimeUiLabel(
+                    "BuildSelectedSaveSlotButtonSummary",
+                    BuildUiScreenSnapshot(
+                        GreedLastScreenState.LobbyReady,
+                        "Lobby",
+                        string.Empty,
+                        0,
+                        hasUsableSaveSlots: true,
+                        hasOccupiedSaveSlots: true,
+                        saveCandidateAvailable: true)) == "S1",
+                "Selected save-slot lobby summaries must not duplicate a slot-only label as S1 S1.");
+            Require(
+                InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "2/2 · 2회 남음 / 집중형 / S") == 2
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "마지막 1회 (1/2) / 안정형 / A") == 1
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "S1 2/2 2회") == 2
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "S1 1/2 마지막") == 1
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "S1 마지막 1회 / 안정형 / A") == 1
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "S2 1회 남음 / 안정형 / A") == 1
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "S3 2회 남음 / 집중형 / S") == 2
+                    && InvokeRuntimeUiInt("ExtractSaveSlotUsesRemainingForVisual", "사용 완료") == 0,
+                "Save-loadout use pips must parse remaining uses without treating used or empty slots as active.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", true, true, false, true, true, 2)
+                    && InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", true, false, false, false, true, 2)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", false, false, false, true, true, 2)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", true, true, true, true, true, 2)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", true, true, false, false, true, 2)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowSaveSlotUsePips", true, true, false, true, true, 0),
+                "Save-loadout use pips must show only for usable stocked slots and stay hidden while saving a new candidate.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildSaveSlotUsePipFillAmount", 2, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSaveSlotUsePipFillAmount", 2, 1), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSaveSlotUsePipFillAmount", 1, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildSaveSlotUsePipFillAmount", 1, 1), 0f),
+                "Save-loadout use pips must represent two-use and final-use slots as two compact segments.");
+            float hiddenSaveUsePipAlpha = InvokeRuntimeUiFloat("BuildSaveSlotUsePipAlpha", false, 1f, true, false, true, 1f);
+            float emptySaveUsePipAlpha = InvokeRuntimeUiFloat("BuildSaveSlotUsePipAlpha", true, 0f, false, false, false, 0f);
+            float filledSaveUsePipAlpha = InvokeRuntimeUiFloat("BuildSaveSlotUsePipAlpha", true, 1f, false, false, false, 0f);
+            float finalUseSaveUsePipAlpha = InvokeRuntimeUiFloat("BuildSaveSlotUsePipAlpha", true, 1f, true, false, true, 1f);
+            Require(
+                Mathf.Approximately(hiddenSaveUsePipAlpha, 0f)
+                    && filledSaveUsePipAlpha > emptySaveUsePipAlpha
+                    && finalUseSaveUsePipAlpha > filledSaveUsePipAlpha,
+                "Save-loadout use pips must fade hidden state, distinguish filled uses, and pulse final-use selection.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildSaveSlotUsePipScale", false, 1f, true, false, true, 1f), 1f)
+                    && InvokeRuntimeUiFloat("BuildSaveSlotUsePipScale", true, 1f, true, false, true, 1f)
+                        > InvokeRuntimeUiFloat("BuildSaveSlotUsePipScale", true, 1f, false, false, false, 0f),
+                "Save-loadout use pips must scale only when visible and emphasize selected final-use slots.");
+            string compactFinalUseLane = InvokeRuntimeUiLabel("BuildCompactSaveSlotLaneState", "마지막 1회 (1/2) / 안정형 / A", false);
+            Require(
+                compactFinalUseLane.StartsWith("1/2 마지막", StringComparison.Ordinal)
+                    && compactFinalUseLane.Contains("안정형", StringComparison.Ordinal)
+                    && compactFinalUseLane.Contains("A", StringComparison.Ordinal),
+                "Compact save-loadout lane labels must keep final-use fraction, profile, and grade together.");
+            string compactSlotPrefixedFinalUseLane = InvokeRuntimeUiLabel("BuildCompactSaveSlotLaneState", "S1 마지막 1회 / 안정형 / A", false);
+            Require(
+                compactSlotPrefixedFinalUseLane.StartsWith("1/2 마지막", StringComparison.Ordinal)
+                    && compactSlotPrefixedFinalUseLane.Contains("안정형", StringComparison.Ordinal)
+                    && compactSlotPrefixedFinalUseLane.Contains("A", StringComparison.Ordinal),
+                "Compact save-loadout lane labels must keep slot-prefixed final-use strings from turning into generic slot text.");
             Require(
                 InvokeRuntimeUiLabel(
                     "BuildSaveSlotLaneActionHint",
@@ -1686,6 +7634,45 @@ namespace GreedLast.Editor
                         false,
                         false) == "시작 후 비움",
                 "The final-use save-loadout lane action hint must expose auto-clear before and after slot selection.");
+            GreedLastStateSnapshot partialEmptyInfiniteSlotSnapshot = BuildLobbyLabelSnapshot(
+                "저장 조합 선택",
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                selectedSaveSlotIndex: 2);
+            Require(
+                InvokeRuntimeUiLabel("BuildInfiniteLoadoutSelectActionLabel", partialEmptyInfiniteSlotSnapshot, false) == "추천 선택"
+                    && InvokeRuntimeUiLabel("BuildInfiniteStartActionLabel", partialEmptyInfiniteSlotSnapshot, false) == "추천 슬롯"
+                    && InvokeRuntimeUiLabel("BuildSaveSlotModeText", partialEmptyInfiniteSlotSnapshot, true, false, false) == "S3 불가\n다른 슬롯",
+                "A selected empty infinite slot with another usable slot must let the primary action auto-select a recommended slot.");
+            GreedLastLobbySnapshot partialEmptyInfiniteStartSnapshot = BuildAppLobbySnapshot(
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                selectedSaveSlotIndex: 2);
+            GreedLastLobbySnapshot allEmptyInfiniteStartSnapshot = BuildAppLobbySnapshot(
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                hasUsableSaveSlot: false,
+                hasOccupiedSaveSlot: false,
+                selectedSaveSlotIndex: 2);
+            Require(
+                InvokeAppStaticBool("ShouldOpenRecommendedSlotBeforeInfiniteStart", partialEmptyInfiniteStartSnapshot)
+                    && !InvokeAppStaticBool("ShouldOpenRecommendedSlotBeforeInfiniteStart", allEmptyInfiniteStartSnapshot),
+                "The infinite-start primary action must show a recommended usable slot before start, but route all-empty states to refill.");
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveSlotModeText", partialEmptyInfiniteSlotSnapshot, false, false, false) == "S3 빈 슬롯\n다른 슬롯",
+                "A selected empty management slot with another usable slot must point back to another slot instead of generic empty-slot management.");
+            GreedLastStateSnapshot partialEmptyDetailSlotSnapshot = BuildLobbyLabelSnapshot(
+                "저장 조합 선택",
+                saveCandidateAvailable: false,
+                infiniteUnlocked: true,
+                selectedSaveSlotIndex: 2,
+                saveSlotDetailViewActive: true);
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveSlotModeText", partialEmptyDetailSlotSnapshot, true, false, false) == "S3 불가\n목록 보기",
+                "A selected empty infinite slot detail must still read as unusable while offering a return to the slot list.");
+            Require(
+                InvokeRuntimeUiLabel("BuildSaveSlotModeText", partialEmptyDetailSlotSnapshot, false, false, false) == "S3 빈 슬롯\n목록 보기",
+                "A selected empty management slot detail must keep the empty-slot state visible while offering a return to the list.");
             GreedLastLobbySnapshot usableLoadoutLobbySnapshot = BuildAppLobbySnapshot(
                 saveCandidateAvailable: false,
                 infiniteUnlocked: true,
@@ -1697,6 +7684,25 @@ namespace GreedLast.Editor
                     && InvokeAppStaticLabel("BuildSaveDraftSlotSelectionNotice", usableLoadoutLobbySnapshot, true, 0)
                         .Contains("저장을 누르면", StringComparison.Ordinal),
                 "Usable slots and pending save candidates must keep their regular selection/save guidance.");
+            string partialEmptyInfiniteSlotNotice = InvokeAppStaticLabel(
+                "BuildInfiniteLoadoutSlotSelectionNotice",
+                usableLoadoutLobbySnapshot,
+                2);
+            string partialEmptySaveDraftSlotNotice = InvokeAppStaticLabel(
+                "BuildSaveDraftSlotSelectionNotice",
+                usableLoadoutLobbySnapshot,
+                false,
+                2);
+            Require(
+                partialEmptyInfiniteSlotNotice.Contains("슬롯 3은 현재 사용할 수 없습니다.", StringComparison.Ordinal)
+                    && partialEmptyInfiniteSlotNotice.Contains("사용 가능한 슬롯을 고르세요.", StringComparison.Ordinal)
+                    && !partialEmptyInfiniteSlotNotice.Contains("선택 완료", StringComparison.Ordinal),
+                "Infinite slot-selection notices must judge the tapped slot, not only the previously selected slot.");
+            Require(
+                partialEmptySaveDraftSlotNotice.Contains("슬롯 3은 비어 있습니다.", StringComparison.Ordinal)
+                    && partialEmptySaveDraftSlotNotice.Contains("다른 슬롯에서 저장 조합을 확인하세요.", StringComparison.Ordinal)
+                    && !partialEmptySaveDraftSlotNotice.Contains("이름 변경", StringComparison.Ordinal),
+                "Save-loadout management notices must not offer rename/delete guidance for an empty tapped slot.");
             GreedLastStateSnapshot expiredLoadoutInfiniteSnapshot = BuildLobbyLabelSnapshot(
                 "저장 조합 사용 완료",
                 saveCandidateAvailable: false,
@@ -1733,6 +7739,13 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "흔적\n다음 확인: 완성 루프 기록 확인") == "완성 기록",
                 "A completed prototype-loop record check must label the record button as final completion records.");
             Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "흔적\n다음: 완성 루프 기록 확인") == "완성 기록",
+                "A shortened completed-loop record next-action must keep the final record button label.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "흔적\n다음: 완성 기록 확인") == "완성 기록"
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "요약 / 다음: 완성 기록 / 실행: 기록 보기") == "완성 기록",
+                "Very short completed-record next-actions must still label the record button as final completion records.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 복기 재도전으로 실수 구간 보완") == "일반",
                 "A normal review retry next-action must target the normal-run button.");
             Require(
@@ -1751,6 +7764,9 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 무한 버튼으로 보충 런 진입") == "무한",
                 "A direct refill-run next-action must target the infinite/refill button.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "보충 런 저장 안 함\n다음: 무한 버튼으로 보충 런 재시도") == "무한",
+                "A refill skip-save retry next-action must target the infinite/refill button.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 보충 런 클리어 후 새 조합 저장") == "무한",
                 "A direct refill-run clear next-action must still target the infinite/refill route.");
             Require(
@@ -1763,8 +7779,71 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 보충 런 클리어 후 새 조합 저장") == "무한",
                 "A prototype refill-run checkpoint phrasing must target the infinite/refill button.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "무한",
+                "Refill guidance without an explicit next directive must still target the infinite/refill route.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장 후보 저장/포기") == "저장",
                 "A prototype save-candidate checkpoint phrasing must target the save-loadout button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 후보 처리") == "저장",
+                "A compact save-candidate checkpoint label must still target the save-loadout button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "후보 처리") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "첫 함정") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "시작→런 확인") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "런 확인") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "복기 후 탈출") == "연습"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "일반 탈출") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "저장 후보 생성") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "첫 무한") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "2회 소진") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "보충 재진입") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "무한 기록") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "완성 기록") == "기록",
+                "Raw compact prototype next-check labels must still target their lobby route when reused without a directive prefix.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장 후보 저장/포기") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장 후보를 첫 슬롯에 저장 또는 포기") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 후보 저장/포기") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장/포기") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장 / 포기") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모(1회)") == "저장",
+                "Shortened save-candidate action phrasing must still target save-loadout handling.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 일반") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 연습") == "연습"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 무한") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 성장") == "성장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 흔적") == "흔적"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 기록") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약 / 다음: 기록 / 실행: 저장 조합") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약 / 다음: 저장 / 포기") == "저장",
+                "One-word next-action aliases, including slash-compacted lines, must still target the intended lobby buttons.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약/다음:기록/실행:저장 조합") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약|다음:무한|실행:저장 조합") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약;다음 확인:저장;실행:기록") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약|다음:완성 기록|실행:저장 조합") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약/다음 확인:기록 보기 - 완성 기록/실행:저장 조합") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "요약|실행:완성 기록") == "기록",
+                "Tightly compacted next/action aliases must keep the same lobby-button priority as spaced directives.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "바로 체크:다음:기록/실행:저장 조합") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "바로 체크:다음 확인:저장/실행:기록") == "저장"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "바로 체크:다음:무한/실행:저장 조합") == "무한",
+                "Nested compact next/action aliases after a label prefix must still prefer the explicit next directive.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", clearSaveDraftRoutingMessage) == "저장",
+                "A clear-summary save-draft notice must keep the next-action target on save handling.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장 조합에서 후보 비교 / 저장 또는 포기") == "저장",
+                "A prototype save-loadout candidate-management checkpoint must target the save-loadout button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장 조합 변경에서 사용 가능한 슬롯 선택") == "저장",
+                "A prototype save-loadout-change checkpoint must target the save-loadout button.");
             Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장 조합으로 무한 시작") == "무한",
                 "A prototype save-loadout infinite-start checkpoint must target the infinite button.");
@@ -1772,8 +7851,21 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 저장 조합 2회 소진") == "무한",
                 "A prototype two-use consumption checkpoint must keep Enter on the infinite/refill route.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "흔적 요약\n실행: 저장 조합 2회 소진") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "흔적 요약\nEnter/강조: 저장 조합 2회 소진") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "흔적 요약\n강조 버튼: 저장 조합 소진") == "무한",
+                "Action-only save-loadout depletion labels must also highlight the infinite/refill route.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 첫 무한") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 2회 소진") == "무한"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 보충 재진입") == "무한",
+                "Compact infinite/checkpoint labels must still target the infinite/refill route.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 무한 기록 생성") == "무한",
                 "A prototype infinite-record checkpoint must target the infinite button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 무한 기록") == "무한",
+                "A compact infinite-record checkpoint label must still target the infinite button.");
             Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 무한 위협 폭·보상 확인") == "무한",
                 "A prototype infinite threat-width/reward checkpoint must target the infinite button.");
@@ -1781,8 +7873,17 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 일반 런 첫 함정") == "일반",
                 "A prototype normal-run checkpoint must target the normal-run button.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 첫 함정") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 시작→런 확인") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 런 확인") == "일반"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 일반 탈출") == "일반",
+                "Compact normal-run checkpoint labels must still target the normal-run button.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 복기 연습 후 탈출") == "연습",
                 "A prototype review-practice checkpoint must target practice.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 복기 후 탈출") == "연습",
+                "A compact review-practice checkpoint label must still target practice.");
             Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 복기 재도전으로 실수 구간 보완") == "일반",
                 "A prototype normal review-retry checkpoint must target the normal-run button.");
@@ -1799,17 +7900,36 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 완성 루프 기록 확인") == "기록",
                 "A completed prototype-loop checkpoint must target records.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 완성 루프 기록 확인") == "기록",
+                "A shortened completed-loop next-action must still target records.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 기록 보기에서 최근 기록 확인") == "기록",
                 "A record-review next-action must target the record button.");
             Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 기록 보드에서 최근 기록 확인") == "기록",
                 "A record-board next-action phrasing must still target the record button.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 기록 확인") == "기록"
+                    && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 완성 기록 확인") == "기록",
+                "Short record-check and completion-record phrasing must still target the record button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 완성 기록") == "기록",
+                "A compact completed-record checkpoint label must still target the record button.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 성장 보정에서 집중 Lv.2 적용") == "성장",
                 "A growth-correction next-action must target the growth button.");
             Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 성장 보정에서 집중 Lv.2 적용") == "성장",
+                "A prototype growth-correction checkpoint must target the growth button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 성장 포인트 보유 2pt / 집중 Lv.2 적용") == "성장",
+                "A growth-point next-action must target the growth button.");
+            Require(
                 InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음: 흔적에서 검증 순서 확인") == "흔적",
                 "A profile next-action must target the profile button.");
+            Require(
+                InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", "결과\n다음 확인: 흔적에서 검증 순서 확인") == "흔적",
+                "A prototype profile checkpoint must target the profile button.");
             Require(
                 InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "무한 조합 보충으로 보충 런 진입") == "무한 조합 보충",
                 "Profile next-action refill phrasing must highlight the refill/infinite action.");
@@ -1822,6 +7942,37 @@ namespace GreedLast.Editor
             Require(
                 InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "저장 후보 저장/포기") == "저장 조합",
                 "Profile next-check save-candidate phrasing must highlight save loadouts.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모(1회)") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "후보 저장/포기") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "후보 처리") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "후보 처리: 1회 후보 / 저장·포기 후 소모") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", " 저장 ") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "포기 버튼: 후보 소모") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "포기 버튼: 후보 소모(1회)") == "저장 조합",
+                "Profile shortened save/abandon button phrasing must highlight save loadouts.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "일반") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "연습") == "복기 연습"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "무한") == "무한모드"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "성장") == "성장 보정"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "흔적") == "흔적"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "기록") == "기록 보기",
+                "Profile one-word next-action aliases must keep the highlighted action consistent with lobby routing.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "첫 함정") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "시작→런 확인") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "런 확인") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "복기 후 탈출") == "복기 연습"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "일반 탈출") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "저장 후보 생성") == "일반 런"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "첫 무한") == "무한모드"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "2회 소진") == "무한모드"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "보충 재진입") == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "무한 기록") == "무한모드"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "완성 기록") == "기록 보기",
+                "Profile raw compact prototype display labels must keep the highlighted action consistent with lobby routing.");
             Require(
                 InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "저장 조합으로 무한 시작") == "무한모드",
                 "Profile next-check save-loadout start phrasing must highlight infinite mode.");
@@ -1846,7 +7997,65 @@ namespace GreedLast.Editor
             Require(
                 InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "완성 루프 기록 확인") == "기록 보기",
                 "Profile completed-loop phrasing must highlight the record action.");
-            var prototypeNextActionBackend = new GreedLastMockBackend();
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "기록 확인") == "기록 보기"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "완성 기록 확인") == "기록 보기",
+                "Short record-check and completion-record next actions must highlight the record action.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 다음: 기록 / 실행: 저장 조합 / 목적: 코칭 없는 순수 기록 확인") == "기록 보기"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 다음 확인: 저장 후보 저장/포기 / 실행: 저장 조합 / 목적: 저장·포기 1회성 처리") == "저장 조합"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 다음 확인: 저장 조합 2회 소진 / 실행: PgUp 소모 / 목적: 마지막 사용 후 자동 비움") == "무한모드"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 다음 확인: 보충 후 무한 재진입 / 실행: 무한 조합 보충 / 목적: 비운 슬롯을 다시 채움") == "무한 조합 보충",
+                "Profile highlight actions must reuse lobby routing for compact immediate-check lines.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 실행: 성장 / 목적: 성장 보정 적용 확인") == "성장 보정"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: 강조 버튼: 무한 조합 보충 / 목적: 비운 슬롯을 다시 채움") == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "바로 체크: Enter/강조: 복기 연습 / 목적: 약한 동작을 짧게 반복") == "복기 연습",
+                "Profile highlight actions must understand compact execute and highlight directives when next-check text is absent.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "성장 보정에서 집중 Lv.2 적용") == "성장 보정",
+                "Profile growth next-action phrasing must highlight growth correction.");
+            Require(
+                InvokeMockBackendStaticLabel("ResolveProfileHighlightActionFromNextAction", "흔적에서 검증 순서 확인") == "흔적",
+                "Profile trace next-action phrasing must highlight the profile button.");
+            var prototypeNextActionBackend = CreateIsolatedBackend();
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckText") == "시작→런 확인"
+                    && prototypeNextActionBackend.BuildProfileBoardText(0).Contains("다음 확인: 시작→런 확인", StringComparison.Ordinal),
+                "A clean prototype profile must put the first check on start-to-run confirmation instead of an internal first-trap label.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "저장 조합에서 후보 비교 / 저장 또는 포기") == "저장 조합",
+                "The profile checklist action label must send save-loadout candidate-management checks to save loadouts.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "저장 조합 변경에서 사용 가능한 슬롯 선택") == "저장 조합",
+                "The profile checklist action label must send save-loadout-change checks to save loadouts.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모") == "저장 조합",
+                "The profile checklist action label must send shortened save/abandon button checks to save loadouts.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "후보 저장/포기") == "저장 조합"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "후보 처리") == "저장 조합"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모(1회)") == "저장 조합"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "후보 처리: 1회 후보 / 저장·포기 후 소모") == "저장 조합",
+                "The profile checklist action label must send very short candidate-handling checks to save loadouts.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "일반") == "일반 런"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "연습") == "복기 연습"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "저장") == "저장 조합"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "무한") == "무한모드"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "성장") == "성장 보정"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "흔적") == "흔적"
+                    && InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "기록") == "기록 보기",
+                "The profile checklist action label must map one-word prototype checkpoints to the same actions as lobby routing.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "클리어 후 저장 후보") == "일반 런",
+                "The profile checklist action label must send new save-candidate creation checks back to a normal run.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "성장 보정에서 집중 Lv.2 적용") == "성장 보정",
+                "The profile checklist action label must send growth-correction checks to growth.");
+            Require(
+                InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "흔적에서 검증 순서 확인") == "흔적",
+                "The profile checklist action label must send trace checks to the profile board.");
             Require(
                 InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "무한 복기 전 기초연습 숙이기 단계 확인") == "복기 연습",
                 "The profile checklist action label must send infinite pre-retry drills to practice.");
@@ -1863,6 +8072,160 @@ namespace GreedLast.Editor
                 InvokeMockBackendLabel(prototypeNextActionBackend, "BuildPrototypeNextCheckActionText", "완성 루프 기록 확인") == "기록 보기",
                 "The profile checklist action label must send completed-loop verification to records.");
             Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "저장 조합 2회 소진", true, true) == "PgUp 소모"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "저장 조합 2회 소진", true, false) == "저장 소모"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "저장 조합 2회 소진", false, false) == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "보충 후 무한 재진입", false, false) == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "보충 런 클리어 후 새 조합 저장", false, false) == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "완성 루프 기록 확인", true, false) == "기록 보기"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", " 저장 조합 2회 소진 ", true, false) == "저장 소모",
+                "Prototype next-check actions must hide editor PgUp wording in release/mobile save-use checkpoints and keep refill/completion routes explicit.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "첫 함정", true, false) == "일반 런"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "복기 후 탈출", true, false) == "복기 연습"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "저장 후보 생성", true, false) == "일반 런"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "후보 처리", true, false) == "저장 조합"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "첫 무한", true, false) == "무한모드"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "2회 소진", true, false) == "저장 소모"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "2회 소진", false, false) == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "보충 재진입", false, false) == "무한 조합 보충"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "무한 기록", true, false) == "무한모드"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckActionTextForMode", "완성 기록", true, false) == "기록 보기",
+                "Prototype action labels must also understand already-compacted next-check display labels.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "일반 런 첫 함정") == "첫 함정"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "시작→런 확인") == "시작→런 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "런 확인") == "런 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "복기 연습 후 탈출") == "복기 후 탈출"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "클리어 후 저장 후보") == "저장 후보 생성"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "저장 후보 저장/포기") == "후보 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "저장 조합으로 무한 시작") == "첫 무한"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "저장 조합 2회 소진") == "2회 소진"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "보충 후 무한 재진입") == "보충 재진입"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "무한 기록 생성") == "무한 기록"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "완성 루프 기록 확인") == "완성 기록"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "성장 보정에서 집중 Lv.2 적용") == "성장 보정"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckDisplayText", "흔적에서 검증 순서 확인") == "흔적 확인",
+                "Prototype next-check display labels must stay short while preserving the action and purpose routing contracts.");
+            string releasePlaytestNextActionLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypePlaytestNextActionLineTextForMode",
+                "저장 조합 2회 소진",
+                true,
+                false);
+            string editorPlaytestNextActionLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypePlaytestNextActionLineTextForMode",
+                "저장 조합 2회 소진",
+                true,
+                true);
+            string fallbackPlaytestNextActionLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypePlaytestNextActionLineTextForMode",
+                string.Empty,
+                false,
+                false);
+            string refillPlaytestNextActionLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypePlaytestNextActionLineTextForMode",
+                "보충 후 무한 재진입",
+                false,
+                false);
+            string releaseImmediateCheckLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypeImmediateCheckLineTextForMode",
+                "저장 조합 2회 소진",
+                true,
+                false);
+            string editorImmediateCheckLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypeImmediateCheckLineTextForMode",
+                "저장 조합 2회 소진",
+                true,
+                true);
+            string fallbackImmediateCheckLine = InvokeMockBackendStaticLabel(
+                "BuildPrototypeImmediateCheckLineTextForMode",
+                string.Empty,
+                false,
+                false);
+            Require(
+                releasePlaytestNextActionLine == "다음 확인: 2회 소진 / 실행: 저장 소모"
+                    && !releasePlaytestNextActionLine.Contains("PgUp", StringComparison.Ordinal)
+                    && editorPlaytestNextActionLine == "다음 확인: 2회 소진 / 실행: PgUp 소모"
+                    && fallbackPlaytestNextActionLine == "다음 확인: 강조 버튼 경로 / 실행: 강조 버튼",
+                "The profile first-page next-action line must use mobile/release save-use wording without losing the editor shortcut or leaving blank checkpoints.");
+            Require(
+                refillPlaytestNextActionLine == "다음 확인: 보충 재진입 / 실행: 무한 조합 보충",
+                "The profile first-page next-action line must route empty-loadout refill checks back through infinite-loadout refill.");
+            Require(
+                InvokeMockBackendStaticLabel(
+                    "BuildPrototypePlaytestNextActionLineTextForMode",
+                    "첫 무한",
+                    true,
+                    false) == "다음 확인: 첫 무한 / 실행: 무한모드"
+                    && InvokeMockBackendStaticLabel(
+                        "BuildPrototypePlaytestNextActionLineTextForMode",
+                        "보충 재진입",
+                        false,
+                        false) == "다음 확인: 보충 재진입 / 실행: 무한 조합 보충",
+                "Prototype first-page next-action lines must remain valid even when an already-compacted label is fed back in.");
+            Require(
+                releaseImmediateCheckLine == "바로 체크: 다음 확인: 2회 소진 / 실행: 저장 소모 / 목적: 마지막 사용 후 자동 비움"
+                    && !releaseImmediateCheckLine.Contains("PgUp", StringComparison.Ordinal)
+                    && editorImmediateCheckLine == "바로 체크: 다음 확인: 2회 소진 / 실행: PgUp 소모 / 목적: 마지막 사용 후 자동 비움"
+                    && fallbackImmediateCheckLine == "바로 체크: 다음 확인: 강조 버튼 경로 / 실행: 강조 버튼 / 목적: 강조 버튼 경로 확인",
+                "The profile immediate-check line must combine checkpoint, action, and purpose while still hiding editor shortcuts in release/mobile wording.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "일반 런 첫 함정") == "위험·동작·박자 첫 체감"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "시작→런 확인") == "위험·동작·박자 첫 체감"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "런 확인") == "위험·동작·박자 첫 체감"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "복기 연습 후 탈출") == "약한 동작을 짧게 반복"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "복기 연습으로 정확권 전환") == "정확 보상 전환 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "일반 런 탈출") == "공명핵 회수 뒤 입구 마무리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 후보 저장/포기") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "후보 저장/포기") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "후보 처리") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 버튼: 이 슬롯 저장 / 포기 버튼: 후보 소모(1회)") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "후보 처리: 1회 후보 / 저장·포기 후 소모") == "저장·포기 1회성 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "클리어 후 저장 후보") == "새 클리어로 후보 생성"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 후보 생성") == "새 클리어로 후보 생성"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 조합 2회 소진") == "마지막 사용 후 자동 비움"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "2회 소진") == "마지막 사용 후 자동 비움"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "저장 조합으로 무한 시작") == "저장 효과와 위협 보상 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "첫 무한") == "저장 효과와 위협 보상 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "보충 후 무한 재진입") == "빈 조합을 보충 런으로 회복"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "보충 재진입") == "빈 조합을 보충 런으로 회복"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "성장 보정에서 집중 Lv.2 적용") == "성장 보정 적용 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "성장 보정") == "성장 보정 적용 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "흔적에서 검증 순서 확인") == "검증 순서와 다음 행동 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "흔적 확인") == "검증 순서와 다음 행동 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "완성 루프 기록 확인") == "코칭 없는 순수 기록 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeNextCheckPurposeText", "완성 기록") == "코칭 없는 순수 기록 확인",
+                "Prototype next-check purposes must explain why the next checkpoint matters without changing the action target.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeProgressPipText", 0, 4) == "[----]"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeProgressPipText", 3, 4) == "[###-]"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeProgressPipText", 9, 4) == "[####]",
+                "Prototype progress pips must clamp progress and give the playtest checklist a quick visual read.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 0, false, false, false, "일반 런 첫 함정") == "일반 런부터"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 2, false, false, true, "저장 후보 저장/포기") == "저장 후보 처리"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 4, true, false, true, "저장 조합 2회 소진") == "마지막 소진 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 4, true, true, false, "보충 후 무한 재진입") == "루프 완료 / 보충 필요"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 4, true, false, true, "완성 루프 기록 확인") == "완성 기록 확인"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeLoopCheckpointStateTextForValues", 4, true, false, true, "완성 기록") == "완성 기록 확인",
+                "Prototype loop checkpoint labels must distinguish first run, candidate handling, final save-use, refill, and completion-record states.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeRemainingReviewStepText", "무한 복기 전 기초연습 숙이기 단계 확인") == "무한 복기"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeRemainingReviewStepText", "복기 연습으로 정확권 전환") == "정확권 복기"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeRemainingReviewStepText", "복기 재도전으로 실수 구간 보완") == "복기",
+                "Prototype remaining-loop review labels must compact practice, exact-band, and infinite review actions.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildSaveUseCheckpointActionText", true, true) == "PgUp 소모"
+                    && InvokeMockBackendStaticLabel("BuildSaveUseCheckpointActionText", true, false) == "저장 소모"
+                    && InvokeMockBackendStaticLabel("BuildSaveUseCheckpointActionText", false, false) == "무한 조합 보충",
+                "Save-use checkpoint labels must keep editor shortcut wording but hide PgUp in release/mobile wording.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildCompactSaveUseTraceText", 2) == "2/2 2회"
+                    && InvokeMockBackendStaticLabel("BuildCompactSaveUseTraceText", 1) == "1/2 마지막"
+                    && InvokeMockBackendStaticLabel("BuildCompactSaveUseTraceText", 0) == "완료",
+                "Profile save-loadout traces must share the same compact remaining-use language as slot buttons and lanes.");
+            Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음: 복기 연습으로 정확권 전환") == "연습",
                 "The lobby Enter action must follow the highlighted review-practice target.");
             Require(
@@ -1875,14 +8238,243 @@ namespace GreedLast.Editor
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 보충 후 무한 재진입") == "무한",
                 "The lobby Enter action must follow prototype refill/re-entry phrasing.");
             Require(
+                InvokeAppStaticLabel(
+                    "ResolveLobbyPrimaryActionTarget",
+                    false,
+                    true,
+                    true,
+                    true,
+                    "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "무한"
+                    && InvokeAppStaticLabel(
+                        "ResolveLobbyPrimaryActionTarget",
+                        false,
+                        true,
+                        true,
+                        true,
+                        "저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "무한",
+                "The lobby Enter action must route condensed refill guidance to infinite/refill even when a usable slot flag is stale.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 후보 처리") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 첫 함정") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 시작→런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 복기 후 탈출") == "연습"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 첫 무한") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 2회 소진") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 보충 재진입") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 완성 기록") == "기록",
+                "The lobby Enter action must route compact prototype next-check display labels even when no execution line remains.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:후보 처리") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:첫 함정") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:시작→런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:일반 탈출") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:저장 후보 생성") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:복기 후 탈출") == "연습"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:첫 무한") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:2회 소진") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:무한 기록") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:보충 재진입") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:완성 기록") == "기록",
+                "Pipe-compacted prototype display labels with a next directive must route to the same lobby target as their standalone label.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|강조 버튼:후보 처리") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|강조 버튼:첫 함정") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|강조 버튼:시작→런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|실행:저장 후보 생성") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|Enter/강조:복기 후 탈출") == "연습"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|실행:2회 소진") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|강조 버튼:보충 재진입") == "무한",
+                "Action-only compact prototype display labels must route to their intended lobby targets.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n루프 상태: 루프 완료 / 보충 필요") == string.Empty
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, false, "흔적 요약\n루프 상태: 루프 완료 / 보충 필요") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 보충 후 무한 재진입\n루프 상태: 루프 완료 / 보충 필요") == "무한",
+                "Prototype loop-state labels must not become action targets unless an explicit next-check or empty-loadout state provides the route.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 저장 조합") == "저장",
+                "The lobby Enter action must follow compact explicit save-loadout execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 저장 조합 2회 소진") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 저장 조합 2회 소진") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 저장 조합 소진") == "무한",
+                "Save-loadout depletion execution labels must route to the infinite/save-use flow before generic save-loadout wording.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 저장") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 저장/포기") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 저장 또는 포기") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약 / 실행: 저장 / 보조") == "저장",
+                "One-word explicit save action labels must route to save loadouts without catching save-use wording.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 저장 후보 저장/포기") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 후보 처리") == "저장",
+                "Short save-candidate and candidate-processing action labels must route to save loadouts.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 일반 런") == "일반",
+                "The lobby Enter action must follow compact explicit normal-run execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 일반") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 시작→런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 런 확인") == "일반"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 연습") == "연습"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 무한") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 성장") == "성장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 흔적") == "흔적"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 기록") == "기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약 / 실행: 무한 / 보조") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약 / 다음: 기록 / 실행: 저장 조합") == "기록",
+                "One-word explicit action labels and slash-compacted next/actions must route to the same lobby buttons as one-word next-action aliases.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:저장/포기|실행:기록") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|다음:완성 기록|실행:저장 조합") == "기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|Enter/강조:기록") == "기록",
+                "Pipe-compacted directive tails must preserve slash-bearing aliases and Enter/highlight directives.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 다음: 기록 / 실행: 저장 조합 / 목적: 코칭 없는 순수 기록 확인") == "기록",
+                "Wrapped immediate-check next aliases must win over later slash-compacted execute labels.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 실행: 성장 / 목적: 성장 보정 적용 확인") == "성장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: Enter/강조: 복기 연습 / 목적: 약한 동작을 짧게 반복") == "연습"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 강조 버튼: 무한 조합 보충 / 목적: 비운 슬롯을 다시 채움") == "무한",
+                "Wrapped immediate-check execute and highlight directives must route the lobby action when next-check text is absent.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 복기 재도전") == "일반",
+                "Short review-retry highlight labels must route to a normal retry.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 복기 연습") == "연습",
+                "The lobby Enter action must follow compact explicit practice execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 무한모드") == "무한",
+                "The lobby Enter action must follow compact explicit infinite execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 무한 복기 재도전") == "무한",
+                "Short infinite-review retry highlight labels must route to infinite mode.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 무한 조합 보충") == "무한",
+                "The lobby Enter action must follow compact explicit refill execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: PgUp 소모") == "무한",
+                "The lobby Enter action must keep editor save-use execution on the infinite/refill route.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 저장 소모") == "무한",
+                "The lobby Enter action must keep release save-use execution on the infinite/refill route.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약/실행:저장 소모") == "무한",
+                "The lobby Enter action must keep compact release save-use execution on the infinite/refill route.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약/실행:PgUp 소모") == "무한",
+                "The lobby Enter action must keep compact editor save-use execution on the infinite/refill route.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 보충 런") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 저장 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: PgUp 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 보충 런") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 저장 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: PgUp 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 보충 후 무한 재진입") == "무한",
+                "Short refill and release save-use highlight labels must route to the infinite/refill action.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 성장 보정") == "성장",
+                "The lobby Enter action must follow compact explicit growth execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 흔적") == "흔적",
+                "The lobby Enter action must follow compact explicit profile execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 기록 보기") == "기록",
+                "The lobby Enter action must follow compact explicit record execution phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약/실행:기록 보기") == "기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|실행:무한모드") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약;실행:저장 조합") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약;강조 버튼:완성 기록") == "기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|Enter/강조:무한모드") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약;강조 버튼:저장 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|Enter/강조:PgUp 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약|Enter/강조:기록 보기") == "기록",
+                "Compact execute/highlight aliases without spaces must keep their explicit lobby-button targets.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n실행: 기록 확인") == "기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 완성 기록") == "기록",
+                "Short record-check and completed-record action labels must route to the record board.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\nEnter/강조: 기록 보기 - 완성 루프 기록 확인") == "기록",
+                "The lobby Enter action must follow compact explicit highlighted record phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 저장 조합") == "저장",
+                "The lobby highlighted-button action must follow release/mobile save-loadout phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 무한모드") == "무한",
+                "The lobby highlighted-button action must follow release/mobile infinite phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n강조 버튼: 기록 보기 - 완성 루프 기록 확인") == "기록",
+                "The lobby highlighted-button action must follow release/mobile record phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n다음 확인: 기록 보드 확인\nEnter/강조: 저장 조합") == "기록",
+                "A concrete next-check record request must win over stale highlighted action copy.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "보충 런 저장 안 함\n다음: 무한 버튼으로 보충 런 재시도") == "무한",
+                "The lobby Enter action must follow refill skip-save retry phrasing.");
+            Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 보충 런 클리어 후 새 조합 저장") == "무한",
                 "The lobby Enter action must follow prototype direct refill-run phrasing.");
             Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 저장 후보 저장/포기") == "저장",
                 "The lobby Enter action must follow prototype save-candidate phrasing.");
             Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", true, true, true, true, clearSaveDraftRoutingMessage) == "저장",
+                "The lobby Enter action must keep compact clear-to-save-draft summaries on save handling while a candidate is pending.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 클리어 후 저장 후보") == "일반",
+                "The lobby Enter action must start a normal run when a new save candidate has to be created.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 저장 조합에서 후보 비교 / 저장 또는 포기") == "저장",
+                "The lobby Enter action must follow prototype save-loadout candidate-management phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 저장 조합 변경에서 사용 가능한 슬롯 선택") == "저장",
+                "The lobby Enter action must follow prototype save-loadout-change phrasing.");
+            Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 저장 조합으로 무한 시작") == "무한",
                 "The lobby Enter action must follow prototype save-loadout infinite-start phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약/다음:저장 소모") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약/다음:PgUp 소모") == "무한",
+                "Compact next-action save-use labels must route to the infinite/refill action instead of the save board.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n탈출 성공 / 기록 저장\n[S] 1200점 / 80.0m") == "기록",
+                "The lobby Enter action must open clear records even when a normal clear has a generic result heading.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "클리어 요약\n이번 기록: [S] 1200점 / 80.0m") == "기록",
+                "The lobby Enter action must open clear records even when the clear summary only keeps a compact record line.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "입구 탈출 완료 [S] 1200점 / 80.0m / 콤9") == "기록",
+                "The lobby Enter action must open clear records even when the entrance-exit result is shortened to a score line.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "입구 탈출 완료: [S] 1200점 / 80.0m / 콤9") == "기록",
+                "The lobby Enter action must open clear records even when the entrance-exit result uses a colon before its score.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "입구 탈출 완료 - [S] 1200점 / 80.0m / 콤9") == "기록",
+                "The lobby Enter action must open clear records even when the entrance-exit result uses a dash before its score.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "입구 탈출 완료/[S] 1200점/80.0m/콤9") == "기록",
+                "The lobby Enter action must open clear records even when the entrance-exit result is tightly slash-separated.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "탈출 완료 [A] 980점 / 64.0m / 콤7") == "기록",
+                "The lobby Enter action must open clear records even when the clear-complete result is shortened to a score line.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "탈출 완료: [A] 980점 / 64.0m / 콤7") == "기록",
+                "The lobby Enter action must open clear records even when the clear-complete result uses a colon before its score.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "탈출 완료 - [A] 980점 / 64.0m / 콤7") == "기록",
+                "The lobby Enter action must open clear records even when the clear-complete result uses a dash before its score.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "탈출 완료/[A] 980점/64.0m/콤7") == "기록",
+                "The lobby Enter action must open clear records even when the clear-complete result is tightly slash-separated.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n탈출 실패 기록 저장\n복기: 채널 확인") == "기록",
+                "The lobby Enter action must open review records even when a failed result has a generic result heading.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n보충 런 저장 안 함\n기록: [S] 1200점 / 80.0m") == "기록",
+                "The lobby Enter action must open refill records even when a refill result has a generic result heading.");
             Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 기록 보드 확인") == "기록",
                 "The lobby Enter action must follow prototype record-board phrasing.");
@@ -1890,17 +8482,136 @@ namespace GreedLast.Editor
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 완성 루프 기록 확인") == "기록",
                 "The lobby Enter action must open records for the completed prototype-loop checkpoint.");
             Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음: 완성 루프 기록 확인") == "기록",
+                "The lobby Enter action must open records for shortened completed-loop next-action phrasing.");
+            string compactCompletedLoopCheck = "흔적 요약\n바로 체크: 다음 확인: 완성 루프 기록 확인 / 실행: 기록 보기 / 목적: 코칭 없는 순수 기록 확인";
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, compactCompletedLoopCheck) == "기록",
+                "The lobby Enter action must open records from the compact immediate-check completed-loop line.");
+            Require(
                 InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "결과\n다음 확인: 완성 루프 기록 확인"),
                 "Opening the completed-loop record shortcut must clear the profile NEW marker.");
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "결과\n다음: 완성 루프 기록 확인"),
+                "Opening a shortened completed-loop record shortcut must also clear the profile NEW marker.");
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "결과\n다음: 완성 기록 확인")
+                    && InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "요약 / 다음: 완성 기록 / 실행: 기록 보기"),
+                "Opening very short completed-record shortcuts must also clear the profile NEW marker.");
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "완성 기록")
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", "완성 기록") == "완성 기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "완성 기록") == "기록"
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "완성 기록", 2, 4) == 0,
+                "A raw compact completed-record label must still clear profile NEW, keep the completion button label, route to records, and open the summary page.");
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", compactCompletedLoopCheck),
+                "Opening compact immediate-check completed-loop records must also clear the profile NEW marker.");
+            string compactShortCompletedRecordCheck = "흔적 요약\n바로 체크: 다음: 완성 기록 / 실행: 기록 보기 / 목적: 코칭 없는 순수 기록 확인";
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, compactShortCompletedRecordCheck) == "기록"
+                    && InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", compactShortCompletedRecordCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", compactShortCompletedRecordCheck) == "완성 기록",
+                "A shortened compact immediate-check completed-record line must open records, clear profile NEW, and label the record button as completion review.");
+            string tightCompactShortCompletedRecordCheck = "흔적 요약/바로 체크:다음:완성 기록/실행:기록 보기/목적:코칭 없는 순수 기록 확인";
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, tightCompactShortCompletedRecordCheck) == "기록"
+                    && InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", tightCompactShortCompletedRecordCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", tightCompactShortCompletedRecordCheck) == "완성 기록",
+                "A tightly compact completed-record line must still open records, clear profile NEW, and label the record button as completion review.");
+            string compactActionOnlyCompletedRecordCheck = "흔적 요약\n바로 체크: 실행: 완성 기록 / 목적: 코칭 없는 순수 기록 확인";
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, compactActionOnlyCompletedRecordCheck) == "기록"
+                    && InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", compactActionOnlyCompletedRecordCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", compactActionOnlyCompletedRecordCheck) == "완성 기록",
+                "An action-only compact completed-record line must still open records, clear profile NEW, and label the record button as completion review.");
+            string highlightedCompletedRecordCheck = "흔적 요약\nEnter/강조: 기록 보기 - 완성 루프 기록 확인";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", highlightedCompletedRecordCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", highlightedCompletedRecordCheck) == "완성 기록",
+                "A highlighted completed-loop record action must clear profile NEW and keep the completion record button label.");
+            string nextCompletedRecordViewCheck = "흔적 요약\n다음: 기록 보기 - 완성 루프 기록 확인";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", nextCompletedRecordViewCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", nextCompletedRecordViewCheck) == "완성 기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, nextCompletedRecordViewCheck) == "기록",
+                "A completed-loop record-view next-action must clear profile NEW, keep the completion label, and route to records.");
+            string nextShortCompletedRecordViewCheck = "흔적 요약\n다음 확인: 기록 보기 - 완성 기록 확인";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", nextShortCompletedRecordViewCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", nextShortCompletedRecordViewCheck) == "완성 기록",
+                "A shortened completed-record view next-check must still count as final completion review.");
+            string shorterCompletedRecordViewCheck = "흔적 요약\n다음: 기록 보기 - 완성 기록";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", shorterCompletedRecordViewCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", shorterCompletedRecordViewCheck) == "완성 기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, shorterCompletedRecordViewCheck) == "기록",
+                "A shorter completed-record view label must still clear profile NEW, keep the completion label, and route to records.");
+            string completedRecordBoardCheck = "흔적 요약\n강조 버튼: 기록 보드 - 완성 루프 기록";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", completedRecordBoardCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", completedRecordBoardCheck) == "완성 기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, completedRecordBoardCheck) == "기록",
+                "A completed-loop record-board highlight must be treated as the final completion record review.");
+            string shorterCompletedRecordBoardCheck = "흔적 요약\n다음: 기록 보드 - 완성 기록";
+            Require(
+                InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", shorterCompletedRecordBoardCheck)
+                    && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", shorterCompletedRecordBoardCheck) == "완성 기록"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, shorterCompletedRecordBoardCheck) == "기록",
+                "A shorter completed-record board next-action must still be treated as the final completion record review.");
+            Require(
+                InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "결과\n다음: 완성 루프 기록 확인", 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "결과\n다음: 완성 기록 확인", 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "요약 / 다음: 완성 기록 / 실행: 기록 보기", 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", compactCompletedLoopCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", compactShortCompletedRecordCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", tightCompactShortCompletedRecordCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", compactActionOnlyCompletedRecordCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", highlightedCompletedRecordCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", nextCompletedRecordViewCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", nextShortCompletedRecordViewCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", shorterCompletedRecordViewCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", completedRecordBoardCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", shorterCompletedRecordBoardCheck, 2, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 성공 / 기록 저장\n[S] 1200점 / 80.0m", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "클리어 요약\n이번 기록: [S] 1200점 / 80.0m", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "입구 탈출 완료 [S] 1200점 / 80.0m / 콤9", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "입구 탈출 완료: [S] 1200점 / 80.0m / 콤9", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "입구 탈출 완료 - [S] 1200점 / 80.0m / 콤9", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "입구 탈출 완료/[S] 1200점/80.0m/콤9", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 완료 [A] 980점 / 64.0m / 콤7", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 완료: [A] 980점 / 64.0m / 콤7", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 완료 - [A] 980점 / 64.0m / 콤7", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 완료/[A] 980점/64.0m/콤7", 3, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "무한모드 종료 / 기록 저장\n[S] 1800점 / 4구간", 0, 4) == 2
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", string.Empty, 9, 4) == 3
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", string.Empty, -1, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "탈출 성공 / 기록 저장\n[S] 1200점 / 80.0m", 3, 1) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardPageForLobbyDetail", "무한모드 종료 / 기록 저장\n[S] 1800점 / 4구간", 0, 1) == 0,
+                "Record-button page selection must open completion summary, normal records, infinite records, or clamped pages.");
             Require(
                 !InvokeAppStaticBool("ShouldMarkProfileSeenFromRecordRequest", "결과\n다음 확인: 기록 보드 확인"),
                 "Opening a regular record-board shortcut must not clear unrelated profile NEW markers.");
             Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 다음 확인: 저장 후보 저장/포기 / 실행: 저장 조합 / 목적: 저장·포기 1회성 처리") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 다음 확인: 저장 조합 2회 소진 / 실행: PgUp 소모 / 목적: 마지막 사용 후 자동 비움") == "무한"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "흔적 요약\n바로 체크: 다음 확인: 무한 조합 보충 / 실행: 무한 조합 보충 / 목적: 비운 슬롯을 다시 채움") == "무한",
+                "Compact immediate-check lines must route save-candidate handling, save-use, and refill checkpoints to the right lobby action.");
+            Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음: 성장 보정에서 집중 Lv.2 적용") == "성장",
                 "The lobby Enter action must follow the highlighted growth target.");
             Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 성장 보정에서 집중 Lv.2 적용") == "성장",
+                "The lobby Enter action must follow prototype growth checkpoint phrasing.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음: 성장 포인트 보유 2pt / 집중 Lv.2 적용") == "성장",
+                "The lobby Enter action must follow growth-point next-action phrasing.");
+            Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음: 흔적에서 검증 순서 확인") == "흔적",
                 "The lobby Enter action must follow the highlighted profile target.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "결과\n다음 확인: 흔적에서 검증 순서 확인") == "흔적",
+                "The lobby Enter action must follow prototype trace checkpoint phrasing.");
             Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", false, true, true, true, "탈출 중단 기록 저장\n점수 125 / 거리 18.0m / 콤보 2") == "기록",
                 "The lobby Enter action must open records after a normal result without an explicit next-action.");
@@ -1919,6 +8630,27 @@ namespace GreedLast.Editor
             Require(
                 InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", true, true, true, false, "결과\n다음 확인: 보충 후 무한 재진입") == "저장",
                 "A pending save candidate must keep the lobby Enter action on save selection before empty-loadout re-entry shortcuts.");
+            Require(
+                InvokeAppStaticLabel(
+                    "ResolveLobbyPrimaryActionTarget",
+                    true,
+                    true,
+                    true,
+                    true,
+                    "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "저장"
+                    && InvokeAppStaticLabel(
+                        "ResolveLobbyPrimaryActionTarget",
+                        true,
+                        true,
+                        true,
+                        false,
+                        "저장 조합 없음\n보충 런 버튼: 보충 런 진입") == "저장",
+                "A pending save candidate must stay ahead of condensed refill-button guidance.");
+            Require(
+                InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", true, true, true, true, "흔적 요약\n실행: PgUp 소모\nEnter/강조: 무한모드") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", true, true, true, true, "흔적 요약\n강조 버튼: 무한 조합 보충") == "저장"
+                    && InvokeAppStaticLabel("ResolveLobbyPrimaryActionTarget", true, true, true, true, "흔적 요약\n다음 확인: 저장 후보 저장/포기\n실행: 무한모드") == "저장",
+                "A pending save candidate must stay ahead of shortened infinite, refill, and save-use highlight copy.");
             string infinitePrepReview = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(
                 infiniteSnapshot.Detail
                 + "\n복기: 무한 1구간 / 정확 0 -> 다음 구간 무실수"
@@ -1987,6 +8719,13 @@ namespace GreedLast.Editor
                 "보충 런 실패\n탈출 실패 기록 저장\n재도전 목표: 저장 조합 보충");
             Require(refillRetryContext.Contains("보충 복기 재도전", StringComparison.Ordinal), "A refill retry must keep its refill-review prefix.");
             Require(refillRetryContext.Contains("재도전 목표: 저장 조합 보충", StringComparison.Ordinal), "A refill retry must keep the refill target.");
+            string prefixedRefillRetryContext = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(
+                "결과\n보충 런 실패\n탈출 실패 기록 저장\n재도전 목표: 저장 조합 보충");
+            Require(
+                prefixedRefillRetryContext.Contains("보충 복기 재도전", StringComparison.Ordinal)
+                    && prefixedRefillRetryContext.Contains("보충 런 실패", StringComparison.Ordinal)
+                    && !prefixedRefillRetryContext.StartsWith("보충 복기 재도전\n결과", StringComparison.Ordinal),
+                "A prefixed refill failure must restart as a clean refill-review retry.");
         }
 
         private static void VerifyDevToolButtonLabels(float now)
@@ -1996,13 +8735,13 @@ namespace GreedLast.Editor
                 saveCandidateAvailable: false,
                 infiniteUnlocked: true);
             Require(
-                InvokeRuntimeUiLabel("BuildLobbyFocusTestButtonLabel", lobbySnapshot) == "저장 생성",
-                "The lobby focus test button must describe sample loadout injection.");
+                InvokeRuntimeUiLabel("BuildLobbyFocusTestButtonLabel", lobbySnapshot) == "테스트 저장",
+                "The lobby focus test button must describe test loadout injection without implying a real clear.");
             Require(
                 InvokeRuntimeUiLabel("BuildLobbySaveUseTestButtonLabel", lobbySnapshot) == "저장 소모",
                 "The lobby save-use test button must describe consuming a usable loadout.");
             Require(
-                InvokeRuntimeUiLabel("BuildLobbyCandidateTestButtonLabel") == "후보 생성",
+                InvokeRuntimeUiLabel("BuildLobbyCandidateTestButtonLabel", lobbySnapshot) == "후보 생성",
                 "The lobby candidate test button must describe sample clear candidate injection.");
 
             GreedLastStateSnapshot candidateSnapshot = BuildLobbyLabelSnapshot(
@@ -2012,6 +8751,12 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbyFocusTestButtonLabel", candidateSnapshot) == "추천 저장",
                 "A pending save candidate must make the test save label read as a recommendation save.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbySaveUseTestButtonLabel", candidateSnapshot) == "후보 우선",
+                "A pending save candidate must prevent the save-use test label from implying that an existing slot can be spent first.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyCandidateTestButtonLabel", candidateSnapshot) == "후보 대기",
+                "A pending save candidate must make the candidate-generation shortcut read as waiting instead of replacement.");
 
             GreedLastStateSnapshot emptyLoadoutSnapshot = BuildLobbyLabelSnapshot(
                 "저장 조합이 비었습니다.",
@@ -2022,6 +8767,9 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbySaveUseTestButtonLabel", emptyLoadoutSnapshot) == "보충 확인",
                 "A lobby with no usable loadout must label the save-use test as refill verification.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyCandidateTestButtonLabel", emptyLoadoutSnapshot) == "보충 후보",
+                "A lobby with no usable loadout must label the candidate shortcut as a refill-candidate helper.");
             GreedLastStateSnapshot freshLobbySnapshot = BuildLobbyLabelSnapshot(
                 "피라미드 입구",
                 saveCandidateAvailable: false,
@@ -2033,6 +8781,9 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildLobbySaveUseTestButtonLabel", freshLobbySnapshot) == "저장 없음",
                 "A fresh lobby before the first save must not imply that refill verification is available.");
+            Require(
+                InvokeRuntimeUiLabel("BuildLobbyCandidateTestButtonLabel", freshLobbySnapshot) == "후보 생성",
+                "A fresh lobby can still use the candidate shortcut as a generic clear-candidate helper.");
 
             Require(
                 InvokeRuntimeUiLabel("BuildGrowthPointTestButtonLabel") == "포인트 +3",
@@ -2052,11 +8803,148 @@ namespace GreedLast.Editor
             runCore.Tick(now + 2f);
             Require(
                 InvokeRuntimeUiLabel("BuildRunFocusTestButtonLabel", runSnapshot) == "집중 발동",
-                "An inactive normal run must label the focus test as activation.");
+                "A normal run before focus activation must label the focus test as activation.");
             runCore.FillFocusForTest();
             Require(
                 InvokeRuntimeUiLabel("BuildRunFocusTestButtonLabel", runSnapshot) == "집중 리필",
                 "An active focus state must label the focus test as a refill.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunThreatDownTestButtonLabel", runSnapshot) == "피해 -1",
+                "A normal run must reuse PgDn as a health-danger test instead of an infinite threat control.");
+            string autoRunningNextLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", runSnapshot, false);
+            Require(
+                runSnapshot.AutoFlow && autoRunningNextLabel == "자동 정지",
+                "A normal run released from the opening countdown must default to auto-flow and expose auto-stop. Actual: "
+                    + autoRunningNextLabel);
+            runCore.ToggleAutoFlow(now + 2.1f);
+            string manualNextLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", runSnapshot, false);
+            Require(
+                !runSnapshot.AutoFlow && manualNextLabel == "자동 시작",
+                "A live normal run with auto-flow disabled must expose auto-start as its next action. Actual: "
+                    + manualNextLabel);
+            int healthBeforeDamageTest = runSnapshot.Health;
+            runCore.DropHealthForDangerTest();
+            Require(
+                runSnapshot.Health == Mathf.Max(1, healthBeforeDamageTest - 1)
+                    && runSnapshot.JudgementText.Contains("테스트 피해 -1", StringComparison.Ordinal)
+                    && runSnapshot.JudgementText.Contains("위험 비네트", StringComparison.Ordinal),
+                "The normal-run health-danger test must lower health and explain the edge vignette.");
+            while (runSnapshot.Health > 1)
+            {
+                runCore.DropHealthForDangerTest();
+            }
+
+            Require(
+                runSnapshot.Health == 1
+                    && InvokeRuntimeUiLabel("BuildRunThreatDownTestButtonLabel", runSnapshot) == "위험 유지",
+                "The health-danger test button must switch to a hold label at minimum survival health.");
+            string healthDangerGuide = InvokeRuntimeUiLabel("BuildHealthDangerSurvivalGuideLine", runSnapshot);
+            Require(
+                healthDangerGuide.Contains("체력 위험", StringComparison.Ordinal)
+                    && healthDangerGuide.Contains("Good 이상 생존", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildRunGuideLine", runSnapshot).Contains(healthDangerGuide, StringComparison.Ordinal),
+                "Low-health runs must add a compact survival instruction to the live guide. Actual: "
+                    + healthDangerGuide);
+            Require(
+                InvokeRuntimeUiLabel("BuildRunPressureStatus", runSnapshot).Contains("체력 위험", StringComparison.Ordinal),
+                "Low-health runs must keep a compact pressure status marker.");
+
+            var activeHealthCore = new GreedLastRunCore();
+            GreedLastRunSnapshot activeHealthSnapshot = default;
+            activeHealthCore.SnapshotChanged += value => activeHealthSnapshot = value;
+            float activeHealthClock = now + 6f;
+            activeHealthCore.Enter("active health-danger feel smoke", refillRun: false);
+            activeHealthCore.HandleInput(GreedLastRunChannel.Center, activeHealthClock + 0.01f);
+            activeHealthCore.Tick(activeHealthClock + 2f);
+            activeHealthCore.Tick(activeHealthClock + 3f);
+            while (activeHealthSnapshot.Health > 1)
+            {
+                activeHealthCore.DropHealthForDangerTest();
+            }
+
+            Require(activeHealthSnapshot.ActivePattern, "The health-danger feel test must keep an active trap on screen.");
+            string lowHealthFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", activeHealthSnapshot);
+            Require(
+                lowHealthFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                    && lowHealthFeelStatus.Contains("→정확→생존", StringComparison.Ordinal),
+                "Low-health prototype feel must prioritize survival as the exact-input goal. Actual: "
+                    + lowHealthFeelStatus);
+            Require(
+                GreedLastRuntimeUi.BuildLiveRunCoachLine(activeHealthSnapshot).Contains("정확→생존", StringComparison.Ordinal),
+                "Low-health live coaching must also lead with survival as the exact-input goal.");
+            string activeHealthObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", activeHealthSnapshot);
+            Require(
+                activeHealthObjective.Contains("생존 우선", StringComparison.Ordinal)
+                    && activeHealthObjective.Contains("회피", StringComparison.Ordinal),
+                "Low-health run objectives must keep the required avoidance action visible instead of only saying survival. Actual: "
+                    + activeHealthObjective);
+            string activeHealthCue = InvokeRuntimeUiLabel("BuildActiveActionCueText", activeHealthSnapshot);
+            Require(
+                activeHealthCue.Contains("생존", StringComparison.Ordinal)
+                    && activeHealthCue.Contains("→생존", StringComparison.Ordinal)
+                    && activeHealthCue.Contains("정확+", StringComparison.Ordinal)
+                    && activeHealthCue.Contains("보정+", StringComparison.Ordinal),
+                "Low-health active action cues must show that exact timing is now a survival payoff. Actual: "
+                    + activeHealthCue);
+            string activeHealthScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", activeHealthSnapshot);
+            Require(
+                activeHealthScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                    && activeHealthScorePreview.Contains("→생존", StringComparison.Ordinal),
+                "Low-health score previews must keep survival beside the exact-score payoff. Actual: "
+                    + activeHealthScorePreview);
+            runCore.DropHealthForDangerTest();
+            Require(runSnapshot.Health == 1, "The health-danger test must keep the run alive at one health for visual checking.");
+
+            var autoFailCore = new GreedLastRunCore();
+            GreedLastRunSnapshot autoFailSnapshot = default;
+            autoFailCore.SnapshotChanged += value => autoFailSnapshot = value;
+            float autoFailClock = now + 8f;
+            autoFailCore.Enter("auto-flow failure smoke", refillRun: false);
+            autoFailCore.HandleInput(GreedLastRunChannel.Center, autoFailClock + 0.01f);
+            autoFailCore.Tick(autoFailClock + 2f);
+            autoFailCore.Tick(autoFailClock + 3f);
+            autoFailClock += 3f;
+            Require(autoFailSnapshot.ActivePattern, "The auto-flow failure test must start from an active trap.");
+            string autoFailRunningLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", autoFailSnapshot, false);
+            Require(
+                autoFailSnapshot.AutoFlow
+                    && autoFailRunningLabel == "자동 정지",
+                "A running auto-flow test must show the next button as auto-stop before failure. Actual: "
+                    + autoFailRunningLabel);
+            while (autoFailSnapshot.Health > 1)
+            {
+                autoFailCore.DropHealthForDangerTest();
+            }
+
+            Require(
+                autoFailSnapshot.ActivePattern && autoFailSnapshot.Health == 1 && autoFailSnapshot.AutoFlow,
+                "The auto-flow failure test must hold an active trap at one health before the terminal miss.");
+            autoFailClock += autoFailSnapshot.Pattern.HitSeconds + 0.2f;
+            autoFailCore.Tick(autoFailClock);
+
+            string autoFailStoppedLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", autoFailSnapshot, false);
+            Require(
+                autoFailSnapshot.Stopped
+                    && autoFailSnapshot.Health == 0
+                    && !autoFailSnapshot.AutoFlow
+                    && autoFailSnapshot.JudgementText.Contains("탈출 실패 - 체력 0", StringComparison.Ordinal)
+                    && autoFailStoppedLabel == "다시 시작",
+                "Auto-flow must shut itself off at health zero and the next button must become retry, not auto-stop. Actual: stopped="
+                    + autoFailSnapshot.Stopped
+                    + " health="
+                    + autoFailSnapshot.Health
+                    + " auto="
+                    + autoFailSnapshot.AutoFlow
+                    + " label="
+                    + autoFailStoppedLabel
+                    + " text="
+                    + autoFailSnapshot.JudgementText);
+            autoFailCore.DropHealthForDangerTest();
+            Require(
+                autoFailSnapshot.Stopped
+                    && autoFailSnapshot.Health == 0
+                    && autoFailSnapshot.JudgementText.Contains("종료 상태에서는 피해 테스트를 적용하지 않습니다.", StringComparison.Ordinal),
+                "The health-danger shortcut must not mutate a stopped run or revive/damage an already-settled failure.");
 
             var infiniteCore = new GreedLastRunCore();
             GreedLastRunSnapshot infiniteSnapshot = default;
@@ -2068,6 +8956,11 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildRunThreatDownTestButtonLabel", infiniteSnapshot) == "위협 MIN",
                 "A minimum-threat infinite run must label the threat-down test as already at minimum.");
+            Require(
+                InvokeRuntimeUiLabel("BuildThreatProgressAlertLabel", 3, 1) == "위협 상승  3"
+                    && InvokeRuntimeUiLabel("BuildThreatProgressAlertLabel", 0, -1) == "위협 하강  1"
+                    && InvokeRuntimeUiLabel("BuildThreatProgressAlertLabel", 9, 1) == "위협 상승  5",
+                "The infinite progress alert must use threat-stage wording and clamp to the readable threat range.");
             infiniteCore.RaiseInfiniteThreatForTest();
             Require(
                 infiniteSnapshot.JudgementText.Contains("테스트 위협 상승 - 위협 2/5 상승", StringComparison.Ordinal)
@@ -2076,11 +8969,25 @@ namespace GreedLast.Editor
                     && infiniteSnapshot.JudgementText.Contains("폭·보상 확인", StringComparison.Ordinal),
                 "The threat-up test must explain the next readable danger width and precision reward. Actual: "
                     + infiniteSnapshot.JudgementText);
+            string threatTwoBanner = InvokeRuntimeUiLabel("BuildStagePresentationText", infiniteSnapshot);
+            Require(
+                threatTwoBanner.Contains("무한 위협 2", StringComparison.Ordinal)
+                    && threatTwoBanner.Contains("상승", StringComparison.Ordinal)
+                    && threatTwoBanner.Contains("폭 보통", StringComparison.Ordinal),
+                "The infinite stage banner must name the threat pressure and danger width, not just the threat number. Actual: "
+                    + threatTwoBanner);
             for (int i = 0; i < 5; i += 1)
             {
                 infiniteCore.RaiseInfiniteThreatForTest();
             }
 
+            string threatMaxBanner = InvokeRuntimeUiLabel("BuildStagePresentationText", infiniteSnapshot);
+            Require(
+                threatMaxBanner.Contains("무한 위협 5", StringComparison.Ordinal)
+                    && threatMaxBanner.Contains("최고", StringComparison.Ordinal)
+                    && threatMaxBanner.Contains("폭 최대", StringComparison.Ordinal),
+                "The max-threat stage banner must expose the highest pressure and danger width. Actual: "
+                    + threatMaxBanner);
             Require(
                 InvokeRuntimeUiLabel("BuildRunThreatUpTestButtonLabel", infiniteSnapshot) == "위협 MAX",
                 "A max-threat infinite run must label the threat-up test as capped.");
@@ -2158,7 +9065,14 @@ namespace GreedLast.Editor
             bool hasUsableSaveSlot = true,
             bool hasOccupiedSaveSlot = true,
             bool firstSaveCompleted = true,
-            bool saveLoadoutUnlocked = true)
+            bool saveLoadoutUnlocked = true,
+            int selectedSaveSlotIndex = 0,
+            bool saveSlotDetailViewActive = false,
+            bool saveSlotChoiceRequired = false,
+            bool saveSlotOverwriteConfirmationPending = false,
+            bool saveLoadoutSkipConfirmationPending = false,
+            bool saveSlotDeleteConfirmationPending = false,
+            bool saveSlotRenameConfirmationPending = false)
         {
             return new GreedLastStateSnapshot(
                 GreedLastScreenState.LobbyReady,
@@ -2176,16 +9090,16 @@ namespace GreedLast.Editor
                 growthTimingLevel: 0,
                 recommendedGrowthTrackIndex: -1,
                 profileButtonSummary: "흔적",
-                selectedSaveSlotIndex: 0,
+                selectedSaveSlotIndex: selectedSaveSlotIndex,
                 saveSlotLabels: new[] { "마지막 1회 / 안정형 / 보너스 A", "빈 슬롯", "빈 슬롯" },
                 saveSlotUsable: new[] { hasUsableSaveSlot, false, false },
                 saveSlotOccupied: new[] { hasOccupiedSaveSlot, false, false },
-                saveSlotChoiceRequired: false,
-                saveSlotOverwriteConfirmationPending: false,
-                saveLoadoutSkipConfirmationPending: false,
-                saveSlotDeleteConfirmationPending: false,
-                saveSlotDetailViewActive: false,
-                saveSlotRenameConfirmationPending: false,
+                saveSlotChoiceRequired: saveSlotChoiceRequired,
+                saveSlotOverwriteConfirmationPending: saveSlotOverwriteConfirmationPending,
+                saveLoadoutSkipConfirmationPending: saveLoadoutSkipConfirmationPending,
+                saveSlotDeleteConfirmationPending: saveSlotDeleteConfirmationPending,
+                saveSlotDetailViewActive: saveSlotDetailViewActive,
+                saveSlotRenameConfirmationPending: saveSlotRenameConfirmationPending,
                 saveLoadoutCandidateAvailable: saveCandidateAvailable,
                 recordBoardPageIndex: 0,
                 retryVisible: false,
@@ -2196,7 +9110,8 @@ namespace GreedLast.Editor
             bool saveCandidateAvailable,
             bool infiniteUnlocked,
             bool hasUsableSaveSlot = true,
-            bool hasOccupiedSaveSlot = true)
+            bool hasOccupiedSaveSlot = true,
+            int selectedSaveSlotIndex = 0)
         {
             return new GreedLastLobbySnapshot(
                 "test",
@@ -2210,7 +9125,7 @@ namespace GreedLast.Editor
                 growthTimingLevel: 0,
                 recommendedGrowthTrackIndex: -1,
                 profileButtonSummary: "흔적",
-                selectedSaveSlotIndex: 0,
+                selectedSaveSlotIndex: selectedSaveSlotIndex,
                 saveSlotLabels: new[] { "S1 테스트", "빈 슬롯", "빈 슬롯" },
                 saveSlotUsable: new[] { hasUsableSaveSlot, false, false },
                 saveSlotOccupied: new[] { hasOccupiedSaveSlot, false, false },
@@ -2236,6 +9151,15 @@ namespace GreedLast.Editor
             return method.Invoke(null, args) as string ?? string.Empty;
         }
 
+        private static string InvokeStateMachineStaticLabel(string methodName, params object[] args)
+        {
+            MethodInfo method = typeof(GreedLastStateMachine).GetMethod(
+                methodName,
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            Require(method != null, "Missing state-machine static label helper: " + methodName);
+            return method.Invoke(null, args) as string ?? string.Empty;
+        }
+
         private static int InvokeAppStaticInt(string methodName, params object[] args)
         {
             MethodInfo method = typeof(GreedLastApp).GetMethod(
@@ -2254,6 +9178,15 @@ namespace GreedLast.Editor
             return (bool)method.Invoke(null, args);
         }
 
+        private static float InvokeAppStaticFloat(string methodName, params object[] args)
+        {
+            MethodInfo method = typeof(GreedLastApp).GetMethod(
+                methodName,
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            Require(method != null, "Missing app static float helper: " + methodName);
+            return (float)method.Invoke(null, args);
+        }
+
         private static Color32 InvokeRuntimeUiSnapshotColor(string methodName, GreedLastRunSnapshot snapshot)
         {
             MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(
@@ -2264,6 +9197,15 @@ namespace GreedLast.Editor
                 modifiers: null);
             Require(method != null, "Missing runtime UI color helper: " + methodName);
             return (Color32)method.Invoke(null, new object[] { snapshot });
+        }
+
+        private static Color32 InvokeRuntimeUiColor(string methodName, params object[] args)
+        {
+            MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(
+                methodName,
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Require(method != null, "Missing runtime UI color helper: " + methodName);
+            return (Color32)method.Invoke(null, args);
         }
 
         private static bool InvokeRuntimeUiBool(string methodName, GreedLastRunSnapshot snapshot)
@@ -2285,6 +9227,796 @@ namespace GreedLast.Editor
                 BindingFlags.Static | BindingFlags.NonPublic);
             Require(method != null, "Missing runtime UI static bool helper: " + methodName);
             return (bool)method.Invoke(null, args);
+        }
+
+        private static void VerifyRuntimeBoardScreenRenderVisibility()
+        {
+            GameObject existingCamera = GameObject.Find("GreedLastCamera");
+            GameObject existingEventSystem = GameObject.Find("GreedLastEventSystem");
+            GameObject host = new GameObject("GreedLastRuntimeUiBoardSmokeHost");
+            GameObject canvasRoot = null;
+
+            try
+            {
+                GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
+                InitializeRuntimeUiSmoke(ui);
+
+                GameObject lanePreviewRoot = GetRuntimeUiField<GameObject>(ui, "lanePreviewRoot");
+                Text subtitleText = GetRuntimeUiField<Text>(ui, "subtitleText");
+                Text detailText = GetRuntimeUiField<Text>(ui, "detailText");
+                Text runHudText = GetRuntimeUiField<Text>(ui, "runHudText");
+                Text[] laneLabelTexts = GetRuntimeUiField<Text[]>(ui, "laneLabelTexts");
+                Button[] laneButtons = GetRuntimeUiField<Button[]>(ui, "laneButtons");
+                Button normalRunButton = GetRuntimeUiField<Button>(ui, "normalRunButton");
+                Button saveLoadoutButton = GetRuntimeUiField<Button>(ui, "saveLoadoutButton");
+                Button infiniteButton = GetRuntimeUiField<Button>(ui, "infiniteButton");
+                Button nextPatternButton = GetRuntimeUiField<Button>(ui, "nextPatternButton");
+                Button saveSlotDetailButton = GetRuntimeUiField<Button>(ui, "saveSlotDetailButton");
+                Button returnLobbyButton = GetRuntimeUiField<Button>(ui, "returnLobbyButton");
+                Button rotationTiltButton = GetRuntimeUiField<Button>(ui, "rotationTiltButton");
+                Image[] lobbyRunPortalPieces = GetRuntimeUiField<Image[]>(ui, "lobbyRunPortalPieces");
+                Image[] lobbyRunPortalPips = GetRuntimeUiField<Image[]>(ui, "lobbyRunPortalPips");
+                Image rotationInputCursor = GetRuntimeUiField<Image>(ui, "straightRunRotationInputCursor");
+                Image rotationNeutralGate = GetRuntimeUiField<Image>(ui, "straightRunRotationNeutralGate");
+                Image[] rotationTiltPips = GetRuntimeUiField<Image[]>(ui, "straightRunRotationTiltPips");
+                Image[] rotationGripBars = GetRuntimeUiField<Image[]>(ui, "straightRunRotationGripBars");
+                GameObject runnerAvatarRoot = GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot");
+                CanvasGroup runnerAvatarCanvasGroup = GetRuntimeUiField<CanvasGroup>(ui, "runnerAvatarCanvasGroup");
+                Image runnerShadow = GetRuntimeUiField<Image>(ui, "runnerShadow");
+                GameObject rootPanel = GetRuntimeUiField<GameObject>(ui, "rootPanel");
+                if (rootPanel != null)
+                {
+                    canvasRoot = rootPanel.transform.root.gameObject;
+                }
+
+                Require(
+                    rotationInputCursor != null && rotationTiltButton != null,
+                    "Runtime UI must create the mobile rotation sensor cursor and persisted tilt preference button.");
+                InvokeRuntimeUiInstance(
+                    ui,
+                    "UpdateStraightRunRotationInputCursor",
+                    true,
+                    -1f,
+                    0.8f,
+                    -0.7f,
+                    -1,
+                    0.5f,
+                    new Color32(224, 177, 74, 255));
+                Color32 correctTiltCursorColor = rotationInputCursor.color;
+                Require(
+                    rotationInputCursor.rectTransform.anchorMin.x < 0.5f
+                        && correctTiltCursorColor.a > 0,
+                    "Runtime mobile tilt cursor must move left and become visible for a deliberate left sensor read.");
+                InvokeRuntimeUiInstance(
+                    ui,
+                    "UpdateStraightRunRotationInputCursor",
+                    true,
+                    -1f,
+                    0.8f,
+                    0.7f,
+                    1,
+                    0.5f,
+                    new Color32(224, 177, 74, 255));
+                Color32 wrongTiltCursorColor = rotationInputCursor.color;
+                Require(
+                    rotationInputCursor.rectTransform.anchorMin.x > 0.5f
+                        && wrongTiltCursorColor.a > 0
+                        && wrongTiltCursorColor.g < correctTiltCursorColor.g,
+                    "Runtime mobile tilt cursor must move right and switch to the wrong-direction warning color.");
+                SetRuntimeUiField(ui, "rotationTiltInputAvailable", false);
+                InvokeRuntimeUiInstance(
+                    ui,
+                    "UpdateStraightRunRotationTiltPips",
+                    true,
+                    -1f,
+                    0.85f,
+                    1f,
+                    0f,
+                    0f,
+                    GreedLastJudgementResult.None);
+                Require(
+                    rotationNeutralGate != null
+                        && rotationNeutralGate.color.a == 0
+                        && rotationInputCursor.color.a == 0
+                        && rotationGripBars != null
+                        && rotationGripBars.Length == 2
+                        && rotationGripBars[0].color.a == 0
+                        && rotationGripBars[1].color.a == 0
+                        && rotationTiltPips != null
+                        && rotationTiltPips.Length == 5
+                        && (rotationTiltPips[0].color.a > 0
+                            || rotationTiltPips[1].color.a > 0
+                            || rotationTiltPips[2].color.a > 0
+                            || rotationTiltPips[3].color.a > 0
+                            || rotationTiltPips[4].color.a > 0),
+                    "Runtime tap fallback must hide tilt-only controls while preserving the rotation-direction pips.");
+                SetRuntimeUiField(ui, "rotationTiltInputAvailable", true);
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "action notice", 0));
+                InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 1f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                Require(lanePreviewRoot != null && lanePreviewRoot.activeSelf, "Lobby rendering must keep the lane preview visible.");
+                Require(subtitleText != null && !string.IsNullOrEmpty(subtitleText.text), "Lobby rendering must keep the mode subtitle visible.");
+                Require(
+                    lobbyRunPortalPieces != null
+                        && lobbyRunPortalPieces.Length == 4
+                        && lobbyRunPortalPieces[3] != null
+                        && lobbyRunPortalPieces[3].color.a > 0
+                        && lobbyRunPortalPips != null
+                        && lobbyRunPortalPips.Length == 3
+                        && lobbyRunPortalPips[0] != null
+                        && lobbyRunPortalPips[0].color.a > 0,
+                    "A ready lobby render must create and light the entrance portal threshold and forward pips.");
+                Require(
+                    runnerAvatarRoot != null
+                        && runnerAvatarRoot.activeSelf
+                        && runnerAvatarCanvasGroup != null
+                        && runnerAvatarCanvasGroup.alpha > 0.8f
+                        && runnerAvatarCanvasGroup.alpha < 1f
+                        && runnerAvatarRoot.transform.localScale.x < 0.7f
+                        && runnerShadow != null
+                        && runnerShadow.gameObject.activeSelf
+                        && normalRunButton.transform.localScale.x > 1f,
+                    "A ready lobby render must stage the existing runner as a small breathing silhouette at the portal threshold.");
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.LobbyReady,
+                    "Lobby",
+                    "저장 조합이 비었습니다.\n다음 확인: 보충 후 무한 재진입 / 실행: 무한 조합 보충",
+                    0,
+                    hasUsableSaveSlots: false,
+                    hasOccupiedSaveSlots: false));
+                Require(
+                    normalRunButton != null
+                        && normalRunButton.gameObject.activeSelf
+                        && saveLoadoutButton != null
+                        && saveLoadoutButton.gameObject.activeSelf
+                        && infiniteButton != null
+                        && infiniteButton.gameObject.activeSelf,
+                    "An auto-cleared lobby render must keep the refill-related lobby actions visible.");
+                Require(
+                    GetButtonLabel(normalRunButton) == "보충 런"
+                        && GetButtonLabel(saveLoadoutButton) == "보충 안내"
+                        && GetButtonLabel(infiniteButton) == "무한 조합 보충",
+                    "An auto-cleared lobby render must route normal/save/infinite buttons to refill. Actual: "
+                        + GetButtonLabel(normalRunButton)
+                        + " / "
+                        + GetButtonLabel(saveLoadoutButton)
+                        + " / "
+                        + GetButtonLabel(infiniteButton));
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.LobbyReady,
+                    "Lobby",
+                    "저장 후보 우선\n다음 확인: 보충 후 무한 재진입",
+                    0,
+                    hasUsableSaveSlots: false,
+                    hasOccupiedSaveSlots: false,
+                    saveCandidateAvailable: true));
+                InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 1f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                Require(
+                    GetButtonLabel(normalRunButton) == "후보 먼저 저장"
+                        && GetButtonLabel(saveLoadoutButton) == "저장 슬롯 선택 추천 S1"
+                        && GetButtonLabel(infiniteButton) == "무한 후보 저장 필요",
+                    "A lobby render with a pending candidate must prioritize save/skip before refill routing. Actual: "
+                        + GetButtonLabel(normalRunButton)
+                        + " / "
+                        + GetButtonLabel(saveLoadoutButton)
+                        + " / "
+                        + GetButtonLabel(infiniteButton));
+                Require(
+                    lobbyRunPortalPips[0].color.a == 0
+                        && lobbyRunPortalPips[1].color.a == 0
+                        && lobbyRunPortalPips[2].color.a == 0,
+                    "A pending save candidate must dim the lobby run portal and suppress its forward pips.");
+                Require(
+                    !runnerAvatarRoot.activeSelf && !runnerShadow.gameObject.activeSelf,
+                    "A pending save candidate must hide the lobby runner so the save decision remains the only staged action.");
+                Require(
+                    Mathf.Approximately(normalRunButton.transform.localScale.x, 1f),
+                    "A pending save candidate must reset normal-run button breathing so it cannot compete with the save decision.");
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.ReSyncPending, "Sync", "동기화 중", 0));
+                InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 1f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                Require(
+                    lobbyRunPortalPieces[0].color.a == 0
+                        && lobbyRunPortalPieces[1].color.a == 0
+                        && lobbyRunPortalPieces[2].color.a == 0
+                        && lobbyRunPortalPieces[3].color.a == 0,
+                    "Re-sync rendering must hide the lobby run portal instead of advertising a blocked start.");
+                Require(
+                    !runnerAvatarRoot.activeSelf && !runnerShadow.gameObject.activeSelf,
+                    "Re-sync rendering must hide the lobby runner together with the blocked entrance portal.");
+                Require(
+                    Mathf.Approximately(normalRunButton.transform.localScale.x, 1f),
+                    "Re-sync rendering must reset normal-run button breathing together with the blocked portal.");
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.LobbyReady,
+                    "Lobby",
+                    "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n보충 런 버튼: 보충 런 진입",
+                    0,
+                    hasUsableSaveSlots: true,
+                    hasOccupiedSaveSlots: true,
+                    saveCandidateAvailable: true));
+                Require(
+                    GetButtonLabel(normalRunButton) == "후보 먼저 저장"
+                        && GetButtonLabel(saveLoadoutButton) == "저장 슬롯 선택 S1"
+                        && GetButtonLabel(infiniteButton) == "무한 후보 저장 필요",
+                    "A lobby render with a pending candidate must keep save-first buttons even with condensed refill-button copy. Actual: "
+                        + GetButtonLabel(normalRunButton)
+                        + " / "
+                        + GetButtonLabel(saveLoadoutButton)
+                        + " / "
+                        + GetButtonLabel(infiniteButton));
+
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.SaveLoadoutDraft,
+                    "Save Draft",
+                    "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n다음: 보충 런 클리어 후 새 조합 저장",
+                    0,
+                    hasUsableSaveSlots: false,
+                    hasOccupiedSaveSlots: false));
+                Require(
+                    nextPatternButton != null
+                        && saveSlotDetailButton != null
+                        && returnLobbyButton != null
+                        && nextPatternButton.gameObject.activeSelf
+                        && saveSlotDetailButton.gameObject.activeSelf
+                        && returnLobbyButton.gameObject.activeSelf,
+                    "An all-empty save-loadout draft render must expose refill, guidance, and lobby return actions.");
+                Require(
+                    GetButtonLabel(nextPatternButton) == "보충 런"
+                        && GetButtonLabel(saveSlotDetailButton) == "보충 안내"
+                        && GetButtonLabel(returnLobbyButton) == "로비로",
+                    "An all-empty save-loadout draft render must route buttons to refill guidance. Actual: "
+                        + GetButtonLabel(nextPatternButton)
+                        + " / "
+                        + GetButtonLabel(saveSlotDetailButton)
+                        + " / "
+                        + GetButtonLabel(returnLobbyButton));
+
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.InfiniteStartReady,
+                    "Infinite Prep",
+                    "저장 조합 없음\n보충 런 버튼: 보충 런 진입\n다음: 보충 런 클리어 후 새 조합 저장",
+                    0,
+                    hasUsableSaveSlots: false,
+                    hasOccupiedSaveSlots: false));
+                Require(
+                    saveLoadoutButton != null
+                        && nextPatternButton != null
+                        && returnLobbyButton != null
+                        && saveLoadoutButton.gameObject.activeSelf
+                        && nextPatternButton.gameObject.activeSelf
+                        && returnLobbyButton.gameObject.activeSelf
+                        && !normalRunButton.gameObject.activeSelf
+                        && !infiniteButton.gameObject.activeSelf,
+                    "An all-empty infinite-prep render must expose only refill-ready preparation actions.");
+                Require(
+                    GetButtonLabel(saveLoadoutButton) == "보충 안내"
+                        && GetButtonLabel(nextPatternButton) == "보충 런"
+                        && GetButtonLabel(returnLobbyButton) == "로비로",
+                    "An all-empty infinite-prep render must route the management and start buttons to refill. Actual: "
+                        + GetButtonLabel(saveLoadoutButton)
+                        + " / "
+                        + GetButtonLabel(nextPatternButton)
+                        + " / "
+                        + GetButtonLabel(returnLobbyButton));
+
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.InfiniteStartReady,
+                    "Infinite Prep",
+                    "재시작: S2 안정형\n저장 조합 변경으로 다른 슬롯을 고를 수 있습니다.",
+                    0,
+                    hasUsableSaveSlots: true,
+                    hasOccupiedSaveSlots: true));
+                Require(
+                    GetButtonLabel(saveLoadoutButton) == "저장 조합 변경"
+                        && GetButtonLabel(nextPatternButton) == "시작 -1회"
+                        && GetButtonLabel(returnLobbyButton) == "로비로",
+                    "An infinite-prep render with a usable save loadout must stay on stored-loadout start instead of refill. Actual: "
+                        + GetButtonLabel(saveLoadoutButton)
+                        + " / "
+                        + GetButtonLabel(nextPatternButton)
+                        + " / "
+                        + GetButtonLabel(returnLobbyButton));
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRecordBoard, "Records", "[S] 1000 / 44m / combo 5", 2));
+                Require(lanePreviewRoot != null && !lanePreviewRoot.activeSelf, "Record-board rendering must hide the lane preview root.");
+                Require(subtitleText != null && string.IsNullOrEmpty(subtitleText.text), "Record-board rendering must hide the generic mode subtitle.");
+                Require(runHudText != null && !runHudText.gameObject.activeSelf, "Record-board rendering must not leave the run HUD visible.");
+                Require(detailText != null && detailText.text.Contains("[S] 1000", StringComparison.Ordinal), "Record-board rendering must keep the record detail text.");
+                Require(
+                    !normalRunButton.gameObject.activeSelf
+                        && !saveLoadoutButton.gameObject.activeSelf
+                        && !infiniteButton.gameObject.activeSelf,
+                    "Record-board rendering must hide lobby action buttons so the board reads as records first.");
+                string recordNavigationLabels = GetButtonLabel(nextPatternButton)
+                    + " / "
+                    + GetButtonLabel(saveSlotDetailButton)
+                    + " / "
+                    + GetButtonLabel(returnLobbyButton);
+                Require(
+                    nextPatternButton != null
+                        && nextPatternButton.gameObject.activeSelf
+                        && saveSlotDetailButton != null
+                        && saveSlotDetailButton.gameObject.activeSelf
+                        && returnLobbyButton != null
+                        && returnLobbyButton.gameObject.activeSelf,
+                    "Record-board rendering must keep only the compact navigation buttons visible.");
+                Require(
+                    recordNavigationLabels == "다음 / 이전 / 로비로",
+                    "Record-board navigation buttons must stay short and must not repeat page names. Actual: "
+                        + recordNavigationLabels);
+                Require(
+                    !recordNavigationLabels.Contains("일반", StringComparison.Ordinal)
+                        && !recordNavigationLabels.Contains("무한", StringComparison.Ordinal)
+                        && !recordNavigationLabels.Contains("랭킹", StringComparison.Ordinal),
+                    "Record-board navigation controls must not bring page labels back into the playfield.");
+                Require(
+                    laneLabelTexts != null
+                        && laneLabelTexts.Length >= 3
+                        && laneLabelTexts[0].text == "좌"
+                        && laneLabelTexts[1].text == "중"
+                        && laneLabelTexts[2].text == "우",
+                    "Record-board lane labels must stay as direction names only, with page names reserved for the title/buttons.");
+                Require(
+                    laneButtons != null
+                        && laneButtons.Length >= 3
+                        && !laneButtons[0].interactable
+                        && !laneButtons[1].interactable
+                        && !laneButtons[2].interactable,
+                    "Record-board lane columns must not act like page selectors after navigation moved to bottom buttons.");
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.ProfileBoard, "Profile", "prototype progress", 0));
+                Require(lanePreviewRoot != null && !lanePreviewRoot.activeSelf, "Profile-board rendering must hide the lane preview root.");
+                Require(subtitleText != null && string.IsNullOrEmpty(subtitleText.text), "Profile-board rendering must hide the generic mode subtitle.");
+                Require(runHudText != null && !runHudText.gameObject.activeSelf, "Profile-board rendering must not leave the run HUD visible.");
+                Require(
+                    !normalRunButton.gameObject.activeSelf
+                        && !saveLoadoutButton.gameObject.activeSelf
+                        && !infiniteButton.gameObject.activeSelf,
+                    "Profile-board rendering must hide lobby action buttons so profile traces do not compete with lobby actions.");
+                ui.Render(BuildUiScreenSnapshot(
+                    GreedLastScreenState.ProfileBoard,
+                    "Profile",
+                    "저장 후보\n성장 보정\n대표 기록",
+                    1));
+                Require(
+                    detailText != null
+                        && detailText.text.Contains("저장 후보", StringComparison.Ordinal)
+                        && detailText.text.Contains("성장 보정", StringComparison.Ordinal),
+                    "Profile-board page-one rendering must keep the storage/growth detail visible after NEW shortcuts route here.");
+                string profileNavigationLabels = GetButtonLabel(saveSlotDetailButton)
+                    + " / "
+                    + GetButtonLabel(nextPatternButton)
+                    + " / "
+                    + GetButtonLabel(returnLobbyButton);
+                Require(
+                    profileNavigationLabels == "이전: 1/4 요약 / 다음: 3/4 장식 / 로비로",
+                    "Profile-board page-one navigation must stay clear when profile NEW shortcuts open storage/growth details. Actual: "
+                        + profileNavigationLabels);
+                Require(
+                    laneLabelTexts != null
+                        && laneLabelTexts.Length >= 3
+                        && laneLabelTexts[0].text.Contains("요약", StringComparison.Ordinal)
+                        && laneLabelTexts[1].text.Contains("기록", StringComparison.Ordinal)
+                        && laneLabelTexts[2].text.Contains("장식", StringComparison.Ordinal),
+                    "Profile-board page-one lane labels must point left to summary, center to record board, and right to badge details.");
+            }
+            finally
+            {
+                if (canvasRoot != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(canvasRoot);
+                }
+
+                DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
+                DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
+        private static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui)
+        {
+            Action action = null;
+            Action<int> timingAction = null;
+            Action<GreedLastDevShortcut> shortcutAction = null;
+            Action<GreedLastRunChannel> channelAction = null;
+            ui.Initialize(
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                action,
+                timingAction,
+                shortcutAction,
+                channelAction);
+        }
+
+        private static void VerifyRuntimeLobbyToRunVisualHandoff()
+        {
+            GameObject existingCamera = GameObject.Find("GreedLastCamera");
+            GameObject existingEventSystem = GameObject.Find("GreedLastEventSystem");
+            GameObject host = new GameObject("GreedLastRuntimeUiLaunchSmokeHost");
+            GameObject canvasRoot = null;
+
+            try
+            {
+                GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
+                InitializeRuntimeUiSmoke(ui);
+
+                GameObject rootPanel = GetRuntimeUiField<GameObject>(ui, "rootPanel");
+                if (rootPanel != null)
+                {
+                    canvasRoot = rootPanel.transform.root.gameObject;
+                }
+
+                GameObject runnerAvatarRoot = GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot");
+                Image runnerShadow = GetRuntimeUiField<Image>(ui, "runnerShadow");
+                Image[] runnerFootfallPips = GetRuntimeUiField<Image[]>(ui, "runnerFootfallPips");
+                Image[] launchGatePieces = GetRuntimeUiField<Image[]>(ui, "straightRunLaunchGatePieces");
+                Image launchThresholdSweep = GetRuntimeUiField<Image>(ui, "straightRunLaunchThresholdSweep");
+                Image[] runEntryTrapRevealPieces = GetRuntimeUiField<Image[]>(ui, "runEntryTrapRevealPieces");
+                Image[] templeEntranceArchPieces = GetRuntimeUiField<Image[]>(ui, "templeEntranceArchPieces");
+                Image[] lobbyRunPortalPieces = GetRuntimeUiField<Image[]>(ui, "lobbyRunPortalPieces");
+                Image trapMarker = GetRuntimeUiField<Image>(ui, "trapMarker");
+                Button rotationTiltButton = GetRuntimeUiField<Button>(ui, "rotationTiltButton");
+                Text pauseMenuBodyText = GetRuntimeUiField<Text>(ui, "pauseMenuBodyText");
+                CanvasGroup runnerAvatarCanvasGroup = GetRuntimeUiField<CanvasGroup>(ui, "runnerAvatarCanvasGroup");
+                Require(
+                    runnerAvatarRoot != null
+                        && runnerAvatarCanvasGroup != null
+                        && runnerShadow != null
+                        && runnerFootfallPips != null
+                        && runnerFootfallPips.Length == 2
+                        && launchGatePieces != null
+                        && launchGatePieces.Length == 2
+                        && launchThresholdSweep != null
+                        && runEntryTrapRevealPieces != null
+                        && runEntryTrapRevealPieces.Length == 4
+                        && templeEntranceArchPieces != null
+                        && templeEntranceArchPieces.Length == 3
+                        && lobbyRunPortalPieces != null
+                        && lobbyRunPortalPieces.Length == 4
+                        && trapMarker != null
+                        && rotationTiltButton != null
+                        && pauseMenuBodyText != null,
+                    "The runtime launch smoke must create the runner, launch staging, and pause sensory controls.");
+
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot snapshot = default;
+                core.SnapshotChanged += value => snapshot = value;
+                float now = Time.realtimeSinceStartup + 900f;
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Practice", string.Empty, 0));
+                core.EnterPractice();
+                Require(snapshot.StartCountdownActive, "Runtime launch smoke must begin in a real start countdown.");
+
+                ui.RenderRun(snapshot);
+                float handoffNow = Time.unscaledTime;
+                SetRuntimeUiField(ui, "runEntranceHandoffStartedAt", handoffNow - 0.17f);
+                SetRuntimeUiField(ui, "runEntranceHandoffUntil", handoffNow + 0.17f);
+                InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 0.5f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                RectTransform runnerRect = runnerAvatarRoot.GetComponent<RectTransform>();
+                Require(
+                    lobbyRunPortalPieces[3].color.a > 0
+                        && runnerAvatarCanvasGroup.alpha < 1f
+                        && runnerRect.localScale.x < 1f
+                        && runnerRect.anchoredPosition.y < -10f,
+                    "The runtime lobby-to-run handoff must keep a fading threshold behind a runner that is still moving forward from its lobby scale.");
+                SetRuntimeUiField(ui, "runEntranceHandoffStartedAt", handoffNow - 0.35f);
+                SetRuntimeUiField(ui, "runEntranceHandoffUntil", handoffNow - 0.01f);
+                InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 0.5f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                InvokeRuntimeUiInstance(ui, "UpdateStraightRunLaunchGate", true, new Color32(58, 74, 77, 255));
+                Require(
+                    runnerAvatarRoot.activeSelf
+                        && lobbyRunPortalPieces[3].color.a == 0
+                        && Mathf.Approximately(runnerAvatarCanvasGroup.alpha, 1f)
+                        && runnerRect.anchoredPosition.y < 0f
+                        && runnerRect.localScale.x > 1f
+                        && runnerRect.localScale.y < 1f
+                        && launchGatePieces[0].color.a > 0
+                        && launchGatePieces[1].color.a > 0,
+                    "A real start countdown must crouch the runner behind a visible launch gate.");
+
+                core.Tick(now + 2f);
+                core.Tick(now + 3f);
+                Require(snapshot.ActivePattern, "Runtime launch smoke must reach its first live trap before testing resume.");
+                SetRuntimeUiField(ui, "lastCountdownBeatActive", true);
+                SetRuntimeUiField(ui, "lastCountdownWasResume", false);
+                ui.RenderRun(snapshot);
+                InvokeRuntimeUiInstance(ui, "Update");
+                InvokeRuntimeUiInstance(ui, "UpdateTempleDepthBackdrop");
+                float revealNow = Time.unscaledTime;
+                Require(
+                    GetRuntimeUiValueField<float>(ui, "straightRunLaunchReleaseUntil") > revealNow
+                        && GetRuntimeUiValueField<float>(ui, "runEntryTrapRevealUntil") > revealNow
+                        && !GetRuntimeUiValueField<bool>(ui, "runEntryTrapRevealPending")
+                        && templeEntranceArchPieces[2].rectTransform.localScale.x > 1f
+                        && templeEntranceArchPieces[0].rectTransform.localScale.y > 1f
+                        && templeEntranceArchPieces[0].color.a > 0
+                        && templeEntranceArchPieces[1].color.a > 0
+                        && templeEntranceArchPieces[2].color.a > 0
+                        && launchThresholdSweep.color.a > 0
+                        && launchThresholdSweep.rectTransform.anchorMin.y < 0.73f,
+                    "The real UI update must release one fresh launch, surge through the existing entrance arch, and consume one first-trap reveal request.");
+                SetRuntimeUiField(ui, "runEntryTrapRevealStartedAt", revealNow - 0.31f);
+                SetRuntimeUiField(ui, "runEntryTrapRevealUntil", revealNow + 0.31f);
+                InvokeRuntimeUiInstance(ui, "UpdateRunTimingVisuals");
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                Require(
+                    trapMarker.color.a > 0
+                        && runEntryTrapRevealPieces[0].color.a > 0
+                        && runEntryTrapRevealPieces[1].color.a > 0
+                        && runEntryTrapRevealPieces[2].color.a > 0
+                        && runEntryTrapRevealPieces[3].color.a > 0
+                        && runEntryTrapRevealPieces[0].rectTransform.anchoredPosition.y > 0f
+                        && runEntryTrapRevealPieces[1].rectTransform.anchoredPosition.x > 0f
+                        && runEntryTrapRevealPieces[2].rectTransform.anchoredPosition.y < 0f
+                        && runEntryTrapRevealPieces[3].rectTransform.anchoredPosition.x < 0f
+                        && Mathf.Abs(runnerRect.anchoredPosition.x) <= 7f,
+                    "The first real trap after GO must be enclosed by four visible lock-on pieces while the runner keeps only a subtle lane-facing shift.");
+                core.TogglePause(now + 3.1f);
+                Require(snapshot.Paused && !snapshot.ResumeCountdownActive, "Runtime sensory settings must be exercised from a real paused run.");
+                ui.RenderRun(snapshot);
+                const string rotationTiltPreferenceKey = "GreedLast.RuntimeUi.RotationTiltEnabled";
+                bool rotationTiltPreferenceWasStored = PlayerPrefs.HasKey(rotationTiltPreferenceKey);
+                int storedRotationTiltPreference = PlayerPrefs.GetInt(rotationTiltPreferenceKey, 1);
+                bool originalTiltPreference = ui.RotationTiltEnabled;
+                string toggledTiltLabel = originalTiltPreference ? "기울임 OFF" : "기울임 ON";
+                int tiltPreferenceChangedCount = 0;
+                bool lastPublishedTiltPreference = originalTiltPreference;
+                Action<bool> handleTiltPreferenceChanged = value =>
+                {
+                    tiltPreferenceChangedCount += 1;
+                    lastPublishedTiltPreference = value;
+                };
+                ui.RotationTiltPreferenceChanged += handleTiltPreferenceChanged;
+                try
+                {
+                    rotationTiltButton.onClick.Invoke();
+                    Require(
+                        rotationTiltButton.gameObject.activeSelf,
+                        "The paused tilt preference button must stay visible while its setting is changed.");
+                    Require(
+                        ui.RotationTiltEnabled != originalTiltPreference,
+                        "The paused tilt preference click must invert its persisted state.");
+                    Require(
+                        GetButtonLabel(rotationTiltButton) == toggledTiltLabel,
+                        "The paused tilt preference button must update immediately. Expected: "
+                            + toggledTiltLabel
+                            + ", actual: "
+                            + GetButtonLabel(rotationTiltButton));
+                    Require(
+                        pauseMenuBodyText.text.Contains(toggledTiltLabel, StringComparison.Ordinal),
+                        "The open pause settings summary must update the tilt preference immediately. Actual: "
+                            + pauseMenuBodyText.text);
+                    Require(
+                        PlayerPrefs.GetInt(rotationTiltPreferenceKey, originalTiltPreference ? 1 : 0)
+                                == (originalTiltPreference ? 0 : 1)
+                            && tiltPreferenceChangedCount == 1
+                            && lastPublishedTiltPreference == !originalTiltPreference,
+                        "The tilt preference must persist and notify the input layer exactly once per click.");
+                }
+                finally
+                {
+                    if (ui.RotationTiltEnabled != originalTiltPreference)
+                    {
+                        rotationTiltButton.onClick.Invoke();
+                    }
+
+                    ui.RotationTiltPreferenceChanged -= handleTiltPreferenceChanged;
+                    if (rotationTiltPreferenceWasStored)
+                    {
+                        PlayerPrefs.SetInt(rotationTiltPreferenceKey, storedRotationTiltPreference);
+                    }
+                    else
+                    {
+                        PlayerPrefs.DeleteKey(rotationTiltPreferenceKey);
+                    }
+
+                    PlayerPrefs.Save();
+                }
+                Require(
+                    ui.RotationTiltEnabled == originalTiltPreference
+                        && tiltPreferenceChangedCount == 2
+                        && lastPublishedTiltPreference == originalTiltPreference
+                        && pauseMenuBodyText.text.Contains(
+                            originalTiltPreference ? "기울임 ON" : "기울임 OFF",
+                            StringComparison.Ordinal),
+                    "The runtime tilt smoke must restore the user's original preference after verifying the toggle.");
+                core.TogglePause(now + 3.2f);
+                Require(snapshot.Paused && snapshot.ResumeCountdownActive, "Runtime launch smoke must enter the real resume countdown.");
+
+                ui.RenderRun(snapshot);
+                InvokeRuntimeUiInstance(ui, "Update");
+                InvokeRuntimeUiInstance(ui, "UpdateRunTimingVisuals");
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                InvokeRuntimeUiInstance(ui, "UpdateStraightRunLaunchGate", true, new Color32(58, 74, 77, 255));
+                InvokeRuntimeUiInstance(ui, "UpdateTempleDepthBackdrop");
+                Require(
+                    runnerRect.anchoredPosition.y < 0f
+                        && runnerRect.localScale.x > 1f
+                        && runnerRect.localScale.y < 1f
+                        && launchGatePieces[0].color.a > 0
+                        && launchGatePieces[1].color.a > 0
+                        && runEntryTrapRevealPieces[0].color.a == 0
+                        && runEntryTrapRevealPieces[1].color.a == 0
+                        && runEntryTrapRevealPieces[2].color.a == 0
+                        && runEntryTrapRevealPieces[3].color.a == 0
+                        && Mathf.Approximately(templeEntranceArchPieces[2].rectTransform.localScale.x, 1f)
+                        && Mathf.Approximately(templeEntranceArchPieces[0].rectTransform.localScale.y, 1f)
+                        && launchThresholdSweep.color.a == 0,
+                    "A real ESC resume countdown must retain the crouched runner and launch gate while clearing the one-time entry cues.");
+
+                core.Tick(now + 5f);
+                Require(!snapshot.Paused && !snapshot.CountdownActive, "Runtime launch smoke must release live control after resume GO.");
+                ui.RenderRun(snapshot);
+                InvokeRuntimeUiInstance(ui, "Update");
+                float releaseNow = Time.unscaledTime;
+                InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
+                InvokeRuntimeUiInstance(ui, "UpdateStraightRunLaunchGate", true, new Color32(58, 74, 77, 255));
+                InvokeRuntimeUiInstance(ui, "UpdateTempleDepthBackdrop");
+                Require(
+                    GetRuntimeUiValueField<float>(ui, "straightRunLaunchReleaseUntil") > releaseNow
+                        && GetRuntimeUiValueField<bool>(ui, "straightRunLaunchReleaseWasResume")
+                        && !GetRuntimeUiValueField<bool>(ui, "runEntryTrapRevealPending")
+                        && runnerRect.anchoredPosition.y > 0f
+                        && runnerShadow.gameObject.activeSelf
+                        && (runnerFootfallPips[0].color.a > 0 || runnerFootfallPips[1].color.a > 0)
+                        && launchGatePieces[0].color.a > 0
+                        && launchGatePieces[1].color.a > 0
+                        && Mathf.Approximately(templeEntranceArchPieces[2].rectTransform.localScale.x, 1f)
+                        && Mathf.Approximately(templeEntranceArchPieces[0].rectTransform.localScale.y, 1f)
+                        && launchThresholdSweep.color.a == 0
+                        && runEntryTrapRevealPieces[0].color.a == 0
+                        && runEntryTrapRevealPieces[1].color.a == 0
+                        && runEntryTrapRevealPieces[2].color.a == 0
+                        && runEntryTrapRevealPieces[3].color.a == 0,
+                    "A real resume GO must keep the launch step and gate while suppressing fresh-run portal and first-trap cues.");
+
+                core.Tick(now + 12f);
+                Require(
+                    !snapshot.ActivePattern && snapshot.MissCount == 1,
+                    "The resumed first trap must be resolvable before the second-pattern regression check.");
+                core.RequestNextPattern(now + 14f);
+                Require(snapshot.ActivePattern, "Runtime launch smoke must reach a second real trap.");
+                ui.RenderRun(snapshot);
+                InvokeRuntimeUiInstance(ui, "Update");
+                InvokeRuntimeUiInstance(ui, "UpdateRunTimingVisuals");
+                InvokeRuntimeUiInstance(ui, "UpdateTempleDepthBackdrop");
+                Require(
+                    !GetRuntimeUiValueField<bool>(ui, "runEntryTrapRevealPending")
+                        && runEntryTrapRevealPieces[0].color.a == 0
+                        && runEntryTrapRevealPieces[1].color.a == 0
+                        && runEntryTrapRevealPieces[2].color.a == 0
+                        && runEntryTrapRevealPieces[3].color.a == 0
+                        && Mathf.Approximately(templeEntranceArchPieces[2].rectTransform.localScale.x, 1f)
+                        && Mathf.Approximately(templeEntranceArchPieces[0].rectTransform.localScale.y, 1f)
+                        && launchThresholdSweep.color.a == 0,
+                    "The second real trap must not replay the fresh-run arch pass-through or first-trap lock-on.");
+            }
+            finally
+            {
+                if (canvasRoot != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(canvasRoot);
+                }
+
+                DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
+                DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
+        private static T GetRuntimeUiField<T>(GreedLastRuntimeUi ui, string fieldName) where T : class
+        {
+            FieldInfo field = typeof(GreedLastRuntimeUi).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Require(field != null, "Missing runtime UI field: " + fieldName);
+            return field.GetValue(ui) as T;
+        }
+
+        private static T GetRuntimeUiValueField<T>(GreedLastRuntimeUi ui, string fieldName) where T : struct
+        {
+            FieldInfo field = typeof(GreedLastRuntimeUi).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Require(field != null, "Missing runtime UI value field: " + fieldName);
+            return (T)field.GetValue(ui);
+        }
+
+        private static void SetRuntimeUiField<T>(GreedLastRuntimeUi ui, string fieldName, T value)
+        {
+            FieldInfo field = typeof(GreedLastRuntimeUi).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Require(field != null, "Missing runtime UI writable field: " + fieldName);
+            field.SetValue(ui, value);
+        }
+
+        private static void InvokeRuntimeUiInstance(GreedLastRuntimeUi ui, string methodName, params object[] args)
+        {
+            MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Require(method != null, "Missing runtime UI instance helper: " + methodName);
+            method.Invoke(ui, args);
+        }
+
+        private static string GetButtonLabel(Button button)
+        {
+            Text label = button == null ? null : button.GetComponentInChildren<Text>(true);
+            return label == null ? string.Empty : label.text;
+        }
+
+        private static GreedLastStateSnapshot BuildUiScreenSnapshot(
+            GreedLastScreenState state,
+            string headline,
+            string detail,
+            int recordBoardPageIndex,
+            bool hasUsableSaveSlots = true,
+            bool hasOccupiedSaveSlots = true,
+            bool saveCandidateAvailable = false,
+            string[] saveSlotLabels = null,
+            int selectedSaveSlotIndex = 0)
+        {
+            bool[] saveSlotUsable = hasUsableSaveSlots
+                ? new[] { true, true, true }
+                : new[] { false, false, false };
+            bool[] saveSlotOccupied = hasOccupiedSaveSlots
+                ? new[] { true, true, true }
+                : new[] { false, false, false };
+            string[] labels = saveSlotLabels ?? new[] { "S1", "S2", "S3" };
+            return new GreedLastStateSnapshot(
+                state,
+                0,
+                headline,
+                detail,
+                busy: false,
+                coreActionsEnabled: true,
+                firstSaveCompleted: true,
+                saveLoadoutUnlocked: true,
+                infiniteUnlocked: true,
+                growthPoints: 0,
+                growthSurvivalLevel: 0,
+                growthFocusLevel: 0,
+                growthTimingLevel: 0,
+                recommendedGrowthTrackIndex: -1,
+                profileButtonSummary: "Profile",
+                selectedSaveSlotIndex: selectedSaveSlotIndex,
+                saveSlotLabels: labels,
+                saveSlotUsable: saveSlotUsable,
+                saveSlotOccupied: saveSlotOccupied,
+                saveSlotChoiceRequired: false,
+                saveSlotOverwriteConfirmationPending: false,
+                saveLoadoutSkipConfirmationPending: false,
+                saveSlotDeleteConfirmationPending: false,
+                saveSlotDetailViewActive: false,
+                saveSlotRenameConfirmationPending: false,
+                saveLoadoutCandidateAvailable: saveCandidateAvailable,
+                recordBoardPageIndex: recordBoardPageIndex,
+                retryVisible: false,
+                blockReason: GreedLastConnectBlockReason.None);
         }
 
         private static bool RuntimePauseBackdropBlocksInput()
@@ -2378,6 +10110,15 @@ namespace GreedLast.Editor
                 BindingFlags.Static | BindingFlags.NonPublic);
             Require(method != null, "Missing runtime UI float helper: " + methodName);
             return (float)method.Invoke(null, args);
+        }
+
+        private static int InvokeRuntimeUiInt(string methodName, params object[] args)
+        {
+            MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(
+                methodName,
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Require(method != null, "Missing runtime UI int helper: " + methodName);
+            return (int)method.Invoke(null, args);
         }
 
         private static Vector4 InvokeRuntimeUiVector4(string methodName, params object[] args)
@@ -2504,7 +10245,7 @@ namespace GreedLast.Editor
             GreedLastRunAttemptRecord noMissAttempt = noMissCore.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned);
             Require(noMissAttempt.TimingProfile.Contains("복기 목표 1장 무실수 / 현재 1", StringComparison.Ordinal), "A no-miss retry target must be stored with its attempt timing profile.");
             Require(noMissAttempt.TimingProfile.Contains("복기 결과 실패 실수 1", StringComparison.Ordinal), "A broken no-miss retry target must settle into the attempt timing profile.");
-            var noMissBackend = new GreedLastMockBackend();
+            var noMissBackend = CreateIsolatedBackend();
             Require(noMissBackend.RegisterNormalAttempt(noMissAttempt), "A review-target attempt must register for a result message.");
             string noMissAttemptMessage = noMissBackend.BuildRunAttemptResultMessage(noMissAttempt);
             RequireTextLayoutBudget(noMissAttemptMessage, 16, 120, "no-miss review-target attempt result");
@@ -2542,7 +10283,7 @@ namespace GreedLast.Editor
                 "A Good judgement that breaks a correction-free review target must use a failure-tinted feedback color.");
             GreedLastRunAttemptRecord goodAttempt = goodCore.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned);
             Require(goodAttempt.TimingProfile.Contains("복기 결과 실패 보정 1", StringComparison.Ordinal), "A broken correction-free retry target must settle into the attempt timing profile.");
-            var goodBackend = new GreedLastMockBackend();
+            var goodBackend = CreateIsolatedBackend();
             Require(goodBackend.RegisterNormalAttempt(goodAttempt), "A correction-free review attempt must register for a result message.");
             string goodAttemptMessage = goodBackend.BuildRunAttemptResultMessage(goodAttempt);
             RequireTextLayoutBudget(goodAttemptMessage, 16, 120, "correction-free review-target attempt result");
@@ -2806,7 +10547,7 @@ namespace GreedLast.Editor
                 terminalShortcutSnapshot,
                 terminalShortcutSnapshot.ChapterTarget);
             Require(
-                terminalProgress.Contains("탈출 직전", StringComparison.Ordinal),
+                terminalProgress.Contains("입구 직전 게이트", StringComparison.Ordinal),
                 "The progress label must show that escape is one pass away.");
             terminalShortcutCore.HandleInput(
                 terminalShortcutSnapshot.Pattern.Channel,
@@ -3028,6 +10769,22 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiLabel("BuildJudgementFeedbackText", noInputFailureSnapshot).Contains("정답키", StringComparison.Ordinal),
                 "An input-omission miss feedback must expose the target editor key.");
+            string mobileNoInputFeedback = InvokeRuntimeUiLabel(
+                "BuildJudgementFeedbackTextForMode",
+                noInputFailureSnapshot,
+                false);
+            string expectedMobileNoInputTargetFeedback = InvokeRuntimeUiLabel(
+                "BuildTargetChannelInputFeedback",
+                noInputFailureSnapshot.Pattern.Channel,
+                false);
+            Require(
+                mobileNoInputFeedback.Contains(expectedMobileNoInputTargetFeedback, StringComparison.Ordinal)
+                    && !mobileNoInputFeedback.Contains("정답키", StringComparison.Ordinal)
+                    && !mobileNoInputFeedback.Contains("A/←", StringComparison.Ordinal)
+                    && !mobileNoInputFeedback.Contains("S/Space", StringComparison.Ordinal)
+                    && !mobileNoInputFeedback.Contains("D/→", StringComparison.Ordinal),
+                "A mobile/release input-omission miss must show the target tap lane without editor key names. Actual: "
+                    + mobileNoInputFeedback);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetHudLine(noInputFailureSnapshot).Contains("목표 실패 입력 없음 1/0", StringComparison.Ordinal)
                     && GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(noInputFailureSnapshot).Contains("목표 실패: 입력 없음 1/0", StringComparison.Ordinal),
@@ -3224,7 +10981,7 @@ namespace GreedLast.Editor
                 advancedSectionContext.Contains("목표: 4구간 생존", StringComparison.Ordinal),
                 "An achieved section-survival result must seed the advanced target into infinite preparation.");
 
-            var achievedTargetBackend = new GreedLastMockBackend();
+            var achievedTargetBackend = CreateIsolatedBackend();
             var achievedNoMissAttempt = new GreedLastRunAttemptRecord(
                 true,
                 GreedLastRunAttemptOutcome.Abandoned,
@@ -3268,7 +11025,7 @@ namespace GreedLast.Editor
                 achievedNoMissRecommendation.Contains("목표 상향", StringComparison.Ordinal),
                 "An achieved review-target retry recommendation must explain that the goal was advanced.");
 
-            var achievedCorrectionBackend = new GreedLastMockBackend();
+            var achievedCorrectionBackend = CreateIsolatedBackend();
             var achievedCorrectionAttempt = new GreedLastRunAttemptRecord(
                 true,
                 GreedLastRunAttemptOutcome.Abandoned,
@@ -3300,7 +11057,7 @@ namespace GreedLast.Editor
                 achievedCorrectionContext.Contains("재도전 목표: 정박 3연속", StringComparison.Ordinal),
                 "An achieved correction-free result must seed the next retry with a precision-streak target.");
 
-            var achievedScopedScoreBackend = new GreedLastMockBackend();
+            var achievedScopedScoreBackend = CreateIsolatedBackend();
             var achievedScopedScoreAttempt = new GreedLastRunAttemptRecord(
                 true,
                 GreedLastRunAttemptOutcome.Abandoned,
@@ -3327,7 +11084,7 @@ namespace GreedLast.Editor
                 achievedScopedScoreMessage.Contains("목표 상향 - 1000점 탈출", StringComparison.Ordinal),
                 "An achieved chapter-scoped score target must use the score number, not the chapter number, for escalation.");
 
-            var achievedInfiniteBackend = new GreedLastMockBackend();
+            var achievedInfiniteBackend = CreateIsolatedBackend();
             var achievedInfiniteRecord = new GreedLastInfiniteRunRecord(
                 true,
                 400,
@@ -3355,6 +11112,36 @@ namespace GreedLast.Editor
             Require(
                 achievedInfiniteContext.Contains("목표: 다음 구간 보정 0회", StringComparison.Ordinal),
                 "An achieved infinite review-target result must seed the next infinite retry with its advanced target.");
+
+            var goodInfiniteBackend = CreateIsolatedBackend();
+            var goodInfiniteRecord = new GreedLastInfiniteRunRecord(
+                true,
+                520,
+                96f,
+                1,
+                2,
+                "S1 집중",
+                "집중형",
+                2,
+                1,
+                0,
+                4,
+                string.Empty,
+                "최근 구간 무한 1구간"
+                    + " / 최근 구간 진행 3/3"
+                    + " / 최근 구간 정확 2회 / 최근 구간 보정 1회 / 최근 구간 실수 0회");
+            Require(goodInfiniteBackend.RegisterInfiniteRun(goodInfiniteRecord), "A Good-only infinite section record must register.");
+            string goodInfiniteMessage = goodInfiniteBackend.BuildInfiniteRunResultMessage(goodInfiniteRecord);
+            RequireTextLayoutBudget(goodInfiniteMessage, 17, 120, "Good-only infinite section result");
+            Require(
+                goodInfiniteMessage.Contains("힌트: 정확 보상 복기", StringComparison.Ordinal),
+                "A Good-only infinite result hint must lead with the missed exact-payoff review purpose before compacting.");
+            Require(
+                goodInfiniteMessage.Contains("복기: 무한 1구간 3/3 / 정확 2 · 보정 1 · 실수 0 / 정확 보상 복기", StringComparison.Ordinal),
+                "A Good-only infinite review line must keep the missed exact-payoff review purpose visible.");
+            Require(
+                goodInfiniteMessage.Contains("목표: 다음 구간 보정 0회 / 직전 1", StringComparison.Ordinal),
+                "A Good-only infinite section must target correction-free conversion on the next section.");
         }
 
         private static string BuildOpeningChoiceRecommendation(string openingContext)
@@ -3917,6 +11704,16 @@ namespace GreedLast.Editor
             core.JumpToDevShortcut(GreedLastDevShortcut.AfterCore, clock += 0.1f);
             StartBufferedPattern(core, ref snapshot, ref clock);
             Require(
+                InvokeRuntimeUiLabel("BuildRunChapterHudText", snapshot) == "탈출 게이트 0/3",
+                "The live HUD must name the escape gate instead of showing a generic chapter-four label.");
+            string openingEscapeObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", snapshot);
+            Require(
+                openingEscapeObjective.Contains("공명핵 들고", StringComparison.Ordinal)
+                    && openingEscapeObjective.Contains("탈출 게이트 0/3", StringComparison.Ordinal),
+                "The live objective must expose the carried-core escape gate count at escape start. Actual: "
+                    + openingEscapeObjective);
+            RequireTextLayoutBudget(openingEscapeObjective.TrimEnd(), 1, 66, "opening escape objective");
+            Require(
                 InvokeRuntimeUiLabel("BuildRouteCadencePipState", snapshot, 0) == "active",
                 "Escape cadence rail must activate its first final step.");
             Require(
@@ -3928,9 +11725,62 @@ namespace GreedLast.Editor
                 snapshot.ChapterTarget);
             Require(
                 escapeProgressLabel.Contains("탈출 검증", StringComparison.Ordinal)
+                    && escapeProgressLabel.Contains("탈출 게이트", StringComparison.Ordinal)
                     && escapeProgressLabel.Contains("공명핵 회수", StringComparison.Ordinal),
                 "Escape progress must preserve both its validation role and carried-core objective.");
             RequireTextLayoutBudget(escapeProgressLabel, 1, 42, "Escape role progress label");
+            Require(
+                InvokeRuntimeUiBool("ShouldShowEscapeGatePips", snapshot)
+                    && !InvokeRuntimeUiBool("ShouldShowEscapeGatePips", default),
+                "Escape gate pips must show only while carrying the core through the escape validation.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", 0, 3, 0), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", 1, 3, 0), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", 2, 3, 1), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", 3, 3, 2), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", 3, 3, 3), 0f),
+                "Escape gate pips must fill one final-validation gate per completed escape trap.");
+            float emptyEscapeGateAlpha = InvokeRuntimeUiFloat("BuildEscapeGatePipAlpha", true, 0f, 0f, 0f, 0f);
+            float filledEscapeGateAlpha = InvokeRuntimeUiFloat("BuildEscapeGatePipAlpha", true, 1f, 0f, 0f, 0f);
+            float pulsedEscapeGateAlpha = InvokeRuntimeUiFloat("BuildEscapeGatePipAlpha", true, 1f, 1f, 1f, 1f);
+            float farEscapeGateReadiness = InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", true, 0, 3, 0, -0.42f, 0.10f, 0f, 0f);
+            float closeEscapeGateReadiness = InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", true, 0, 3, 0, 0.02f, 0.10f, 0f, 0f);
+            float nextEscapeGateReadiness = InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", true, 1, 3, 1, 0.02f, 0.10f, 0f, 0f);
+            float activeEscapeGateDownbeat = InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 1f, true, 0f, 1f, 1, 1, 3);
+            float priorEscapeGateDownbeat = InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 1f, true, 1f, 0f, 0, 1, 3);
+            float completeEscapeGateDownbeat = InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 1f, true, 1f, 1f, 2, 3, 3);
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipAlpha", false, 1f, 1f, 1f, 1f), 0f)
+                    && filledEscapeGateAlpha > emptyEscapeGateAlpha
+                    && pulsedEscapeGateAlpha > filledEscapeGateAlpha,
+                "Escape gate pips must brighten by gate fill and pulse during stage/forward payoff moments.");
+            Require(
+                Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipScale", false, 1f, 1f, 1f, 1f), 1f)
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipScale", true, 0.5f, 0f, 0f, 0f) > 1f
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipScale", true, 1f, 1f, 1f, 1f) > 1f,
+                "Escape gate pips must scale on partial gates and escape payoff pulses.");
+            Require(
+                closeEscapeGateReadiness > farEscapeGateReadiness
+                    && nextEscapeGateReadiness > farEscapeGateReadiness
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", true, 0, 3, 1, 0f, 0.10f, 1f, 1f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", true, 3, 3, 2, 0f, 0.10f, 1f, 1f), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipReadinessPulse", false, 0, 3, 0, 0f, 0.10f, 1f, 1f), 0f)
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipAlphaWithReadiness", true, 0f, 0f, 0f, 0f, closeEscapeGateReadiness)
+                        > emptyEscapeGateAlpha
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipScaleWithReadiness", true, 0f, 0f, 0f, 0f, closeEscapeGateReadiness)
+                        > InvokeRuntimeUiFloat("BuildEscapeGatePipScale", true, 0f, 0f, 0f, 0f),
+                "Only the current escape gate pip must pulse brighter and larger near the judgement window.");
+            Require(
+                activeEscapeGateDownbeat > priorEscapeGateDownbeat
+                    && completeEscapeGateDownbeat >= activeEscapeGateDownbeat
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 0f, true, 0f, 1f, 1, 1, 3), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 1f, false, 0f, 1f, 1, 1, 3), 0f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatLift", 1f, true, 0f, 1f, 2, 1, 3), 0f)
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipAlphaWithDownbeat", 0.70f, activeEscapeGateDownbeat) > 0.70f
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipScaleWithDownbeat", 1f, activeEscapeGateDownbeat) > 1f
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipDownbeatColorBlend", activeEscapeGateDownbeat) > 0f
+                    && InvokeRuntimeUiFloat("BuildEscapeGatePipBackDownbeatColorBlend", activeEscapeGateDownbeat) > 0f,
+                "Escape gate pips must catch the four-beat downbeat on the current gate, not on unrelated empty gates.");
             GreedLastTimingType[] expectedTimings =
             {
                 GreedLastTimingType.Clutch,
@@ -3968,6 +11818,22 @@ namespace GreedLast.Editor
                 clock = exactAt;
                 if (i < 2)
                 {
+                    string nextEscapeProgressLabel = InvokeRuntimeUiLabel(
+                        "BuildEscapeProgressLabel",
+                        snapshot,
+                        snapshot.ChapterTarget);
+                    Require(
+                        nextEscapeProgressLabel.Contains(i == 0 ? "탈출 게이트 1/3" : "입구 직전 게이트 2/3", StringComparison.Ordinal),
+                        "Escape progress must show gate completion and the final entry-before-exit state.");
+                    Require(
+                        InvokeRuntimeUiLabel("BuildRunChapterHudText", snapshot)
+                            == (i == 0 ? "탈출 게이트 1/3" : "입구 직전 게이트 2/3"),
+                        "The live HUD must match the escape-gate progress bar wording.");
+                    string nextEscapeObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", snapshot);
+                    Require(
+                        nextEscapeObjective.Contains(i == 0 ? "탈출 게이트 1/3" : "입구 직전 게이트 2/3", StringComparison.Ordinal),
+                        "The live objective must follow the same escape-gate wording as HUD and progress. Actual: "
+                            + nextEscapeObjective);
                     string feedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot);
                     Require(
                         feedback.Contains("경로 안정 " + (i + 1) + "/3", StringComparison.Ordinal)
@@ -3982,6 +11848,23 @@ namespace GreedLast.Editor
             }
 
             Require(snapshot.Stopped && snapshot.EscapeSucceeded, "The final cadence guidance sample must still finish the escape.");
+            int visibleEscapeGateProgress = InvokeRuntimeUiInt("BuildEscapeGateVisibleProgress", snapshot);
+            Require(
+                InvokeRuntimeUiBool("ShouldShowEscapeGatePips", snapshot)
+                    && visibleEscapeGateProgress == snapshot.ChapterTarget
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildEscapeGatePipFillAmount", visibleEscapeGateProgress, snapshot.ChapterTarget, 2), 1f),
+                "Escape gate pips must stay visible and filled on the clear summary before pressing the entrance-exit button.");
+            Require(
+                InvokeRuntimeUiLabel("BuildRunChapterHudText", snapshot) == "입구 탈출 완료",
+                "The clear summary HUD must read as the completed entrance escape.");
+            Require(
+                InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", snapshot) == "탈출 게이트 3/3 완료 · 입구로 나가기",
+                "The clear summary progress bar must keep the completed escape-gate count connected to the entrance-exit button.");
+            RequireTextLayoutBudget(
+                InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", snapshot),
+                1,
+                42,
+                "clear-summary escape-gate progress label");
             Require(snapshot.StableRouteBundleCount == 1, "A clean final escape cadence must grant its restored stable-route finisher.");
             Require(snapshot.JudgementText.Contains("안정 완주", StringComparison.Ordinal), "The escape settlement must retain its route finisher text.");
         }
@@ -4063,7 +11946,7 @@ namespace GreedLast.Editor
             };
             string[] expectedActions = { "점프", "숙이기", "비틀기" };
             string[] expectedLaneHazards = { "바닥", "상단", "측면" };
-            string[] expectedNextLabels = { "다음 ↓ 숙이기", "다음 ↔ 비틀기", "다음 ↑ 점프" };
+            string[] expectedNextLabels = { "다음 ↓ 숙이기", "다음 ↔ 비틀기", "다음 ↺ 회전 Q" };
             string[] expectedRoles = { "충전", "반격", "연쇄" };
             string[] expectedRolePayoffs =
             {
@@ -4071,6 +11954,7 @@ namespace GreedLast.Editor
                 "반격+" + GreedLastRunCore.ClutchCounterScoreBonus,
                 "연쇄+" + GreedLastRunCore.OffbeatFlowComboBonus,
             };
+            string[] expectedFeelGoals = { "→집중", "→반격", "→연쇄" };
             Require(
                 InvokeRuntimeUiLabel("BuildAvoidanceTestShortcutLabel", snapshot) == "동작 ↑ 점프",
                 "The avoidance-cycle shortcut button must name jump as the first comparison sample.");
@@ -4098,11 +11982,37 @@ namespace GreedLast.Editor
                     snapshot.Pattern.AvoidanceType == expectedAvoidances[i]
                         && snapshot.Pattern.TimingType == expectedTimings[i],
                     "The avoidance-cycle shortcut must pair each response with its authored representative timing.");
+                string prototypeFeelStatus = InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", snapshot);
+                Require(
+                    prototypeFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
+                        && prototypeFeelStatus.Contains(expectedLaneHazards[i], StringComparison.Ordinal)
+                        && prototypeFeelStatus.Contains(expectedFeelGoals[i], StringComparison.Ordinal),
+                    "The prototype feel token must name the active hazard and the exact-input payoff goal. Actual: "
+                        + prototypeFeelStatus);
+                string prototypeCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot);
+                Require(
+                    prototypeCoach.Contains("정확" + expectedFeelGoals[i], StringComparison.Ordinal),
+                    "The live coach must keep the exact-input payoff goal visible for each avoidance sample. Actual: "
+                        + prototypeCoach);
+                string expectedMobileLaneHint = InvokeRuntimeUiLabel(
+                    "BuildRunChannelInputHintForMode",
+                    snapshot.Pattern.Channel,
+                    false);
+                string mobileActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueTextForMode", snapshot, false);
+                Require(
+                    !string.IsNullOrEmpty(expectedMobileLaneHint)
+                        && mobileActionCue.Contains(expectedMobileLaneHint, StringComparison.Ordinal)
+                        && !mobileActionCue.Contains("A/←", StringComparison.Ordinal)
+                        && !mobileActionCue.Contains("S/Space", StringComparison.Ordinal)
+                        && !mobileActionCue.Contains("D/→", StringComparison.Ordinal),
+                    "Every mobile/release avoidance cue must use tap hints instead of editor key names. Actual: "
+                        + mobileActionCue);
                 string laneResponseHint = InvokeRuntimeUiLabel("BuildLaneResponseHint", snapshot);
                 Require(
                     laneResponseHint.Contains(expectedActions[i], StringComparison.Ordinal)
                         && laneResponseHint.Contains(expectedLaneHazards[i], StringComparison.Ordinal)
                         && laneResponseHint.Contains("→", StringComparison.Ordinal)
+                        && laneResponseHint.Contains("정확→", StringComparison.Ordinal)
                         && laneResponseHint.Contains(expectedRoles[i], StringComparison.Ordinal)
                         && laneResponseHint.Contains(expectedRolePayoffs[i], StringComparison.Ordinal)
                         && laneResponseHint.Contains(
@@ -4110,7 +12020,7 @@ namespace GreedLast.Editor
                                 ? "↑"
                                 : expectedAvoidances[i] == GreedLastAvoidanceType.Slide ? "↓" : "↔",
                             StringComparison.Ordinal),
-                    "The active lane hint must pair the hazard, response name, payoff value, payoff role, and action symbol.");
+                    "The active lane hint must pair the hazard, response name, exact-input payoff value, payoff role, and action symbol.");
                 Vector4 markerShape = InvokeRuntimeUiVector4("BuildTrapMarkerShapeLayout", snapshot.Pattern, 1f);
                 if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
                 {
@@ -4134,6 +12044,108 @@ namespace GreedLast.Editor
                             && Mathf.Abs(markerShape.z) >= 20f,
                         "Twist trap markers must stay narrow, tall, and angled like a side strike.");
                 }
+
+                float calmMarkerScaleX = InvokeRuntimeUiFloat("BuildTrapMarkerResponseScaleX", snapshot.Pattern, 0.05f, 0f, 0f);
+                float calmMarkerScaleY = InvokeRuntimeUiFloat("BuildTrapMarkerResponseScaleY", snapshot.Pattern, 0.05f, 0f, 0f);
+                float pressuredMarkerScaleX = InvokeRuntimeUiFloat("BuildTrapMarkerResponseScaleX", snapshot.Pattern, 1f, 1f, 0f);
+                float pressuredMarkerScaleY = InvokeRuntimeUiFloat("BuildTrapMarkerResponseScaleY", snapshot.Pattern, 1f, 1f, 0f);
+                float pressuredMarkerAngle = InvokeRuntimeUiFloat("BuildTrapMarkerResponseAngleLift", snapshot.Pattern, 1f, 1f);
+                if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
+                {
+                    Require(
+                        pressuredMarkerScaleX > calmMarkerScaleX
+                            && pressuredMarkerScaleY < calmMarkerScaleY
+                            && Mathf.Approximately(pressuredMarkerAngle, 0f),
+                        "Jump trap markers must flatten wider as the floor sweep reaches the judgement line.");
+                }
+                else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
+                {
+                    Require(
+                        pressuredMarkerScaleY > calmMarkerScaleY
+                            && pressuredMarkerScaleX < calmMarkerScaleX
+                            && Mathf.Approximately(pressuredMarkerAngle, 0f),
+                        "Slide trap markers must press taller as the overhead block reaches the judgement line.");
+                }
+                else
+                {
+                    Require(
+                        pressuredMarkerScaleY > calmMarkerScaleY
+                            && pressuredMarkerScaleX < calmMarkerScaleX
+                            && Mathf.Abs(pressuredMarkerAngle) > 0f,
+                        "Twist trap markers must sharpen taller and gain angle pressure near the judgement line.");
+                }
+
+                float readyTrapDownbeat = InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatLift", 1f, 0.82f, 1f);
+                float weakTrapDownbeat = InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatLift", 1f, 0.12f, 0f);
+                float trapDownbeatScaleX = InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatScaleX", snapshot.Pattern, readyTrapDownbeat);
+                float trapDownbeatScaleY = InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatScaleY", snapshot.Pattern, readyTrapDownbeat);
+                float trapDownbeatAngle = InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatAngleLift", snapshot.Pattern, readyTrapDownbeat);
+                Require(
+                    readyTrapDownbeat > weakTrapDownbeat
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatLift", 0f, 0.82f, 1f), 0f)
+                        && InvokeRuntimeUiFloat("BuildTrapMarkerDownbeatColorBlend", readyTrapDownbeat) > 0f,
+                    "Trap markers must only gain their downbeat lift when the pulse is alive and the active marker is near.");
+                if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
+                {
+                    Require(
+                        trapDownbeatScaleX > trapDownbeatScaleY
+                            && Mathf.Approximately(trapDownbeatAngle, 0f),
+                        "Jump trap marker downbeats must read as a wider floor sweep without adding angle.");
+                }
+                else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
+                {
+                    Require(
+                        trapDownbeatScaleY > trapDownbeatScaleX
+                            && Mathf.Approximately(trapDownbeatAngle, 0f),
+                        "Slide trap marker downbeats must read as a taller overhead press without adding angle.");
+                }
+                else
+                {
+                    Require(
+                        trapDownbeatScaleY > trapDownbeatScaleX
+                            && Mathf.Abs(trapDownbeatAngle) > 0f,
+                        "Twist trap marker downbeats must read as a taller angled side strike.");
+                }
+
+                Require(
+                    InvokeRuntimeUiInt("BuildTrapDangerBandDownbeatAlphaLift", readyTrapDownbeat)
+                        > InvokeRuntimeUiInt("BuildTrapDangerBandDownbeatAlphaLift", weakTrapDownbeat)
+                        && InvokeRuntimeUiInt("BuildTrapDangerGlowDownbeatAlphaLift", readyTrapDownbeat)
+                            > InvokeRuntimeUiInt("BuildTrapDangerGlowDownbeatAlphaLift", weakTrapDownbeat)
+                        && InvokeRuntimeUiFloat("BuildTrapDangerGlowDownbeatScaleLift", readyTrapDownbeat)
+                            > InvokeRuntimeUiFloat("BuildTrapDangerGlowDownbeatScaleLift", weakTrapDownbeat)
+                        && InvokeRuntimeUiFloat("BuildTrapDangerGlowDownbeatColorBlend", readyTrapDownbeat)
+                            > InvokeRuntimeUiFloat("BuildTrapDangerGlowDownbeatColorBlend", weakTrapDownbeat)
+                        && InvokeRuntimeUiInt("BuildTrapStrikeDownbeatAlphaLift", readyTrapDownbeat)
+                            > InvokeRuntimeUiInt("BuildTrapStrikeDownbeatAlphaLift", weakTrapDownbeat)
+                        && InvokeRuntimeUiFloat("BuildTrapStrikeDownbeatColorBlend", readyTrapDownbeat)
+                            > InvokeRuntimeUiFloat("BuildTrapStrikeDownbeatColorBlend", weakTrapDownbeat),
+                    "Trap danger bands, glows, and strike lines must share the marker downbeat without changing their core hazard role.");
+                float strikeDownbeatScaleX = InvokeRuntimeUiFloat("BuildTrapStrikeDownbeatScaleX", snapshot.Pattern, readyTrapDownbeat);
+                float strikeDownbeatScaleY = InvokeRuntimeUiFloat("BuildTrapStrikeDownbeatScaleY", snapshot.Pattern, readyTrapDownbeat);
+                float strikeDownbeatAngle = InvokeRuntimeUiFloat("BuildTrapStrikeDownbeatAngleLift", snapshot.Pattern, readyTrapDownbeat);
+                if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
+                {
+                    Require(
+                        strikeDownbeatScaleX > strikeDownbeatScaleY
+                            && Mathf.Approximately(strikeDownbeatAngle, 0f),
+                        "Jump trap strike downbeats must widen the floor strike without adding angle.");
+                }
+                else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
+                {
+                    Require(
+                        strikeDownbeatScaleY > strikeDownbeatScaleX
+                            && Mathf.Approximately(strikeDownbeatAngle, 0f),
+                        "Slide trap strike downbeats must lengthen the overhead strike without adding angle.");
+                }
+                else
+                {
+                    Require(
+                        strikeDownbeatScaleY > strikeDownbeatScaleX
+                            && Mathf.Abs(strikeDownbeatAngle) > 0f,
+                        "Twist trap strike downbeats must keep the side-strike angle readable.");
+                }
+
                 Vector4 dangerBounds = InvokeRuntimeUiVector4(
                     "BuildTrapDangerBandLayout",
                     snapshot.Pattern,
@@ -4141,6 +12153,350 @@ namespace GreedLast.Editor
                     0.75f,
                     0f,
                     0f);
+                float ghostChannelX = snapshot.Pattern.Channel == GreedLastRunChannel.Left
+                    ? 0.2f
+                    : snapshot.Pattern.Channel == GreedLastRunChannel.Right
+                        ? 0.8f
+                        : 0.5f;
+                float ghostCoreProgress = Mathf.Clamp01(snapshot.Pattern.CoreSeconds / Mathf.Max(0.01f, snapshot.Pattern.HitSeconds));
+                Vector4 farContactCue = InvokeRuntimeUiVector4(
+                    "BuildTrapContactCueLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.18f);
+                Vector4 nearContactCue = InvokeRuntimeUiVector4(
+                    "BuildTrapContactCueLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.88f);
+                Vector4 farCorridorShadow = InvokeRuntimeUiVector4(
+                    "BuildTrapCorridorShadowLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.70f,
+                    0.18f);
+                Vector4 nearCorridorShadow = InvokeRuntimeUiVector4(
+                    "BuildTrapCorridorShadowLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.44f,
+                    0.88f);
+                Vector4 farWarningRail = InvokeRuntimeUiVector4(
+                    "BuildTrapWarningRailLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.70f,
+                    0.18f,
+                    0);
+                Vector4 nearWarningRail = InvokeRuntimeUiVector4(
+                    "BuildTrapWarningRailLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.44f,
+                    0.88f,
+                    0);
+                Vector4 nearWarningRailPair = InvokeRuntimeUiVector4(
+                    "BuildTrapWarningRailLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    ghostChannelX,
+                    0.44f,
+                    0.88f,
+                    1);
+                int hiddenContactCueAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapContactCueAlpha",
+                    default(GreedLastPatternModel),
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                int calmContactCueAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapContactCueAlpha",
+                    snapshot.Pattern,
+                    0.18f,
+                    0f,
+                    false,
+                    1,
+                    0f);
+                int urgentContactCueAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapContactCueAlpha",
+                    snapshot.Pattern,
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                int hiddenCorridorShadowAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapCorridorShadowAlpha",
+                    default(GreedLastPatternModel),
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                int calmCorridorShadowAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapCorridorShadowAlpha",
+                    snapshot.Pattern,
+                    0.18f,
+                    0f,
+                    false,
+                    1,
+                    0f);
+                int urgentCorridorShadowAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapCorridorShadowAlpha",
+                    snapshot.Pattern,
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                int hiddenWarningRailAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapWarningRailAlpha",
+                    default(GreedLastPatternModel),
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                int calmWarningRailAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapWarningRailAlpha",
+                    snapshot.Pattern,
+                    0.18f,
+                    0f,
+                    false,
+                    1,
+                    0f);
+                int urgentWarningRailAlpha = InvokeRuntimeUiInt(
+                    "BuildTrapWarningRailAlpha",
+                    snapshot.Pattern,
+                    0.88f,
+                    1f,
+                    true,
+                    5,
+                    0.3f);
+                Require(
+                    hiddenContactCueAlpha == 0
+                        && urgentContactCueAlpha > calmContactCueAlpha
+                        && urgentContactCueAlpha <= 168
+                        && InvokeRuntimeUiFloat("BuildTrapContactCueScale", 1f, 0.88f)
+                            > InvokeRuntimeUiFloat("BuildTrapContactCueScale", 0f, 0.88f)
+                        && InvokeRuntimeUiFloat("BuildTrapContactCueColorBlend", 0.88f, 1f, 0.3f)
+                            > InvokeRuntimeUiFloat("BuildTrapContactCueColorBlend", 0.18f, 0f, 0f),
+                    "Trap contact cues must stay hidden without a valid trap and intensify only near the contact beat.");
+                Require(
+                    hiddenCorridorShadowAlpha == 0
+                        && urgentCorridorShadowAlpha > calmCorridorShadowAlpha
+                        && urgentCorridorShadowAlpha <= 158
+                        && InvokeRuntimeUiFloat("BuildTrapCorridorShadowScale", 1f, 0.88f)
+                            > InvokeRuntimeUiFloat("BuildTrapCorridorShadowScale", 0f, 0.18f)
+                        && InvokeRuntimeUiFloat("BuildTrapCorridorShadowColorBlend", 0.88f, 1f, 0.3f)
+                            > InvokeRuntimeUiFloat("BuildTrapCorridorShadowColorBlend", 0.18f, 0f, 0f),
+                    "Trap corridor shadows must stay hidden without a valid trap and intensify with near-beat pressure.");
+                Require(
+                    hiddenWarningRailAlpha == 0
+                        && urgentWarningRailAlpha > calmWarningRailAlpha
+                        && urgentWarningRailAlpha <= 148
+                        && InvokeRuntimeUiFloat("BuildTrapWarningRailScale", 1f, 0.88f, 1)
+                            > InvokeRuntimeUiFloat("BuildTrapWarningRailScale", 0f, 0.88f, 1)
+                        && InvokeRuntimeUiFloat("BuildTrapWarningRailColorBlend", 0.88f, 1f, 0.3f)
+                            > InvokeRuntimeUiFloat("BuildTrapWarningRailColorBlend", 0.18f, 0f, 0f),
+                    "Trap warning rails must stay hidden without a valid trap and intensify only near the contact beat.");
+                float baseDropPreview = InvokeRuntimeUiFloat("BuildTrapVisualPreviewProgress", 0.30f, 0.62f, 0, true);
+                float slowDropPreview = InvokeRuntimeUiFloat("BuildTrapVisualPreviewProgress", 0.30f, 0.62f, 1, true);
+                float fastDropPreview = InvokeRuntimeUiFloat("BuildTrapVisualPreviewProgress", 0.30f, 0.62f, 2, true);
+                Require(
+                    Mathf.Approximately(baseDropPreview, 0.30f)
+                        && slowDropPreview < baseDropPreview
+                        && fastDropPreview > baseDropPreview
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapVisualPreviewProgress", 0.62f, 0.62f, 1, true), 0.62f)
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapVisualPreviewProgress", 0.30f, 0.62f, 2, false), 0.30f)
+                        && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewButtonLabel", 0) == "낙하 보통"
+                        && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewButtonLabel", 1) == "낙하 느림"
+                        && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewButtonLabel", 2) == "낙하 빠름"
+                        && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewFeedbackText", 1).Contains("판정 위치 유지", StringComparison.Ordinal),
+                    "Dev-only trap visual preview must change only pre-core approach speed, preserve the core timing point, and stay off in release policy.");
+                Vector4 leadGhost = InvokeRuntimeUiVector4(
+                    "BuildTrapApproachGhostLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    0.68f,
+                    ghostCoreProgress,
+                    0);
+                Vector4 tailGhost = InvokeRuntimeUiVector4(
+                    "BuildTrapApproachGhostLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    0.68f,
+                    ghostCoreProgress,
+                    2);
+                float leadGhostAlpha = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachGhostAlpha",
+                    snapshot.Pattern,
+                    0.68f,
+                    ghostCoreProgress,
+                    0.5f,
+                    0);
+                float tailGhostAlpha = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachGhostAlpha",
+                    snapshot.Pattern,
+                    0.68f,
+                    ghostCoreProgress,
+                    0.5f,
+                    2);
+                Require(
+                    leadGhostAlpha > tailGhostAlpha
+                        && tailGhostAlpha > 0f
+                        && leadGhost.y < tailGhost.y
+                        && leadGhost.z > tailGhost.z
+                        && leadGhost.w > tailGhost.w,
+                    "Trap approach ghosts must form a descending trail that grows and brightens toward the active marker.");
+                float lowApproachPressure = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachGhostPressure",
+                    0.15f,
+                    false,
+                    1,
+                    0f);
+                float nearApproachPressure = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachGhostPressure",
+                    0.78f,
+                    false,
+                    1,
+                    0.1f);
+                float infiniteApproachPressure = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachGhostPressure",
+                    0.78f,
+                    true,
+                    5,
+                    0.3f);
+                Require(
+                    nearApproachPressure > lowApproachPressure
+                        && infiniteApproachPressure > nearApproachPressure,
+                    "Trap approach ghost pressure must rise as the marker nears the judgement line and intensify in high-threat infinite mode.");
+                Require(
+                    InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureScale", nearApproachPressure, 0)
+                        > InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureScale", lowApproachPressure, 0)
+                        && InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureAlpha", leadGhostAlpha, nearApproachPressure, 0)
+                            > InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureAlpha", leadGhostAlpha, lowApproachPressure, 0)
+                        && InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureColorBlend", nearApproachPressure, 0)
+                            > InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureColorBlend", lowApproachPressure, 0)
+                        && Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureAngle", 38f, nearApproachPressure, 0))
+                            > Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapApproachGhostPressureAngle", 38f, lowApproachPressure, 0)),
+                    "Trap approach ghost pressure must enlarge, brighten, recolor, and rotate the danger trail.");
+                float leadGhostDownbeat = InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatLift", 1f, 0.78f, nearApproachPressure, 0);
+                float tailGhostDownbeat = InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatLift", 1f, 0.78f, nearApproachPressure, 2);
+                float weakGhostDownbeat = InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatLift", 1f, 0.15f, lowApproachPressure, 0);
+                Require(
+                    leadGhostDownbeat > tailGhostDownbeat
+                        && leadGhostDownbeat > weakGhostDownbeat
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatLift", 0f, 0.78f, nearApproachPressure, 0), 0f)
+                        && InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatScaleLift", leadGhostDownbeat, 0)
+                            > InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatScaleLift", tailGhostDownbeat, 2)
+                        && InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatAlpha", leadGhostAlpha, leadGhostDownbeat, 0)
+                            > InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatAlpha", leadGhostAlpha, weakGhostDownbeat, 0)
+                        && InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatColorBlend", leadGhostDownbeat, 0)
+                            > InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatColorBlend", tailGhostDownbeat, 2)
+                        && Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatAngleLift", 38f, leadGhostDownbeat, 0))
+                            > Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapApproachGhostDownbeatAngleLift", 38f, weakGhostDownbeat, 0)),
+                    "Trap approach ghosts must share the downbeat most clearly on the lead ghost and fade down the trail.");
+                float pipInterval = InvokeRuntimeUiFloat("BuildTimingBeatPipInterval", snapshot.Pattern, 0.5f);
+                Vector4 oneBeatPip = InvokeRuntimeUiVector4(
+                    "BuildTimingBeatPipLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    pipInterval,
+                    0);
+                Vector4 threeBeatPip = InvokeRuntimeUiVector4(
+                    "BuildTimingBeatPipLayout",
+                    snapshot.Pattern,
+                    ghostChannelX,
+                    pipInterval,
+                    2);
+                float oneBeatPipAlpha = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipAlpha",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    0);
+                float threeBeatPipAlpha = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipAlpha",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    2);
+                float oneBeatPipReadiness = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipReadiness",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    0);
+                float threeBeatPipReadiness = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipReadiness",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    2);
+                float oneBeatPipScale = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipScale",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    0,
+                    0f);
+                float threeBeatPipScale = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipScale",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    2,
+                    0f);
+                float exactPulsePipScale = InvokeRuntimeUiFloat(
+                    "BuildTimingBeatPipScale",
+                    snapshot.Pattern,
+                    -pipInterval,
+                    pipInterval,
+                    0,
+                    1f);
+                float idleTimingBeatPipPulse = InvokeRuntimeUiFloat("BuildTimingBeatPipPulse", 0f, 0f, 1f, 0);
+                float readyTimingBeatPipPulse = InvokeRuntimeUiFloat("BuildTimingBeatPipPulse", oneBeatPipReadiness, 0f, 1f, 0);
+                float exactTimingBeatPipPulse = InvokeRuntimeUiFloat("BuildTimingBeatPipPulse", oneBeatPipReadiness, 1f, 0f, 0);
+                float leadTimingBeatPipLock = InvokeRuntimeUiFloat("BuildTimingBeatPipExactLock", 1f, 0);
+                float tailTimingBeatPipLock = InvokeRuntimeUiFloat("BuildTimingBeatPipExactLock", 1f, 2);
+                Require(
+                    pipInterval <= 0.5f
+                        && oneBeatPip.y < threeBeatPip.y
+                        && oneBeatPip.z >= threeBeatPip.z
+                        && oneBeatPipAlpha > threeBeatPipAlpha
+                        && threeBeatPipAlpha > 0f
+                        && oneBeatPipReadiness > threeBeatPipReadiness
+                        && oneBeatPipScale > threeBeatPipScale
+                        && exactPulsePipScale > oneBeatPipScale,
+                    "Timing beat pips must mark the active trap path from early preparation toward the exact hit line.");
+                Require(
+                    Mathf.Approximately(idleTimingBeatPipPulse, 0f)
+                        && readyTimingBeatPipPulse > idleTimingBeatPipPulse
+                        && exactTimingBeatPipPulse > readyTimingBeatPipPulse * 0.8f
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipAlphaWithPulse", oneBeatPipAlpha, readyTimingBeatPipPulse) > oneBeatPipAlpha
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipScaleWithPulse", oneBeatPipScale, readyTimingBeatPipPulse) > oneBeatPipScale
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipWidthLift", readyTimingBeatPipPulse, 0)
+                            > InvokeRuntimeUiFloat("BuildTimingBeatPipWidthLift", readyTimingBeatPipPulse, 2)
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipHeightLift", readyTimingBeatPipPulse, 0)
+                            > InvokeRuntimeUiFloat("BuildTimingBeatPipHeightLift", readyTimingBeatPipPulse, 2),
+                    "Timing beat pips must breathe on beat, with the nearest cue receiving the strongest width and thickness lift.");
+                Require(
+                    leadTimingBeatPipLock > tailTimingBeatPipLock
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTimingBeatPipExactLock", 0f, 0), 0f)
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipAlphaWithExactLock", oneBeatPipAlpha, leadTimingBeatPipLock) > oneBeatPipAlpha
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipScaleXWithExactLock", oneBeatPipScale, leadTimingBeatPipLock) > oneBeatPipScale
+                        && InvokeRuntimeUiFloat("BuildTimingBeatPipScaleYWithExactLock", oneBeatPipScale, leadTimingBeatPipLock)
+                            > InvokeRuntimeUiFloat("BuildTimingBeatPipScaleXWithExactLock", oneBeatPipScale, leadTimingBeatPipLock),
+                    "Timing beat pips must exact-lock the nearest cue brighter and taller while damping later pips.");
                 if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
                 {
                     Require(
@@ -4148,12 +12504,57 @@ namespace GreedLast.Editor
                             && dangerBounds.w < 0.37f
                             && dangerBounds.z - dangerBounds.x >= 0.24f,
                         "Jump traps must read as a low, broad floor danger zone.");
+                    Require(
+                        leadGhost.z > leadGhost.w * 2f,
+                        "Jump approach ghosts must keep the low, broad floor-sweep silhouette.");
+                    Require(
+                        nearContactCue.y < 0.18f
+                            && nearContactCue.z > farContactCue.z
+                            && nearContactCue.z > nearContactCue.w * 10f
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapContactCueAngle", snapshot.Pattern, 0.88f, 1f), 0f),
+                        "Jump contact cues must read as a wide floor impact line.");
+                    Require(
+                        nearCorridorShadow.y < farCorridorShadow.y
+                            && nearCorridorShadow.z > nearCorridorShadow.w * 3f
+                            && nearCorridorShadow.z > farCorridorShadow.z
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapCorridorShadowAngle", snapshot.Pattern, 0.88f, 1f), 0f),
+                        "Jump corridor shadows must widen low across the floor as the trap reaches the runner.");
+                    Require(
+                        nearWarningRail.y < 0.22f
+                            && nearWarningRailPair.y > nearWarningRail.y
+                            && nearWarningRail.z > farWarningRail.z
+                            && nearWarningRail.z > nearWarningRail.w * 14f
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapWarningRailAngle", snapshot.Pattern, 0.88f, 1f, 0), 0f),
+                        "Jump warning rails must bracket the floor impact with low horizontal guide lines.");
                 }
                 else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
                 {
                     Require(
                         dangerBounds.y >= 0.30f && dangerBounds.w >= 0.90f,
                         "Slide traps must read as an overhead danger zone descending from above.");
+                    Require(
+                        leadGhost.z > leadGhost.w,
+                        "Slide approach ghosts must keep the overhead block silhouette.");
+                    Require(
+                        nearContactCue.y < farContactCue.y
+                            && nearContactCue.y > 0.62f
+                            && nearContactCue.z > nearContactCue.w * 9f
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapContactCueAngle", snapshot.Pattern, 0.88f, 1f), 0f),
+                        "Slide contact cues must read as an overhead pressure line descending toward the lane.");
+                    Require(
+                        nearCorridorShadow.y <= farCorridorShadow.y
+                            && nearCorridorShadow.w > nearCorridorShadow.z * 1.8f
+                            && nearCorridorShadow.w > farCorridorShadow.w
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapCorridorShadowAngle", snapshot.Pattern, 0.88f, 1f), 0f),
+                        "Slide corridor shadows must stay tall and descend as overhead pressure.");
+                    Require(
+                        nearWarningRail.y < farWarningRail.y
+                            && nearWarningRail.y > 0.60f
+                            && nearWarningRailPair.y > nearWarningRail.y
+                            && nearWarningRail.z > farWarningRail.z
+                            && nearWarningRail.z > nearWarningRail.w * 14f
+                            && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapWarningRailAngle", snapshot.Pattern, 0.88f, 1f, 0), 0f),
+                        "Slide warning rails must bracket the overhead pressure with descending horizontal guide lines.");
                 }
                 else
                 {
@@ -4162,15 +12563,184 @@ namespace GreedLast.Editor
                             && dangerBounds.y <= 0.18f
                             && dangerBounds.w >= 0.88f,
                         "Twist traps must read as a narrow side strike through the lane.");
+                    Require(
+                        leadGhost.w > leadGhost.z * 2.8f
+                            && Mathf.Abs(leadGhost.x - ghostChannelX) > 0.015f,
+                        "Twist approach ghosts must preserve a narrow side-strike trail with horizontal sweep.");
+                    Require(
+                        nearContactCue.w > nearContactCue.z * 10f
+                            && Mathf.Abs(nearContactCue.x - ghostChannelX) > Mathf.Abs(farContactCue.x - ghostChannelX)
+                            && Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapContactCueAngle", snapshot.Pattern, 0.88f, 1f)) > 9.5f,
+                        "Twist contact cues must read as a narrow angled side impact line.");
+                    Require(
+                        nearCorridorShadow.w > nearCorridorShadow.z * 5f
+                            && Mathf.Abs(nearCorridorShadow.x - ghostChannelX) > Mathf.Abs(farCorridorShadow.x - ghostChannelX)
+                            && Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapCorridorShadowAngle", snapshot.Pattern, 0.88f, 1f)) > 24f,
+                        "Twist corridor shadows must offset and tilt into a narrow side-pressure column.");
+                    Require(
+                        nearWarningRail.w > nearWarningRail.z * 14f
+                            && nearWarningRailPair.w > nearWarningRailPair.z * 14f
+                            && Mathf.Abs(nearWarningRail.x - ghostChannelX) > Mathf.Abs(farWarningRail.x - ghostChannelX)
+                            && Mathf.Abs(nearWarningRailPair.x - ghostChannelX) > Mathf.Abs(farWarningRail.x - ghostChannelX)
+                            && Mathf.Abs(InvokeRuntimeUiFloat("BuildTrapWarningRailAngle", snapshot.Pattern, 0.88f, 1f, 0)) > 18f,
+                        "Twist warning rails must bracket the side strike with tall angled guide lines.");
                 }
                 Vector4 missImpact = InvokeRuntimeUiVector4("BuildResolvedMissImpactLayout", snapshot.Pattern);
                 float missImpactAngle = InvokeRuntimeUiFloat("BuildResolvedMissImpactAngle", snapshot.Pattern);
                 float missHaptic = InvokeRuntimeUiFloat("BuildMissHapticDuration", snapshot.Pattern);
+                Vector4 avoidanceTrail = InvokeRuntimeUiVector4("BuildResolvedAvoidanceTrailLayout", snapshot.Pattern, 0.5f, 0.18f);
+                float avoidanceTrailAngle = InvokeRuntimeUiFloat("BuildResolvedAvoidanceTrailAngle", snapshot.Pattern);
+                Vector4 exactWake = InvokeRuntimeUiVector4(
+                    "BuildResolvedJudgementImpactWakeLayout",
+                    snapshot.Pattern,
+                    GreedLastJudgementResult.Success,
+                    0.5f);
+                Vector4 missWake = InvokeRuntimeUiVector4(
+                    "BuildResolvedJudgementImpactWakeLayout",
+                    snapshot.Pattern,
+                    GreedLastJudgementResult.Miss,
+                    0.5f);
+                float exactWakeAngle = InvokeRuntimeUiFloat(
+                    "BuildResolvedJudgementImpactWakeAngle",
+                    snapshot.Pattern,
+                    GreedLastJudgementResult.Success,
+                    0.5f);
+                float missWakeAngle = InvokeRuntimeUiFloat(
+                    "BuildResolvedJudgementImpactWakeAngle",
+                    snapshot.Pattern,
+                    GreedLastJudgementResult.Miss,
+                    0.5f);
+                Require(
+                    InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Success, 0.5f, 1f)
+                        > InvokeRuntimeUiInt("BuildResolvedJudgementImpactWakeAlpha", GreedLastJudgementResult.Good, 0.5f, 1f)
+                        && InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Miss, 0.5f)
+                            > InvokeRuntimeUiFloat("BuildResolvedJudgementImpactWakeScale", GreedLastJudgementResult.Good, 0.5f),
+                    "Resolved judgement impact wakes must preserve result intensity across trap families.");
+                if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
+                {
+                    Require(
+                        exactWake.z > exactWake.w * 7f
+                            && exactWake.y < 0.18f
+                            && missWake.z > exactWake.z * 0.86f
+                            && Mathf.Approximately(exactWakeAngle, 0f)
+                            && Mathf.Approximately(missWakeAngle, 0f),
+                        "Jump resolved judgement wakes must read as low floor sweeps after the input.");
+                }
+                else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
+                {
+                    Require(
+                        exactWake.y > 0.22f
+                            && exactWake.w > 60f
+                            && exactWake.z > exactWake.w * 3f
+                            && missWake.w > exactWake.w
+                            && Mathf.Approximately(exactWakeAngle, 0f)
+                            && Mathf.Approximately(missWakeAngle, 0f),
+                        "Slide resolved judgement wakes must read as an overhead pad collapsing after the input.");
+                }
+                else
+                {
+                    Require(
+                        exactWake.w > exactWake.z * 4f
+                            && Mathf.Abs(exactWake.x - 0.5f) > 0.07f
+                            && Mathf.Abs(missWakeAngle) > Mathf.Abs(exactWakeAngle)
+                            && Mathf.Abs(exactWakeAngle) > 20f,
+                        "Twist resolved judgement wakes must preserve the side-column angle after the input.");
+                }
                 Vector4 successPose = InvokeRuntimeUiVector4("BuildRunnerResponsePoseTransformForPattern", snapshot.Pattern, 1f, 1f);
                 Vector4 successMotion = InvokeRuntimeUiVector4("BuildRunnerResponsePoseMotionForPattern", snapshot.Pattern, 1f, 1f);
                 Vector4 successLimbs = InvokeRuntimeUiVector4("BuildRunnerResponseLimbAnglesForPattern", snapshot.Pattern, 1f, 1f);
+                float earlyAnticipation = InvokeRuntimeUiFloat(
+                    "BuildRunnerAnticipationStrength",
+                    true,
+                    false,
+                    -0.40f,
+                    snapshot.Pattern.GoodWindowSeconds);
+                float peakAnticipation = InvokeRuntimeUiFloat(
+                    "BuildRunnerAnticipationStrength",
+                    true,
+                    false,
+                    -0.05f,
+                    snapshot.Pattern.GoodWindowSeconds);
+                Require(
+                    earlyAnticipation > 0f
+                        && peakAnticipation > earlyAnticipation
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerAnticipationStrength", true, true, -0.05f, snapshot.Pattern.GoodWindowSeconds), 0f)
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerAnticipationStrength", true, false, snapshot.Pattern.GoodWindowSeconds + 0.02f, snapshot.Pattern.GoodWindowSeconds), 0f),
+                    "Runner anticipation must ramp toward the core beat and stay disabled while blocked or too late.");
+                Vector4 anticipationPose = InvokeRuntimeUiVector4("BuildRunnerAnticipationPoseTransformForPattern", snapshot.Pattern, 1f, 1f);
+                Vector4 anticipationMotion = InvokeRuntimeUiVector4("BuildRunnerAnticipationPoseMotionForPattern", snapshot.Pattern, 1f, 1f);
+                Vector4 anticipationLimbs = InvokeRuntimeUiVector4("BuildRunnerAnticipationLimbAnglesForPattern", snapshot.Pattern, 1f, 1f);
+                float readyRunnerDownbeat = InvokeRuntimeUiFloat(
+                    "BuildRunnerDownbeatLift",
+                    true,
+                    false,
+                    1f,
+                    -0.05f,
+                    snapshot.Pattern.GoodWindowSeconds);
+                float weakRunnerDownbeat = InvokeRuntimeUiFloat(
+                    "BuildRunnerDownbeatLift",
+                    true,
+                    false,
+                    1f,
+                    -0.40f,
+                    snapshot.Pattern.GoodWindowSeconds);
+                float runnerDownbeatScaleX = InvokeRuntimeUiFloat("BuildRunnerDownbeatBodyScaleX", snapshot.Pattern, readyRunnerDownbeat);
+                float runnerDownbeatScaleY = InvokeRuntimeUiFloat("BuildRunnerDownbeatBodyScaleY", snapshot.Pattern, readyRunnerDownbeat);
+                float runnerDownbeatAngle = InvokeRuntimeUiFloat("BuildRunnerDownbeatBodyAngleLift", snapshot.Pattern, readyRunnerDownbeat);
+                Require(
+                    readyRunnerDownbeat > weakRunnerDownbeat
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerDownbeatLift", true, true, 1f, -0.05f, snapshot.Pattern.GoodWindowSeconds), 0f)
+                        && Mathf.Approximately(InvokeRuntimeUiFloat("BuildRunnerDownbeatLift", true, false, 0f, -0.05f, snapshot.Pattern.GoodWindowSeconds), 0f)
+                        && InvokeRuntimeUiFloat("BuildRunnerDownbeatBodyColorBlend", readyRunnerDownbeat) > 0f
+                        && InvokeRuntimeUiFloat("BuildRunnerDownbeatShadowScaleXLift", readyRunnerDownbeat) > 0f
+                        && InvokeRuntimeUiFloat("BuildRunnerDownbeatShadowAlphaLift", readyRunnerDownbeat) > 0f,
+                    "Runner downbeat anticipation must appear only while an active trap is approaching and the run is not blocked.");
+                Vector4 preparationCue = InvokeRuntimeUiVector4(
+                    "BuildRunnerPreparationCueLayoutForPattern",
+                    snapshot.Pattern,
+                    0.92f,
+                    1f);
+                float preparationCueAngle = InvokeRuntimeUiFloat(
+                    "BuildRunnerPreparationCueAngleForPattern",
+                    snapshot.Pattern,
+                    0.92f,
+                    1f);
+                Vector4 preparationSymbol = InvokeRuntimeUiVector4(
+                    "BuildRunnerPreparationSymbolLayoutForPattern",
+                    snapshot.Pattern,
+                    0.92f,
+                    1f);
+                float preparationSymbolAngle = InvokeRuntimeUiFloat(
+                    "BuildRunnerPreparationSymbolAngleForPattern",
+                    snapshot.Pattern,
+                    0.92f,
+                    1f);
+                Require(
+                    InvokeRuntimeUiInt("BuildRunnerPreparationCueAlpha", snapshot.Pattern, false, false, 0.92f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationCueAlpha", snapshot.Pattern, true, true, 0.92f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationCueAlpha", snapshot.Pattern, true, false, 0f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationCueAlpha", snapshot.Pattern, true, false, 0.92f, 1f, 1f)
+                            > InvokeRuntimeUiInt("BuildRunnerPreparationCueAlpha", snapshot.Pattern, true, false, 0.28f, 0f, 0f)
+                        && InvokeRuntimeUiFloat("BuildRunnerPreparationCueScale", 0.92f, 1f)
+                            > InvokeRuntimeUiFloat("BuildRunnerPreparationCueScale", 0.18f, 0f)
+                        && InvokeRuntimeUiFloat("BuildRunnerPreparationCueColorBlend", 0.92f, 1f, 1f)
+                            > InvokeRuntimeUiFloat("BuildRunnerPreparationCueColorBlend", 0.18f, 0f, 0f),
+                    "Runner preparation cues must stay hidden while inactive or blocked and intensify near the input beat.");
+                Require(
+                    InvokeRuntimeUiInt("BuildRunnerPreparationSymbolAlpha", snapshot.Pattern, false, false, 0.92f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationSymbolAlpha", snapshot.Pattern, true, true, 0.92f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationSymbolAlpha", snapshot.Pattern, true, false, 0f, 1f, 1f) == 0
+                        && InvokeRuntimeUiInt("BuildRunnerPreparationSymbolAlpha", snapshot.Pattern, true, false, 0.92f, 1f, 1f)
+                            > InvokeRuntimeUiInt("BuildRunnerPreparationSymbolAlpha", snapshot.Pattern, true, false, 0.28f, 0f, 0f)
+                        && preparationSymbol.z > 30f
+                        && preparationSymbol.w > 1f,
+                    "Runner preparation symbols must stay hidden while inactive or blocked and grow readable near the input beat.");
                 if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
                 {
+                    Require(
+                        runnerDownbeatScaleY > runnerDownbeatScaleX
+                            && Mathf.Approximately(runnerDownbeatAngle, 0f),
+                        "Runner jump downbeats must read as an upward spring without adding side angle.");
                     Require(
                         missImpact.y < 0.18f
                             && missImpact.z > missImpact.w * 4f
@@ -4184,9 +12754,35 @@ namespace GreedLast.Editor
                             && successLimbs.x < 0f
                             && successLimbs.y > 0f,
                         "A successful jump must visibly rise, compress, and tuck its limbs.");
+                    Require(
+                        anticipationPose.y < 0f
+                            && anticipationPose.w < 0.96f
+                            && anticipationMotion.z > 1.08f
+                            && anticipationLimbs.x < 0f
+                            && anticipationLimbs.y > 0f,
+                        "A pending jump trap must make the runner crouch slightly before the exact beat.");
+                    Require(
+                        preparationCue.y <= -45f
+                            && preparationCue.z > preparationCue.w * 7f
+                            && Mathf.Approximately(preparationCueAngle, 0f),
+                        "A pending jump trap must show a low launch preparation line under the runner.");
+                    Require(
+                        preparationSymbol.y >= 78f
+                            && Mathf.Abs(preparationSymbol.x) <= 6f
+                            && Mathf.Approximately(preparationSymbolAngle, 0f),
+                        "A pending jump trap must lift the runner action symbol above the body.");
+                    Require(
+                        avoidanceTrail.z > avoidanceTrail.w * 7f
+                            && avoidanceTrail.y <= 0.215f
+                            && Mathf.Approximately(avoidanceTrailAngle, 0f),
+                        "A successful jump must leave a low, broad escape trail after clearing the floor trap.");
                 }
                 else if (expectedAvoidances[i] == GreedLastAvoidanceType.Slide)
                 {
+                    Require(
+                        runnerDownbeatScaleX > runnerDownbeatScaleY
+                            && Mathf.Approximately(runnerDownbeatAngle, 0f),
+                        "Runner slide downbeats must read as a lower, wider preparation without adding side angle.");
                     Require(
                         missImpact.y >= 0.29f
                             && missImpact.z > missImpact.w * 2f
@@ -4200,9 +12796,35 @@ namespace GreedLast.Editor
                             && Mathf.Abs(successMotion.x) >= 8f
                             && successLimbs.z < 0f,
                         "A successful slide must crouch low, stretch wide, and lean under the overhead trap.");
+                    Require(
+                        anticipationPose.y <= -13f
+                            && anticipationPose.z > 1.14f
+                            && anticipationPose.w < 0.82f
+                            && anticipationMotion.x < 0f
+                            && anticipationLimbs.z < 0f,
+                        "A pending slide trap must lower and widen the runner before the overhead hit arrives.");
+                    Require(
+                        preparationCue.y < 0f
+                            && preparationCue.z > preparationCue.w * 12f
+                            && Mathf.Abs(preparationCueAngle) >= 4f,
+                        "A pending slide trap must show a low, wide duck preparation line.");
+                    Require(
+                        preparationSymbol.y < 0f
+                            && Mathf.Abs(preparationSymbol.x) >= 42f
+                            && Mathf.Approximately(preparationSymbolAngle, 0f),
+                        "A pending slide trap must keep the runner action symbol low beside the body.");
+                    Require(
+                        avoidanceTrail.z > avoidanceTrail.w * 10f
+                            && avoidanceTrail.y <= 0.205f
+                            && Mathf.Approximately(avoidanceTrailAngle, 0f),
+                        "A successful slide must leave a thin, wide slip trail under the overhead trap.");
                 }
                 else
                 {
+                    Require(
+                        runnerDownbeatScaleY > runnerDownbeatScaleX
+                            && Mathf.Abs(runnerDownbeatAngle) > 0f,
+                        "Runner twist downbeats must read as a narrow angled preparation.");
                     Require(
                         missImpact.w > missImpact.z * 4f
                             && Mathf.Abs(missImpact.x - 0.5f) > 0.05f
@@ -4217,11 +12839,117 @@ namespace GreedLast.Editor
                             && successLimbs.x < 0f
                             && successLimbs.y > 0f,
                         "A successful twist must sidestep, narrow its silhouette, and rotate around the side strike.");
+                    Require(
+                        Mathf.Abs(anticipationPose.x) >= 17f
+                            && anticipationPose.z < 0.94f
+                            && anticipationMotion.x < 0f
+                            && anticipationMotion.z < 0.94f
+                            && anticipationLimbs.x < 0f
+                            && anticipationLimbs.y > 0f,
+                        "A pending twist trap must pre-shift and narrow the runner before the side strike.");
+                    Require(
+                        preparationCue.w > preparationCue.z * 9f
+                            && Mathf.Abs(preparationCue.x) >= 70f
+                            && Mathf.Abs(preparationCueAngle) >= 24f,
+                        "A pending twist trap must show an offset vertical preparation line beside the runner.");
+                    Require(
+                        preparationSymbol.y >= 32f
+                            && Mathf.Abs(preparationSymbol.x) >= 84f
+                            && Mathf.Abs(preparationSymbolAngle) >= 10f,
+                        "A pending twist trap must place an angled runner action symbol beside the body.");
+                    Require(
+                        avoidanceTrail.w > avoidanceTrail.z * 5f
+                            && Mathf.Abs(avoidanceTrailAngle) >= 20f,
+                        "A successful twist must leave a tall, angled side-pass trail.");
                 }
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
                 core.HandleInput(snapshot.Pattern.Channel, exactAt);
                 clock = exactAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Every avoidance-cycle sample must remain playable.");
+                string exactJudgementFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot);
+                Require(
+                    exactJudgementFeedback.Contains("정확" + expectedFeelGoals[i], StringComparison.Ordinal),
+                    "Every avoidance-cycle exact judgement must repeat its payoff goal after input. Actual: "
+                        + exactJudgementFeedback);
+            }
+
+            GreedLastRunChannel[] expectedRotationChannels =
+            {
+                GreedLastRunChannel.Left,
+                GreedLastRunChannel.Right,
+            };
+            string[] expectedRotationTexts = { "좌회전 통로", "우회전 통로" };
+            string[] expectedRotationShortcutHints = { "Q / 좌 기울임", "E / 우 기울임" };
+            string[] expectedRotationEditorHints = { "Q/A/←", "E/D/→" };
+            string[] expectedRotationMobileHints = { "좌 기울임", "우 기울임" };
+            string[] expectedRotationActions = { "↺ 좌회전 정렬", "↻ 우회전 정렬" };
+            string[] expectedRotationCenterRewardTexts =
+            {
+                "정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus,
+                "압박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus,
+            };
+            for (int i = 0; i < expectedRotationChannels.Length; i += 1)
+            {
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock += 2f);
+                Require(
+                    snapshot.StartCountdownActive
+                        && snapshot.JudgementText.Contains(expectedRotationTexts[i], StringComparison.Ordinal)
+                        && snapshot.JudgementText.Contains(expectedRotationShortcutHints[i], StringComparison.Ordinal),
+                    "The avoidance-cycle shortcut must expose rotation-corridor samples and their side-specific editor/mobile hints after the three base responses.");
+
+                StartBufferedPattern(core, ref snapshot, ref clock);
+                Require(
+                    GreedLastRunCore.IsRotationPattern(snapshot.Pattern)
+                        && snapshot.Pattern.Channel == expectedRotationChannels[i],
+                    "The avoidance-cycle shortcut must force authored left/right rotation-corridor patterns for testing.");
+                Require(
+                    InvokeRuntimeUiLabel("BuildRotationInputHintForMode", snapshot.Pattern, true) == expectedRotationEditorHints[i]
+                        && InvokeRuntimeUiLabel("BuildRotationInputHintForMode", snapshot.Pattern, false) == expectedRotationMobileHints[i],
+                    "Forced rotation-corridor samples must preserve editor Q/E and mobile tilt hints.");
+                string rotationMobileActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueTextForMode", snapshot, false);
+                Require(
+                    rotationMobileActionCue.Contains("통로 위험 →", StringComparison.Ordinal)
+                        && rotationMobileActionCue.Contains(expectedRotationActions[i], StringComparison.Ordinal)
+                        && rotationMobileActionCue.Contains(expectedRotationMobileHints[i], StringComparison.Ordinal)
+                        && rotationMobileActionCue.Contains("중립→", StringComparison.Ordinal)
+                        && rotationMobileActionCue.Contains("정렬", StringComparison.Ordinal)
+                        && !rotationMobileActionCue.Contains("회피", StringComparison.Ordinal),
+                    "Forced rotation-corridor mobile cues must read as tilt-based corridor alignment, not generic avoidance. Actual: "
+                        + rotationMobileActionCue);
+                Require(
+                    InvokeRuntimeUiLabel("BuildAvoidanceTestShortcutLabel", snapshot)
+                        == (i == 0 ? "다음 ↻ 회전 E" : "다음 ↑ 점프"),
+                    "The avoidance-cycle shortcut label must continue through both rotation-corridor samples.");
+
+                float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                clock = exactAt;
+                Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Every forced rotation-corridor sample must be playable with exact input.");
+                Require(
+                    GreedLastRunCore.IsRotationPattern(snapshot.LastJudgedPattern),
+                    "A resolved rotation-corridor sample must keep its last judged pattern for result feedback.");
+                Require(
+                    InvokeRuntimeUiLabel("BuildJudgementFeedbackPatternCueLabel", snapshot)
+                        == (i == 0 ? "통로→↺회전" : "통로→↻회전"),
+                    "Resolved rotation-corridor feedback must still resolve the compact corridor cue from the last judged pattern.");
+                Require(
+                    InvokeRuntimeUiLabel("BuildJudgementHistoryResponseSymbol", snapshot) == "↔",
+                    "Resolved rotation-corridor history must stay in the twist mastery family instead of losing its response symbol.");
+                Require(
+                    InvokeRuntimeUiLabel("BuildTargetChannelKeyFeedbackForMode", snapshot, true) == "정답키 " + expectedRotationEditorHints[i]
+                        && InvokeRuntimeUiLabel("BuildTargetChannelKeyFeedbackForMode", snapshot, false) == "정답 " + expectedRotationMobileHints[i],
+                    "Resolved rotation-corridor miss/no-input help must preserve Q/E and mobile tilt hints.");
+                string rotationJudgementFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot);
+                Require(
+                    rotationJudgementFeedback.Contains("정렬", StringComparison.Ordinal)
+                        && !rotationJudgementFeedback.Contains("회피", StringComparison.Ordinal),
+                    "Forced rotation-corridor exact feedback must report alignment instead of avoidance. Actual: "
+                        + rotationJudgementFeedback);
+                Require(
+                    rotationJudgementFeedback.Contains("정확→", StringComparison.Ordinal)
+                        && rotationJudgementFeedback.Contains(expectedRotationCenterRewardTexts[i], StringComparison.Ordinal),
+                    "Resolved rotation-corridor feedback must preserve exact payoff and center-hit reward lines after the active pattern is cleared. Actual: "
+                        + rotationJudgementFeedback);
             }
 
             core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock += 2f);
@@ -4229,7 +12957,7 @@ namespace GreedLast.Editor
             Require(
                 snapshot.Pattern.AvoidanceType == GreedLastAvoidanceType.Jump
                     && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect,
-                "The avoidance-cycle shortcut must wrap from twist back to jump.");
+                "The avoidance-cycle shortcut must wrap from right rotation back to jump.");
         }
 
         private static void VerifyStableRouteRecovery(float now)
@@ -4464,6 +13192,18 @@ namespace GreedLast.Editor
             Require(
                 stableAccent.g >= stableAccent.r && stableAccent.g > stableAccent.b,
                 "Stable-route atmosphere must lean toward a readable recovery-green accent.");
+            float activeReadinessAtmosphere = InvokeRuntimeUiFloat("BuildTrapReadinessAtmosphereStrength", stableSnapshot);
+            Color32 activeReadinessColor = InvokeRuntimeUiSnapshotColor("BuildTrapReadinessAtmosphereColor", stableSnapshot);
+            Require(
+                activeReadinessAtmosphere > 0f
+                    && activeReadinessColor.a == 255
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapReadinessAtmosphereStrength", default(GreedLastRunSnapshot)), 0f),
+                "Active trap readiness must add a visible atmosphere layer while staying absent outside a live trap.");
+            stableCore.TogglePause(stableClock += 0.05f);
+            Require(
+                stableSnapshot.Paused
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapReadinessAtmosphereStrength", stableSnapshot), 0f),
+                "Trap-readiness atmosphere must turn off while the run is paused.");
 
             var variationCore = new GreedLastRunCore();
             GreedLastRunSnapshot variationSnapshot = default;
@@ -4708,19 +13448,139 @@ namespace GreedLast.Editor
             {
                 PlayerPrefs.DeleteKey(backendSaveKey);
                 PlayerPrefs.Save();
+                VerifyIsolatedBackendDoesNotPersist(record, backendSaveKey);
                 var backend = new GreedLastMockBackend();
                 RequirePrototypeLoopStatus(backend, "루프 0/4", "A fresh profile");
                 Require(
                     InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", InvokeMockBackendLabel(backend, "BuildLobbyStatusMessage", true)),
                     "The default synchronized lobby message must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료\n일반 런은 6-2에서 열립니다.\n첫 저장 전 구매만 보이지 않습니다."),
+                    "Default lobby sync/onboarding fragments must stay hidden when they are combined.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "일반 런은 6-2에서 열립니다.\n첫 저장 전 구매만 보이지 않습니다."),
+                    "Default first-save onboarding fragments must stay hidden even without the sync-complete line.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료 / 일반 런은 6-2에서 열립니다. / 첫 저장 전 구매만 보이지 않습니다."),
+                    "Slash-separated default lobby sync/onboarding fragments must also stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료/일반런은 6-2에서 열립니다./첫 저장 전 구매만 보이지 않습니다."),
+                    "Tightly slash-separated default lobby sync/onboarding fragments must stay hidden even when UI copy is compacted.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료 | 일반런은 6-2에서 열립니다. | 첫 저장 전 구매만 보이지 않습니다."),
+                    "Pipe-separated default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료; 일반 런은 6-2에서 열립니다.; 첫 저장 전 구매만 보이지 않습니다."),
+                    "Semicolon-separated default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료, 일반런은 6-2에서 열립니다, 첫저장전 구매만 보이지 않습니다."),
+                    "Comma-separated default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료 · 일반런 6-2 보임 · 첫저장전 구매만 보이지 않습니다."),
+                    "Middle-dot-separated default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료. 일반런은 6-2에서 열립니다. 첫 저장 전 구매만 보이지 않습니다."),
+                    "Sentence-separated default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "1. 피라미드 입구 동기화 완료\n2. 일반런은 6-2에서 열립니다.\n3. 첫 저장 전 구매만 보이지 않습니다."),
+                    "Numbered-list default lobby sync/onboarding fragments must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료\n일반 런 6-2에 보입니다\n첫저장전 구매만 보이지 않습니다."),
+                    "Default lobby onboarding variants without the usual particles/spaces must stay hidden.");
+                Require(
+                    InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료 / 일반런 6-2 보임 / 첫저장전 구매만 보이지 않습니다."),
+                    "Compact default lobby onboarding variants must stay hidden.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료\n저장 후보 대기"),
+                    "A real lobby action notice must stay visible even when it follows the default sync line.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료/저장 후보 대기"),
+                    "A tightly slash-separated real lobby action notice must stay visible after default sync copy.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료. 저장 후보 대기"),
+                    "A sentence-separated real lobby action notice must stay visible after default sync copy.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료, 저장 후보 대기"),
+                    "A comma-separated real lobby action notice must stay visible after default sync copy.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "피라미드 입구 동기화 완료 · 저장 후보 대기"),
+                    "A middle-dot-separated real lobby action notice must stay visible after default sync copy.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "일반 런은 6-2에서 열립니다.\n저장 후보 대기"),
+                    "A real lobby action notice must stay visible even when it follows onboarding copy without the sync line.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "일반 런 6-2에 보입니다\n저장 후보 대기"),
+                    "A real lobby action notice must stay visible after a compact onboarding variant.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "저장 조합 없음\n무한 조합 보충으로 보충 런에 들어가세요."),
+                    "The empty save-loadout refill notice must never be hidden as default lobby sync text.");
+                Require(
+                    !InvokeRuntimeUiStaticBool(
+                        "ShouldHideLobbyDetail",
+                        "보충 안내 / 저장 후보 없음 / 저장 조합 없음\n보충 런 버튼: 보충 런 진입"),
+                    "Condensed refill-button guidance must stay visible as an actionable lobby notice.");
                 GreedLastLobbySnapshot freshNoSaveConsumeLobby =
                     backend.ConsumeSelectedSaveLoadoutUseForTest(out string freshNoSaveConsumeNotice);
                 Require(
                     freshNoSaveConsumeNotice.Contains("먼저 저장 조합을 만들어야 합니다.", StringComparison.Ordinal)
-                        && freshNoSaveConsumeNotice.Contains("F6 저장 생성", StringComparison.Ordinal)
+                        && freshNoSaveConsumeNotice.Contains("F6 테스트 저장", StringComparison.Ordinal)
                         && !freshNoSaveConsumeNotice.Contains("무한 버튼으로 보충 런", StringComparison.Ordinal)
                         && !freshNoSaveConsumeLobby.InfiniteUnlocked,
                     "Before the first save, PgUp save-consume feedback must point to creating a save instead of refill.");
+                string releaseNoSaveConsumeHelp = InvokeMockBackendStaticLabel(
+                    "BuildSaveConsumeUnavailableTestHelpText",
+                    false,
+                    false);
+                string releaseRefillConsumeHelp = InvokeMockBackendStaticLabel(
+                    "BuildSaveConsumeUnavailableTestHelpText",
+                    true,
+                    false);
+                Require(
+                    releaseNoSaveConsumeHelp.Contains("일반 런을 클리어", StringComparison.Ordinal)
+                        && releaseRefillConsumeHelp.Contains("보충 런", StringComparison.Ordinal)
+                        && !releaseNoSaveConsumeHelp.Contains("F6", StringComparison.Ordinal)
+                        && !releaseRefillConsumeHelp.Contains("F6", StringComparison.Ordinal),
+                    "Release/mobile save-consume guidance must not expose the F6 sample-save shortcut.");
                 string attemptMessage = backend.BuildRunAttemptResultMessage(chapterMissAttempt);
                 RequireTextLayoutBudget(attemptMessage, 16, 110, "normal attempt result");
                 Require(attemptMessage.Contains("약점 구간: 1장 실수 1회", StringComparison.Ordinal), "An attempt result must identify its most fragile chapter and failure count.");
@@ -4731,7 +13591,7 @@ namespace GreedLast.Editor
                     "An attempt result training hint must carry the weakest avoidance drill step.");
                 Require(attemptMessage.Contains("재도전 목표: 1장 무실수 / 현재 1", StringComparison.Ordinal), "A chapter miss must become a segment-specific retry target.");
                 Require(attemptMessage.Contains("다음: 복기 재도전으로 실수 구간 보완", StringComparison.Ordinal), "A missed attempt should prioritize a review retry as the next action.");
-                var reviewChecklistBackend = new GreedLastMockBackend();
+                var reviewChecklistBackend = CreateIsolatedBackend();
                 Require(reviewChecklistBackend.RegisterNormalAttempt(chapterMissAttempt), "A review-checklist attempt must register for profile board verification.");
                 RequirePrototypeLoopStatus(reviewChecklistBackend, "루프 1/4", "A failed-attempt profile");
                 GreedLastLobbySnapshot reviewLobby = reviewChecklistBackend.LoadLobby();
@@ -4743,10 +13603,14 @@ namespace GreedLast.Editor
                     InvokeAppStaticInt("ResolveProfileBoardOpeningPage", reviewLobby) == 0,
                     "A review-priority profile button must open on the summary checklist instead of the storage/growth page.");
                 string reviewChecklistText = reviewChecklistBackend.BuildProfileBoardText(0);
-                RequireTextLayoutBudget(reviewChecklistText, 12, 92, "profile review checklist");
+                RequireTextLayoutBudget(reviewChecklistText, 18, 92, "profile review checklist");
                 Require(
                     reviewChecklistText.Contains("복기 약점 상단→↓숙이기 실1 / 연습 숙이기", StringComparison.Ordinal),
                     "The profile prototype checklist must surface the current avoidance weakness.");
+                Require(
+                    reviewChecklistText.Contains("남은: 복기 후 탈출", StringComparison.Ordinal)
+                        && InvokeMockBackendLabel(reviewChecklistBackend, "BuildPrototypeRemainingLoopStepText") == "복기 후 탈출",
+                    "A failed first attempt must show that the remaining prototype loop is review practice before escape.");
                 Require(
                     reviewChecklistText.Contains("다음 행동", StringComparison.Ordinal)
                         && reviewChecklistText.Contains("Enter/강조: 복기 연습", StringComparison.Ordinal)
@@ -4757,8 +13621,17 @@ namespace GreedLast.Editor
                 Require(goodAttemptMessage.Contains("약점 구간: 1장 보정 1회", StringComparison.Ordinal), "A Good-only attempt must request an exact-judgement conversion in its weak segment.");
                 Require(goodAttemptMessage.Contains("흐름: 보정 의존", StringComparison.Ordinal), "A Good-only attempt must be classified as correction-dependent.");
                 Require(
-                    goodAttemptMessage.Contains("훈련 힌트: 1장 보정 1회 / 정확 판정 전환 / 바닥→↑점프 보정 1회 / 기초연습 점프 단계 / 판정선 안쪽으로 입력 좁히기", StringComparison.Ordinal),
+                    goodAttemptMessage.Contains("훈련 힌트: 1장 보정 1회 / 정확 판정 전환 / 정확 보상 복기 / 바닥→↑점프 보정 1회 / 기초연습 점프 단계 / 판정선 안쪽으로 입력 좁히기", StringComparison.Ordinal),
                     "A Good-only attempt must receive a concrete exact-band training hint with its weakest avoidance step.");
+                Require(
+                    goodAttemptMessage.Contains("복기: 중단 / 1장 보정 1회 / 정확 판정 전환 / 정확 보상 복기", StringComparison.Ordinal),
+                    "A Good-only attempt review line must keep the missed exact-payoff recovery purpose visible.");
+                var goodReviewRemainingBackend = CreateIsolatedBackend();
+                Require(goodReviewRemainingBackend.RegisterNormalAttempt(chapterGoodAttempt), "A Good-only attempt must register for remaining-loop review checks.");
+                Require(
+                    goodReviewRemainingBackend.BuildProfileBoardText(0).Contains("남은: 복기 후 탈출", StringComparison.Ordinal)
+                        && InvokeMockBackendLabel(goodReviewRemainingBackend, "BuildPrototypeRemainingLoopStepText") == "복기 후 탈출",
+                    "A Good-only first attempt must still route the remaining loop through review before escape.");
                 Require(goodAttemptMessage.Contains("복기: 중단 / 1장 보정 1회", StringComparison.Ordinal), "A Good-only attempt must connect correction reliance to a compact review line.");
                 Require(goodAttemptMessage.Contains("재도전 목표: 1장 보정 0회 / 현재 1", StringComparison.Ordinal), "A chapter Good must become a segment-specific exact-conversion target.");
                 Require(goodAttemptMessage.Contains("다음: 복기 연습으로 정확권 전환", StringComparison.Ordinal), "A Good-only attempt should prioritize a review drill as the next action.");
@@ -4791,18 +13664,26 @@ namespace GreedLast.Editor
                 RequireTextLayoutBudget(saveDraftText, 18, 120, "pending save-loadout draft");
                 Require(
                     saveDraftText.Contains("후보 포기", StringComparison.Ordinal)
+                        && saveDraftText.Contains("후보 처리: 1회 후보", StringComparison.Ordinal)
+                        && saveDraftText.Contains("저장·포기 후 소모", StringComparison.Ordinal)
                         && saveDraftText.Contains("저장 버튼: 이 슬롯 저장", StringComparison.Ordinal)
                         && saveDraftText.Contains("포기 버튼: 후보 소모", StringComparison.Ordinal)
                         && saveDraftText.Contains("빈 슬롯에 새 조합 저장", StringComparison.Ordinal),
                     "A pending save-loadout draft must expose both saving and skipping as valid candidate-consuming actions.");
                 Require(saveDraftText.Contains("구간 +144", StringComparison.Ordinal), "A clean full clear must receive the expected segment-stability save quality bonus.");
                 string clearMessage = backend.BuildRunClearResultMessage(record);
-                RequireTextLayoutBudget(clearMessage, 19, 110, "normal clear result");
+                RequireTextLayoutBudget(clearMessage, 20, 110, "normal clear result");
+                Require(clearMessage.StartsWith("클리어 요약", StringComparison.Ordinal), "The normal clear result must use the same clear-summary title as the skip-save path.");
                 Require(clearMessage.Contains("이번 런 전용", StringComparison.Ordinal), "The clear result must label its relic as a one-run effect.");
                 Require(clearMessage.Contains("생존 x3", StringComparison.Ordinal), "The clear result must summarize accumulated gifts for the save candidate.");
                 Require(clearMessage.Contains("집중: 발동", StringComparison.Ordinal), "The clear result must expose one compact focus-performance line.");
                 Require(clearMessage.Contains("판정: 정박", StringComparison.Ordinal), "The clear result must separate the three timing-success axes.");
                 Require(clearMessage.Contains("흐름: 집중 정밀", StringComparison.Ordinal), "A clean focused clear must be classified as focus precision.");
+                Require(
+                    clearMessage.Contains("충전", StringComparison.Ordinal)
+                        && clearMessage.Contains("반격", StringComparison.Ordinal)
+                        && clearMessage.Contains("엇박 연쇄", StringComparison.Ordinal),
+                    "A clean focused clear must settle exact timing payoff counts in the result flow line.");
                 Require(
                     clearMessage.Contains("회피: 점프", StringComparison.Ordinal)
                         && clearMessage.Contains("숙이기", StringComparison.Ordinal)
@@ -4813,9 +13694,99 @@ namespace GreedLast.Editor
                 Require(
                     clearMessage.Contains("다음: 저장 조합에서 첫 슬롯 저장 또는 포기", StringComparison.Ordinal),
                     "A first clean clear must send the player toward saving or skipping the new candidate.");
+                Require(
+                    clearMessage.Contains("저장 기회: 1회 / 저장하거나 포기하면 사라짐", StringComparison.Ordinal),
+                    "A first clean clear must mark the save candidate as a one-time opportunity.");
                 Require(clearMessage.Contains("정확 100% · 보정 0% · 실수 0%", StringComparison.Ordinal), "A clean clear must expose an exact judgement ratio.");
                 Require(clearMessage.Contains("비교: 신기록 / 이전 최고 대비", StringComparison.Ordinal), "A new normal best must compare itself against the previous best instead of only saying current best.");
                 Require(clearMessage.Contains("정확률 +20%p", StringComparison.Ordinal), "A new normal best must expose its exact-rate improvement.");
+                string clearSaveDraftNotice = backend.BuildRunClearSaveDraftNoticeMessage(record, refillRun: false);
+                RequireTextLayoutBudget(clearSaveDraftNotice, 7, 100, "clear-to-save-draft notice");
+                Require(
+                    clearSaveDraftNotice.StartsWith("클리어 요약", StringComparison.Ordinal)
+                        && clearSaveDraftNotice.Contains("탈출 성공 / 기록 저장", StringComparison.Ordinal)
+                        && clearSaveDraftNotice.Contains("저장 후보:", StringComparison.Ordinal)
+                        && clearSaveDraftNotice.Contains("저장 기회: 1회 / 저장하거나 포기하면 소모", StringComparison.Ordinal)
+                        && clearSaveDraftNotice.Contains("다음: 슬롯 선택 후 저장 또는 포기", StringComparison.Ordinal)
+                        && !clearSaveDraftNotice.Contains("이번 런 전용", StringComparison.Ordinal)
+                        && !clearSaveDraftNotice.Contains("비교:", StringComparison.Ordinal),
+                    "Entering the save-slot draft from the entrance-exit button must still begin with a compact clear summary.");
+                string clearSaveDraftDetail = clearSaveDraftNotice
+                    + "\n\n"
+                    + backend.BuildSaveLoadoutClearSlotChoiceText()
+                    + "\n선택 전 저장 잠김 / 저장 포기는 후보 소모";
+                RequireTextLayoutBudget(clearSaveDraftDetail, 18, 120, "clear-to-save-draft full detail");
+                Require(
+                    clearSaveDraftDetail.StartsWith("클리어 요약", StringComparison.Ordinal)
+                        && clearSaveDraftDetail.Contains("저장 슬롯 선택", StringComparison.Ordinal)
+                        && clearSaveDraftDetail.Contains("다음: 좌 / 중 / 우로 저장할 슬롯 선택", StringComparison.Ordinal)
+                        && clearSaveDraftDetail.Contains("선택 전 저장 잠김", StringComparison.Ordinal)
+                        && !clearSaveDraftDetail.Contains("저장 모드 / 1회 후보", StringComparison.Ordinal)
+                        && !clearSaveDraftDetail.Contains("추천 슬롯:", StringComparison.Ordinal),
+                    "The first save-slot choice screen after clear must show the clear summary before asking for a slot without repeating candidate management copy.");
+                var clearSaveDraftStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+                GreedLastStateSnapshot clearSaveDraftSnapshot = default;
+                clearSaveDraftStateMachine.StateChanged += value => clearSaveDraftSnapshot = value;
+                clearSaveDraftStateMachine.SetSaveLoadoutDraft(
+                    lobby,
+                    clearSaveDraftDetail,
+                    saveSlotChoiceRequired: true,
+                    saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+                Require(
+                    clearSaveDraftSnapshot.State == GreedLastScreenState.SaveLoadoutDraft
+                        && clearSaveDraftSnapshot.Headline == "저장 슬롯 선택"
+                        && clearSaveDraftSnapshot.Detail.StartsWith("클리어 요약", StringComparison.Ordinal)
+                        && clearSaveDraftSnapshot.SaveSlotChoiceRequired
+                        && clearSaveDraftSnapshot.SaveLoadoutCandidateAvailable
+                        && clearSaveDraftSnapshot.CoreActionsEnabled
+                        && InvokeRuntimeUiLabel(
+                            "BuildSaveDraftPrimaryActionLabel",
+                            clearSaveDraftSnapshot,
+                            false,
+                            false,
+                            true,
+                            false) == "좌·중·우 선택"
+                        && !InvokeRuntimeUiStaticBool(
+                            "BuildSaveDraftPrimaryActionEnabled",
+                            clearSaveDraftSnapshot,
+                            false,
+                            true,
+                            false)
+                        && InvokeRuntimeUiLabel(
+                            "BuildSaveDraftReturnActionLabel",
+                            clearSaveDraftSnapshot,
+                            false,
+                            true) == "저장 포기",
+                    "The entrance-exit save draft must publish a clear-summary slot-choice screen with saving locked until a lane is selected.");
+                string refillClearSaveDraftNotice = backend.BuildRunClearSaveDraftNoticeMessage(record, refillRun: true);
+                Require(
+                    refillClearSaveDraftNotice.StartsWith("클리어 요약", StringComparison.Ordinal)
+                        && refillClearSaveDraftNotice.Contains("보충 런 클리어 / 기록 저장", StringComparison.Ordinal)
+                        && refillClearSaveDraftNotice.Contains("무한모드 재개", StringComparison.Ordinal),
+                    "A refill clear that opens the save draft must read as a clear summary and name infinite-mode recovery.");
+                var pendingClearStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+                GreedLastStateSnapshot pendingClearNoticeSnapshot = default;
+                pendingClearStateMachine.StateChanged += value => pendingClearNoticeSnapshot = value;
+                pendingClearStateMachine.SetLobbyReady(lobby);
+                pendingClearStateMachine.ShowLocalNotice(clearMessage);
+                Require(
+                    pendingClearNoticeSnapshot.State == GreedLastScreenState.LobbyReady
+                        && pendingClearNoticeSnapshot.Detail == clearMessage
+                        && pendingClearNoticeSnapshot.SaveLoadoutCandidateAvailable
+                        && pendingClearNoticeSnapshot.CoreActionsEnabled
+                        && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", pendingClearNoticeSnapshot.Detail)
+                        && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", pendingClearNoticeSnapshot.Detail) == "클리어 복기"
+                        && InvokeRuntimeUiLabel("BuildLobbyNormalRunButtonLabel", pendingClearNoticeSnapshot) == "후보 먼저 저장"
+                        && InvokeRuntimeUiLabel("BuildLobbySaveLoadoutButtonLabel", pendingClearNoticeSnapshot, "추천 S1") == "저장 슬롯 선택 추천 S1"
+                        && InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", pendingClearNoticeSnapshot, "추천 S1") == "무한 후보 저장 필요"
+                        && InvokeAppStaticLabel(
+                            "ResolveLobbyPrimaryActionTarget",
+                            true,
+                            pendingClearNoticeSnapshot.SaveLoadoutUnlocked,
+                            pendingClearNoticeSnapshot.FirstSaveCompleted,
+                            Array.Exists(pendingClearNoticeSnapshot.SaveSlotUsable, usable => usable),
+                            pendingClearNoticeSnapshot.Detail) == "저장",
+                    "A normal clear notice must keep the one-time save candidate alive while still exposing clear review.");
                 var reloadedAfterNormalBestBackend = new GreedLastMockBackend();
                 string reloadedNormalComparison = InvokeMockBackendLabel(reloadedAfterNormalBestBackend, "BuildLatestNormalComparisonText");
                 Require(
@@ -4837,12 +13808,24 @@ namespace GreedLast.Editor
                     "루프 2/4",
                     "A clear with a pending save candidate");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 저장 후보 저장/포기", StringComparison.Ordinal),
+                    backend.BuildProfileBoardText(0).Contains("다음 확인: 후보 처리", StringComparison.Ordinal),
                     "The prototype checklist must point a pending clear toward save confirmation or skip.");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 저장 후보 저장/포기 / 실행: 저장 조합", StringComparison.Ordinal),
+                    backend.BuildProfileBoardText(0).Contains("다음 확인: 후보 처리 / 실행: 저장 조합", StringComparison.Ordinal),
                     "The prototype checklist must name the save-loadout button as the action for a pending save candidate.");
-                var candidateGrowthHintBackend = new GreedLastMockBackend();
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("바로 체크: 다음 확인: 후보 처리 / 실행: 저장 조합 / 목적: 저장·포기 1회성 처리", StringComparison.Ordinal),
+                    "The prototype checklist must keep pending save-candidate action and one-time purpose together on the immediate-check line.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("루프 상태: 저장 후보 처리", StringComparison.Ordinal),
+                    "A pending save candidate must be named as the current loop checkpoint state.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("남은: 후보 처리", StringComparison.Ordinal),
+                    "The prototype checklist progress pips must name the pending candidate as the remaining loop step.");
+                Require(
+                    InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "후보 처리",
+                    "The remaining-loop helper must resolve a pending save candidate before infinite-entry checks.");
+                var candidateGrowthHintBackend = CreateIsolatedBackend();
                 candidateGrowthHintBackend.RegisterClear(record);
                 string pendingCandidateGrowthNotice = string.Empty;
                 for (int i = 0; i < 3; i += 1)
@@ -4854,12 +13837,40 @@ namespace GreedLast.Editor
                     pendingCandidateGrowthNotice.Contains("성장 포인트 부족", StringComparison.Ordinal)
                         && pendingCandidateGrowthNotice.Contains("저장 후보 처리 후 무한모드 또는 일반 런", StringComparison.Ordinal),
                     "A pending-candidate growth-board refill hint must not imply that only save confirmation can clear the candidate.");
+                PlayerPrefs.DeleteKey(backendSaveKey);
+                PlayerPrefs.Save();
                 string saveCandidateLobbyMessage = InvokeMockBackendLabel(backend, "BuildLobbyStatusMessage", true);
                 Require(
                     saveCandidateLobbyMessage.Contains("저장 후보 대기", StringComparison.Ordinal)
                         && saveCandidateLobbyMessage.Contains("저장 또는 포기", StringComparison.Ordinal)
                         && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", saveCandidateLobbyMessage),
                     "A pending save candidate must remain visible as an actionable lobby notice.");
+                var shortcutSaveCandidateBackend = CreateIsolatedBackend();
+                shortcutSaveCandidateBackend.RegisterClear(record);
+                Require(shortcutSaveCandidateBackend.HasSaveLoadoutCandidate, "The F6 candidate-save shortcut test must begin from a pending candidate.");
+                GreedLastLobbySnapshot shortcutSavedCandidateLobby =
+                    shortcutSaveCandidateBackend.AddSampleSaveLoadoutForTest(out string shortcutSaveCandidateNotice);
+                Require(
+                    shortcutSaveCandidateNotice.Contains("저장 후보를 추천 슬롯에 저장했습니다.", StringComparison.Ordinal)
+                        && shortcutSaveCandidateNotice.Contains("저장 후보 소모 완료 / 같은 클리어 재저장 불가", StringComparison.Ordinal)
+                        && !shortcutSaveCandidateNotice.Contains("테스트 저장 조합을 만들었습니다.", StringComparison.Ordinal)
+                        && !shortcutSaveCandidateBackend.HasSaveLoadoutCandidate
+                        && !shortcutSavedCandidateLobby.SaveLoadoutCandidateAvailable
+                        && shortcutSavedCandidateLobby.SaveSlotOccupied[0]
+                        && shortcutSavedCandidateLobby.SaveSlotLabels[0].Contains("2/2", StringComparison.Ordinal),
+                    "The F6 lobby shortcut must save a pending candidate into the recommended slot instead of replacing it with a sample loadout.");
+                var candidateGenerationGuardBackend = CreateIsolatedBackend();
+                candidateGenerationGuardBackend.RegisterClear(record);
+                string candidateGenerationGuardDraftBefore = candidateGenerationGuardBackend.BuildSaveLoadoutDraftText();
+                GreedLastLobbySnapshot candidateGenerationGuardLobby =
+                    candidateGenerationGuardBackend.AddSampleClearCandidateForTest(out string candidateGenerationGuardNotice);
+                Require(
+                    candidateGenerationGuardNotice.Contains("저장 후보가 이미 대기 중입니다.", StringComparison.Ordinal)
+                        && !candidateGenerationGuardNotice.Contains("테스트 저장 후보를 만들었습니다.", StringComparison.Ordinal)
+                        && candidateGenerationGuardBackend.HasSaveLoadoutCandidate
+                        && candidateGenerationGuardLobby.SaveLoadoutCandidateAvailable
+                        && candidateGenerationGuardBackend.BuildSaveLoadoutDraftText() == candidateGenerationGuardDraftBefore,
+                    "The PgDn candidate-generation shortcut must not replace an existing pending save candidate.");
                 var skipSaveBackend = new GreedLastMockBackend();
                 skipSaveBackend.RegisterClear(record);
                 Require(skipSaveBackend.HasSaveLoadoutCandidate, "The skip-save test must begin from a pending save candidate.");
@@ -4869,7 +13880,7 @@ namespace GreedLast.Editor
                     + "\n선택 전 저장 잠김 / 저장 포기는 후보 소모";
                 RequireTextLayoutBudget(explicitSlotChoiceDraftText, 14, 120, "explicit save-slot choice draft");
                 Require(
-                    skipSaveDraftText.Contains("후보는 저장 또는 포기 뒤 사라집니다.", StringComparison.Ordinal),
+                    skipSaveDraftText.Contains("후보는 저장 또는 포기 뒤 사라지고 같은 클리어로 다시 저장할 수 없습니다.", StringComparison.Ordinal),
                     "The save draft must explain that skipping consumes the candidate.");
                 var skipSaveStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
                 GreedLastStateSnapshot skipSaveDraftSnapshot = default;
@@ -4893,8 +13904,19 @@ namespace GreedLast.Editor
                         && skippedSaveLobby.ProfileButtonSummary.Contains("NEW", StringComparison.Ordinal),
                     "After skipping save, the profile button must point to refill instead of the consumed save candidate.");
                 Require(
+                    InvokeAppStaticInt("ResolveProfileBoardOpeningPage", skippedSaveLobby) == 1,
+                    "A refill-action profile button after skipping save must open directly on the save/growth trace page.");
+                Require(
                     !Array.Exists(skippedSaveLobby.SaveSlotOccupied, occupied => occupied),
                     "Skipping save must not create or occupy any save-loadout slot.");
+                skipSaveBackend.SelectSaveLoadoutSlot(0);
+                GreedLastLobbySnapshot confirmAfterSkipLobby = skipSaveBackend.ConfirmSaveLoadout();
+                Require(
+                    !skipSaveBackend.HasSaveLoadoutCandidate
+                        && !confirmAfterSkipLobby.SaveLoadoutCandidateAvailable
+                        && !Array.Exists(confirmAfterSkipLobby.SaveSlotOccupied, occupied => occupied)
+                        && skipSaveBackend.BuildSaveConfirmMessage().Contains("새 저장은 다음 클리어 후 1회만 가능합니다.", StringComparison.Ordinal),
+                    "Pressing save again after skipping must not revive or create a second candidate from the same clear.");
                 var reloadedAfterSkipSaveBackend = new GreedLastMockBackend();
                 GreedLastLobbySnapshot reloadedAfterSkipSaveLobby = reloadedAfterSkipSaveBackend.LoadLobby();
                 Require(
@@ -4905,13 +13927,28 @@ namespace GreedLast.Editor
                     "A skipped save candidate must not reappear after backend reload or leave a phantom save chance.");
                 string skippedSaveMessage = skipSaveBackend.BuildRunClearSkipSaveMessage(record);
                 Require(
-                    skippedSaveMessage.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal)
+                    skippedSaveMessage.StartsWith("클리어 요약", StringComparison.Ordinal)
+                        && skippedSaveMessage.Contains("저장 조합 슬롯에는 저장하지 않았습니다.", StringComparison.Ordinal)
                         && skippedSaveMessage.Contains("저장 후보는 사라지고 기록 보드에는 남습니다.", StringComparison.Ordinal),
-                    "The skip-save result must distinguish record persistence from save-slot storage.");
+                    "The skip-save result must read as a clear summary and distinguish record persistence from save-slot storage.");
                 Require(
                     !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", skippedSaveMessage)
                         && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", skippedSaveMessage) == "클리어 복기",
                     "The skip-save lobby notice must remain visible and route the record button to clear review.");
+                var normalSkipStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+                GreedLastStateSnapshot normalSkipNoticeSnapshot = default;
+                normalSkipStateMachine.StateChanged += value => normalSkipNoticeSnapshot = value;
+                normalSkipStateMachine.SetLobbyReady(skippedSaveLobby);
+                normalSkipStateMachine.ShowLocalNotice(skippedSaveMessage);
+                Require(
+                    normalSkipNoticeSnapshot.State == GreedLastScreenState.LobbyReady
+                        && normalSkipNoticeSnapshot.Headline == "피라미드 입구"
+                        && normalSkipNoticeSnapshot.Detail == skippedSaveMessage
+                        && normalSkipNoticeSnapshot.CoreActionsEnabled
+                        && !normalSkipNoticeSnapshot.SaveLoadoutCandidateAvailable
+                        && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", normalSkipNoticeSnapshot.Detail)
+                        && InvokeRuntimeUiLabel("BuildLobbyRecordButtonLabel", normalSkipNoticeSnapshot.Detail) == "클리어 복기",
+                    "A normal skip-save notice must survive the lobby state-machine notice path as a visible clear-review summary.");
                 string refillSkipSaveMessage = InvokeAppStaticLabel("BuildRefillClearSkipSaveMessage", skippedSaveMessage);
                 RequireTextLayoutBudget(refillSkipSaveMessage, 4, 120, "refill skip-save lobby notice");
                 Require(
@@ -4952,6 +13989,65 @@ namespace GreedLast.Editor
                 backend.SelectSaveLoadoutSlot(0);
                 lobby = backend.ConfirmSaveLoadout();
                 Require(!backend.HasSaveLoadoutCandidate && !lobby.SaveLoadoutCandidateAvailable, "Confirming a save must consume its candidate immediately.");
+                string savedSlotLabelAfterConfirm = lobby.SaveSlotLabels[0];
+                string saveConfirmMessage = backend.BuildSaveConfirmMessage();
+                RequireTextLayoutBudget(saveConfirmMessage, 7, 90, "save-confirm success notice");
+                Require(
+                    saveConfirmMessage.Contains("저장 후보 소모 완료 / 같은 클리어 재저장 불가", StringComparison.Ordinal),
+                    "The save-confirm notice must explicitly say the same clear cannot be saved again.");
+                var saveConfirmStateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+                GreedLastStateSnapshot saveConfirmNoticeSnapshot = default;
+                saveConfirmStateMachine.StateChanged += value => saveConfirmNoticeSnapshot = value;
+                saveConfirmStateMachine.SetLobbyReady(lobby);
+                saveConfirmStateMachine.ShowLocalNotice(saveConfirmMessage);
+                Require(
+                    saveConfirmNoticeSnapshot.State == GreedLastScreenState.LobbyReady
+                        && saveConfirmNoticeSnapshot.Headline == "피라미드 입구"
+                        && saveConfirmNoticeSnapshot.Detail == saveConfirmMessage
+                        && saveConfirmNoticeSnapshot.CoreActionsEnabled
+                        && !saveConfirmNoticeSnapshot.SaveLoadoutCandidateAvailable
+                        && saveConfirmNoticeSnapshot.SaveSlotOccupied[0]
+                        && saveConfirmNoticeSnapshot.SaveSlotUsable[0]
+                        && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", saveConfirmNoticeSnapshot.Detail)
+                        && InvokeAppStaticLabel(
+                            "ResolveLobbyPrimaryActionTarget",
+                            false,
+                            saveConfirmNoticeSnapshot.SaveLoadoutUnlocked,
+                            saveConfirmNoticeSnapshot.FirstSaveCompleted,
+                            Array.Exists(saveConfirmNoticeSnapshot.SaveSlotUsable, usable => usable),
+                            saveConfirmNoticeSnapshot.Detail) == "무한",
+                    "A save-confirm notice must survive the lobby state-machine notice path and keep Enter on infinite entry.");
+                GreedLastLobbySnapshot repeatConfirmLobby = backend.ConfirmSaveLoadout();
+                string repeatConfirmMessage = backend.BuildSaveConfirmMessage();
+                Require(
+                    !backend.HasSaveLoadoutCandidate
+                        && !repeatConfirmLobby.SaveLoadoutCandidateAvailable
+                        && repeatConfirmLobby.SaveSlotOccupied[0]
+                        && repeatConfirmLobby.SaveSlotLabels[0] == savedSlotLabelAfterConfirm
+                        && repeatConfirmMessage.Contains("저장 후보 없음", StringComparison.Ordinal)
+                        && repeatConfirmMessage.Contains("새 저장은 다음 클리어 후 1회만 가능합니다.", StringComparison.Ordinal)
+                        && !repeatConfirmMessage.Contains("저장 조합 저장 완료", StringComparison.Ordinal),
+                    "Pressing save again after confirming must not duplicate the consumed candidate or replay the save-complete notice.");
+                var staleSaveConfirmBackend = CreateIsolatedBackend();
+                staleSaveConfirmBackend.RegisterClear(record);
+                staleSaveConfirmBackend.SelectSaveLoadoutSlot(0);
+                staleSaveConfirmBackend.ConfirmSaveLoadout();
+                Require(
+                    staleSaveConfirmBackend.BuildSaveConfirmMessage().Contains("저장 조합 저장 완료", StringComparison.Ordinal),
+                    "The stale-confirm guard test must start from a real save confirmation.");
+                staleSaveConfirmBackend.RegisterClear(record);
+                string pendingCandidateConfirmMessage = staleSaveConfirmBackend.BuildSaveConfirmMessage();
+                RequireTextLayoutBudget(pendingCandidateConfirmMessage, 2, 70, "pending candidate pre-confirm notice");
+                Require(
+                    pendingCandidateConfirmMessage.Contains("저장 확인 전", StringComparison.Ordinal)
+                        && !pendingCandidateConfirmMessage.Contains("저장 조합 저장 완료", StringComparison.Ordinal),
+                    "Creating a new pending candidate must clear the previous save-complete notice.");
+                staleSaveConfirmBackend.DiscardSaveLoadoutCandidate();
+                string discardedCandidateConfirmMessage = staleSaveConfirmBackend.BuildSaveConfirmMessage();
+                Require(
+                    discardedCandidateConfirmMessage.Contains("저장 후보 없음", StringComparison.Ordinal)
+                        && !discardedCandidateConfirmMessage.Contains("저장 조합 저장 완료", StringComparison.Ordinal),
+                    "Discarding a pending candidate must also keep the previous save-complete notice from being reused.");
                 Require(lobby.SaveSlotOccupied[0] && lobby.SaveSlotUsable[0], "The confirmed candidate must occupy its selected slot.");
                 Require(
                     lobby.SaveSlotLabels[0].Contains("2/2", StringComparison.Ordinal)
@@ -4969,7 +14065,123 @@ namespace GreedLast.Editor
                     growthProfileText.Contains("성장 흔적", StringComparison.Ordinal)
                         && growthProfileText.Contains("Enter/강조: 성장 보정", StringComparison.Ordinal),
                     "The growth-action profile page must show growth traces and the highlighted growth action.");
-                var partialGrowthBackend = new GreedLastMockBackend();
+                Require(
+                    growthProfileText.Contains("S1 2/2 2회", StringComparison.Ordinal),
+                    "The save/growth trace page must show a fresh saved loadout with the same compact 2/2 use language as slot lanes.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("소진 대기 S1 2/2 2회", StringComparison.Ordinal),
+                    "The first profile checklist must surface a saved loadout's two-use status before the first infinite entry.");
+                Require(
+                    backend.BuildProfileBoardText(3).Contains("저장: 소진 대기 S1 2/2 2회 / 2회 소진 후 자동 비움", StringComparison.Ordinal),
+                    "The verification page must surface the ready two-use save-loadout state before the first infinite entry.");
+                var explicitSlotCandidateBackend = CreateIsolatedBackend();
+                explicitSlotCandidateBackend.RegisterClear(record);
+                GreedLastLobbySnapshot explicitSlotCandidateLobby = explicitSlotCandidateBackend.SelectSaveLoadoutSlot(2);
+                Require(
+                    explicitSlotCandidateLobby.SelectedSaveSlotIndex == 2,
+                    "Explicit save-slot selection must not be overwritten by the recommended slot while a candidate is pending.");
+                Require(
+                    explicitSlotCandidateBackend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == 2,
+                    "Save-slot management snapshots must preserve the explicit slot while the player is still on that screen.");
+                GreedLastLobbySnapshot explicitSlotSavedLobby = explicitSlotCandidateBackend.ConfirmSaveLoadout();
+                Require(
+                    explicitSlotSavedLobby.SaveSlotOccupied[2]
+                        && explicitSlotSavedLobby.SaveSlotUsable[2]
+                        && explicitSlotSavedLobby.SelectedSaveSlotIndex == 2,
+                    "Confirming a pending candidate after explicit slot selection must save into that selected slot.");
+                Require(
+                    explicitSlotCandidateBackend.BuildSaveConfirmMessage().Contains("슬롯 3 저장 조합 저장 완료", StringComparison.Ordinal),
+                    "The save-confirm notice must name the explicitly selected slot, not a recommended/default slot.");
+                var autoSelectUsableLoadoutBackend = CreateIsolatedBackend();
+                autoSelectUsableLoadoutBackend.RegisterClear(record);
+                autoSelectUsableLoadoutBackend.SelectSaveLoadoutSlot(0);
+                autoSelectUsableLoadoutBackend.ConfirmSaveLoadout();
+                autoSelectUsableLoadoutBackend.SelectSaveLoadoutSlot(2);
+                Require(
+                    autoSelectUsableLoadoutBackend.TryConsumeSelectedSaveLoadout(
+                        out GreedLastRunRecord autoSelectedLoadout,
+                        out string autoSelectedLoadoutDetail,
+                        out string autoSelectedLoadoutError)
+                        && autoSelectedLoadout.IsValid
+                        && string.IsNullOrEmpty(autoSelectedLoadoutError)
+                        && autoSelectedLoadoutDetail.Contains("슬롯 1 조합으로 진입", StringComparison.Ordinal),
+                    "Infinite entry must auto-select a usable save slot if the currently selected slot is empty.");
+                var autoSelectDevConsumeBackend = CreateIsolatedBackend();
+                autoSelectDevConsumeBackend.RegisterClear(record);
+                autoSelectDevConsumeBackend.SelectSaveLoadoutSlot(0);
+                autoSelectDevConsumeBackend.ConfirmSaveLoadout();
+                autoSelectDevConsumeBackend.SelectSaveLoadoutSlot(2);
+                GreedLastLobbySnapshot autoSelectDevConsumeLobby =
+                    autoSelectDevConsumeBackend.ConsumeSelectedSaveLoadoutUseForTest(out string autoSelectDevConsumeNotice);
+                Require(
+                    autoSelectDevConsumeNotice.Contains("저장 조합 소모: 슬롯 1", StringComparison.Ordinal)
+                        && autoSelectDevConsumeLobby.SaveSlotLabels[0].Contains("마지막 1회", StringComparison.Ordinal),
+                    "The PgUp save-use shortcut must auto-select a usable slot instead of stopping on an empty selected slot.");
+                var partialEmptyLoadoutBackend = CreateIsolatedBackend();
+                partialEmptyLoadoutBackend.RegisterClear(record);
+                partialEmptyLoadoutBackend.SelectSaveLoadoutSlot(0);
+                partialEmptyLoadoutBackend.ConfirmSaveLoadout();
+                partialEmptyLoadoutBackend.SelectSaveLoadoutSlot(2);
+                GreedLastLobbySnapshot partialEmptyLoadoutSlotView =
+                    partialEmptyLoadoutBackend.LoadSelectedSaveSlotView();
+                Require(
+                    partialEmptyLoadoutSlotView.SelectedSaveSlotIndex == 2
+                        && !partialEmptyLoadoutSlotView.SaveSlotUsable[2]
+                        && partialEmptyLoadoutSlotView.SaveSlotUsable[0],
+                    "A save-slot view must preserve a selected empty slot while still exposing that another slot is usable.");
+                string partialEmptySaveManagementText = partialEmptyLoadoutBackend.BuildSaveLoadoutDraftText();
+                RequireTextLayoutBudget(partialEmptySaveManagementText, 16, 120, "partial empty save-loadout management");
+                Require(
+                    partialEmptySaveManagementText.Contains("관리 모드 / 저장 후보 없음", StringComparison.Ordinal)
+                        && partialEmptySaveManagementText.Contains("선택: 슬롯 3 / 상태: 빈 슬롯", StringComparison.Ordinal)
+                        && partialEmptySaveManagementText.Contains("> 슬롯 3: 비어 있음", StringComparison.Ordinal)
+                        && partialEmptySaveManagementText.Contains("다음: 좌 / 중 / 우로 확인할 슬롯 선택", StringComparison.Ordinal)
+                        && partialEmptySaveManagementText.Contains("상세 보기: 기존 저장 조합 기록 확인", StringComparison.Ordinal)
+                        && !partialEmptySaveManagementText.Contains("보충 안내 / 저장 후보 없음 / 저장 조합 없음", StringComparison.Ordinal),
+                    "Save-loadout management must preserve an explicitly selected empty slot while another usable slot exists, instead of jumping to the recommended slot or refill guidance.");
+                string partialEmptySaveDetailText = partialEmptyLoadoutBackend.BuildSelectedSaveLoadoutComparisonText();
+                RequireTextLayoutBudget(partialEmptySaveDetailText, 8, 72, "partial empty save-loadout detail");
+                Require(
+                    partialEmptySaveDetailText.Contains("슬롯 3 상세 보기", StringComparison.Ordinal)
+                        && partialEmptySaveDetailText.Contains("선택 불가: 사용 가능한 슬롯을 고르세요.", StringComparison.Ordinal)
+                        && partialEmptySaveDetailText.Contains("다른 슬롯에서 저장 조합을 확인하세요.", StringComparison.Ordinal)
+                        && partialEmptySaveDetailText.Contains("목록: 좌 / 중 / 우로 확인할 슬롯 선택", StringComparison.Ordinal)
+                        && !partialEmptySaveDetailText.Contains("일반 런을 클리어하면 새 저장 후보", StringComparison.Ordinal),
+                    "The selected empty-slot detail must point back to usable slots when another save loadout exists.");
+                string partialEmptyLoadoutSelectText = partialEmptyLoadoutBackend.BuildInfiniteLoadoutSelectText();
+                RequireTextLayoutBudget(partialEmptyLoadoutSelectText, 14, 110, "partial empty infinite loadout selection guidance");
+                Require(
+                    partialEmptyLoadoutSelectText.Contains("상태: 비어 있음 - 다른 슬롯 선택", StringComparison.Ordinal)
+                        && partialEmptyLoadoutSelectText.Contains("선택 불가: 사용 가능한 슬롯을 고르세요.", StringComparison.Ordinal)
+                        && partialEmptyLoadoutSelectText.Contains("추천: 최고 슬롯 S1 선택 권장", StringComparison.Ordinal)
+                        && partialEmptyLoadoutSelectText.Contains("다음: 추천 선택 또는 좌 / 중 / 우 슬롯 선택", StringComparison.Ordinal)
+                        && !partialEmptyLoadoutSelectText.Contains("보충 런 버튼: 보충 런 진입", StringComparison.Ordinal)
+                        && !partialEmptyLoadoutSelectText.Contains("사용 흐름:", StringComparison.Ordinal),
+                    "A selected empty slot with another usable slot must ask for a slot change, not refill or start-use guidance.");
+                string partialEmptyLoadoutDetailText = partialEmptyLoadoutBackend.BuildSelectedInfiniteLoadoutDetailText();
+                Require(
+                    partialEmptyLoadoutDetailText.Contains("선택 불가: 사용 가능한 슬롯을 고르세요.", StringComparison.Ordinal)
+                        && !partialEmptyLoadoutDetailText.Contains("보충 런 버튼: 보충 런 진입", StringComparison.Ordinal),
+                    "The selected empty-slot detail must stay on slot-change guidance when another save loadout is usable.");
+                GreedLastLobbySnapshot autoRecommendedLoadoutLobby =
+                    partialEmptyLoadoutBackend.SelectBestUsableSaveLoadoutSlotForInfiniteEntry(out string autoRecommendedLoadoutNotice);
+                Require(
+                    autoRecommendedLoadoutNotice.Contains("추천 슬롯 S1 자동 선택", StringComparison.Ordinal)
+                        && autoRecommendedLoadoutLobby.SelectedSaveSlotIndex == 0
+                        && autoRecommendedLoadoutLobby.SaveSlotUsable[0],
+                    "The infinite primary action must be able to auto-select the best usable slot without consuming a use.");
+                var lobbyAutoSelectionBackend = CreateIsolatedBackend();
+                lobbyAutoSelectionBackend.RegisterClear(record);
+                lobbyAutoSelectionBackend.SelectSaveLoadoutSlot(0);
+                lobbyAutoSelectionBackend.ConfirmSaveLoadout();
+                lobbyAutoSelectionBackend.SelectSaveLoadoutSlot(2);
+                GreedLastLobbySnapshot preservedSlotView = lobbyAutoSelectionBackend.LoadSelectedSaveSlotView();
+                GreedLastLobbySnapshot autoCorrectedLobby = lobbyAutoSelectionBackend.LoadLobby();
+                Require(
+                    preservedSlotView.SelectedSaveSlotIndex == 2
+                        && autoCorrectedLobby.SelectedSaveSlotIndex == 0,
+                    "Slot views must preserve manual empty-slot inspection, while lobby entry can still auto-correct to the best usable slot.");
+                var partialGrowthBackend = CreateIsolatedBackend();
                 partialGrowthBackend.AddGrowthPointsForTest(1);
                 partialGrowthBackend.UpgradeGrowth(GreedLastRunChannel.Left, out _);
                 GreedLastLobbySnapshot partialGrowthLobby = partialGrowthBackend.AddGrowthPointsForTest(1);
@@ -4992,11 +14204,21 @@ namespace GreedLast.Editor
                     activeLoadoutText.Contains("입장 체크: 위협 폭·보상 / PgUp·PgDn", StringComparison.Ordinal),
                     "A saved loadout detail must remind the player to verify infinite threat width and reward before entry.");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 저장 조합으로 무한 시작", StringComparison.Ordinal),
+                    InvokeMockBackendStaticLabel("BuildInfiniteEntryCheckLine", true) == "입장 체크: 위협 폭·보상 / PgUp·PgDn"
+                        && InvokeMockBackendStaticLabel("BuildInfiniteEntryCheckLine", false) == "입장 체크: 위협 폭·보상 / 시작 전 확인",
+                    "Infinite entry-check wording must keep PgUp/PgDn only for editor/debug playtesting.");
+                Require(
+                backend.BuildProfileBoardText(0).Contains("다음 확인: 첫 무한", StringComparison.Ordinal),
                     "After confirming a save, the prototype checklist must point to the first infinite entry.");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 저장 조합으로 무한 시작 / 실행: 무한모드", StringComparison.Ordinal),
+                backend.BuildProfileBoardText(0).Contains("다음 확인: 첫 무한 / 실행: 무한모드", StringComparison.Ordinal),
                     "After confirming a save, the prototype checklist must name the infinite button as the action for the first infinite entry.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("남은: 첫 무한", StringComparison.Ordinal),
+                    "After confirming a save, the prototype checklist progress pips must point to the first infinite entry.");
+                Require(
+                    InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "첫 무한",
+                    "The remaining-loop helper must resolve confirmed save loadouts to the first infinite entry.");
                 RequirePrototypeLoopStatus(
                     backend,
                     "루프 3/4",
@@ -5008,7 +14230,18 @@ namespace GreedLast.Editor
                         && postConfirmDraftText.Contains("다음 클리어 후 1회", StringComparison.Ordinal)
                         && !postConfirmDraftText.Contains("후보 처리", StringComparison.Ordinal),
                     "After confirming a save, the save-loadout screen must switch to management mode without a second save chance.");
-                var replacementCandidateBackend = new GreedLastMockBackend();
+                GreedLastStateSnapshot postConfirmDraftSnapshot = BuildLobbyLabelSnapshot(
+                    postConfirmDraftText,
+                    saveCandidateAvailable: false,
+                    infiniteUnlocked: true,
+                    hasUsableSaveSlot: true,
+                    hasOccupiedSaveSlot: true);
+                Require(
+                    InvokeRuntimeUiLabel("BuildSaveDraftPrimaryActionLabel", postConfirmDraftSnapshot, false, true, false, false) == "저장 후보 없음"
+                        && !InvokeRuntimeUiStaticBool("BuildSaveDraftPrimaryActionEnabled", postConfirmDraftSnapshot, false, false, false)
+                        && InvokeRuntimeUiLabel("BuildSaveDraftReturnActionLabel", postConfirmDraftSnapshot, false, false) == "로비로",
+                    "After confirming a save, the save-draft controls must show candidate-none management with no second save button.");
+                var replacementCandidateBackend = CreateIsolatedBackend();
                 replacementCandidateBackend.RegisterClear(record);
                 replacementCandidateBackend.SelectSaveLoadoutSlot(0);
                 replacementCandidateBackend.ConfirmSaveLoadout();
@@ -5022,12 +14255,25 @@ namespace GreedLast.Editor
                     replacementCandidateProfileText.Contains("저장 조합에서 후보 비교 후 저장/포기", StringComparison.Ordinal)
                         && replacementCandidateProfileText.Contains("필요 행동: 저장 후보를 슬롯에 저장 또는 포기", StringComparison.Ordinal),
                     "A replacement candidate profile page must expose compare, save, and skip paths before infinite re-entry.");
+                replacementCandidateBackend.SelectSaveLoadoutSlot(0);
                 string replacementCandidateDraftText = replacementCandidateBackend.BuildSaveLoadoutDraftText();
                 Require(
                     replacementCandidateDraftText.Contains("작업: 후보 비교 / 저장·포기", StringComparison.Ordinal)
-                        && replacementCandidateDraftText.Contains("저장 버튼: 덮어쓰기 확인 / 포기 버튼: 후보 소모", StringComparison.Ordinal)
+                        && replacementCandidateDraftText.Contains("저장 버튼: 덮어쓰기 확인 / 포기 버튼: 후보 소모(1회)", StringComparison.Ordinal)
                         && replacementCandidateDraftText.Contains("비교: 후보와 기존 슬롯 차이", StringComparison.Ordinal),
                     "A replacement candidate save draft must separate overwrite confirmation from candidate skipping.");
+                string candidateGuardSlotLabelBefore = replacementCandidateBackend.LoadLobby().SaveSlotLabels[0];
+                GreedLastLobbySnapshot candidateGuardLobby =
+                    replacementCandidateBackend.ConsumeSelectedSaveLoadoutUseForTest(out string candidateGuardNotice);
+                Require(
+                    candidateGuardNotice.Contains("저장 후보 처리 우선", StringComparison.Ordinal)
+                        && replacementCandidateBackend.HasSaveLoadoutCandidate
+                        && candidateGuardLobby.SaveLoadoutCandidateAvailable
+                        && candidateGuardLobby.SaveSlotLabels[0] == candidateGuardSlotLabelBefore,
+                    "The PgUp save-use shortcut must not consume a stored loadout while a new save candidate is waiting for save or skip.");
+                Require(
+                    !InvokeAppStaticBool("ShouldStartLobbyNormalAsRefillRun", candidateGuardLobby),
+                    "The PgUp save-use shortcut must keep a guarded save candidate in the lobby instead of opening refill preparation.");
                 var reloadedAfterConfirmBackend = new GreedLastMockBackend();
                 GreedLastLobbySnapshot reloadedAfterConfirmLobby = reloadedAfterConfirmBackend.LoadLobby();
                 Require(
@@ -5039,7 +14285,7 @@ namespace GreedLast.Editor
                         && reloadedAfterConfirmBackend.BuildSaveLoadoutDraftText().Contains("저장 후보 없음", StringComparison.Ordinal),
                     "Reloading after save confirmation must preserve the stored slot without creating a second save chance.");
                 VerifyPrototypeChecklist(backend, "저장 조합 가능", "무한 대기");
-                var firstInfiniteActionBackend = new GreedLastMockBackend();
+                var firstInfiniteActionBackend = CreateIsolatedBackend();
                 firstInfiniteActionBackend.RegisterClear(record);
                 firstInfiniteActionBackend.SelectSaveLoadoutSlot(0);
                 firstInfiniteActionBackend.ConfirmSaveLoadout();
@@ -5064,6 +14310,13 @@ namespace GreedLast.Editor
                 string labelAfterFirstConfirm = lobby.SaveSlotLabels[0];
                 lobby = backend.ConfirmSaveLoadout();
                 Require(lobby.SaveSlotLabels[0] == labelAfterFirstConfirm, "Confirming again without a candidate must not duplicate or refresh the save.");
+                string duplicateConfirmMessage = backend.BuildSaveConfirmMessage();
+                RequireTextLayoutBudget(duplicateConfirmMessage, 2, 70, "duplicate save-confirm no-candidate notice");
+                Require(
+                    duplicateConfirmMessage.Contains("저장 후보 없음", StringComparison.Ordinal)
+                        && duplicateConfirmMessage.Contains("다음 클리어 후 1회", StringComparison.Ordinal)
+                        && !duplicateConfirmMessage.Contains("저장 조합 저장 완료", StringComparison.Ordinal),
+                    "Confirming again without a candidate must not reuse the previous save-complete notice.");
 
                 Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord firstUseRecord, out _, out _), "The first infinite entry must consume one save use.");
                 Require(firstUseRecord.IsValid, "The first save use must return its stored loadout.");
@@ -5075,6 +14328,15 @@ namespace GreedLast.Editor
                     lobby.SaveSlotLabels[0].Contains("마지막 1회", StringComparison.Ordinal)
                         && lobby.SaveSlotLabels[0].Contains("1/2", StringComparison.Ordinal),
                     "One clearly visible final use must remain after the first infinite entry.");
+                Require(
+                    backend.BuildProfileBoardText(1).Contains("S1 1/2 마지막", StringComparison.Ordinal),
+                    "The save/growth trace page must show the final-use slot with the same compact 1/2 language as slot lanes.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("최근 소모 1/2 마지막", StringComparison.Ordinal),
+                    "The first profile checklist must use compact final-use wording after the first save-loadout consumption.");
+                Require(
+                    backend.BuildProfileBoardText(3).Contains("저장: 최근 소모 1/2 마지막 / 자동 비움 대기", StringComparison.Ordinal),
+                    "The verification page must surface the compact final-use save-loadout state after the first consumption.");
                 string finalUseStartReadyText = backend.BuildInfiniteStartReadyText();
                 Require(
                     finalUseStartReadyText.Contains("마지막 1회", StringComparison.Ordinal)
@@ -5147,8 +14409,17 @@ namespace GreedLast.Editor
                     "루프 4/4",
                     "A profile after the first infinite record");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 저장 조합 2회 소진 / 실행: PgUp 소모", StringComparison.Ordinal),
+                backend.BuildProfileBoardText(0).Contains("다음 확인: 2회 소진 / 실행: PgUp 소모", StringComparison.Ordinal),
                     "After the first infinite record, the prototype checklist must guide the tester to consume the final save-loadout use.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("루프 상태: 마지막 소진 확인", StringComparison.Ordinal),
+                    "After the first infinite record, the prototype checklist must separate completed loop progress from the remaining final save-use check.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("남은: 2회 소진", StringComparison.Ordinal),
+                    "After the first infinite record, the prototype checklist progress pips must point to the final save-use check.");
+                Require(
+                    InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "2회 소진",
+                    "The remaining-loop helper must keep the second save-use check visible after the first infinite run.");
                 Require(
                     backend.BuildProfileBoardText(0).Contains("Enter/강조: 무한모드 - 정산 종료 확인 완료 / 실제 무한 런으로 생존 흐름 확인", StringComparison.Ordinal),
                     "After a forced infinite settlement, the profile next action must prefer real infinite play over review noise.");
@@ -5162,7 +14433,7 @@ namespace GreedLast.Editor
                 Require(coachedInfiniteMessage.Contains("힌트: 무한 1구간 / 정확 0", StringComparison.Ordinal), "A real infinite stop must coach from its latest completed section first.");
                 Require(coachedInfiniteMessage.Contains("목표: 다음 구간 무실수 / 직전 2", StringComparison.Ordinal), "A miss-heavy latest section must become the next infinite target.");
                 Require(coachedInfiniteMessage.Contains("다음: 무한 복기 재도전으로 실수 구간 보완", StringComparison.Ordinal), "A miss-heavy infinite result should prioritize an infinite review retry.");
-                var cleanBestHintBackend = new GreedLastMockBackend();
+                var cleanBestHintBackend = CreateIsolatedBackend();
                 var cleanBestHintRecord = new GreedLastInfiniteRunRecord(
                     true,
                     1280,
@@ -5229,9 +14500,13 @@ namespace GreedLast.Editor
                         && !reloadedAfterAutoClearBackend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
                     "A two-use auto-cleared save slot must remain empty and unusable after backend reload.");
                 Require(
-                    reloadedAfterAutoClearBackend.BuildSaveLoadoutDraftText().Contains("보충 안내 / 저장 조합 없음", StringComparison.Ordinal)
+                    reloadedAfterAutoClearBackend.BuildSaveLoadoutDraftText().Contains("보충 안내 / 저장 후보 없음 / 저장 조합 없음", StringComparison.Ordinal)
                         && reloadedAfterAutoClearBackend.BuildInfiniteStartReadyText().Contains("보충 런 버튼: 보충 런 진입", StringComparison.Ordinal),
                     "Reloading after two-use auto-clear must keep both save management and infinite entry pointed to refill.");
+                Require(
+                    reloadedAfterAutoClearBackend.BuildInfiniteStartReadyBriefText().Contains("보충 런", StringComparison.Ordinal)
+                        && !reloadedAfterAutoClearBackend.BuildInfiniteStartReadyBriefText().Contains("일반 런 클리어", StringComparison.Ordinal),
+                    "The brief infinite-start text after auto-clear must point to refill instead of a plain normal clear.");
                 Require(
                     InvokeAppStaticInt("ResolveProfileBoardOpeningPage", lobby) == 1,
                     "An empty save-loadout state must open profile directly on the storage/refill page.");
@@ -5256,11 +14531,38 @@ namespace GreedLast.Editor
                     "루프 4/4",
                     "A profile after the two-use save loadout auto-clears");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 보충 후 무한 재진입", StringComparison.Ordinal),
+                backend.BuildProfileBoardText(0).Contains("다음 확인: 보충 재진입", StringComparison.Ordinal),
                     "After the last save slot auto-clears, the prototype checklist must point back to refill and re-entry.");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("다음 확인: 보충 후 무한 재진입 / 실행: 무한 조합 보충", StringComparison.Ordinal),
+                    backend.BuildProfileBoardText(0).Contains("루프 상태: 루프 완료 / 보충 필요", StringComparison.Ordinal),
+                    "After auto-clear, the prototype checklist must clarify that the loop was completed but the next playable state needs refill.");
+                Require(
+                backend.BuildProfileBoardText(0).Contains("다음 확인: 보충 재진입 / 실행: 무한 조합 보충", StringComparison.Ordinal),
                     "After auto-clear, the prototype checklist must name the refill action needed for infinite re-entry.");
+                GreedLastStateSnapshot autoClearedLobbyLabelSnapshot = BuildLobbyLabelSnapshot(
+                    backend.BuildProfileBoardText(0),
+                    saveCandidateAvailable: lobby.SaveLoadoutCandidateAvailable,
+                    infiniteUnlocked: lobby.InfiniteUnlocked,
+                    hasUsableSaveSlot: Array.Exists(lobby.SaveSlotUsable, usable => usable),
+                    hasOccupiedSaveSlot: Array.Exists(lobby.SaveSlotOccupied, occupied => occupied),
+                    firstSaveCompleted: lobby.FirstSaveCompleted,
+                    saveLoadoutUnlocked: lobby.SaveLoadoutUnlocked);
+                Require(
+                    InvokeAppStaticLabel(
+                        "ResolveLobbyPrimaryActionTarget",
+                        lobby.SaveLoadoutCandidateAvailable,
+                        lobby.SaveLoadoutUnlocked,
+                        lobby.FirstSaveCompleted,
+                        Array.Exists(lobby.SaveSlotUsable, usable => usable),
+                        backend.BuildProfileBoardText(0)) == "무한"
+                        && InvokeRuntimeUiLabel("BuildLobbyInfiniteButtonLabel", autoClearedLobbyLabelSnapshot, "없음") == "무한 조합 보충",
+                    "After auto-clear, the actual profile detail and lobby infinite button must both point to loadout refill.");
+                Require(
+                    backend.BuildProfileBoardText(0).Contains("남은: 보충 재진입", StringComparison.Ordinal),
+                    "After auto-clear, the prototype checklist progress pips must point to refill and re-entry.");
+                Require(
+                    InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "보충 재진입",
+                    "The remaining-loop helper must resolve an empty auto-cleared inventory to refill re-entry.");
                 var autoClearNoInfiniteBackend = new GreedLastMockBackend();
                 autoClearNoInfiniteBackend.AddSampleSaveLoadoutForTest(out _);
                 GreedLastLobbySnapshot autoClearNoInfiniteLobby =
@@ -5280,10 +14582,49 @@ namespace GreedLast.Editor
                     "The second PgUp dev save-consume path must auto-clear the slot before any infinite record exists.");
                 string autoClearNoInfiniteProfile = autoClearNoInfiniteBackend.BuildProfileBoardText(0);
                 Require(
-                    autoClearNoInfiniteProfile.Contains("다음 확인: 보충 후 무한 재진입", StringComparison.Ordinal)
-                        && !autoClearNoInfiniteProfile.Contains("다음 확인: 무한 기록 생성", StringComparison.Ordinal),
+                autoClearNoInfiniteProfile.Contains("다음 확인: 보충 재진입", StringComparison.Ordinal)
+                    && !autoClearNoInfiniteProfile.Contains("다음 확인: 무한 기록", StringComparison.Ordinal),
                     "If test-only consumption clears the final slot before an infinite record, the checklist must prioritize refill over impossible infinite-record creation.");
-                var completedLoopBackend = new GreedLastMockBackend();
+                Require(
+                    autoClearNoInfiniteProfile.Contains("루프 상태: 루프 완료 / 보충 필요", StringComparison.Ordinal),
+                    "If test-only consumption clears the current slot in a completed-loop context, the loop checkpoint must read as completed-but-refill-needed.");
+                GreedLastLobbySnapshot refillCandidateShortcutLobby =
+                    autoClearNoInfiniteBackend.AddSampleClearCandidateForTest(out string refillCandidateShortcutNotice);
+                Require(
+                    refillCandidateShortcutNotice.StartsWith("보충 테스트 후보를 만들었습니다.", StringComparison.Ordinal)
+                        && refillCandidateShortcutNotice.Contains("저장 후 무한모드 재개를 확인하세요.", StringComparison.Ordinal)
+                        && autoClearNoInfiniteBackend.HasSaveLoadoutCandidate
+                        && refillCandidateShortcutLobby.SaveLoadoutCandidateAvailable,
+                    "After auto-clear, the PgDn candidate helper must read as a refill-candidate shortcut instead of a generic save-candidate injection.");
+                var multiSlotAutoClearBackend = new GreedLastMockBackend();
+                multiSlotAutoClearBackend.AddSampleSaveLoadoutForTest(out _);
+                multiSlotAutoClearBackend.AddSampleSaveLoadoutForTest(out _);
+                multiSlotAutoClearBackend.SelectSaveLoadoutSlot(0);
+                multiSlotAutoClearBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
+                GreedLastLobbySnapshot multiSlotAutoClearLobby =
+                    multiSlotAutoClearBackend.ConsumeSelectedSaveLoadoutUseForTest(out string multiSlotAutoClearNotice);
+                Require(
+                    multiSlotAutoClearNotice.Contains("사용 횟수 소진 - 슬롯 자동 비움", StringComparison.Ordinal)
+                        && multiSlotAutoClearNotice.Contains("다음 조합 자동 선택: S2", StringComparison.Ordinal)
+                        && multiSlotAutoClearLobby.SelectedSaveSlotIndex == 1
+                        && !multiSlotAutoClearLobby.SaveSlotOccupied[0]
+                        && multiSlotAutoClearLobby.SaveSlotOccupied[1]
+                        && multiSlotAutoClearLobby.SaveSlotUsable[1],
+                    "Auto-clearing one exhausted save slot must immediately select the next usable slot instead of stopping on an empty slot.");
+                Require(
+                    multiSlotAutoClearBackend.BuildInfiniteStartReadyBriefText().Contains("S2", StringComparison.Ordinal)
+                        && !multiSlotAutoClearBackend.BuildInfiniteStartReadyBriefText().Contains("보충 런", StringComparison.Ordinal),
+                    "When another save loadout remains after auto-clear, infinite prep must continue with that slot instead of pointing to refill.");
+                GreedLastLobbySnapshot multiSlotManagementLobby = multiSlotAutoClearBackend.LoadSelectedSaveSlotView();
+                string multiSlotManagementDraftText = multiSlotAutoClearBackend.BuildSaveLoadoutDraftText();
+                Require(
+                    multiSlotManagementLobby.SelectedSaveSlotIndex == 1
+                        && multiSlotManagementDraftText.Contains("> 슬롯 2:", StringComparison.Ordinal)
+                        && multiSlotManagementDraftText.Contains("선택: 슬롯 2", StringComparison.Ordinal)
+                        && !multiSlotManagementDraftText.Contains("선택: 슬롯 1 / 상태: 빈 슬롯", StringComparison.Ordinal)
+                        && !multiSlotManagementDraftText.Contains("보충 안내 / 저장 후보 없음 / 저장 조합 없음", StringComparison.Ordinal),
+                    "After auto-clearing S1 while S2 remains, save-loadout management must stay on S2 instead of showing stale S1 or refill guidance.");
+                var completedLoopBackend = CreateIsolatedBackend();
                 completedLoopBackend.RegisterClear(record);
                 completedLoopBackend.SelectSaveLoadoutSlot(0);
                 completedLoopBackend.ConfirmSaveLoadout();
@@ -5293,6 +14634,53 @@ namespace GreedLast.Editor
                 completedLoopBackend.SelectSaveLoadoutSlot(0);
                 completedLoopBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
                 completedLoopBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
+                GreedLastLobbySnapshot completedLoopAutoSelectedLobby = completedLoopBackend.LoadLobby();
+                Require(
+                    !completedLoopAutoSelectedLobby.SaveSlotOccupied[0]
+                        && completedLoopAutoSelectedLobby.SaveSlotOccupied[1]
+                        && completedLoopAutoSelectedLobby.SaveSlotUsable[1]
+                        && completedLoopAutoSelectedLobby.SelectedSaveSlotIndex == 1,
+                    "Auto-clearing a depleted save slot must immediately move lobby selection to the next usable stored loadout.");
+                Require(
+                    completedLoopBackend.BuildInfiniteStartReadyBriefText().StartsWith("재시작: S2", StringComparison.Ordinal),
+                    "After auto-clear with another usable loadout, infinite preparation must continue from the remaining slot instead of the emptied slot.");
+                Require(
+                    completedLoopBackend.BuildInfiniteStartReadyText().Contains("저장 조합 변경으로 다른 슬롯을 고를 수 있습니다.", StringComparison.Ordinal)
+                        && !completedLoopBackend.BuildInfiniteStartReadyText().Contains("보충 런 버튼: 보충 런 진입", StringComparison.Ordinal),
+                    "After auto-clear with another usable loadout, infinite preparation must stay on the remaining slot instead of showing refill guidance.");
+                var autoClearNextEntryBackend = CreateIsolatedBackend();
+                autoClearNextEntryBackend.RegisterClear(record);
+                autoClearNextEntryBackend.SelectSaveLoadoutSlot(0);
+                autoClearNextEntryBackend.ConfirmSaveLoadout();
+                autoClearNextEntryBackend.RegisterClear(record);
+                autoClearNextEntryBackend.SelectSaveLoadoutSlot(1);
+                autoClearNextEntryBackend.ConfirmSaveLoadout();
+                autoClearNextEntryBackend.SelectSaveLoadoutSlot(0);
+                autoClearNextEntryBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
+                GreedLastLobbySnapshot nextEntryAutoClearLobby =
+                    autoClearNextEntryBackend.ConsumeSelectedSaveLoadoutUseForTest(out string nextEntryAutoClearNotice);
+                Require(
+                    nextEntryAutoClearNotice.Contains("사용 횟수 소진 - 슬롯 자동 비움", StringComparison.Ordinal)
+                        && nextEntryAutoClearNotice.Contains("다음 조합 자동 선택: S2", StringComparison.Ordinal)
+                        && nextEntryAutoClearLobby.SelectedSaveSlotIndex == 1
+                        && !nextEntryAutoClearLobby.SaveSlotOccupied[0]
+                        && nextEntryAutoClearLobby.SaveSlotUsable[1],
+                    "Auto-clearing S1 while S2 remains must announce and select the next usable loadout.");
+                Require(
+                    autoClearNextEntryBackend.TryConsumeSelectedSaveLoadout(
+                        out GreedLastRunRecord autoClearNextEntryRecord,
+                        out string autoClearNextEntryDetail,
+                        out string autoClearNextEntryError)
+                        && autoClearNextEntryRecord.IsValid
+                        && string.IsNullOrEmpty(autoClearNextEntryError)
+                        && autoClearNextEntryDetail.Contains("슬롯 2 조합으로 진입", StringComparison.Ordinal),
+                    "The next real infinite entry after auto-clear must consume the remaining S2 loadout, not the emptied S1 slot.");
+                GreedLastLobbySnapshot nextEntryAfterS2UseLobby = autoClearNextEntryBackend.LoadLobby();
+                Require(
+                    nextEntryAfterS2UseLobby.SelectedSaveSlotIndex == 1
+                        && nextEntryAfterS2UseLobby.SaveSlotLabels[1].Contains("마지막 1회", StringComparison.Ordinal)
+                        && autoClearNextEntryBackend.BuildInfiniteStartReadyBriefText().StartsWith("재시작: S2", StringComparison.Ordinal),
+                    "After consuming the auto-selected S2 loadout once, lobby and infinite prep must remain on S2 with its final-use warning.");
                 var cleanCompletedLoopInfiniteRecord = new GreedLastInfiniteRunRecord(
                     true,
                     1500,
@@ -5311,14 +14699,23 @@ namespace GreedLast.Editor
                 string completedLoopProfile = completedLoopBackend.BuildProfileBoardText(0);
                 Require(
                     completedLoopProfile.Contains("루프 4/4", StringComparison.Ordinal)
-                        && completedLoopProfile.Contains("다음 확인: 완성 루프 기록 확인 / 실행: 기록 보기", StringComparison.Ordinal),
+                    && completedLoopProfile.Contains("다음 확인: 완성 기록 / 실행: 기록 보기", StringComparison.Ordinal),
                     "A completed loop with another usable slot must guide the tester into the final record summary instead of refill or save-use checks.");
+                Require(
+                    completedLoopProfile.Contains("남은: 완성 기록", StringComparison.Ordinal),
+                    "A completed loop must keep the progress pip remainder on the final record check.");
+                Require(
+                    completedLoopProfile.Contains("루프 상태: 완성 기록 확인", StringComparison.Ordinal),
+                    "A completed loop must name the final record-board check as the current loop checkpoint state.");
+                Require(
+                    InvokeMockBackendLabel(completedLoopBackend, "BuildPrototypeRemainingLoopStepText") == "완성 기록",
+                    "The remaining-loop helper must resolve a completed prototype loop to final record verification.");
                 Require(
                     completedLoopProfile.Contains("Enter/강조: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
                     "A completed loop must keep the profile next-action highlight on the final record check even when growth points remain.");
                 Require(
-                    !completedLoopProfile.Contains("다음 확인: 보충 후 무한 재진입", StringComparison.Ordinal)
-                        && !completedLoopProfile.Contains("다음 확인: 저장 조합 2회 소진", StringComparison.Ordinal),
+                !completedLoopProfile.Contains("다음 확인: 보충 재진입", StringComparison.Ordinal)
+                    && !completedLoopProfile.Contains("다음 확인: 2회 소진", StringComparison.Ordinal),
                     "The completed-loop final record check must only appear after refill and two-use save checks are no longer urgent.");
                 GreedLastLobbySnapshot completedLoopLobby = completedLoopBackend.LoadLobby();
                 Require(
@@ -5327,7 +14724,7 @@ namespace GreedLast.Editor
                     "A completed prototype loop must surface the final completion check on the profile button before passive growth.");
                 Require(
                     completedLoopLobby.Message.Contains("프로토타입 완성 루프 확인", StringComparison.Ordinal)
-                        && completedLoopLobby.Message.Contains("다음 확인: 완성 루프 기록 확인", StringComparison.Ordinal),
+                    && completedLoopLobby.Message.Contains("다음 확인: 완성 루프 기록 확인", StringComparison.Ordinal),
                     "A completed prototype loop must surface the final record check directly in the lobby message.");
                 Require(
                     !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", completedLoopLobby.Message),
@@ -5349,6 +14746,17 @@ namespace GreedLast.Editor
                     completedLoopSeenLobby.ProfileButtonSummary.Contains("완성", StringComparison.Ordinal)
                         && !completedLoopSeenLobby.ProfileButtonSummary.Contains("NEW", StringComparison.Ordinal),
                     "After the completed-loop profile notice is seen, the profile button must keep its completion label without the NEW marker.");
+                completedLoopBackend.RegisterNormalAttempt(chapterMissAttempt);
+                string completedLoopWithReviewNoiseProfile = completedLoopBackend.BuildProfileBoardText(0);
+                Require(
+                completedLoopWithReviewNoiseProfile.Contains("다음 확인: 완성 기록 / 실행: 기록 보기", StringComparison.Ordinal)
+                        && completedLoopWithReviewNoiseProfile.Contains("남은: 완성 기록", StringComparison.Ordinal)
+                        && completedLoopWithReviewNoiseProfile.Contains("Enter/강조: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
+                    "A completed prototype loop must keep final record verification ahead of lingering review practice noise.");
+                Require(
+                    completedLoopBackend.LoadLobby().ProfileButtonSummary.Contains("완성", StringComparison.Ordinal)
+                        && !completedLoopBackend.LoadLobby().ProfileButtonSummary.Contains("복기", StringComparison.Ordinal),
+                    "A completed prototype loop profile button must keep the completion label even when a later attempt carries review noise.");
                 Require(
                     backend.BuildProfileBoardText(1).Contains("필요 행동: 무한 조합 보충", StringComparison.Ordinal)
                         && backend.BuildProfileBoardText(1).Contains("Enter/강조: 무한 조합 보충", StringComparison.Ordinal),
@@ -5371,14 +14779,23 @@ namespace GreedLast.Editor
                 string emptySaveLoadoutDraftText = backend.BuildSaveLoadoutDraftText();
                 RequireTextLayoutBudget(emptySaveLoadoutDraftText, 12, 110, "empty save-loadout refill guidance draft");
                 Require(
-                    emptySaveLoadoutDraftText.Contains("보충 안내 / 저장 조합 없음", StringComparison.Ordinal)
+                    emptySaveLoadoutDraftText.Contains("보충 안내 / 저장 후보 없음 / 저장 조합 없음", StringComparison.Ordinal)
                         && emptySaveLoadoutDraftText.Contains("다음: 보충 런 클리어 후 새 조합 저장", StringComparison.Ordinal)
                         && !emptySaveLoadoutDraftText.Contains("기존 슬롯 확인/변경/삭제", StringComparison.Ordinal),
                     "An empty save-loadout management screen must focus on refill guidance instead of stale slot management.");
+                string emptySaveLoadoutDetailText = backend.BuildSelectedSaveLoadoutComparisonText();
+                RequireTextLayoutBudget(emptySaveLoadoutDetailText, 6, 72, "empty save-loadout refill detail");
+                Require(
+                    emptySaveLoadoutDetailText.Contains("비어 있음", StringComparison.Ordinal)
+                        && emptySaveLoadoutDetailText.Contains("보충 런으로 새 저장 조합을 만들어야 합니다.", StringComparison.Ordinal)
+                        && emptySaveLoadoutDetailText.Contains("다음: 보충 런 클리어 후 새 조합 저장", StringComparison.Ordinal)
+                        && !emptySaveLoadoutDetailText.Contains("일반 런을 클리어하면 새 저장 후보", StringComparison.Ordinal)
+                        && !emptySaveLoadoutDetailText.Contains("좌 / 중 / 우로 확인할 슬롯 선택", StringComparison.Ordinal),
+                    "An empty save-loadout detail after auto-clear must point to refill instead of first-save creation or slot picking.");
                 string emptySaveLoadoutSlotChoiceText = backend.BuildSaveLoadoutDraftText(showSelectedSlot: false);
                 RequireTextLayoutBudget(emptySaveLoadoutSlotChoiceText, 10, 110, "empty save-loadout slot-choice refill guidance");
                 Require(
-                    emptySaveLoadoutSlotChoiceText.Contains("보충 안내 / 저장 조합 없음", StringComparison.Ordinal)
+                    emptySaveLoadoutSlotChoiceText.Contains("보충 안내 / 저장 후보 없음 / 저장 조합 없음", StringComparison.Ordinal)
                         && emptySaveLoadoutSlotChoiceText.Contains("다음: 보충 런 클리어 후 새 조합 저장", StringComparison.Ordinal)
                         && !emptySaveLoadoutSlotChoiceText.Contains("좌 / 중 / 우로 확인할 슬롯 선택", StringComparison.Ordinal),
                     "An empty save-loadout slot-choice view must not ask the player to select unavailable slots.");
@@ -5703,7 +15120,33 @@ namespace GreedLast.Editor
             GreedLastRunAttemptRecord attemptRecord,
             GreedLastInfiniteRunRecord infiniteRecord)
         {
-            var boardBackend = new GreedLastMockBackend();
+            var emptyRecordBackend = CreateIsolatedBackend();
+            for (int page = 0; page < emptyRecordBackend.RecordBoardPages; page += 1)
+            {
+                Require(
+                    emptyRecordBackend.BuildRecordBoardText(page) == "기록 없음",
+                    "An empty record board must stay compact and avoid placeholder metrics on every page.");
+            }
+
+            Require(
+                emptyRecordBackend.BuildProfileBoardText(2).Contains("대표 기록\n기록 없음", StringComparison.Ordinal),
+                "An empty profile representative page must not invent records from persisted playtest data.");
+
+            var attemptOnlyBackend = CreateIsolatedBackend();
+            attemptOnlyBackend.RegisterNormalAttempt(attemptRecord);
+            string attemptOnlySummaryText = attemptOnlyBackend.BuildRecordBoardText(0);
+            string attemptOnlyNormalText = attemptOnlyBackend.BuildRecordBoardText(1);
+            Require(
+                attemptOnlySummaryText.Contains("최근 시도", StringComparison.Ordinal)
+                    && !attemptOnlySummaryText.Contains("일반 최고", StringComparison.Ordinal),
+                "A first failed or abandoned run must enter the summary as a recent attempt, not a fake normal best.");
+            Require(
+                attemptOnlyNormalText.Contains("시도1", StringComparison.Ordinal)
+                    && attemptOnlyNormalText.Contains("탈출 중단", StringComparison.Ordinal),
+                "A first failed or abandoned run must still be visible on the normal record page.");
+            RequireTextLayoutBudget(attemptOnlyNormalText, 3, 72, "attempt-only normal record board");
+
+            var boardBackend = CreateIsolatedBackend();
             boardBackend.RegisterClear(clearRecord);
             Require(
                 boardBackend.ResolveRecentRecordBoardPageIndex() == 1,
@@ -5759,6 +15202,7 @@ namespace GreedLast.Editor
             {
                 string boardText = boardBackend.BuildRecordBoardText(page);
                 RequireTextLayoutBudget(boardText, 5, 72, "record board page " + page);
+                RequireRecordBoardPrimaryMetricRows(boardText, "record board page " + page);
                 Require(!boardText.Contains("타이밍:", StringComparison.Ordinal), "Record boards must not show timing-detail labels.");
                 Require(!boardText.Contains("후보", StringComparison.Ordinal), "Record boards must not show save-candidate guidance.");
                 Require(!boardText.Contains("목표:", StringComparison.Ordinal), "Record boards must not show coaching goals.");
@@ -5779,10 +15223,12 @@ namespace GreedLast.Editor
                 Require(!boardText.Contains("터치 탭", StringComparison.Ordinal), "Record boards must not show mobile touch checklist hints.");
                 Require(!boardText.Contains("성장 포인트", StringComparison.Ordinal), "Record boards must not show growth-point result text.");
                 Require(!boardText.Contains("입력 보정", StringComparison.Ordinal), "Record boards must not show input-calibration advice.");
+                Require(!boardText.Contains("정확 보상", StringComparison.Ordinal), "Record boards must not show exact-payoff coaching text.");
                 Require(!boardText.Contains("감각:", StringComparison.Ordinal), "Record boards must not show sensory setting text.");
                 Require(!boardText.Contains("보정:", StringComparison.Ordinal), "Record boards must not show calibration setting text.");
                 Require(!boardText.Contains("소리", StringComparison.Ordinal), "Record boards must not show audio setting text.");
                 Require(!boardText.Contains("진동", StringComparison.Ordinal), "Record boards must not show haptic setting text.");
+                Require(!boardText.Contains("기울임", StringComparison.Ordinal), "Record boards must not show tilt setting text.");
                 Require(
                     !boardText.Contains("점프 정확", StringComparison.Ordinal)
                         && !boardText.Contains("숙이기 정확", StringComparison.Ordinal)
@@ -5811,10 +15257,10 @@ namespace GreedLast.Editor
                     && normalText.Contains("콤" + attemptRecord.MaxCombo, StringComparison.Ordinal),
                 "The normal attempt board must keep max combo as a compact record metric.");
             Require(normalText.Contains("시도1", StringComparison.Ordinal), "The normal attempt board must label failed or abandoned attempts without adding a noisy section heading.");
-            var denseNormalBoardBackend = new GreedLastMockBackend();
+            var denseNormalBoardBackend = CreateIsolatedBackend();
             for (int i = 0; i < 4; i += 1)
             {
-                denseNormalBoardBackend.RegisterClear(BuildRecordBoardRunVariant(record, i));
+                denseNormalBoardBackend.RegisterClear(BuildRecordBoardRunVariant(clearRecord, i));
             }
 
             for (int i = 0; i < 3; i += 1)
@@ -5823,12 +15269,14 @@ namespace GreedLast.Editor
             }
 
             string denseNormalText = denseNormalBoardBackend.BuildRecordBoardText(1);
-            RequireTextLayoutBudget(denseNormalText, 4, 72, "dense normal record board");
+            RequireTextLayoutBudget(denseNormalText, 3, 72, "dense normal record board");
+            RequireRecordBoardPrimaryMetricRows(denseNormalText, "dense normal record board");
             Require(
                 denseNormalText.Contains("1위", StringComparison.Ordinal)
                     && denseNormalText.Contains("2위", StringComparison.Ordinal)
                     && !denseNormalText.Contains("3위", StringComparison.Ordinal)
                     && denseNormalText.Contains("시도1", StringComparison.Ordinal)
+                    && !denseNormalText.Contains("시도2", StringComparison.Ordinal)
                     && denseNormalText.Contains("탈출 중단", StringComparison.Ordinal),
                 "A dense normal record board must keep top clears plus recent attempts without expanding into a noisy long list.");
 
@@ -5843,12 +15291,41 @@ namespace GreedLast.Editor
                     && InvokeRuntimeUiLabel("GetRecordBoardPageLabel", 1).Contains("일반", StringComparison.Ordinal)
                     && InvokeRuntimeUiLabel("GetRecordBoardPageLabel", 2).Contains("무한", StringComparison.Ordinal)
                     && InvokeRuntimeUiLabel("GetRecordBoardPageLabel", 3).Contains("랭킹", StringComparison.Ordinal),
-                "Record-board lane labels must expose previous, summary, and next page navigation.");
+                "Record-board page names must stay available for headlines and internal navigation.");
             Require(
-                InvokeRuntimeUiLabel("GetRecordBoardPageButtonLabel", 1) == "2/4 일반 기록"
-                    && InvokeRuntimeUiLabel("GetRecordBoardPageButtonLabel", -1) == "4/4 무한 랭킹"
+                InvokeRuntimeUiLabel("BuildRecordBoardLaneLabel", 0) == "좌"
+                    && InvokeRuntimeUiLabel("BuildRecordBoardCenterLaneLabel", 0) == "중"
+                    && InvokeRuntimeUiLabel("BuildRecordBoardCenterLaneLabel", 3) == "중"
+                    && InvokeRuntimeUiLabel("BuildRecordBoardLaneLabel", 2) == "우",
+                "Record-board lane labels must stay as clean channel labels so page names do not clutter record rows.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.InfiniteRecordBoard)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.ProfileBoard)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.LobbyReady)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.SaveLoadoutDraft)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.GrowthBoard)
+                    && InvokeRuntimeUiStaticBool("ShouldShowLanePreviewForScreen", GreedLastScreenState.RunCoreTest),
+                "Record and profile boards must hide the playfield preview so only records/profile text and navigation remain.");
+            Require(
+                !InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.InfiniteRecordBoard)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.ProfileBoard)
+                    && InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.LobbyReady)
+                    && InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.SaveLoadoutDraft)
+                    && InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.GrowthBoard)
+                    && InvokeRuntimeUiStaticBool("ShouldShowModeSubtitleForScreen", GreedLastScreenState.RunCoreTest),
+                "Record and profile boards must also hide the generic mode subtitle so board text stays visually quiet.");
+            Require(
+                InvokeAppStaticInt("ResolveRecordBoardLanePage", 1, GreedLastRunChannel.Left, 4) == 0
+                    && InvokeAppStaticInt("ResolveRecordBoardLanePage", 1, GreedLastRunChannel.Center, 4) == 1
+                    && InvokeAppStaticInt("ResolveRecordBoardLanePage", 1, GreedLastRunChannel.Right, 4) == 2
+                    && InvokeAppStaticInt("ResolveRecordBoardLanePage", 0, GreedLastRunChannel.Left, 4) == 3
+                    && InvokeAppStaticInt("ResolveRecordBoardLanePage", -1, GreedLastRunChannel.Center, 4) == 0,
+                "Record-board keyboard lane input must keep its previous/current/next routing even after visual labels are simplified.");
+            Require(
+                InvokeRuntimeUiLabel("GetRecordBoardNavigationButtonLabel", 1) == "다음"
+                    && InvokeRuntimeUiLabel("GetRecordBoardNavigationButtonLabel", -1) == "이전"
                     && InvokeRuntimeUiLabel("GetProfileBoardPageButtonLabel", 3) == "4/4 검증",
-                "Record/profile board buttons must include page numbers for long playtest navigation.");
+                "Record-board buttons must stay short while profile-board buttons can keep page numbers for checklist navigation.");
             Require(
                 InvokeRuntimeUiLabel("BuildProfileBoardCenterLaneLabel") == "기록\n보드",
                 "The profile-board center lane must clearly announce its record-board shortcut.");
@@ -5858,18 +15335,48 @@ namespace GreedLast.Editor
             Require(
                 sanitizedBoardLine == "[S] 1000점 / 콤9",
                 "The record board compactor must strip coaching, next-action, and save-candidate fragments.");
+            string auxiliaryOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "72.0m / 3구간 / 위협 4 / 콤9 / 실수 1");
+            Require(
+                auxiliaryOnlyBoardLine == "기록 없음",
+                "Distance, section, threat, combo, and miss fragments without a score must not become a fake record row.");
+            string rankedAuxiliaryOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "1위 / 72.0m / 3구간 / 콤9");
+            Require(
+                rankedAuxiliaryOnlyBoardLine == "기록 없음",
+                "A ranking label plus auxiliary metrics must still be rejected when the score is missing.");
             string prototypeChecklistSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 1120점 / 체크 6/7 / 다음 확인: 저장 조합 2회 소진 / 실행: PgUp 소모 / Enter/강조: 무한모드 / 콤10");
+                "[S] 1120점 / 검증 모드: 에디터 테스트키 ON / 체크 6/7 / 진행칸: 체크 [######-] / 루프 [####] / 남은: 2회 소진 / 다음 확인: 저장 조합 2회 소진 / 실행: PgUp 소모 / Enter/강조: 무한모드 / 콤10");
             Require(
                 prototypeChecklistSanitizedBoardLine == "[S] 1120점 / 콤10",
                 "The record board compactor must strip prototype next-check and action fragments even when they contain numbers.");
+            string compactNextCheckLabelSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1140점 / 시작→런 확인 / 런 확인 / 첫 함정 / 복기 후 탈출 / 일반 탈출 / 저장 후보 생성 / 첫 무한 / 2회 소진 / 무한 기록 / 보충 재진입 / 완성 기록 / 콤9");
+            Require(
+                compactNextCheckLabelSanitizedBoardLine == "[S] 1140점 / 콤9",
+                "The record board compactor must strip compact prototype next-check labels from score rows.");
+            string infiniteGoodReviewSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1240점 / 복기: 무한 1구간 3/3 / 정확 2 · 보정 1 · 실수 0 / 정확 보상 복기 / 확인 목적: 정확 보상 전환 확인 / 목표: 다음 구간 보정 0회 / 직전 1 / 콤11");
+            Require(
+                infiniteGoodReviewSanitizedBoardLine == "[S] 1240점 / 콤11",
+                "The record board compactor must strip infinite Good review, progress, and exact-payoff purpose fragments.");
             string mobileHintSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 900점 / 정답키 A/← / 정답 좌 탭 / 터치 탭 / 위험→동작·탭·1박·보상 / 위험→동작·키·1박·보상 / 위험 + 동작 + 키 + 1박 전 + 보상 / 바닥 위험 → ↑ 점프 회피 · A/← · 1박 전 · 정확+140 집중+1 보정+25 / 바닥→↑점프 · 충전+1 / 상단→↓숙이기 · 반격+50 / 측면→↔비틀기 · 연쇄+1 / 좌 탭 / 콤5");
+                "[S] 900점 / 정답키 A/← / 정답 좌 탭 / 터치 탭 / 위험→동작·탭·1박·보상 / 위험→동작·키·1박·보상 / 위험 + 동작 + 키 + 1박 전 + 보상 / 바닥 위험 → ↑ 점프 회피 · A/← · 1박 전 · 정확+140→집중 집중+1 보정+25 / 바닥→↑점프 · 정확→충전+1 / 상단→↓숙이기 · 정확→반격+50 / 측면→↔비틀기 · 정확→연쇄+1 / 통로→↻회전 / 통로→↺회전 · 정확→연쇄+1 / 우 기울임 / 좌 탭 / 콤5");
             Require(
                 mobileHintSanitizedBoardLine == "[S] 900점 / 콤5",
-                "The record board compactor must strip editor key, mobile touch, active action cue, and lane payoff fragments.");
+                "The record board compactor must strip editor key, mobile touch, active action cue, rotation/tilt cue, and lane payoff fragments.");
+            string releaseEntryCheckSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1120점 / 입장 체크: 위협 폭·보상 / 시작 전 확인 / 콤8");
+            Require(
+                releaseEntryCheckSanitizedBoardLine == "[S] 1120점 / 콤8",
+                "The record board compactor must strip release/mobile infinite-entry check fragments from score rows.");
             string recentFlowSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[A] 860점 / 최근 좌정·바→점 > 중압·상→숙 / 흐름: 피하기 확인 / 콤4");
@@ -5896,10 +15403,76 @@ namespace GreedLast.Editor
                 "The record board compactor must strip short active action cue fragments without relying on reward text.");
             string uiHintSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[A] 777점 / 가이드 좌 점프 / 상태 동작 ↑ / 코칭 회피 점프 / 재개 목표 카운트 뒤 첫 함정 / 중앙/레인 큐+상태줄 확인: 위험→동작·키·1박·보상 / 일시정지 배경차단 / Enter/강조: 저장 조합 / 보정: +35ms / 감각: 소리 80%·진동 ON / 콤4");
+                "[A] 777점 / 가이드 좌 점프 / 상태 동작 ↑ / 코칭 회피 점프 / 재개 목표 카운트 뒤 첫 함정 / 중앙/레인 큐+상태줄·코치 확인: 위험→동작·키·1박·보상 / 일시정지 재개목표·배경차단 / Enter/강조: 저장 조합 / 보정: +35ms / 감각: 소리 80%·진동 ON / 콤4");
             Require(
                 uiHintSanitizedBoardLine == "[A] 777점 / 콤4",
                 "The record board compactor must strip live guide, pause, cue checklist, and sensory fragments.");
+            string pauseTitleSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 777점 / 일시정지 메뉴 / 기초연습 메뉴 / 보충 런 메뉴 / 무한모드 메뉴 / 재개 준비 / 콤4");
+            Require(
+                pauseTitleSanitizedBoardLine == "[A] 777점 / 콤4",
+                "The record board compactor must strip mode-specific pause titles from score rows.");
+            string hudFontSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 888점 / run HUD responsive font / 런 HUD 폰트 축소 / 긴 상태줄 7줄 / 중앙 판정선 보호 / responsive detail panels / master sfx volume / mobile haptic duration clamp / judgement haptic profile / countdown haptic staging / countdown beat schedule reset / 카운트 전용 비트 / 일반 박자음 / 라이브 조작 가능 / live-control motion/audio gate / 박자 긴급도 / beat-cue urgency / beat cue threshold contract / timing guide word contract / rapid lane input guard / input boundaries / mobile pause header / mobile pause body copy / 재개 버튼 안내 / pause body responsive font / 일시정지 본문 폰트 / pause soft-blur staging / 블러 밴드 재개 강화 / 콤4");
+            Require(
+                hudFontSanitizedBoardLine == "[A] 888점 / 콤4",
+                "The record board compactor must strip HUD readability, detail-panel, sound-setting, haptic-setting, countdown-audio, live-control urgency, beat-cue threshold, timing-guide word, rapid-input, mobile pause, pause-body, and pause-blur checklist fragments.");
+            string pauseKeySanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 760점 / ESC/P 또는 재개 / ESC 또는 P / 재개 버튼 안내 / 앞 박자 여유 / 카운트 2 / 재개 1.0s / 콤3");
+            Require(
+                pauseKeySanitizedBoardLine == "[A] 760점 / 콤3",
+                "The record board compactor must strip editor pause-key and resume-count guidance from score rows.");
+            string pauseMenuSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 790점 / 재개 준비 - 카운트 후 함정이 다시 내려옵니다. / 재개목표 정확→집중 / 카운트 뒤 첫 함정 기준선 / 중단 기록으로 로비 복귀 / 앱 전환으로 재개 카운트가 멈췄습니다. / 콤4");
+            Require(
+                pauseMenuSanitizedBoardLine == "[A] 790점 / 콤4",
+                "The record board compactor must strip pause-menu resume, exit-consequence, and app-background guidance from score rows.");
+            string pauseHeaderDetailSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 795점 / 로비로 돌아가도 일반 런 기록과 저장 기회에는 영향을 주지 않습니다. / 로비로 돌아가면 현재 보충 런은 중단 기록으로 남습니다. / 로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다. / 콤4");
+            Require(
+                pauseHeaderDetailSanitizedBoardLine == "[A] 795점 / 콤4",
+                "The record board compactor must strip mode-specific pause-exit header details from score rows.");
+            string pauseHeaderDetailOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "로비로 돌아가도 일반 런 기록과 저장 기회에는 영향을 주지 않습니다.\n로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다.");
+            Require(
+                pauseHeaderDetailOnlyBoardLine == "기록 없음",
+                "Pause-exit header details without a score row must not become a fake record.");
+            string pauseSettingsSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 810점 / 설정: 소리 80% / 보정 +20ms / 추천 입력 빠름 -> +40ms / 재개 1.0s / 시작 2.0s / 진동 ON / 콤4");
+            Require(
+                pauseSettingsSanitizedBoardLine == "[A] 810점 / 콤4",
+                "The record board compactor must strip pause settings, calibration recommendation, countdown, and haptic fragments from score rows.");
+            string tiltSettingSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 805점 / 기울임 OFF / 콤4");
+            Require(
+                tiltSettingSanitizedBoardLine == "[A] 805점 / 콤4",
+                "The record board compactor must strip the standalone tilt setting from score rows.");
+            string timingButtonSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 830점 / 적용 완료 +20ms / 0ms 복귀 / 빠름 +20ms / 늦음 -20ms / 콤4");
+            Require(
+                timingButtonSanitizedBoardLine == "[A] 830점 / 콤4",
+                "The record board compactor must strip pause timing-button labels from score rows.");
+            string pauseSettingsOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "설정: 소리 80% / 보정 +20ms / 추천 대기 1/4 / 시작 2.0s / 진동 ON");
+            Require(
+                pauseSettingsOnlyBoardLine == "기록 없음",
+                "Pause settings without a score row must not become a fake record.");
+            string timingButtonOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "적용 완료 +20ms / 0ms 복귀 / 빠름 +20ms / 늦음 -20ms");
+            Require(
+                timingButtonOnlyBoardLine == "기록 없음",
+                "Pause timing-button labels without a score row must not become a fake record.");
             string growthSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1300점 / 성장 포인트 +3 / 보유 6pt / 생존 강화 가능 / 콤8");
@@ -5912,42 +15485,330 @@ namespace GreedLast.Editor
             Require(
                 calibrationSanitizedBoardLine == "[A] 910점 / 콤5",
                 "The record board compactor must strip input-calibration advice fragments.");
+            string invincibleSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 990점 / 무적 보호 / 체력 3/5 / 테스트 무적 - 피해를 무시했습니다. / 무적 테스트 / 콤5");
+            Require(
+                invincibleSanitizedBoardLine == "[A] 990점 / 체력 3/5 / 콤5",
+                "The record board compactor must strip dev-invincibility guidance while keeping real health and combo metrics.");
+            string devRuntimeSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1000점 / 테스트 집중 상태 발동 - 정확 성공의 점수와 연쇄 유지 효과를 확인합니다. / 테스트 바로가기 - 공명핵 회수 직후 / 테스트 저장 후보를 만들었습니다. / 콤8");
+            Require(
+                devRuntimeSanitizedBoardLine == "[S] 1000점 / 콤8",
+                "The record board compactor must strip generic dev-test runtime notices from score rows.");
             string saveManagementSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[A] 777점 / 관리 모드 / 저장 후보 없음 / 기존 슬롯만 확인 / 이름 변경 / 삭제 / 새 저장은 다음 클리어 후 1회만 가능 / 상세 보기: 기존 저장 조합 기록 확인 / 보충 안내 / 보충 런 버튼: 보충 런 진입 / 무한 시작 전 저장 조합 보충 필요 / 콤4");
             Require(
                 saveManagementSanitizedBoardLine == "[A] 777점 / 콤4",
                 "The record board compactor must strip save-management mode fragments even when they contain numbers.");
+            string refillGuidanceOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보충 안내 / 저장 후보 없음 / 저장 조합 없음 / 보충 런 버튼: 보충 런 진입 / 다음: 보충 런 클리어 후 새 조합 저장");
+            Require(
+                refillGuidanceOnlyBoardLine == "기록 없음",
+                "Refill guidance without a score row must not become a fake record.");
+            string saveConfirmSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1400점 / 저장 후보를 추천 슬롯에 저장했습니다. / 슬롯 1 저장 조합 저장 완료 / 사용 가능 횟수 2회 / 모두 쓰면 자동 비움 / 저장 후보 소모 완료 / 같은 클리어 재저장 불가 / 다음: 저장 조합으로 무한모드 시작 / 콤9");
+            Require(
+                saveConfirmSanitizedBoardLine == "[S] 1400점 / 콤9",
+                "The record board compactor must strip save-confirm success guidance when it is appended to playable record rows.");
+            string duplicateSaveConfirmSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1400점 / 저장 후보 없음 / 새 저장은 다음 클리어 후 1회만 가능합니다. / 콤9");
+            Require(
+                duplicateSaveConfirmSanitizedBoardLine == "[S] 1400점 / 콤9",
+                "The record board compactor must strip duplicate-save no-candidate guidance from playable record rows.");
+            string pendingSaveConfirmSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1400점 / 저장 확인 전 / 좌 / 중 / 우 슬롯 선택 후 저장하세요. / 콤9");
+            Require(
+                pendingSaveConfirmSanitizedBoardLine == "[S] 1400점 / 콤9",
+                "The record board compactor must strip pre-confirm save guidance from playable record rows.");
+            string refillCompletionSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 무한모드에 쓸 저장 슬롯을 고른 뒤 저장하세요 / 새 저장 조합으로 무한모드 재개 가능 / 콤12");
+            Require(
+                refillCompletionSanitizedBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip refill-completion save guidance from score rows.");
+            string refillCompletedSlotSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 보충 완료 - S1 2회 사용 가능 / 무한모드 재개 가능 / 콤12");
+            Require(
+                refillCompletedSlotSanitizedBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip refill-completed slot guidance from score rows.");
             string saveUseSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1180점 / 저장 조합 소모: 슬롯 1 / 사용 결과: 2/2 · 2회 남음 -> 마지막 1회 (1/2) / 남은 사용 1회 / 다음 소모 후 슬롯 자동 비움 / 콤8");
             Require(
                 saveUseSanitizedBoardLine == "[S] 1180점 / 콤8",
                 "The record board compactor must strip save-use consumption notices from playable record rows.");
+            string saveUseAutoSelectSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1180점 / 사용 횟수 소진 - 슬롯 자동 비움 / 다음 조합 자동 선택: S2 2/2 2회 / 콤8");
+            Require(
+                saveUseAutoSelectSanitizedBoardLine == "[S] 1180점 / 콤8",
+                "The record board compactor must strip auto-clear and next-loadout auto-selection notices from playable record rows.");
+            string directSaveUseStateBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1280점 / S1 2/2 2회 / 2/2 · 2회 남음 / 마지막 1회 (1/2) / 1/2 마지막 / 시작 후 비움 / 사용 완료 / 콤6");
+            Require(
+                directSaveUseStateBoardLine == "[S] 1280점 / 콤6",
+                "The record board compactor must strip direct save-use state labels when they are appended to score rows.");
+            string saveUseStateOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "S1 2/2 2회 / 1/2 마지막 / 시작 후 비움 / 콤6");
+            Require(
+                saveUseStateOnlyBoardLine == "기록 없음",
+                "Direct save-use state labels plus leftover combo must not become a fake record row.");
+            string releaseSaveUseHelpSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1180점 / 저장 조합이 필요하면 일반 런 클리어 또는 보충 런을 먼저 진행하세요. / 먼저 저장 조합을 만들어야 합니다. / 일반 런을 클리어해 저장 후보를 먼저 만드세요. / 콤8");
+            Require(
+                releaseSaveUseHelpSanitizedBoardLine == "[S] 1180점 / 콤8",
+                "The record board compactor must strip release/mobile save-use guidance even without dev-key names.");
             string refillRunSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1500점 / 다음: 보충 런 클리어 후 새 조합 저장 / 다음 확인: 보충 후 무한 재진입 / 실행: 무한 조합 보충 / 보충 런 버튼: 보충 런 진입 / 콤12");
             Require(
                 refillRunSanitizedBoardLine == "[S] 1500점 / 콤12",
                 "The record board compactor must strip refill-run next-action and button guidance from playable record rows.");
+            string refillCheckSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 보충 확인 / 보충 확인 - 다음 버튼으로 보충 런에 들어갈 수 있습니다. / 콤12");
+            Require(
+                refillCheckSanitizedBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip compact refill-check button and notice fragments from playable record rows.");
+            string refillUnavailableSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1180점 / 재시작 불가: 저장 조합 보충 필요 / 보충 런 / 무한 조합 보충 / 콤8");
+            Require(
+                refillUnavailableSanitizedBoardLine == "[S] 1180점 / 콤8",
+                "The record board compactor must strip refill-required unavailable-start guidance from playable record rows.");
+            string refillSkipSavePrefixedRecordLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보충 런 저장 안 함\n저장 조합은 갱신되지 않았습니다.\n기록: [S] 1500점 / 다음: 무한 버튼으로 보충 런 재시도 / 콤12");
+            Require(
+                refillSkipSavePrefixedRecordLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip refill skip-save notices and remove the record display prefix.");
+            string inlineRefillSkipSaveBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보충 런 저장 안 함 / 저장 조합은 갱신되지 않았습니다. / 기록: [S] 1500점 / 다음: 무한 버튼으로 보충 런 재시도 / 콤12");
+            Require(
+                inlineRefillSkipSaveBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip inline refill skip-save prefixes before keeping score rows.");
+            string inlineClearResultBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "결과 / 탈출 성공 / 기록 저장 / 이번 기록: [A] 920점 / 55.5m / 다음: 기록 보드 / 콤7");
+            Require(
+                inlineClearResultBoardLine == "[A] 920점 / 55.5m / 콤7",
+                "The record board compactor must strip inline result and display prefixes from clear summaries.");
+            string storedRecordNoticeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록 저장 완료: [S] 1510점 / 저장 후보는 사라지고 기록 보드에는 남습니다. / 다음: 기록 보기에서 최근 기록 확인 / 콤12");
+            Require(
+                storedRecordNoticeBoardLine == "[S] 1510점 / 콤12",
+                "The record board compactor must keep score rows when a save-confirm prefix is attached to the score itself.");
+            string dashClearPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 성공 - [A] 940점 / 다음: 저장 후보 저장/포기 / 자동 진행 / 콤7");
+            Require(
+                dashClearPrefixedBoardLine == "[A] 940점 / 콤7",
+                "The record board compactor must strip dash-style clear result prefixes from playable score rows.");
+            string plainClearPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 성공 [A] 940점 / 다음: 저장 후보 저장/포기 / 자동 진행 / 콤7");
+            Require(
+                plainClearPrefixedBoardLine == "[A] 940점 / 콤7",
+                "The record board compactor must strip plain clear result prefixes only when they directly lead into a score row.");
+            string plainExitPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "입구 탈출 완료 [S] 1200점 / 80.0m / 탈출 게이트 3/3 완료 · 입구로 나가기 / 콤9");
+            Require(
+                plainExitPrefixedBoardLine == "[S] 1200점 / 80.0m / 콤9",
+                "The record board compactor must strip plain entrance-exit completion prefixes when the score follows immediately.");
+            string colonExitPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "입구 탈출 완료: [S] 1200점 / 80.0m / 탈출 게이트 3/3 완료 · 입구로 나가기 / 콤9");
+            Require(
+                colonExitPrefixedBoardLine == "[S] 1200점 / 80.0m / 콤9",
+                "The record board compactor must strip colon-style entrance-exit completion prefixes when the score follows immediately.");
+            string dashExitPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "입구 탈출 완료 - [S] 1200점 / 80.0m / 탈출 게이트 3/3 완료 · 입구로 나가기 / 콤9");
+            Require(
+                dashExitPrefixedBoardLine == "[S] 1200점 / 80.0m / 콤9",
+                "The record board compactor must strip dash-style entrance-exit completion prefixes when the score follows immediately.");
+            string tightSlashExitPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "입구 탈출 완료/[S] 1200점/80.0m/탈출 게이트 3/3 완료 · 입구로 나가기/콤9");
+            Require(
+                tightSlashExitPrefixedBoardLine == "[S] 1200점 / 80.0m / 콤9",
+                "The record board compactor must strip tightly slash-separated entrance-exit completion prefixes and guidance.");
+            string plainCompletePrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 완료 [A] 980점 / 64.0m / 입구로 나가기 / 콤7");
+            Require(
+                plainCompletePrefixedBoardLine == "[A] 980점 / 64.0m / 콤7",
+                "The record board compactor must strip plain clear-complete prefixes when the score follows immediately.");
+            string colonCompletePrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 완료: [A] 980점 / 64.0m / 입구로 나가기 / 콤7");
+            Require(
+                colonCompletePrefixedBoardLine == "[A] 980점 / 64.0m / 콤7",
+                "The record board compactor must strip colon-style clear-complete prefixes when the score follows immediately.");
+            string dashCompletePrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 완료 - [A] 980점 / 64.0m / 입구로 나가기 / 콤7");
+            Require(
+                dashCompletePrefixedBoardLine == "[A] 980점 / 64.0m / 콤7",
+                "The record board compactor must strip dash-style clear-complete prefixes when the score follows immediately.");
+            string tightSlashCompletePrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 완료/[A] 980점/64.0m/입구로 나가기/콤7");
+            Require(
+                tightSlashCompletePrefixedBoardLine == "[A] 980점 / 64.0m / 콤7",
+                "The record board compactor must strip tightly slash-separated clear-complete prefixes and guidance.");
+            string singleLineClearSummaryBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 성공 / 기록 저장 / 이번 기록: [A] 920점 / 55.5m / 다음: 기록 보드 / 콤7");
+            Require(
+                singleLineClearSummaryBoardLine == "[A] 920점 / 55.5m / 콤7",
+                "The record board compactor must not over-strip single-line clear summaries before their record prefix.");
+            string tightSlashClearSummaryBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 성공/기록 저장/이번 기록: [A] 920점/55.5m/다음: 기록 보드/콤7");
+            Require(
+                tightSlashClearSummaryBoardLine == "[A] 920점 / 55.5m / 콤7",
+                "The record board compactor must strip tightly slash-separated clear summaries before their record prefix.");
+            string refillPrefixedScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보충 기록: [B] 880점 / 보충 완료 - S1 2회 사용 가능 / 새 저장 조합으로 무한모드 재개 가능 / 콤3");
+            Require(
+                refillPrefixedScoreBoardLine == "[B] 880점 / 콤3",
+                "The record board compactor must keep refill scores while stripping refill-complete guidance prefixes.");
+            string infiniteStoredPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무한 기록 저장 완료: [S] 2890점 / 5구간 / 위협 5 / 기록 보드에서 이번 무한 기록을 확인할 수 있습니다. / 콤20");
+            Require(
+                infiniteStoredPrefixedBoardLine == "[S] 2890점 / 5구간 / 위협 5 / 콤20",
+                "The record board compactor must strip infinite-save notices attached before an infinite score row.");
+            string completionCheckPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "완성 기록 확인: [S] 1600점 / 흔적 완성 NEW / 기록 확인 / 콤14");
+            Require(
+                completionCheckPrefixedBoardLine == "[S] 1600점 / 콤14",
+                "The record board compactor must strip completed-record check prefixes without leaving confirmation text.");
+            string recordCheckPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록 확인: [A] 970점 / 기록 보드 1/4 / 다음 기록 / 콤6");
+            Require(
+                recordCheckPrefixedBoardLine == "[A] 970점 / 콤6",
+                "The record board compactor must strip generic record-check prefixes without dropping the score row.");
+            string clearSummaryTitledBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "클리어 요약\n탈출 성공 / 기록 저장\n이번 기록: [A] 940점 / 58.0m / 저장 후보는 사라지고 기록 보드에는 남습니다. / 다음: 기록 보기에서 최근 기록 확인 / 콤8");
+            Require(
+                clearSummaryTitledBoardLine == "[A] 940점 / 58.0m / 콤8",
+                "The record board compactor must strip the clear-summary title and skip-save guidance while keeping the score row.");
+            string clearSaveDraftNoticeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "클리어 요약\n탈출 성공 / 기록 저장\n[S] 1430점 / 72.0m / 콤9\n판정: 정박 5 / 보정 0 / 실수 0\n저장 후보: 집중 축 S1 / 생존 x2\n저장 기회: 1회 / 저장하거나 포기하면 소모\n다음: 슬롯 선택 후 저장 또는 포기");
+            Require(
+                clearSaveDraftNoticeBoardLine == "[S] 1430점 / 72.0m / 콤9",
+                "The record board compactor must keep only the score row from the compact clear-to-save-draft notice.");
+            string clearSaveSlotChoiceGuidanceBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1430점 / 72.0m / 저장 슬롯 선택 / 슬롯 / 다음: 좌 / 중 / 우로 저장할 슬롯 선택 / 후보는 저장 또는 포기 뒤 사라지고 같은 클리어로 다시 저장할 수 없습니다. / 선택 전 저장 잠김 / 저장 포기는 후보 소모 / 콤9");
+            Require(
+                clearSaveSlotChoiceGuidanceBoardLine == "[S] 1430점 / 72.0m / 콤9",
+                "The record board compactor must strip the clear-to-slot-choice guidance when it is appended to a score row.");
+            string exitButtonProgressBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 920점 / 55.5m / 탈출 게이트 3/3 완료 · 입구로 나가기 / 입구로 나가기 대기 / 콤7");
+            Require(
+                exitButtonProgressBoardLine == "[A] 920점 / 55.5m / 콤7",
+                "The record board compactor must strip clear-summary entrance-exit progress labels from score rows.");
+            string currentRecordPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "이번 기록: [A] 920점 / 55.5m / 2구간 / 위협 3 / 다음: 기록 보드 / 콤7");
+            Require(
+                currentRecordPrefixedBoardLine == "[A] 920점 / 55.5m / 2구간 / 위협 3 / 콤7",
+                "The record board compactor must normalize current-record prefixes before compacting.");
+            string recentRecordPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최근 기록: [S] 1290점 / 66.0m / 3구간 / 위협 4 / 다음: 기록 보드 / 콤9");
+            Require(
+                recentRecordPrefixedBoardLine == "[S] 1290점 / 66.0m / 3구간 / 위협 4 / 콤9",
+                "The record board compactor must normalize recent-record prefixes before compacting.");
+            string infiniteBestPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무한 최고: [S] 2100점 / 130.5m / 5구간 / 위협 5 / 콤18");
+            Require(
+                infiniteBestPrefixedBoardLine == "[S] 2100점 / 130.5m / 5구간 / 위협 5 / 콤18",
+                "The record board compactor must normalize board-label prefixes before compacting.");
+            string saveSlotDetailPrefixedRecordLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록: 집중 축 S1 / S / 집중형·안정 / 1740점 / 82.1m / 2/2 · 2회 남음");
+            Require(
+                saveSlotDetailPrefixedRecordLine == "기록 없음",
+                "The record board compactor must still drop save-slot detail rows after removing a record display prefix.");
+            string bestSaveSlotPrefixedRecordLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최고 기록: 집중 축 S1 / S / 집중형·안정 / 1740점 / 82.1m / 2/2 · 2회 남음");
+            Require(
+                bestSaveSlotPrefixedRecordLine == "기록 없음",
+                "The record board compactor must still drop best-record-prefixed save-slot summary rows.");
+            string representativeSaveSlotPrefixedRecordLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "대표 기록: 집중 축 S1 / S / 집중형·안정 / 1740점 / 82.1m / 2/2 · 2회 남음");
+            Require(
+                representativeSaveSlotPrefixedRecordLine == "기록 없음",
+                "The record board compactor must still drop representative-record-prefixed save-slot summary rows.");
+            string partialEmptySlotGuidanceBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 980점 / 선택 불가: 사용 가능한 슬롯을 고르세요. / 추천: 최고 슬롯 S1 선택 권장 / 다음: 추천 선택 또는 좌 / 중 / 우 슬롯 선택 / S3 불가 / 다른 슬롯 / 콤6");
+            Require(
+                partialEmptySlotGuidanceBoardLine == "[A] 980점 / 콤6",
+                "The record board compactor must strip partial-empty slot selection guidance from playable record rows.");
             string pendingCandidateRouteSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 1420점 / 후보 처리 후 무한 / 무한 후보 저장 필요 / 저장 후보 우선 / 콤11");
+                "[S] 1420점 / 후보 처리 후 무한 / 무한 후보 저장 필요 / 저장 후보 우선 / 후보 우선 / 콤11");
             Require(
                 pendingCandidateRouteSanitizedBoardLine == "[S] 1420점 / 콤11",
                 "The record board compactor must strip pending-candidate routing guidance from playable record rows.");
             string saveCandidateButtonGuidanceBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 1410점 / 저장 조합에서 후보 비교 후 저장/포기 / 저장 버튼: 덮어쓰기 확인 / 포기 버튼: 후보 소모 / 콤10");
+                "[S] 1410점 / 저장 조합에서 후보 비교 후 저장/포기 / 저장 버튼: 덮어쓰기 확인 / 포기 버튼: 후보 소모(1회) / 콤10");
             Require(
                 saveCandidateButtonGuidanceBoardLine == "[S] 1410점 / 콤10",
                 "The record board compactor must strip save-candidate button guidance from playable record rows.");
             string saveCandidateChoiceGuidanceBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 1410점 / 저장 후보 대기 / 저장 기회: 저장하거나 포기하면 사라짐 / 좌 · 중 · 우 슬롯을 고른 뒤 저장 또는 포기를 선택하세요. / 콤10");
+                "[S] 1410점 / 저장 후보 대기 / 저장 기회: 1회 / 저장하거나 포기하면 사라짐 / 좌 · 중 · 우 슬롯을 고른 뒤 저장 또는 포기를 선택하세요. / 콤10");
             Require(
                 saveCandidateChoiceGuidanceBoardLine == "[S] 1410점 / 콤10",
                 "The record board compactor must strip save-or-skip candidate guidance from playable record rows.");
+            string saveCandidateSlotChoiceBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1430점 / 선택 전 저장 잠김 / 저장 포기는 후보 소모 / 다시 포기: 후보 소모 / 포기 취소 저장 / 포기 확정 / 저장: 좌·중·우 선택 후 저장 / 저장: 포기 취소 후 선택 슬롯 저장 / 콤9");
+            Require(
+                saveCandidateSlotChoiceBoardLine == "[S] 1430점 / 콤9",
+                "The record board compactor must strip slot-choice and save-abandon guidance from playable record rows.");
+            string testSaveCandidateNoticeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "추천 슬롯: 2\n신규: 테스트 저장 S2 / S / 집중형·안정 / 1520점 / 92.0m\n교체 전: 품질 1200 / 차이: 품질 +180");
+            Require(
+                testSaveCandidateNoticeBoardLine == "기록 없음",
+                "The record board compactor must drop test save-candidate slot notices even when they contain score-like numbers.");
+            string refillCandidateNoticeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1520점 / 보충 테스트 후보를 만들었습니다. / 저장 후 무한모드 재개를 확인하세요. / 콤10");
+            Require(
+                refillCandidateNoticeBoardLine == "[S] 1520점 / 콤10",
+                "The record board compactor must strip refill-candidate helper notices from playable score rows.");
             string settlementStopSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1190점 / 힌트: 정산 종료 기록 / 실제 생존 흐름은 다음 무한 런에서 확인 / 복기: 정산 종료 -> 실제 플레이로 무한 종료 기록 확인 / 콤8");
@@ -5984,12 +15845,36 @@ namespace GreedLast.Editor
             Require(
                 saveCandidateComparisonBoardLine == "기록 없음",
                 "The record board compactor must strip candidate/current quality comparison rows instead of keeping their score-like numbers.");
+            string bestSlotSummaryBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최고 슬롯: 1 / 품질 2277 / S / 집중형·안정 / 집중 x2 / 1740점 / 82.1m / 2/2 · 2회 남음");
+            Require(
+                bestSlotSummaryBoardLine == "기록 없음",
+                "The record board compactor must strip best-slot management summaries even when they contain score and distance.");
+            string currentSlotSummaryBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "현재: 집중 축 S1 / S / 집중형·안정 / 1740점 / 82.1m / 품질: 품질 2277 / 조합 시작 감각 + 집중 x2");
+            Require(
+                currentSlotSummaryBoardLine == "기록 없음",
+                "The record board compactor must strip current-slot management summaries even when they contain score and distance.");
+            string saveSlotSummaryPrefixedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "요약: 집중 축 S1 / S / 집중형·안정 / 1740점 / 82.1m / 2/2 · 2회 남음");
+            Require(
+                saveSlotSummaryPrefixedBoardLine == "기록 없음",
+                "The record board compactor must strip save-slot summary rows with score-like numbers.");
             string devShortcutSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 888점 / F1 무적 / F2 기프트·F3 유물·F4 핵·F5 탈출 / F6 집중 / F7 목표·F8 경로·F9 동작 / PgUp·PgDn·End / 콤6");
+                "[S] 888점 / F1 무적 / F2 기프트·F3 유물·F4 핵·F5 탈출 / F6 집중 / F7 목표·F8 경로·F9 동작 / F10 낙하 보기 / PgUp·PgDn·End / 콤6");
             Require(
                 devShortcutSanitizedBoardLine == "[S] 888점 / 콤6",
                 "The record board compactor must strip long-playtest shortcut fragments.");
+            string reviewTargetShortcutSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 910점 / 목표 정산 / 목표 구간 / 목표 보정 / 콤5");
+            Require(
+                reviewTargetShortcutSanitizedBoardLine == "[A] 910점 / 콤5",
+                "The record board compactor must strip F7 review-target shortcut labels from score rows.");
             string threatReadSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1280점 / 목표: 위협 3 진입 / 현재 2 / 폭·보상 확인 / 다음: 저장 조합으로 무한모드 기록 갱신 / 콤5");
@@ -6020,12 +15905,120 @@ namespace GreedLast.Editor
             Require(
                 statusSanitizedBoardLine == "[B] 640점 / 콤3",
                 "The record board compactor must strip status, judgement, focus, and use-flow fragments.");
+            string runOnlyRelicSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1330점 / 유물: 황금 박동 / 이번 런 전용 / 시작 기프트: 안정 호흡 / 기프트: 집중 축 / 콤9");
+            Require(
+                runOnlyRelicSanitizedBoardLine == "[S] 1330점 / 콤9",
+                "The record board compactor must strip one-run relic and gift result explanations from score rows.");
+            string scoreOnlyProfileBaselineBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1440점 / 콤10");
+            Require(
+                scoreOnlyProfileBaselineBoardLine == "[S] 1440점 / 콤10",
+                "The record board compactor must keep a bare score and combo row. Actual: " + scoreOnlyProfileBaselineBoardLine);
+            string profileSingleFragmentSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1440점 / 성향: 집중형·안정 / 콤10");
+            Require(
+                profileSingleFragmentSanitizedBoardLine == "[S] 1440점 / 콤10",
+                "The record board compactor must strip a single loadout-profile fragment from score rows. Actual: " + profileSingleFragmentSanitizedBoardLine);
+            string loadoutProfileSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1440점 / 성향: 집중형·안정 / 조합 성향: 정박+집중 / 기프트 누적: 집중 x2 / 기록 기준 1740점 82.1m / 구성: 안정 호흡 + 집중 축 / 현재 구성: 집중 축 S1 / 콤10");
+            Require(
+                loadoutProfileSanitizedBoardLine == "[S] 1440점 / 콤10",
+                "The record board compactor must strip loadout-profile result explanations from score rows. Actual: " + loadoutProfileSanitizedBoardLine);
+            string loadoutProfileOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "성향: 집중형·안정 / 조합 성향: 정박+집중 / 기프트 누적: 집중 x2 / 기록 기준 1740점 82.1m / 구성: 안정 호흡 + 집중 축 / 콤10");
+            Require(
+                loadoutProfileOnlyBoardLine == "기록 없음",
+                "Loadout-profile result explanations plus a leftover combo must not become a record-board row. Actual: " + loadoutProfileOnlyBoardLine);
+            string loadoutProfileRankingBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "1위  [S] 1770점 / 91.5m / 조합 성향: 정박+집중 / 기프트 누적: 집중 x2 / 콤12");
+            Require(
+                loadoutProfileRankingBoardLine == "1위  [S] 1770점 / 91.5m / 콤12",
+                "The record board compactor must keep ranked score rows while stripping loadout-profile fragments. Actual: " + loadoutProfileRankingBoardLine);
+            string saveManagementPrefixedScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "요약: [S] 1440점 / 82.1m / 품질 2200 / 조합 안정+집중 / 콤10");
+            Require(
+                saveManagementPrefixedScoreBoardLine == "기록 없음",
+                "A save-management summary prefix must still discard score-like slot rows. Actual: " + saveManagementPrefixedScoreBoardLine);
+            string bestSlotPrefixedScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최고 슬롯: [S] 1440점 / 82.1m / 품질 2200 / 조합 안정+집중 / 콤10");
+            Require(
+                bestSlotPrefixedScoreBoardLine == "기록 없음",
+                "A best-slot management prefix must still discard score-like slot rows. Actual: " + bestSlotPrefixedScoreBoardLine);
             string autoFlowSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[A] 770점 / 자동 진행 / 자동 정지 / 자동 비움 / GO 뒤 자동 진행 복구 / 콤4");
             Require(
                 autoFlowSanitizedBoardLine == "[A] 770점 / 콤4",
                 "The record board compactor must strip standalone auto-flow and auto-clear status fragments.");
+            string runtimeHudSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1010점 / run HUD responsive font / responsive detail panels / master sfx volume / mobile haptic duration clamp / countdown beat schedule / pause soft-blur staging / ESC/P 재개 버튼 / 콤6");
+            Require(
+                runtimeHudSanitizedBoardLine == "[S] 1010점 / 콤6",
+                "The record board compactor must strip HUD, sensory, countdown, and pause readability check fragments from score rows.");
+            string mixedCaseRuntimeHudSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1020점 / Run Hud Responsive Font / Master SFX Volume / Mobile Haptic Duration Clamp / Beat Cue Threshold / Soft Blur Staging / 콤7");
+            Require(
+                mixedCaseRuntimeHudSanitizedBoardLine == "[S] 1020점 / 콤7",
+                "The record board compactor must strip mixed-case English HUD, SFX, haptic, beat-cue, and blur fragments.");
+            string visualEffectSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 990점 / 위험 비네트 / 목표 레인 glow / 레인 glow 박자 / 중앙 액션 큐 / 판정 피드백 오프셋 / 입력 파동 판정 / 터치 강조 / 오입력 경고 / 붉은 경고 / 정답 레인 홀드 경고 / 콤보 배지 보상 / Good 판정 밴드 / 판정선 세 칸 burst / 경고 레일 / 위험 레일 / 콤5");
+            Require(
+                visualEffectSanitizedBoardLine == "[A] 990점 / 콤5",
+                "The record board compactor must strip visual-effect verification fragments from playable score rows.");
+            string horizonVisualSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1012점 / 전방 수평선 / 수평선 lock / 기울임 수평선 / tilt horizon lock / horizon lock / phone tilt lock / 콤8");
+            Require(
+                horizonVisualSanitizedBoardLine == "[S] 1012점 / 콤8",
+                "The record board compactor must strip tilt-horizon verification fragments from playable score rows.");
+            string horizonVisualOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "전방 수평선 / 기울임 수평선 / horizon lock / 콤8");
+            Require(
+                horizonVisualOnlyBoardLine == "기록 없음",
+                "Tilt-horizon verification fragments plus a leftover combo must not become a fake record row.");
+            string neutralGateSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1014점 / 중립 복귀 게이트 / 중립 게이트 / tilt release gate / neutral gate / 콤8");
+            Require(
+                neutralGateSanitizedBoardLine == "[S] 1014점 / 콤8",
+                "The record board compactor must strip tilt-neutral-gate verification fragments from playable score rows.");
+            string neutralGateOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "중립 복귀 게이트 / release gate / neutral gate / 콤8");
+            Require(
+                neutralGateOnlyBoardLine == "기록 없음",
+                "Tilt-neutral-gate verification fragments plus a leftover combo must not become a fake record row.");
+            string mixedCaseVisualEffectSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 995점 / Target Lane Glow / Lane Input Ripple / Timing-Pip Beat-Cue / DownBeat Gold Pulse / Motion Trail / Reward Flash / Warning Rail / Warning Bracket / 콤5");
+            Require(
+                mixedCaseVisualEffectSanitizedBoardLine == "[A] 995점 / 콤5",
+                "The record board compactor must strip mixed-case English visual-effect fragments from playable score rows.");
+            string sectionPrepSanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1180점 / 시작 정비 1/2 / 기프트 선택 / 시작 정비 2/2 / 유물 선택 / 핵 직후 / 탈출 직전 / 콤5");
+            Require(
+                sectionPrepSanitizedBoardLine == "[S] 1180점 / 콤5",
+                "The record board compactor must strip start-prep and section-jump fragments from playable score rows.");
+            string saveUseOnlySanitizedBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "S1 2/2 2회 / 2/2 · 2회 남음 / 마지막 1회 (1/2) / 1/2 마지막 / 시작 후 비움 / 사용 완료 / 콤4");
+            Require(
+                saveUseOnlySanitizedBoardLine == "기록 없음",
+                "Save-use labels and a leftover combo alone must not become a record-board row.");
             string saveDraftSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "관리 모드 / 저장 후보 없음\n슬롯\n> 슬롯 1: 집중 축 S1 / S / 정박+집중 / 1107점 / 2/2 · 2회 남음\n선택: 슬롯 1 / 상태: 2/2 · 2회 남음\n작업: 상세 보기 / 이름 변경 / 삭제\n다음: 상세 보기");
@@ -6038,6 +16031,42 @@ namespace GreedLast.Editor
             Require(
                 emptySanitizedBoardLine == "기록 없음",
                 "A record-board line made only of coaching fragments must collapse to an empty record.");
+            string comboOnlyAfterCoachingBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "저장 후보 저장 / 다음: 저장 조합 확인 / 콤9");
+            Require(
+                comboOnlyAfterCoachingBoardLine == "기록 없음",
+                "A record-board line must not survive when coaching is stripped and only a combo metric remains.");
+            string comboOnlyAfterAutoFlowBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "자동 진행 / 자동 정지 / 콤4");
+            Require(
+                comboOnlyAfterAutoFlowBoardLine == "기록 없음",
+                "Auto-flow guidance with only a leftover combo count must not become a fake record.");
+            string missOnlyAfterCoachingBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "복기 약점 숙이기 실수 1회 / 다음: 약점 반복 / 실1");
+            Require(
+                missOnlyAfterCoachingBoardLine == "기록 없음",
+                "A leftover miss-count alone must not survive as a record-board row.");
+            string threatOnlyAfterCoachingBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "다음 확인: 무한 위협 / 폭·보상 읽기 / 위협 4");
+            Require(
+                threatOnlyAfterCoachingBoardLine == "기록 없음",
+                "A leftover threat number alone must not survive as a record-board row.");
+            string scoreAndComboBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 770점 / 자동 진행 / 콤4");
+            Require(
+                scoreAndComboBoardLine == "[A] 770점 / 콤4",
+                "A real score row must still keep its score and combo after guidance fragments are stripped.");
+            string emptyLabelWithFakeMetricBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록 없음 / 콤0 / 다음: 일반 런 시작");
+            Require(
+                emptyLabelWithFakeMetricBoardLine == "기록 없음",
+                "An empty record label must not become a fake combo record when extra placeholder metrics are appended.");
             string nonMetricBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "추천 루트 안정 / 최고 대비 유지 / 검증 순서 확인 / 체감 목표 유지");
@@ -6050,6 +16079,24 @@ namespace GreedLast.Editor
             Require(
                 looseNumberBoardLine == "기록 없음",
                 "Record-board compaction must require record units, not just arbitrary checklist or settings numbers.");
+            string englishScoreInstructionOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "score: 1500점 / distance: 88.0m / combo: 12 / target score 1800점");
+            Require(
+                englishScoreInstructionOnlyBoardLine == "기록 없음",
+                "English score/distance/combo summary labels without a grade marker must not become fake record rows.");
+            string distanceOnlyAfterGuideBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "입장 체크: 위협 폭·보상 / 시작 전 확인 / 105.5m / 콤5");
+            Require(
+                distanceOnlyAfterGuideBoardLine == "기록 없음",
+                "A stray distance plus combo must not survive when all surrounding guidance has been stripped.");
+            string sectionOnlyAfterGuideBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무한: 무한 위협 +/- / 폭·보상 읽기 / 5구간 / 위협 4 / 콤7");
+            Require(
+                sectionOnlyAfterGuideBoardLine == "기록 없음",
+                "A stray section plus secondary metrics must not survive without a score-bearing record row.");
             string settingsInRecordBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1500점 / 보정 100ms / 입력 보정 0ms / 콤12");
@@ -6068,6 +16115,12 @@ namespace GreedLast.Editor
             Require(
                 scoreWithComparisonDeltaBoardLine == "[S] 1500점 / 콤12",
                 "Record-board compaction must strip comparison deltas while preserving the actual score row.");
+            string scoreWithEnglishComparisonDeltaBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / Score +120 / Distance +8.0m / Health +1 / Focus -1 / Accuracy +20%p / 콤12");
+            Require(
+                scoreWithEnglishComparisonDeltaBoardLine == "[S] 1500점 / 콤12",
+                "Record-board compaction must strip English comparison deltas while preserving the actual score row.");
             string scoreWithResourceDeltaBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1500점 / 체력 +1 / 집중 -1 / 콤12");
@@ -6080,18 +16133,390 @@ namespace GreedLast.Editor
             Require(
                 scoreWithRewardDeltaBoardLine == "[S] 1500점 / 콤12",
                 "Record-board compaction must strip live reward-delta coaching from score rows.");
+            string scoreWithPurposePreviewBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 바닥→↑점프 정확 +120→집중 / 상단→↓숙이기 정확 +130→반격 / 측면→↔비틀기 정확 +140→연쇄 / 보정 +30 / 콤12");
+            Require(
+                scoreWithPurposePreviewBoardLine == "[S] 1500점 / 콤12",
+                "Record-board compaction must strip exact-score purpose previews from score rows.");
+            string purposePreviewOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "바닥→↑점프 정확 +120→집중 / 보정 +30 / 콤4");
+            Require(
+                purposePreviewOnlyBoardLine == "기록 없음",
+                "Exact-score purpose previews plus a leftover combo must not become fake record rows.");
+            string rewardPointOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보상 25점 / 추가 보상 80점 / 정박 보상 획득 / 콤4");
+            Require(
+                rewardPointOnlyBoardLine == "기록 없음",
+                "Transient reward-point copy with score units must not survive as a standalone record.");
+            string scoreWithRewardPointCopyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 보상 25점 / 추가 보상 80점 / 정확 보상 목표 / 콤12");
+            Require(
+                scoreWithRewardPointCopyBoardLine == "[S] 1500점 / 콤12",
+                "Record-board compaction must strip transient reward-point copy while preserving the real score row.");
+            string scoreInstructionOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "획득 점수 25점 / 이번 점수 80점 / 목표 점수 800점 / 콤4");
+            Require(
+                scoreInstructionOnlyBoardLine == "기록 없음",
+                "Score-instruction copy plus a leftover combo must not become a fake record row.");
+            string scoreWithInstructionCopyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 획득 점수 25점 / 최종 점수 확인 / 현재 점수 1500점 / 콤12");
+            Require(
+                scoreWithInstructionCopyBoardLine == "[S] 1500점 / 콤12",
+                "Record-board compaction must strip score-instruction copy while preserving the real score row.");
+            string bareAttemptScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "탈출 중단 / C2 1/3 / 910점 / 콤4 / 실1");
+            Require(
+                bareAttemptScoreBoardLine == "탈출 중단 / C2 1/3 / 910점 / 콤4 / 실1",
+                "A real attempt row with a bare score value must remain visible after score-instruction filtering.");
             string buttonNavigationBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "2/4 버튼 / 페이지 이동 / 다음 기록 / 이전 기록 / 체크 7/7");
             Require(
                 buttonNavigationBoardLine == "기록 없음",
                 "Record-board navigation labels with numbers must not survive as record rows.");
+            string recordBoardNavigationScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최고: [S] 1500점 / 기록 저장 완료 / 기록 보드 3/4 무한 요약 / 무한 기록 화면 / 기록 보기 버튼 / 보드: 페이지 이동 / 콤12");
+            Require(
+                recordBoardNavigationScoreLine == "[S] 1500점 / 콤12",
+                "Record-board screen/navigation fragments must be stripped even when appended to a score row with a generic best prefix.");
+            string recordBoardNavigationOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록 보드 3/4 / 무한 기록 화면 / 기록 확인 / 보드: 페이지 이동 / 콤4");
+            Require(
+                recordBoardNavigationOnlyLine == "기록 없음",
+                "Record-board screen/navigation fragments plus a leftover combo must not become a fake record row.");
+            string recordBoardControlOverlayScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1510점 / 조작: 좌 일반 런 / 중 요약 / 우 무한 랭킹 / 다음 기록 / 이전 기록 / 무한 요약 화면 / 콤13");
+            Require(
+                recordBoardControlOverlayScoreLine == "[S] 1510점 / 콤13",
+                "Record-board control overlays must be stripped when they are appended to a score row.");
+            string recordBoardControlOverlayOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "조작: 좌 일반 런 / 중 요약 / 우 무한 랭킹 / 다음 기록 / 이전 기록 / 무한 요약 화면 / 콤13");
+            Require(
+                recordBoardControlOverlayOnlyLine == "기록 없음",
+                "Record-board control overlays plus leftover combo text must not become a fake record row.");
+            string shortRecordBoardNavigationScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1510점 / 다음 / 이전 / 페이지 이동 / 콤13");
+            Require(
+                shortRecordBoardNavigationScoreLine == "[S] 1510점 / 콤13",
+                "Short record-board navigation labels must be stripped when appended to a score row.");
+            string shortRecordBoardNavigationOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "다음 / 이전 / 페이지 이동 / 콤13");
+            Require(
+                shortRecordBoardNavigationOnlyLine == "기록 없음",
+                "Short record-board navigation labels plus a leftover combo must not become a fake record row.");
+            string shortActionButtonLabelsScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1515점 / 로비로 / 저장 / 저장 조합 / 무한 / 무한모드 / 흔적 / 기록 / 성장 보정 / 보충 / 콤13");
+            Require(
+                shortActionButtonLabelsScoreLine == "[S] 1515점 / 콤13",
+                "Short action button labels must be stripped when appended to a score row.");
+            string shortActionButtonLabelsOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "로비로 / 저장 / 무한모드 / 흔적 / 기록 / 성장 / 보충 / 콤13");
+            Require(
+                shortActionButtonLabelsOnlyLine == "기록 없음",
+                "Short action button labels plus a leftover combo must not become a fake record row.");
+            string devShortcutButtonLabelsScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1600점 / 무적 ON / 종료 테스트 / 배율 +20 / 보정 0 / 빠름 +20 / 늦음 -20 / 집중 MAX / 기프트 / 유물 / 핵 직후 / 끝 직전 / 콤14");
+            Require(
+                devShortcutButtonLabelsScoreLine == "[S] 1600점 / 콤14",
+                "Dev shortcut button labels must be stripped when appended to a score row.");
+            string devShortcutButtonLabelsOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무적 OFF / 종료 테스트 / 배율 +20 / 보정 0 / 빠름 +20 / 늦음 -20 / 집중 MAX / 기프트 / 유물 / 핵 직후 / 끝 직전 / 콤5");
+            Require(
+                devShortcutButtonLabelsOnlyLine == "기록 없음",
+                "Dev shortcut button labels plus a leftover combo must not become a fake record row.");
+            string compactDevShortcutButtonLabelsScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1605점 / 무적ON / 무적OFF / 배율+20 / 보정0 / 빠름+20 / 늦음-20 / 집중MAX / 콤15");
+            Require(
+                compactDevShortcutButtonLabelsScoreLine == "[S] 1605점 / 콤15",
+                "Compact dev shortcut button labels without spaces must be stripped when appended to a score row.");
+            string compactDevShortcutButtonLabelsOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무적ON / 무적OFF / 배율+20 / 보정0 / 빠름+20 / 늦음-20 / 집중MAX / 콤5");
+            Require(
+                compactDevShortcutButtonLabelsOnlyLine == "기록 없음",
+                "Compact dev shortcut button labels without spaces plus a leftover combo must not become a fake record row.");
+            string whitespaceDevShortcutButtonLabelsScoreLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1610점 / 무적\tON / 배율\t+20 / 보정\t0 / 빠름\t+20 / 늦음\t-20 / 집중\tMAX / 콤16");
+            Require(
+                whitespaceDevShortcutButtonLabelsScoreLine == "[S] 1610점 / 콤16",
+                "Dev shortcut button labels with tab whitespace must be stripped when appended to a score row.");
+            string whitespaceDevShortcutButtonLabelsOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무적\tOFF / 배율\t+20 / 보정\t0 / 빠름\t+20 / 늦음\t-20 / 집중\tMAX / 콤5");
+            Require(
+                whitespaceDevShortcutButtonLabelsOnlyLine == "기록 없음",
+                "Dev shortcut button labels with tab whitespace plus a leftover combo must not become a fake record row.");
+            string laneOnlyRecordBoardControlLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 1180점 / 좌 일반 런 / 중 요약 / 우 무한 랭킹 / 콤8");
+            Require(
+                laneOnlyRecordBoardControlLine == "[A] 1180점 / 콤8",
+                "Lane-prefixed record-board control fragments must be stripped even without a leading control label.");
+            string genericRecordPrefixBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최근: [A] 900점 / 기록 저장 완료 / 일반 기록 화면 / 콤5");
+            Require(
+                genericRecordPrefixBoardLine == "[A] 900점 / 콤5",
+                "Generic recent/best record prefixes must be stripped before compacting record rows.");
+            string colonlessBestRecordPrefixBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "일반 최고 [S] 1540점 / 기록 저장 완료 / 기록 보드 1/4 / 콤12");
+            Require(
+                colonlessBestRecordPrefixBoardLine == "[S] 1540점 / 콤12",
+                "Colonless best-record prefixes must be stripped when they are followed by a playable score marker.");
+            string colonlessRecentInfinitePrefixBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "최근 무한 [A] 1320점 / 4구간 / 위협 5 / 무한 기록 화면 / 콤7");
+            Require(
+                colonlessRecentInfinitePrefixBoardLine == "[A] 1320점 / 4구간 / 위협 5 / 콤7",
+                "Colonless recent-infinite prefixes must keep the score row while dropping board navigation text.");
+            string colonlessRankedPrefixBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "랭킹 1위 [S] 1800점 / 5구간 / 기록 보기 버튼 / 콤14");
+            Require(
+                colonlessRankedPrefixBoardLine == "1위 [S] 1800점 / 5구간 / 콤14",
+                "Colonless ranking lead-ins must preserve the rank and score while stripping navigation fragments.");
+            string compactRankedMarkerBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무한 최고 1위[S] 1820점 / 5구간 / 콤15");
+            Require(
+                compactRankedMarkerBoardLine == "1위[S] 1820점 / 5구간 / 콤15",
+                "Ranked score markers must be recognized even when the rank and grade touch without a space.");
+            string colonlessRecordPrefixOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "일반 최고 기록 보드 1/4 / 기록 보기 버튼 / 콤4");
+            Require(
+                colonlessRecordPrefixOnlyBoardLine == "기록 없음",
+                "Colonless record prefixes without an actual score marker must not turn navigation text into a fake record.");
+            string markdownListRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "- [S] 1410점 / 기록 보드 1/4 / 콤9");
+            Require(
+                markdownListRecordBoardLine == "[S] 1410점 / 콤9",
+                "Markdown bullet prefixes must be stripped from playable record rows.");
+            string markdownCheckboxRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "- [ ] [S] 1425점 / 기록 보기 버튼 / 콤10");
+            Require(
+                markdownCheckboxRecordBoardLine == "[S] 1425점 / 콤10",
+                "Markdown checkbox prefixes must be stripped from playable record rows.");
+            string numberedListRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "1. 최근 무한 [A] 1360점 / 4구간 / 무한 기록 화면 / 콤8");
+            Require(
+                numberedListRecordBoardLine == "[A] 1360점 / 4구간 / 콤8",
+                "Numbered-list prefixes must be stripped before record-summary lead-ins are compacted.");
+            string numberedCheckboxRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "2) [x] 최근 기록 [A] 1375점 / 보드: 페이지 이동 / 콤8");
+            Require(
+                numberedCheckboxRecordBoardLine == "[A] 1375점 / 콤8",
+                "Numbered markdown checkbox prefixes must be stripped before compacting record-summary lead-ins.");
+            string symbolListRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "• 랭킹 2위 [S] 1900점 / 5구간 / 기록 보기 버튼 / 콤16");
+            Require(
+                symbolListRecordBoardLine == "2위 [S] 1900점 / 5구간 / 콤16",
+                "Symbol-list prefixes must not prevent compact ranked record rows from being recognized.");
+            string quoteRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "> [기록] [S] 1460점 / 기록 보드 1/4 / 콤11");
+            Require(
+                quoteRecordBoardLine == "[S] 1460점 / 콤11",
+                "Obsidian quote and bracket labels must be stripped from playable record rows.");
+            string calloutRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "> [!NOTE] [S] 1490점 / 기록 보기 버튼 / 콤12");
+            Require(
+                calloutRecordBoardLine == "[S] 1490점 / 콤12",
+                "Obsidian callout labels must be stripped before playable score rows are compacted.");
+            string wikiLinkRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[[최근 기록]] [A] 1210점 / 다음 기록 / 콤7");
+            Require(
+                wikiLinkRecordBoardLine == "[A] 1210점 / 콤7",
+                "Obsidian wiki-link record labels must not appear beside playable score rows.");
+            string markdownLinkRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[최근 기록](obsidian://open?vault=greed) [A] 1260점 / 기록 보드 2/4 / 콤8");
+            Require(
+                markdownLinkRecordBoardLine == "[A] 1260점 / 콤8",
+                "Markdown links used as record labels must be stripped before playable score rows.");
+            string tightMarkdownLinkRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[최근 기록](obsidian://open?vault=greed)[A] 1270점 / 기록 보드 2/4 / 콤8");
+            Require(
+                tightMarkdownLinkRecordBoardLine == "[A] 1270점 / 콤8",
+                "Markdown links must be stripped even when the score marker follows without a space.");
+            string workflowNoteScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 옵시디언 최신화 완료 / GitHub push pending / 체크할 부분: 저장 조합 2회 소진 / 콤12");
+            Require(
+                workflowNoteScoreBoardLine == "[S] 1500점 / 콤12",
+                "Workflow sync/check notes must not appear beside playable score rows.");
+            string workflowNoteOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "옵시디언 최신화 / 깃허브 커밋 / 확인할 부분: 기록 보드 / 콤4");
+            Require(
+                workflowNoteOnlyBoardLine == "기록 없음",
+                "Workflow sync/check notes plus a leftover combo must not become a fake record.");
+            string dayNoteScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 980점 / 오늘 한 것: 저장 조합 소진 라우팅 / 내일 할 것: 그래픽 체크 / 수정 필요: 기록 보드 가독성 / 콤7");
+            Require(
+                dayNoteScoreBoardLine == "[A] 980점 / 콤7",
+                "Daily work notes must be stripped from playable record rows.");
+            string dayNoteOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "오늘한거 정리 / 내일할거 저장 조합 확인 / 확인 목록: 일반 런부터 / 콤5");
+            Require(
+                dayNoteOnlyBoardLine == "기록 없음",
+                "Daily work notes plus a leftover combo must not become a fake record.");
+            string markdownImageRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "![record-shot](attachments/record.png) [S] 1540점 / 기록 보기 버튼 / 콤12");
+            Require(
+                markdownImageRecordBoardLine == "[S] 1540점 / 콤12",
+                "Markdown image embeds must be stripped from record-board score rows.");
+            string angleLinkRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "<obsidian://open?vault=greed> [S] 1660점 / 다음 기록 / 콤13");
+            Require(
+                angleLinkRecordBoardLine == "[S] 1660점 / 콤13",
+                "Autolink-style Obsidian prefixes must be stripped from record-board score rows.");
+            string tightAngleLinkRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "<obsidian://open?vault=greed>[S] 1670점 / 다음 기록 / 콤13");
+            Require(
+                tightAngleLinkRecordBoardLine == "[S] 1670점 / 콤13",
+                "Autolink-style prefixes must be stripped even when the score marker follows without a space.");
+            string headingRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "### (최근 기록) [A] 1180점 / 다음 기록 / 콤7");
+            Require(
+                headingRecordBoardLine == "[A] 1180점 / 콤7",
+                "Markdown heading and parenthesized record labels must not dirty compact record rows.");
+            string boldRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "**[S] 1520점 / 기록 보드 1/4 / 콤13**");
+            Require(
+                boldRecordBoardLine == "[S] 1520점 / 콤13",
+                "Markdown emphasis wrappers must be stripped from playable score rows.");
+            string tableRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "| 최근 무한 | [A] 1365점 | 4구간 | 무한 기록 화면 | 콤8 |");
+            Require(
+                tableRecordBoardLine == "[A] 1365점 / 4구간 / 콤8",
+                "Markdown table cells must compact into only the playable record metrics.");
+            string rankedTableRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "| 랭킹 1위 | [S] 1880점 | 5구간 | 기록 보기 버튼 | 콤15 |");
+            Require(
+                rankedTableRecordBoardLine == "1위 [S] 1880점 / 5구간 / 콤15",
+                "Markdown table rank cells must merge with the score row instead of becoming a separate metric.");
+            string pipeSeparatedRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1420점 | 기록 보기 버튼 | 콤10");
+            Require(
+                pipeSeparatedRecordBoardLine == "[S] 1420점 / 콤10",
+                "Pipe-separated record summaries must be normalized while dropping navigation fragments.");
+            string semicolonSeparatedRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1445점; 기록 확인; 다음 기록; 콤10");
+            Require(
+                semicolonSeparatedRecordBoardLine == "[S] 1445점 / 콤10",
+                "Semicolon-separated record summaries must keep the score row and drop board controls.");
+            string fullWidthSeparatedRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 990점｜기록 보기 버튼｜콤6");
+            Require(
+                fullWidthSeparatedRecordBoardLine == "[A] 990점 / 콤6",
+                "Full-width pipe separators must normalize without leaving navigation fragments.");
+            string hashRankRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "#1 [S] 1910점 / 5구간 / 기록 보기 버튼 / 콤16");
+            Require(
+                hashRankRecordBoardLine == "1위 [S] 1910점 / 5구간 / 콤16",
+                "Hash-style ranking prefixes must normalize into Korean rank score rows.");
+            string noRankRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "No. 2 [A] 1470점 / 4구간 / 다음 기록 / 콤9");
+            Require(
+                noRankRecordBoardLine == "2위 [A] 1470점 / 4구간 / 콤9",
+                "No.-style ranking prefixes must normalize without preserving document-list noise.");
+            string dotSeparatedRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 970점 · 정확→집중·반격·연쇄 · 기록 보드 2/4 · 콤6");
+            Require(
+                dotSeparatedRecordBoardLine == "[A] 970점 / 콤6",
+                "Middle-dot separated prototype payoff and board fragments must be stripped from score rows.");
+            string dotSeparatedAuxiliaryOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "정확→집중·반격·연쇄 · 콤6 · 위협 4");
+            Require(
+                dotSeparatedAuxiliaryOnlyBoardLine == "기록 없음",
+                "Middle-dot separated coaching and auxiliary metrics without a score must not become a fake record.");
+            string separatedBeatCountBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 880점 · 위험→동작·탭·1박·보상 · 2박전 · 콤5");
+            Require(
+                separatedBeatCountBoardLine == "[A] 880점 / 콤5",
+                "Separated beat-count cue fragments must not survive beside playable score rows.");
+            string separatedJudgementSummaryBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1430점 · 정확 2 · 보정 1 · 실수 0 · Good 1 · Miss 0 · 콤11");
+            Require(
+                separatedJudgementSummaryBoardLine == "[S] 1430점 / 콤11",
+                "Separated judgement-count summaries must not survive as record metrics beside the score row.");
+            string namedRecordBoardPrefixLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "무한 기록: [S] 1660점 / 3구간 / 기록 보드 2/4 / 무한 기록 화면 / 콤10");
+            Require(
+                namedRecordBoardPrefixLine == "[S] 1660점 / 3구간 / 콤10",
+                "Named record-board prefixes must be stripped without dropping the playable score row.");
             string prototypeOnlyBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "체크 7/7 / 루프 4/4 / 다음 확인: 보충 후 무한 재진입 / 실행: 무한 조합 보충 / Enter/강조: 무한 조합 보충");
             Require(
                 prototypeOnlyBoardLine == "기록 없음",
                 "Prototype checklist-only lines must not survive as record rows.");
+            string prototypePurposeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 확인 목적: 마지막 사용 후 자동 비움 / 확인 목적: 코칭 없는 순수 기록 확인 / 콤12");
+            Require(
+                prototypePurposeBoardLine == "[S] 1500점 / 콤12",
+                "Prototype next-check purpose fragments must not survive inside playable record rows.");
+            string prototypeProgressPipBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 진행칸: 체크 [#######] / 루프 [####] / 루프 상태: 루프 완료 / 보충 필요 / 콤12");
+            Require(
+                prototypeProgressPipBoardLine == "[S] 1500점 / 콤12",
+                "Prototype progress-pip and loop-state fragments must not survive inside playable record rows.");
+            string prototypeSplitLoopStateOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "루프 상태: 루프 완료 / 보충 필요 / 남은: 보충 재진입 / 다음 확인: 보충 후 무한 재진입");
+            Require(
+                prototypeSplitLoopStateOnlyBoardLine == "기록 없음",
+                "A split loop-state checklist line must not leave a refill-needed fragment as a fake record.");
             string profileSummaryBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "성과 요약\n일반 2회  클리어 1 / 실패 1 / 중단 0\n클리어율 50%  무한 기록 1회 / 루프 4/4");
@@ -6106,28 +16531,172 @@ namespace GreedLast.Editor
                 "The record board compactor must strip prototype completion-loop checklist fragments.");
             string prototypeGoalBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 1500점 / 프로토타입: 기획 체감 검증 / 기획 체감 검증용 / 체감 목표: 피하기 + 정확 타이밍 / 완성 기록 / 콤12");
+                "[S] 1500점 / 프로토타입: 기획 체감 검증 / 기획 체감 검증용 / 체감 목표: 피하기 + 정확 타이밍 / 단계: 기능 체감 우선 / 그래픽 후 시야·속도·질감 재검증 / 완성 기록 / 콤12");
             Require(
                 prototypeGoalBoardLine == "[S] 1500점 / 콤12",
                 "The record board compactor must strip prototype-goal fragments from score rows.");
+            string prototypeScopeScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / " + InvokeMockBackendStaticLabel("BuildPrototypeScopeContractLine") + " / 콤12");
+            Require(
+                prototypeScopeScoreBoardLine == "[S] 1500점 / 콤12",
+                "The shared prototype scope contract must be stripped when it is appended to score rows.");
+            string prototypeScopeOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                InvokeMockBackendStaticLabel("BuildPrototypeScopeContractLine"));
+            Require(
+                prototypeScopeOnlyBoardLine == "기록 없음",
+                "The shared prototype scope contract must never appear as a standalone record-board row.");
+            string prototypeLiveFeelBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 체감 일반 바닥→↑점프→정확→집중 / 체감 무한 측면→↔비틀기→정확→연쇄 / 체감 보충 상단→↓숙이기→정확 / 체감 연습 바닥→↑점프→정확→집중 / 콤12");
+            Require(
+                prototypeLiveFeelBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip live prototype-feel status fragments from score rows.");
+            string prototypePayoffChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 정확→집중·반격·연쇄 / 위기→생존·고점·회복 / 콤12");
+            Require(
+                prototypePayoffChecklistBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip prototype payoff-goal checklist fragments from score rows.");
+            string goodMissedPayoffBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 980점 / 정확→집중 미발동 / Good 생존 · 정확 보상 미발동 / 정확 보상 복기 / 정확 보상 전환 확인 / 콤5");
+            Require(
+                goodMissedPayoffBoardLine == "[A] 980점 / 콤5",
+                "The record board compactor must strip Good missed-payoff feedback fragments from score rows.");
+            string prototypePayoffGoalBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 정확→집중 / 정확→반격 / 측면→↔비틀기→정확→연쇄 / 콤12");
+            Require(
+                prototypePayoffGoalBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip detached prototype payoff-goal fragments.");
+            string prototypeConditionalPayoffGoalBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 정확→생존 / 정확→고점 / 바닥→↑점프→정확→회복 / 콤12");
+            Require(
+                prototypeConditionalPayoffGoalBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip conditional survival, focus, and recovery payoff-goal fragments.");
+            string prototypeGoalTagBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 생존 / 고점 / 회복 / 집중 / 반격 / 연쇄 / 정확+120→생존 보정+30 / 정확+120→고점 보정+30 / 정확+120→회복 보정+30 / 콤12");
+            Require(
+                prototypeGoalTagBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip detached prototype payoff tags and active-cue goal payoff fragments.");
+            string prototypeCoachPayoffGoalBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 코칭 정확→집중 / 바닥→↑점프 회피 / 정박 타이밍 / 중앙 집중 +1 / 콤12");
+            Require(
+                prototypeCoachPayoffGoalBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip live coach payoff-goal fragments after the coach line gained a prototype prefix.");
             string prototypeCompletionNoticeBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[S] 1500점 / 프로토타입 완성 루프 확인 / 다음 확인: 완성 루프 기록 확인 / 흔적 완성 NEW / 콤12");
             Require(
                 prototypeCompletionNoticeBoardLine == "[S] 1500점 / 콤12",
                 "The record board compactor must strip completed-loop lobby/profile notice fragments from score rows.");
+            string shortRecordCheckBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1510점 / 다음 확인: 기록 확인 / 다음: 완성 기록 확인 / 기록 확인 / 완성 기록 확인 / 콤12");
+            Require(
+                shortRecordCheckBoardLine == "[S] 1510점 / 콤12",
+                "Short record-check and completion-record fragments must not survive inside playable record rows.");
             string prototypeLoopProgressBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[A] 900점 / 루프 진행 3/4 / 완성 진행: 저장 확정 전 / 콤6");
+                "[A] 900점 / 루프 진행 3/4 / 완성 진행: 저장 전 / 콤6");
             Require(
                 prototypeLoopProgressBoardLine == "[A] 900점 / 콤6",
                 "The record board compactor must strip prototype loop-progress variants.");
+            string escapeGateHudBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1320점 / 탈출 게이트 1/3 / 입구 직전 게이트 2/3 / 입구 탈출 완료 / 탈출 검증 · 입구 직전 게이트 2/3 / 콤7");
+            Require(
+                escapeGateHudBoardLine == "[S] 1320점 / 콤7",
+                "The record board compactor must strip escape-gate HUD and progress-bar fragments from score rows.");
+            string splitPrototypeChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "진행: 체크 7/7 / 루프 4/4\n동작 확인: 위험→동작 / 바닥↑점·상단↓숙·측면↔틀\nEnter: 강조 다음 행동 / GO 첫 함정\n무한: 무한 위협 +/- / 폭·보상 읽기\n저장: 저장 조합 2회 소진 후 자동 비움");
+            Require(
+                splitPrototypeChecklistBoardLine == "기록 없음",
+                "Split prototype checklist lines must not survive as standalone records.");
+            string splitPrototypeScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1550점 / 진행: 체크 7/7 / 동작 확인: 위험→동작 / Enter: 강조 다음 행동 / 무한: 무한 위협 +/- / 저장: 저장 조합 2회 소진 후 자동 비움 / 소진 대기 S1 2/2 2회 / 콤12");
+            Require(
+                splitPrototypeScoreBoardLine == "[S] 1550점 / 콤12",
+                "Split prototype checklist fragments must be stripped from score rows.");
+            string playtestOrderOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "1 일반 런: 첫 탈출 / 위험→동작·박자·보상·상태줄·코치·루트 버튼·탈출 게이트\n"
+                    + "2 저장 조합: 저장됨 / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진\n"
+                    + "3 무한모드: 기록 확인 / 위협·정산·실전 재개\n"
+                    + "4 기록/흔적: 기록 비교 / 기록만: 점수 행 / 거리·구간 보조 / 보조 단독 제외·일시 피드백 제외 / 2/4 버튼");
+            Require(
+                playtestOrderOnlyBoardLine == "기록 없음",
+                "The prototype playtest order must not become a record-board row just because it contains counts and run terms.");
+            string playtestOrderScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1660점 / 1 일반 런: 완료 / 위험→동작·박자·보상·상태줄·코치·루트 버튼·탈출 게이트 / "
+                    + "2 저장 조합: 저장됨 / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진 / "
+                    + "3 무한모드: 기록 확인 / 위협·정산·실전 재개 / "
+                    + "4 기록/흔적: 기록 비교 / 기록만: 점수 행 / 거리·구간 보조 / 보조 단독 제외·일시 피드백 제외 / 태그·흔적·잔상·끊김 숨김 / 콤14");
+            Require(
+                playtestOrderScoreBoardLine == "[S] 1660점 / 콤14",
+                "The prototype playtest order must be stripped when it is appended to a playable score row.");
+            string releasePlaytestActionScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1580점 / 다음 확인: 저장 조합 2회 소진 / 실행: 저장 소모 / 강조 버튼: 무한모드 / 콤13");
+            Require(
+                releasePlaytestActionScoreBoardLine == "[S] 1580점 / 콤13",
+                "Release/mobile playtest action fragments must not survive beside score rows.");
+            string timingWindowGuideBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 935점 / 좌 / 바닥→↑점프 / 준비 0.48s / 곧 정확권 0.12s / 지금 누르기 / 조금 늦음 / 보정권 / 보정권 ±0.20s / 정확권 ±0.09s / 정확 ±0.09s / 콤6");
+            Require(
+                timingWindowGuideBoardLine == "[A] 935점 / 콤6",
+                "Live timing-window guide fragments must not survive beside score rows.");
+            string timingWindowGuideOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "좌 / 바닥→↑점프 / 준비 0.48s / 곧 정확권 0.12s / 지금 누르기 / 보정권 ±0.20s / 콤6");
+            Require(
+                timingWindowGuideOnlyBoardLine == "기록 없음",
+                "Live timing-window guide fragments plus a leftover combo must not become a fake record row.");
+            string releaseHighlightSaveUseOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "강조 버튼: 저장 소모 / 강조 버튼: 보충 런 / 다음 확인: 보충 후 무한 재진입 / 콤4");
+            Require(
+                releaseHighlightSaveUseOnlyBoardLine == "기록 없음",
+                "Release/mobile highlighted save-use or refill-only fragments must not become fake record rows.");
+            string releaseVerificationOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "검증 순서\n조작 체크\n터치 레인 좌·중·우 / 모바일 조작: 중앙/레인 큐 / 개발 테스트키 숨김 / 기록·흔적 체크로 검증\n현재 추천\n강조 버튼: 무한모드\n종료 흐름");
+            Require(
+                releaseVerificationOnlyBoardLine == "기록 없음",
+                "Release/mobile verification-page text must not survive as a standalone record.");
+            string releaseVerificationScoreBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1550점 / 조작 체크 / 터치 레인 좌·중·우 / 모바일 조작: 중앙/레인 큐 / 개발 테스트키 숨김 / 기록·흔적 체크로 검증 / 현재 추천 / 강조 버튼: 무한모드 / 종료 흐름 / 콤12");
+            Require(
+                releaseVerificationScoreBoardLine == "[S] 1550점 / 콤12",
+                "Release/mobile verification-page fragments must be stripped when appended to score rows.");
             string statusLinePrototypeBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "상태줄 보상·3동작 HUD / 동작 ↑ 1/3→↓ / 중앙/레인 큐+상태줄 확인: 위험→동작·키·1박·보상");
+                "상태줄 보상·코치 목표·3동작 HUD / 동작 ↑ 1/3→↓ / 중앙/레인 큐+상태줄·코치 확인: 위험→동작·키·1박·보상");
             Require(
                 statusLinePrototypeBoardLine == "기록 없음",
                 "Status-line and three-action HUD checklist text must not survive as record rows.");
+            string prototypeCoachGoalBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 990점 / 코치 목표 / 정확→집중 / 콤4");
+            Require(
+                prototypeCoachGoalBoardLine == "[A] 990점 / 콤4",
+                "Standalone coach-goal checklist fragments must not survive beside score rows.");
+            string anticipationCueBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1010점 / 예비 자세: 점프 웅크림 / 입력 전 아바타 점프 준비 / 아바타 숙이기 낮아짐 / 콤6");
+            Require(
+                anticipationCueBoardLine == "[S] 1010점 / 콤6",
+                "Runner anticipation cue text must stay out of compact record rows.");
             string infiniteWeaknessBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
                 "[A] 880점 / 무한 약점 바닥→↑점프 실1 / 연습 점프 / 콤5");
@@ -6140,14 +16709,237 @@ namespace GreedLast.Editor
             Require(
                 compressedPracticeBoardLine == "[B] 720점 / 콤3",
                 "The record board compactor must strip compressed practice-step review fragments.");
+            string healthDangerBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 920점 / 체력 위험: Good 이상 생존 / 안정 보정 회복 / 위험 유지 / 콤6");
+            Require(
+                healthDangerBoardLine == "[A] 920점 / 콤6",
+                "The record board compactor must strip low-health survival guidance and dev danger labels.");
+            string activeHealthDangerBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 940점 / 체력 위험: 바닥→↑점프 Good 이상 생존 / 다음 함정 Good 이상 생존 / Good 이상 생존 / 콤7");
+            Require(
+                activeHealthDangerBoardLine == "[A] 940점 / 콤7",
+                "The record board compactor must strip active low-health survival prompts from score rows.");
+            string pauseResumeBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 760점 / 앞 박자 여유 / 카운트 2 / 재개 1.0s / 앱 전환 일시정지 / 콤3");
+            Require(
+                pauseResumeBoardLine == "[A] 760점 / 콤3",
+                "The record board compactor must strip pause/resume buffer fragments from score rows.");
+            string pauseResumeCopyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 777점 / ESC/P 또는 재개를 누르면 카운트와 앞 박자 여유 뒤에 이어집니다. / 재개 버튼을 누르면 카운트와 앞 박자 여유 뒤에 이어집니다. / 콤4");
+            Require(
+                pauseResumeCopyBoardLine == "[A] 777점 / 콤4",
+                "The record board compactor must strip the pause resume-buffer copy from score rows.");
+            string pauseResumeCopyOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "카운트와 앞 박자 여유 뒤에 이어집니다. / 재개 버튼을 누르면 카운트와 앞 박자 여유 뒤에 이어집니다. / 콤4");
+            Require(
+                pauseResumeCopyOnlyBoardLine == "기록 없음",
+                "Pause resume-buffer copy plus a leftover combo must not become a fake record row.");
+            string timingTraceBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 930점 / 빠름 42ms / 빠름 42ms→살짝 늦게 / 다음은 살짝 늦게 / 늦음 35ms / 늦음 35ms→살짝 빠르게 / 다음은 살짝 빠르게 / 2박 전 / 다음 박 / 곧 0.12 · 다음 박 / 대기 0.47 / 정박 / 누르기 / 놓침 / 오입력 / 정확 / Good / Miss / 콤7");
+            Require(
+                timingTraceBoardLine == "[A] 930점 / 콤7",
+                "The record board compactor must strip transient timing-trace, beat-count guide, and judgement-tag fragments from score rows.");
+            string objectiveCorrectionBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 920점 / 생존 우선 / 정답 채널 확인 / 다음 함정 입력 / 다음은 조금 늦게 / 다음은 조금 빠르게 / 콤6");
+            Require(
+                objectiveCorrectionBoardLine == "[A] 920점 / 콤6",
+                "The record board compactor must strip run-objective correction and one-health survival fragments from score rows.");
+            string precisionRewardCoachBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1110점 / 정박 보상까지 2회 / 정박 보상 획득 / 연쇄 보너스 x1까지 2 / 집중 1칸 남음 / 집중 2회 / 집중 상태 3.2s / 콤8");
+            Require(
+                precisionRewardCoachBoardLine == "[S] 1110점 / 콤8",
+                "The record board compactor must strip transient precision, chain, and focus coaching fragments from score rows.");
+            string transientUiNameBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 970점 / 레인 판정 태그 / 레인 판정 펄스 / Miss 흔들림 / 입력 흔적 / 입력 흔적 방향 / 흔적 기울기 / 빠름 흔적 / 늦음 흔적 / 화면 판정 플래시 / 성공 화면 플래시 / 화면 플래시 / 마커 흔들림 / 마커 충격 / 비트 마커 / 다운비트 펄스 / downbeat pulse / 포커스 오라 밴드 / 집중 타이머 다운비트 / 정박 보상칸 다운비트 / 전환 배너 / 전환선 / 판정 히스토리 잔상 / 판정 히스토리 기호 색 / 판정 잔상 / 통과 궤적 / 보정 궤적 / 판정 사운드 / 무한 위협 5칸 피프 / 경로 박자 3칸 지도 / 경로 칸 박자 펄스 / 탈출 게이트 박자 펄스 / 타이밍 눈금 / 타이밍 눈금 박자 / 눈금 박자 펄스 / 눈금 확대 / 전진선 속도감 / 좌우 속도선 / speed streak / 바닥 박자 타일 / 기둥 이동감 / 공간 이동감 / 주자 보폭 / 보폭 속도감 / 터널 깊이감 / 박자공간·주자 / 전진 보상 / Miss 회복 / 비틀거림 회복 / 회복 압박 / 압박 틴트 / 피격 회복 틴트 / 위험 비네트 / 위험 가장자리 edge inset / 분위기 가중치 / 함정 분위기 / 목표 레인 glow / 레인 압박 glow / 레인 glow 박자 / 목표 레인 박자 펄스 / 피프 방향 킥 / 중앙 액션 큐 / 액션 큐 오프셋 / 목표 레인 오프셋 / 판정 피드백 오프셋 / 판정 피드백 방향 / 콤보 배지 보상 / 콤보 배지 펄스 / 콤보 배지 스케일 / 콤보 배지 다운비트 / Good 판정 밴드 / 정확 판정 밴드 / 정확 창 / 성공 창 / 커진 판정선 펄스 / 붉은 끊김 라인 / 연쇄 끊김 라인 / 판정선 세 칸 burst / 콤5");
+            Require(
+                transientUiNameBoardLine == "[A] 970점 / 콤5",
+                "The record board compactor must strip transient UI effect names from score rows.");
+            string downbeatVisualChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1180점 / 4박 첫 박 다운비트 / 다운비트 금색 펄스 / 정답 레인의 좌/중/우 라벨 세로 스케일 / 중앙 판정선 세로 선명도 / 정확권 lock / 세로 lock / 가로 확장보다 세로 스케일 / 목표 레인 glow와 라벨 / 함정 안쪽 동작 기호 / 축이 잠기는 강조 / Good권 비교 / 콤6");
+            Require(
+                downbeatVisualChecklistBoardLine == "[S] 1180점 / 콤6",
+                "The record board compactor must strip Korean downbeat and exact-window visual checklist fragments.");
+            string escapeGateDownbeatChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1210점 / 탈출 게이트 현재 칸 다운비트 / escape gate pip downbeat lift / 게이트 칸 밝기 / 완료 직전 마지막 칸 / 콤6");
+            Require(
+                escapeGateDownbeatChecklistBoardLine == "[S] 1210점 / 콤6",
+                "The record board compactor must strip escape-gate downbeat checklist fragments from score rows.");
+            string runnerTrapVisualChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 970점 / 함정 접근 잔상 선두 잔상 / 뒤쪽 잔상 약함 / 접촉 예고선 / 충돌 예고선 / 피격 예고선 / 압박 그림자 / 함정 그림자 / corridor shadow / trap shadow / 통로 압박 스퀴즈 / 압박 스퀴즈 / trap-pressure squeeze / corridor squeeze / rotation corridor settle / 판정 웨이크 / 충격 웨이크 / 회피 웨이크 / 피격 웨이크 / judgement wake / impact wake / 주자 준비선 / 대응 준비선 / 주자 준비 기호 / 동작 표식 / 발밑 접지 / 접지 피프 / 발자국 피프 / 주자 그림자 접지 / 주자 실루엣 몸 스케일 squash / 함정 글로우와 타격선 / 터널 안쪽 레일 / 배경 이동감 / 콤5");
+            Require(
+                runnerTrapVisualChecklistBoardLine == "[A] 970점 / 콤5",
+                "The record board compactor must strip runner, trap-trail, and scenery visual checklist fragments.");
+            string runnerActionTrailVisualBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 980점 / 주자 잔상 / 주자 뒤 잔상 / 동작 잔상 / 액션 잔상 / 회전 통로 잔상 / 회전 통로 기둥 / 주행 통로 고리 / 통로 고리 / 터널 고리 / 통로 압축 / 측면 벽 / 벽 스트라이프 / 측면 속도감 / 중앙 이음선 / 주행 축 / 전방 페이스 / 페이스 마커 / 전방 초점 / 초점 비콘 / 목표 프레임 / 전방 목표 프레임 / 초점 프레임 / 출구 슬롯 / 도착 슬롯 / 탈출 유도 레일 / 출구 유도 레일 / 출발 게이트 / 시작 게이트 / 런치 게이트 / 기울임 손잡이 / 입구 아치 / 돌문 실루엣 / center seam / run axis / pace marker / forward pace / focus beacon / focus ring / focus frame / target frame / vanishing point / exit slot / goal slot / destination slot / exit approach / escape rail / destination rail / launch gate / start gate / run gate / tilt grip / grip bar / entrance arch / corridor gate / tunnel gate / side wall / wall stripe / 기둥 드리프트 / 기둥 기울기 / 콤5");
+            Require(
+                runnerActionTrailVisualBoardLine == "[A] 980점 / 콤5",
+                "The record board compactor must strip runner-action-trail, corridor-gate, side-wall, center-seam, forward-pace, focus-target, entrance-arch, and rotation-pillar visual checklist fragments.");
+            string runnerActionTrailVisualOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "주자 잔상 / 동작 잔상 / 액션 잔상 / 회전 통로 기둥 / 주행 통로 고리 / 측면 벽 / 바닥 중앙선 / 중앙 대시 / 박자 표식 / 전진 표식 / 전방 중심점 / 목표 프레임 / 도착 슬롯 / 유도 레일 / 시작 게이트 / 회전 손잡이 / 피라미드 아치 / center dash / run tick / run beacon / destination slot / destination rail / start gate / focus ring / temple arch / side stripe / gate ring / grip bar / 기둥 드리프트 / 콤5");
+            Require(
+                runnerActionTrailVisualOnlyBoardLine == "기록 없음",
+                "Runner-action-trail, corridor-gate, side-wall, center-seam, forward-pace, focus-target, entrance-arch, and rotation-pillar checklist fragments plus combo must not become fake record rows.");
+            string graphicsReadabilityChecklistBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1240점 / 그래픽 체크: 시야·속도·질감 재검증 / 가독성 확인 / 레인 잔광 트레일 / 타격 펄스 밝기 / 주자 모션 움직임 / 판정 연출 / 콤7");
+            Require(
+                graphicsReadabilityChecklistBoardLine == "[S] 1240점 / 콤7",
+                "The record board compactor must strip graphics-readability checklist fragments from playable score rows.");
+            string graphicsReadabilityOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "그래픽 체크: 시야·속도·질감 재검증 / 가독성 확인 / 레인 잔광 트레일 / 타격 펄스 밝기 / 주자 모션 움직임 / 판정 연출 / 콤7");
+            Require(
+                graphicsReadabilityOnlyBoardLine == "기록 없음",
+                "Graphics-readability checklist fragments plus a leftover combo must not become fake record rows.");
+            string runnerCoreGaugeVisualBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1260점 / 주자 코어 glow 준비 / 집중 게이지 아래 5칸 타이머 / 체력 게이지 아래 3칸 위험 피프 / 붉은 가장자리 비네트 / 콤8");
+            Require(
+                runnerCoreGaugeVisualBoardLine == "[S] 1260점 / 콤8",
+                "The record board compactor must strip runner-core, focus-gauge, health-warning, and danger-edge visual checklist fragments.");
+            string markerBandVisualBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1270점 / 주행 레인 프리뷰 / 함정 마커 점프·숙이기·비틀기 / 동작 기호 ↑↓↔ / 위험 밴드 억제 / 판정 창 성공권 lock / 중앙 정확선 / 목표 레인 라벨 / 바닥 타일 접지 / 터널 압축 / 기둥 펄스 / 콤9");
+            Require(
+                markerBandVisualBoardLine == "[S] 1270점 / 콤9",
+                "The record board compactor must strip marker, action-symbol, timing-window, lane-label, floor, tunnel, and pillar visual checklist fragments.");
+            string laneNavigationOverlayBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "조작: 좌 일반 런 / 중 요약 / 우 무한 랭킹 / 다음 기록 / 이전 기록 / [S] 1500점 / 80.0m / 콤3");
+            Require(
+                laneNavigationOverlayBoardLine == "[S] 1500점 / 80.0m / 콤3",
+                "The record board compactor must strip lane-prefixed page navigation overlays from playable score rows.");
+            string laneNavigationOverlayOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "좌 일반 런 / 중 요약 / 우 무한 랭킹 / 다음 기록 / 이전 기록");
+            Require(
+                laneNavigationOverlayOnlyBoardLine == "기록 없음",
+                "Lane-prefixed page navigation overlays without a score must not become fake record rows.");
+            string immediateCheckBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1320점 / 바로 체크: 다음 확인: 저장 조합 2회 소진 / 실행: 저장 소모 / 목적: 마지막 사용 후 자동 비움 / 콤8");
+            Require(
+                immediateCheckBoardLine == "[S] 1320점 / 콤8",
+                "The record board compactor must strip compact immediate-check checkpoint, action, and purpose fragments from score rows.");
+            string completedImmediateCheckBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 바로 체크: 다음: 완성 기록 / 실행: 기록 보기 / 목적: 코칭 없는 순수 기록 확인 / 흔적 완성 NEW / 콤12");
+            Require(
+                completedImmediateCheckBoardLine == "[S] 1500점 / 콤12",
+                "The record board compactor must strip compact completion-check and profile-NEW fragments from score rows.");
+            string actionOnlyCompletedRecordBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1510점 / 바로 체크: 실행: 완성 기록 / 강조 버튼: 완성 기록 / 목적: 코칭 없는 순수 기록 확인 / 흔적 완성 NEW / 콤13");
+            Require(
+                actionOnlyCompletedRecordBoardLine == "[S] 1510점 / 콤13",
+                "The record board compactor must strip action-only compact completion-check and profile-NEW fragments from score rows.");
+            string executeOnlyImmediateCheckBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 980점 / 바로 체크: 실행: 성장 / 목적: 성장 보정 적용 확인 / 강조 버튼: 성장 보정 / 콤5");
+            Require(
+                executeOnlyImmediateCheckBoardLine == "[A] 980점 / 콤5",
+                "The record board compactor must strip execute-only compact immediate-check and highlighted-button fragments from score rows.");
+            string saveUseStatusBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1380점 / S1 2/2 2회 / 2/2 · 2회 남음 / 마지막 1회 (1/2) / 1/2 마지막 / 시작 후 비움 / 사용 완료 / 사용 횟수 소진 / 다음 조합 자동 선택 / 직전 1 / 콤4");
+            Require(
+                saveUseStatusBoardLine == "[S] 1380점 / 콤4",
+                "The record board compactor must strip save-loadout use-count, auto-clear, and previous-slot fragments from score rows.");
+            string saveSlotPrefixedUseStatusBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1390점 / S1 마지막 1회 / 안정형 / A / S2 1회 남음 / 균형형 / B / S3 2회 남음 / 집중형 / C / 콤5");
+            Require(
+                saveSlotPrefixedUseStatusBoardLine == "[S] 1390점 / 콤5",
+                "The record board compactor must strip slot-prefixed save-use labels, loadout profiles, and grade-only fragments from score rows.");
+            string saveSlotPrefixedUseStatusOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "S1 마지막 1회 / 안정형 / A / S2 1회 남음 / 생존형·변주 / B / S3 2회 남음 / 고점형 / C / 콤5");
+            Require(
+                saveSlotPrefixedUseStatusOnlyBoardLine == "기록 없음",
+                "Slot-prefixed save-use labels and profile fragments plus a leftover combo must not become a fake record row.");
+            string compositeLoadoutProfileStatusBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 1320점 / 생존형·변주 / 안정형 / 고점형 / 균형형 / B / C / 콤6");
+            Require(
+                compositeLoadoutProfileStatusBoardLine == "[A] 1320점 / 콤6",
+                "Composite loadout-profile and grade-only fragments must be stripped from playable score rows.");
+            string refillStatusBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "보충 완료 - S1 2회 사용 가능 / 새 저장 조합으로 무한모드 재개 가능 / [A] 900점 / 콤3");
+            Require(
+                refillStatusBoardLine == "[A] 900점 / 콤3",
+                "Refill completion and infinite-resume guidance must not survive beside the actual record score.");
+            string emptySaveLoadoutGuidanceBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1500점 / 저장 조합이 비었습니다. / 저장 조합 없음 / 남은 저장 조합 없음 - 무한 버튼에서 보충 런 진입 가능 / 보충 런 버튼: 보충 런 진입 / 콤12");
+            Require(
+                emptySaveLoadoutGuidanceBoardLine == "[S] 1500점 / 콤12",
+                "Empty save-loadout and refill guidance must not survive beside the actual record score. Got: " + emptySaveLoadoutGuidanceBoardLine);
+            string emptySaveLoadoutGuidanceOnlyBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "저장 조합이 비었습니다. / 저장 조합 없음 / 남은 저장 조합 없음 - 무한 버튼에서 보충 런 진입 가능 / 보충 런 버튼: 보충 런 진입 / 콤12");
+            Require(
+                emptySaveLoadoutGuidanceOnlyBoardLine == "기록 없음",
+                "Empty save-loadout guidance plus a leftover combo must not become a fake record row. Got: " + emptySaveLoadoutGuidanceOnlyBoardLine);
+            string emptyAuxiliaryMetricsBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "기록 없음 / 콤0 / 위협 4 / 실1 / 2/4 점검 / 입력 보정 0ms");
+            Require(
+                emptyAuxiliaryMetricsBoardLine == "기록 없음",
+                "Empty-board auxiliary metrics and setup counts must not become fake record rows.");
+            string sensoryFeedbackVisualBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 990점 / 판정 사운드 볼륨 확인 / SFX 믹스 / 오디오 레이턴시 재확인 / 모바일 햅틱 진동 세기 / 카운트다운 사운드 / 콤4");
+            Require(
+                sensoryFeedbackVisualBoardLine == "[A] 990점 / 콤4",
+                "The record board compactor must strip sound, haptic, volume, and vibration checklist fragments from score rows.");
+            string transientEnglishUiNameBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[S] 1040점 / health-danger edge inset / threat-pip directional kick / target-lane pressure glow / target-lane readiness glow / target lane glow beat / target-lane label downbeat lift / target-lane label beat-cue urgency lift / beat-cue audio lift / wrong-lane hold warning / wrong lane hold warning / trap-marker downbeat lift / trap-marker beat-cue urgency lift / trap-danger downbeat lift / trap-action symbol downbeat lift / runner downbeat anticipation / runner beat-cue urgency lift / trap-ghost downbeat lift / scenery pillar downbeat lift / forward-line downbeat lift / forward-line beat-cue urgency lift / floor-tile beat-cue urgency lift / tunnel beat-cue urgency lift / feedback flash eased fade / trap-readiness atmosphere / route cadence readiness pulse / route cadence pip beat / escape gate readiness pulse / escape gate pip beat / active action cue lane offset / judgement feedback lane offset / judgment feedback lane offset / judgement cue volume / timing guide downbeat lift / judgement-line downbeat lift / judgement-line beat-cue urgency lift / active action cue readiness pulse / lane input ripple judgement follow-through / lane input ripple beat-cue lift / lane touch emphasis hierarchy / result-specific lane judgement tag motion / resolved avoidance trail / avoidance trail / precision reward pip downbeat lift / combo badge reward pulse / combo badge downbeat lift / focus timer downbeat urgency / reward flash lift / combo-weighted rhythm break line / timing-band readiness breath / timing-band downbeat breath / timing-pip beat pulse / timing-pip downbeat pulse / timing-pip beat-cue urgency pulse / timing beat pip lift / downbeat timing band / downbeat timing pip / 콤6");
+            Require(
+                transientEnglishUiNameBoardLine == "[S] 1040점 / 콤6",
+                "The record board compactor must strip internal visual-effect labels from score rows.");
+            string expandedEnglishVisualDebugBoardLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "[A] 1010점 / camera shake / VFX burst / danger edge vignette / threat pip kick / runner shadow / trap marker / floor tile scroll / tunnel depth / pillar parallax / forward line speed / action cue offset / wrong lane hold / avoidance trail / combo badge scale / focus timer urgency / timing pip lift / 콤5");
+            Require(
+                expandedEnglishVisualDebugBoardLine == "[A] 1010점 / 콤5",
+                "The record board compactor must strip expanded English visual-debug fragments from playable score rows.");
+            string expandedEnglishVisualDebugOnlyLine = InvokeMockBackendStaticLabel(
+                "CompactRecordBoardLine",
+                "camera shake / VFX burst / danger edge vignette / runner shadow / trap marker / combo badge scale / 콤5");
+            Require(
+                expandedEnglishVisualDebugOnlyLine == "기록 없음",
+                "Expanded English visual-debug fragments plus combo must not become fake record rows.");
         }
 
         private static void VerifyPrototypeChecklist(GreedLastMockBackend backend, params string[] expectedFragments)
         {
             Require(backend.ProfileBoardPages == 4, "The profile board must expose summary, storage, badge, and verification pages.");
             string profileText = backend.BuildProfileBoardText(0);
-            RequireTextLayoutBudget(profileText, 12, 92, "profile prototype checklist");
+            string prototypeScopeContract = InvokeMockBackendStaticLabel("BuildPrototypeScopeContractLine");
+            RequireTextLayoutBudget(profileText, 19, 92, "profile prototype checklist");
             Require(profileText.Contains("프로토타입 체크", StringComparison.Ordinal), "The profile board must expose a prototype checklist.");
+            Require(
+                prototypeScopeContract == "체감 목표: 피하기 + 정확 타이밍 / 구현축: 회피·박자·보상·저장·무한 / 단계: 기능 체감 우선 / 그래픽 후 시야·속도·질감 재검증",
+                "The prototype scope contract must keep the feel goal and graphics-later validation on one shared line.");
+            Require(
+                profileText.Contains(prototypeScopeContract, StringComparison.Ordinal),
+                "The profile checklist must use the shared prototype scope contract line.");
             Require(
                 profileText.Contains("기획 체감 검증", StringComparison.Ordinal),
                 "The profile checklist must state that this build is validating the planned prototype feel.");
@@ -6155,9 +16947,28 @@ namespace GreedLast.Editor
                 profileText.Contains("체감 목표: 피하기 + 정확 타이밍", StringComparison.Ordinal),
                 "The profile checklist must keep the prototype goal visible on the first page.");
             Require(
+                profileText.Contains("구현축: 회피·박자·보상·저장·무한", StringComparison.Ordinal),
+                "The profile checklist must summarize the prototype implementation scope.");
+            Require(
+                profileText.Contains("단계: 기능 체감 우선 / 그래픽 후 시야·속도·질감 재검증", StringComparison.Ordinal),
+                "The profile checklist must separate the current prototype feel pass from later graphics/visibility validation.");
+            Require(
+                profileText.Contains("검증 모드: 에디터 테스트키 ON", StringComparison.Ordinal),
+                "The editor profile checklist must clearly mark dev shortcuts as test-only controls.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeRuntimeModeChecklistText", true) == "검증 모드: 에디터 테스트키 ON"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeRuntimeModeChecklistText", false) == "검증 모드: 모바일/릴리스 테스트키 숨김",
+                "The prototype runtime-mode line must separate editor test shortcuts from release/mobile controls.");
+            Require(
                 profileText.Contains("체크 ", StringComparison.Ordinal)
                     && profileText.Contains("/7", StringComparison.Ordinal),
                 "The profile checklist must expose compact prototype progress counting.");
+            Require(
+                profileText.Contains("진행칸:", StringComparison.Ordinal),
+                "The profile checklist must expose visual progress pips for long playtest passes.");
+            Require(
+                profileText.Contains("남은:", StringComparison.Ordinal),
+                "The profile checklist progress pips must name the remaining prototype-loop step.");
             Require(
                 profileText.Contains("루프 ", StringComparison.Ordinal)
                     && profileText.Contains("/4", StringComparison.Ordinal),
@@ -6169,15 +16980,96 @@ namespace GreedLast.Editor
                 "The profile summary must include the current completion-loop status before the checklist.");
             Require(profileText.Contains("다음 확인:", StringComparison.Ordinal), "The profile checklist must name the next concrete playtest checkpoint.");
             Require(profileText.Contains("실행:", StringComparison.Ordinal), "The profile checklist must name the button or test shortcut that runs the next checkpoint.");
+            Require(profileText.Contains("바로 체크:", StringComparison.Ordinal), "The profile checklist must group the next checkpoint, action, and purpose into one immediate-check line.");
+            Require(profileText.Contains("목적:", StringComparison.Ordinal), "The profile checklist must explain why the current checkpoint matters.");
             Require(profileText.Contains("Enter/강조:", StringComparison.Ordinal), "The profile checklist must name the currently highlighted lobby action.");
             Require(profileText.Contains("중앙/레인 큐", StringComparison.Ordinal), "The profile checklist must expose active action and lane cue status together.");
             Require(profileText.Contains("상태줄", StringComparison.Ordinal), "The profile checklist must expose status-line payoff readability from the first page.");
+            Require(profileText.Contains("상태줄·코치", StringComparison.Ordinal), "The profile checklist must expose status-line and live-coach payoff readability from the first page.");
+            Require(profileText.Contains("박자공간·주자", StringComparison.Ordinal), "The profile checklist must expose beat-space-runner readability from the first page.");
             Require(
                 profileText.Contains("위험→동작·키·1박·보상", StringComparison.Ordinal),
                 "The profile checklist must describe the hazard, active action cue timing, editor key hint, and payoff preview.");
             Require(
-                InvokeMockBackendStaticLabel("BuildPrototypeCueContractText", false) == "위험→동작·탭·1박·보상",
-                "The profile cue contract must switch to mobile tap wording outside dev/editor mode.");
+                InvokeMockBackendStaticLabel("BuildPrototypeCueContractText", true) == "위험→동작·키·1박·보상"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeCueContractText", false) == "위험→동작·탭·1박·보상",
+                "The profile cue contract must switch between editor key and mobile tap wording through the dev-tool policy.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeCueChecklistTextForMode", false, false)
+                    == "중앙/레인 큐+상태줄·코치+박자공간·주자 대기: 첫 함정 위험→동작·탭·1박·보상 / 정확→집중·반격·연쇄 / 위기→생존·고점·회복"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeCueChecklistTextForMode", true, true)
+                        == "중앙/레인 큐+상태줄·코치+박자공간·주자 확인: 위험→동작·키·1박·보상 / 정확→집중·반격·연쇄 / 위기→생존·고점·회복",
+                "The profile cue checklist must swap whole-line editor key and mobile tap contracts without changing progress state.");
+            Require(
+                profileText.Contains("정확→집중·반격·연쇄", StringComparison.Ordinal)
+                    && profileText.Contains("위기→생존·고점·회복", StringComparison.Ordinal),
+                "The profile checklist must keep exact-input and danger-state payoff goals visible.");
+            string[] hiddenReleaseShortcutTokens =
+            {
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "PgUp",
+                "PgDn",
+                "End",
+                "ESC",
+                "A/←",
+                "S/Space",
+                "D/→",
+            };
+            string releasePrototypeInteraction = InvokeMockBackendStaticLabel(
+                "BuildPrototypeInteractionChecklistTextForMode",
+                false,
+                "무한 위협 변화 / 폭·보상 읽기 / 종료 흐름",
+                "소진 대기 S1 2/2 2회 / 2회 소진 후 자동 비움");
+            RequireTextLayoutBudget(releasePrototypeInteraction, 10, 92, "release/mobile prototype interaction checklist");
+            RequireTextOmitsTokens(
+                releasePrototypeInteraction,
+                hiddenReleaseShortcutTokens,
+                "full release/mobile prototype interaction checklist");
+            Require(
+                releasePrototypeInteraction.Contains("터치 레인 좌·중·우", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("모바일 조작", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("개발 테스트키 숨김", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("강조 버튼: 다음 행동", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("정확→집중·반격·연쇄", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("위기→생존·고점·회복", StringComparison.Ordinal)
+                    && releasePrototypeInteraction.Contains("종료 흐름", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("Enter:", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("F1", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("F9", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("PgUp", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("PgDn", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("End", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("A/←", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("S/Space", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("D/→", StringComparison.Ordinal),
+                "The full release/mobile prototype interaction checklist must hide dev shortcuts and editor key names. Actual: "
+                    + releasePrototypeInteraction);
+            string editorPrototypeInteraction = InvokeMockBackendStaticLabel(
+                "BuildPrototypeInteractionChecklistTextForMode",
+                true,
+                "무한 위협 +/- / 폭·보상 읽기 / 정산 종료",
+                "최근 소모 1/2 마지막 / 자동 비움 대기");
+            RequireTextLayoutBudget(editorPrototypeInteraction, 10, 92, "editor/debug prototype interaction checklist");
+            Require(
+                editorPrototypeInteraction.Contains("F1 무적", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("F2 기프트", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("F9 동작", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("F10 낙하 보기", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("PgUp·PgDn·End", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("Enter: 강조 다음 행동", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("정확→집중·반격·연쇄", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("위기→생존·고점·회복", StringComparison.Ordinal)
+                    && editorPrototypeInteraction.Contains("정산 종료", StringComparison.Ordinal),
+                "The editor/debug prototype interaction checklist must keep concrete shortcut names for fast prototype testing.");
             Require(profileText.Contains("위협 폭·보상", StringComparison.Ordinal), "The profile checklist must expose the infinite threat read check.");
             Require(profileText.Contains("감각 보정:", StringComparison.Ordinal), "The profile checklist must expose the current calibration and sensory setting check.");
             Require(
@@ -6201,7 +17093,7 @@ namespace GreedLast.Editor
                     GreedLastRunCore.BuildStoredInputTimingOffsetChecklistText() == "보정: +200ms",
                     "The stored input calibration checklist must clamp overly late calibration values.");
                 string maxCalibratedProfileText = backend.BuildProfileBoardText(0);
-                RequireTextLayoutBudget(maxCalibratedProfileText, 12, 92, "max-calibrated profile prototype checklist");
+                RequireTextLayoutBudget(maxCalibratedProfileText, 19, 92, "max-calibrated profile prototype checklist");
                 Require(
                     maxCalibratedProfileText.Contains("감각 보정:+200ms", StringComparison.Ordinal),
                     "The profile checklist must keep max late calibration visible without breaking layout.");
@@ -6210,7 +17102,7 @@ namespace GreedLast.Editor
                     GreedLastRunCore.BuildStoredInputTimingOffsetChecklistText() == "보정: -200ms",
                     "The stored input calibration checklist must clamp overly early calibration values.");
                 string minCalibratedProfileText = backend.BuildProfileBoardText(0);
-                RequireTextLayoutBudget(minCalibratedProfileText, 12, 92, "min-calibrated profile prototype checklist");
+                RequireTextLayoutBudget(minCalibratedProfileText, 19, 92, "min-calibrated profile prototype checklist");
                 Require(
                     minCalibratedProfileText.Contains("감각 보정:-200ms", StringComparison.Ordinal),
                     "The profile checklist must keep max early calibration visible without breaking layout.");
@@ -6234,16 +17126,27 @@ namespace GreedLast.Editor
                     profileText.Contains(expectedFragments[i], StringComparison.Ordinal),
                     "The profile checklist must include: " + expectedFragments[i]);
             }
+            Require(
+                profileText.Contains("점수 행 기준", StringComparison.Ordinal),
+                "The profile checklist must expose the score-bearing record-row rule.");
+            Require(
+                profileText.Contains("보조 단독 제외", StringComparison.Ordinal),
+                "The profile checklist first page must remind that auxiliary-only metric fragments are not records.");
 
             string verificationText = backend.BuildProfileBoardText(3);
-            RequireTextLayoutBudget(verificationText, 14, 92, "profile prototype verification order");
+            RequireTextLayoutBudget(verificationText, 23, 92, "profile prototype verification order");
+            Require(
+                verificationText.Contains(prototypeScopeContract, StringComparison.Ordinal),
+                "The verification page must use the shared prototype scope contract line.");
             Require(verificationText.Contains("검증 순서", StringComparison.Ordinal), "The profile board must expose a verification-order page.");
+            Require(verificationText.Contains("검증 모드: 에디터 테스트키 ON", StringComparison.Ordinal), "The verification-order page must keep the current shortcut policy visible.");
             Require(verificationText.Contains("Enter/강조:", StringComparison.Ordinal), "The verification page must preserve the highlighted lobby action summary.");
             Require(verificationText.Contains("1 일반 런", StringComparison.Ordinal), "The verification page must start with the normal-run check.");
             Require(verificationText.Contains("위험→동작·박자", StringComparison.Ordinal), "The verification order must start normal-run testing from hazard-action readability.");
             Require(verificationText.Contains("박자·보상", StringComparison.Ordinal), "The verification page must remind the player to check rhythm and score-reward feedback.");
             Require(verificationText.Contains("상태줄", StringComparison.Ordinal), "The verification page must include the bottom status-line reward check.");
             Require(verificationText.Contains("루트 버튼", StringComparison.Ordinal), "The verification page must include the route-button timing/action check.");
+            Require(verificationText.Contains("탈출 게이트", StringComparison.Ordinal), "The verification page must include the escape-gate progress check.");
             Require(verificationText.Contains("2 저장 조합", StringComparison.Ordinal), "The verification page must include the save-loadout check.");
             Require(
                 verificationText.Contains("저장 없이 로비", StringComparison.Ordinal)
@@ -6270,14 +17173,30 @@ namespace GreedLast.Editor
             Require(verificationText.Contains("위협·정산·실전 재개", StringComparison.Ordinal), "The verification page must include the forced-settlement-to-real-run check.");
             Require(verificationText.Contains("4 기록/흔적", StringComparison.Ordinal), "The verification page must finish with records and profile review.");
             Require(verificationText.Contains("기록만", StringComparison.Ordinal), "The verification page must remind the player to check that record boards stay record-only.");
+            Require(
+                verificationText.Contains("점수 행", StringComparison.Ordinal)
+                    && verificationText.Contains("거리·구간 보조", StringComparison.Ordinal),
+                "The verification page must name score-bearing rows as the primary record rule and distance/section as auxiliary values.");
+            Require(verificationText.Contains("보조 단독 제외", StringComparison.Ordinal), "The verification page must remind that auxiliary-only metrics are excluded.");
+            Require(verificationText.Contains("일시 피드백 제외", StringComparison.Ordinal), "The verification page must remind that transient play feedback is excluded from record rows.");
             Require(verificationText.Contains("2/4 버튼", StringComparison.Ordinal), "The verification page must include record/profile page-button navigation.");
             Require(verificationText.Contains("체감 목표", StringComparison.Ordinal), "The verification page must keep the prototype experience goal visible.");
+            Require(verificationText.Contains("구현축: 회피·박자·보상·저장·무한", StringComparison.Ordinal), "The verification page must keep the prototype implementation scope visible.");
+            Require(
+                verificationText.Contains("단계: 기능 체감 우선 / 그래픽 후 시야·속도·질감 재검증", StringComparison.Ordinal),
+                "The verification page must keep the prototype scope and later graphics validation boundary visible.");
             Require(verificationText.Contains("동작 확인", StringComparison.Ordinal), "The verification page must include the jump-slide-twist action shortcut check.");
             Require(verificationText.Contains("위험→동작", StringComparison.Ordinal), "The verification page must bind hazards to avoidance actions.");
             Require(verificationText.Contains("바닥↑점", StringComparison.Ordinal), "The verification page must expose the compact floor-to-jump cue.");
+            Require(
+                verificationText.Contains("정확→집중·반격·연쇄", StringComparison.Ordinal)
+                    && verificationText.Contains("위기→생존·고점·회복", StringComparison.Ordinal),
+                "The verification page must include the exact-input payoff goals and danger-state exceptions.");
             Require(verificationText.Contains("3동작 HUD", StringComparison.Ordinal), "The verification page must include the three-action live-HUD check.");
             Require(verificationText.Contains("상태줄 보상", StringComparison.Ordinal), "The verification page must include active status-line payoff readability.");
+            Require(verificationText.Contains("코치 목표", StringComparison.Ordinal), "The verification page must include live coach payoff-goal readability.");
             Require(verificationText.Contains("최근 흐름", StringComparison.Ordinal), "The verification page must include the recent lane-timing-action flow check.");
+            Require(verificationText.Contains("박자공간·주자", StringComparison.Ordinal), "The verification page must include the beat-space-runner readability check.");
             Require(
                 verificationText.Contains("중앙/레인 큐", StringComparison.Ordinal),
                 "The verification page must remind the player to check active action and lane cues together.");
@@ -6292,17 +17211,110 @@ namespace GreedLast.Editor
             Require(verificationText.Contains("F8 경로", StringComparison.Ordinal), "The verification page must include the route-cycle dev-test shortcut.");
             Require(verificationText.Contains("↑↓↔·↔↓↑·↓↔↑", StringComparison.Ordinal), "The verification page must expose the stable/variation/pressure route response maps.");
             Require(verificationText.Contains("F9 동작", StringComparison.Ordinal), "The verification page must include the avoidance-cycle dev-test shortcut.");
+            Require(verificationText.Contains("F10 낙하 보기", StringComparison.Ordinal), "The verification page must include the dev-only trap-drop visual preview shortcut.");
             Require(verificationText.Contains("F6", StringComparison.Ordinal), "The verification page must include the focus/save dev-test shortcut.");
             Require(verificationText.Contains("PgUp", StringComparison.Ordinal), "The verification page must include the threat-up/save-use dev-test shortcut.");
             Require(verificationText.Contains("PgDn", StringComparison.Ordinal), "The verification page must include the threat-down/candidate dev-test shortcut.");
             Require(
                 verificationText.Contains("End", StringComparison.Ordinal),
                 "The verification page must include the infinite-stop dev-test shortcut.");
+            string releaseShortcutChecklist = InvokeMockBackendStaticLabel("BuildPrototypeInteractionShortcutChecklistText", false);
+            Require(
+                releaseShortcutChecklist.Contains("터치 레인 좌·중·우", StringComparison.Ordinal)
+                    && releaseShortcutChecklist.Contains("개발 테스트키 숨김", StringComparison.Ordinal)
+                    && !releaseShortcutChecklist.Contains("F1", StringComparison.Ordinal)
+                    && !releaseShortcutChecklist.Contains("PgUp", StringComparison.Ordinal)
+                    && !releaseShortcutChecklist.Contains("End", StringComparison.Ordinal),
+                "The release/mobile verification checklist must hide dev shortcut names while preserving touch-lane checks.");
+            RequireTextOmitsTokens(
+                releaseShortcutChecklist,
+                hiddenReleaseShortcutTokens,
+                "release/mobile verification shortcut checklist");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeInteractionShortcutChecklistText", true)
+                    .Contains("F1 무적", StringComparison.Ordinal)
+                    && InvokeMockBackendStaticLabel("BuildPrototypeInteractionShortcutChecklistText", true)
+                        .Contains("F10 낙하 보기", StringComparison.Ordinal)
+                    && InvokeMockBackendStaticLabel("BuildPrototypeInteractionShortcutChecklistText", true)
+                        .Contains("PgUp·PgDn·End", StringComparison.Ordinal),
+                "The editor/debug verification checklist must keep concrete dev shortcut labels.");
+            Require(
+                InvokeMockBackendStaticLabel("BuildPrototypeInfiniteInteractionCheckText", true, true, true) == "무한 위협 +/- / 폭·보상 읽기 / 정산 종료"
+                    && InvokeMockBackendStaticLabel("BuildPrototypeInfiniteInteractionCheckText", false, true, true) == "무한 위협 변화 / 폭·보상 읽기 / 종료 흐름",
+                "The infinite verification line must distinguish editor settlement shortcuts from release end-flow wording.");
+            string releaseNextActionText = InvokeMockBackendStaticLabel(
+                "FormatProfileNextActionTextForMode",
+                "무한모드",
+                "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인",
+                false);
+            string editorNextActionText = InvokeMockBackendStaticLabel(
+                "FormatProfileNextActionTextForMode",
+                "무한모드",
+                "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인",
+                true);
+            Require(
+                releaseNextActionText.StartsWith("강조 버튼: 무한모드", StringComparison.Ordinal)
+                    && !releaseNextActionText.Contains("Enter/강조", StringComparison.Ordinal)
+                    && editorNextActionText.StartsWith("Enter/강조: 무한모드", StringComparison.Ordinal),
+                "Profile next-action summaries must use highlighted-button wording for release/mobile and Enter wording for editor/debug.");
+            string compactPlaytestOrder =
+                "1 일반 런: 첫 탈출 / 위험→동작·박자·보상·상태줄·코치"
+                + "\n2 저장 조합: 저장됨 / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진"
+                + "\n3 무한모드: 저장 조합 시작 / 위협·정산·실전 재개"
+                + "\n4 기록/흔적: 기록 비교 / 기록만: 점수 행 / 거리·구간 보조 / 보조 단독 제외";
+            string releaseVerificationPage = InvokeMockBackendStaticLabel(
+                "BuildPrototypeVerificationPageTextForMode",
+                compactPlaytestOrder,
+                false,
+                "무한 위협 변화 / 폭·보상 읽기 / 종료 흐름",
+                "소진 대기 S1 2/2 2회 / 2회 소진 후 자동 비움",
+                releaseNextActionText);
+            RequireTextLayoutBudget(releaseVerificationPage, 23, 92, "release/mobile prototype verification page");
+            RequireTextOmitsTokens(
+                releaseVerificationPage,
+                hiddenReleaseShortcutTokens,
+                "release/mobile prototype verification page");
+            Require(
+                releaseVerificationPage.Contains("검증 순서", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("검증 모드: 모바일/릴리스 테스트키 숨김", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("조작 체크", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("현재 추천", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("강조 버튼: 무한모드", StringComparison.Ordinal)
+                    && !releaseVerificationPage.Contains("Enter/강조", StringComparison.Ordinal)
+                    && !releaseVerificationPage.Contains("Enter:", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("개발 테스트키 숨김", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("터치 레인 좌·중·우", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("박자공간·주자", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("일시정지 재개목표·배경차단", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("선택·정산 큐 숨김", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("종료 흐름", StringComparison.Ordinal),
+                "The release/mobile verification page must keep page structure, touch controls, and non-dev infinite end-flow wording.");
+            string editorVerificationPage = InvokeMockBackendStaticLabel(
+                "BuildPrototypeVerificationPageTextForMode",
+                compactPlaytestOrder,
+                true,
+                "무한 위협 +/- / 폭·보상 읽기 / 정산 종료",
+                "최근 소모 1/2 마지막 / 자동 비움 대기",
+                editorNextActionText);
+            RequireTextLayoutBudget(editorVerificationPage, 23, 92, "editor/debug prototype verification page");
+            Require(
+                editorVerificationPage.Contains("검증 모드: 에디터 테스트키 ON", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("F1 무적", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("F2 기프트", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("박자공간·주자", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("F9 동작", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("F10 낙하 보기", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("PgUp·PgDn·End", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("Enter/강조: 무한모드", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("정산 종료", StringComparison.Ordinal),
+                "The editor/debug verification page must preserve fast-test shortcuts and settlement wording.");
             Require(verificationText.Contains("Enter: 강조 다음 행동", StringComparison.Ordinal), "The verification page must include the keyboard primary-action check.");
             Require(verificationText.Contains("일시정지", StringComparison.Ordinal), "The verification page must include the pause-and-resume check.");
+            Require(verificationText.Contains("재개목표", StringComparison.Ordinal), "The verification page must include the pause resume-goal check.");
             Require(verificationText.Contains("배경차단", StringComparison.Ordinal), "The verification page must include the pause-backdrop input block check.");
             Require(verificationText.Contains("큐 숨김", StringComparison.Ordinal), "The verification page must include the non-action cue suppression check.");
             Require(verificationText.Contains("선택·정산 큐 숨김", StringComparison.Ordinal), "The verification page must include choice/result cue suppression in the checklist.");
+            Require(verificationText.Contains("태그·흔적·잔상·끊김 숨김", StringComparison.Ordinal), "The verification page must include transient tag, trace, afterimage, and break-line suppression.");
             Require(
                 verificationText.Contains("완성 루프: 일반→저장→무한→기록", StringComparison.Ordinal),
                 "The verification page must expose the prototype completion loop as a single playtest contract.");
@@ -6397,6 +17409,35 @@ namespace GreedLast.Editor
             Require(
                 !exhaustedLegacyBackend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
                 "A pruned exhausted legacy save slot must not be consumable.");
+
+            legacyData.selectedSaveSlotIndex = 0;
+            legacyData.saveLoadoutSlots = new[] { BuildLegacyRunRecord(record), BuildLegacyRunRecord(record) };
+            legacyData.saveLoadoutUsesRemaining = new[] { 0, 2 };
+            legacyData.saveLoadoutRenameSteps = new[] { 0, 0 };
+            PlayerPrefs.SetString(backendSaveKey, JsonUtility.ToJson(legacyData));
+            PlayerPrefs.Save();
+
+            var mixedLegacyBackend = new GreedLastMockBackend();
+            GreedLastLobbySnapshot mixedLegacyLobby = mixedLegacyBackend.LoadLobby();
+            Require(
+                !mixedLegacyLobby.SaveSlotOccupied[0]
+                    && mixedLegacyLobby.SaveSlotOccupied[1]
+                    && mixedLegacyLobby.SaveSlotUsable[1]
+                    && mixedLegacyLobby.SelectedSaveSlotIndex == 1,
+                "A legacy exhausted S1 with a usable S2 must prune S1 and auto-select the remaining S2 loadout on reload.");
+            Require(
+                mixedLegacyBackend.BuildInfiniteStartReadyBriefText().StartsWith("재시작: S2", StringComparison.Ordinal)
+                    && !mixedLegacyBackend.BuildInfiniteStartReadyText().Contains("보충 런 버튼: 보충 런 진입", StringComparison.Ordinal),
+                "A mixed legacy reload must keep infinite preparation on S2 instead of showing refill guidance.");
+            Require(
+                mixedLegacyBackend.TryConsumeSelectedSaveLoadout(
+                    out GreedLastRunRecord mixedLegacyRecord,
+                    out string mixedLegacyDetail,
+                    out string mixedLegacyError)
+                    && mixedLegacyRecord.IsValid
+                    && string.IsNullOrEmpty(mixedLegacyError)
+                    && mixedLegacyDetail.Contains("슬롯 2 조합으로 진입", StringComparison.Ordinal),
+                "A mixed legacy reload must consume the remaining S2 loadout for the next infinite entry.");
         }
 
         private static LegacyRunRecordData BuildLegacyRunRecord(GreedLastRunRecord record)
@@ -6571,6 +17612,69 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void RequireTextOmitsTokens(string text, string[] hiddenTokens, string context)
+        {
+            for (int i = 0; i < hiddenTokens.Length; i += 1)
+            {
+                Require(
+                    !text.Contains(hiddenTokens[i], StringComparison.Ordinal),
+                    context + " must not leak dev shortcut token " + hiddenTokens[i] + ". Actual: " + text);
+            }
+        }
+
+        private static void RequireRecordBoardPrimaryMetricRows(string text, string context)
+        {
+            string[] lines = (text ?? string.Empty).Replace("\r", string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i += 1)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line) || line == "기록 없음")
+                {
+                    continue;
+                }
+
+                Require(
+                    HasPrimaryRecordMetricForBoard(line),
+                    context + " line " + (i + 1)
+                        + " must contain a score before keeping distance, section, or auxiliary metrics: " + line);
+            }
+        }
+
+        private static bool HasPrimaryRecordMetricForBoard(string line)
+        {
+            return ContainsDigitBeforeMetricMarkerForBoard(line, "점");
+        }
+
+        private static bool ContainsDigitBeforeMetricMarkerForBoard(string line, string marker)
+        {
+            int startIndex = 0;
+            while (startIndex < line.Length)
+            {
+                int markerIndex = line.IndexOf(marker, startIndex, StringComparison.Ordinal);
+                if (markerIndex < 0)
+                {
+                    return false;
+                }
+
+                if (marker == "m"
+                    && markerIndex + 1 < line.Length
+                    && char.ToLowerInvariant(line[markerIndex + 1]) == 's')
+                {
+                    startIndex = markerIndex + marker.Length;
+                    continue;
+                }
+
+                if (markerIndex > 0 && char.IsDigit(line[markerIndex - 1]))
+                {
+                    return true;
+                }
+
+                startIndex = markerIndex + marker.Length;
+            }
+
+            return false;
+        }
+
         [Serializable]
         private sealed class LegacyBackendSaveData
         {
@@ -6613,6 +17717,25 @@ namespace GreedLast.Editor
             {
                 throw new InvalidOperationException("Greed Last prototype smoke check failed: " + message);
             }
+        }
+
+        private static int CountOccupiedSaveSlots(GreedLastLobbySnapshot snapshot)
+        {
+            if (snapshot.SaveSlotOccupied == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < snapshot.SaveSlotOccupied.Length; i += 1)
+            {
+                if (snapshot.SaveSlotOccupied[i])
+                {
+                    count += 1;
+                }
+            }
+
+            return count;
         }
     }
 }

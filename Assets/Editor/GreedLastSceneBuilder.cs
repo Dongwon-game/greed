@@ -8,6 +8,7 @@ namespace GreedLast.Editor
     public static class GreedLastSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/GreedLast_Boot.unity";
+        private const string ResetProgressMenuPath = "Greed Last/Reset Prototype Progress (Keep Settings)";
 
         [MenuItem("Greed Last/Rebuild Boot Scene")]
         public static void Build()
@@ -29,6 +30,33 @@ namespace GreedLast.Editor
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("Greed Last boot scene rebuilt: " + ScenePath);
+        }
+
+        [MenuItem(ResetProgressMenuPath)]
+        public static void ResetPrototypeProgress()
+        {
+            bool confirmed = EditorUtility.DisplayDialog(
+                "Greed Last 진행도 초기화",
+                "일반 런, 저장 조합, 무한 기록, 성장과 첫 연습 완료 상태를 지웁니다.\n\n소리, 진동, 기울임 설정은 유지됩니다.",
+                "진행도 초기화",
+                "취소");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            GreedLastApp.ResetPrototypeProgressForEditor();
+            Debug.Log("Greed Last prototype progress reset. Sensory and input settings were preserved.");
+            EditorUtility.DisplayDialog(
+                "초기화 완료",
+                "다음 재생은 GREED LAST 타이틀과 기초 연습부터 시작합니다.",
+                "확인");
+        }
+
+        [MenuItem(ResetProgressMenuPath, true)]
+        private static bool ValidateResetPrototypeProgress()
+        {
+            return !EditorApplication.isPlayingOrWillChangePlaymode;
         }
     }
 }

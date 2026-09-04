@@ -65,6 +65,7 @@ namespace GreedLast
         ReviewTargetCheck = 4,
         RouteCycle = 5,
         AvoidanceCycle = 6,
+        VisualDropPreview = 7,
     }
 
     public enum GreedLastRunAttemptOutcome
@@ -390,6 +391,7 @@ namespace GreedLast
     {
         public GreedLastRunSnapshot(
             GreedLastPatternModel pattern,
+            GreedLastPatternModel lastJudgedPattern,
             string judgementText,
             string ignoreReason,
             string missReason,
@@ -489,6 +491,7 @@ namespace GreedLast
             string timingProfile)
         {
             Pattern = pattern;
+            LastJudgedPattern = lastJudgedPattern;
             JudgementText = judgementText ?? string.Empty;
             IgnoreReason = ignoreReason ?? string.Empty;
             MissReason = missReason ?? string.Empty;
@@ -589,6 +592,7 @@ namespace GreedLast
         }
 
         public GreedLastPatternModel Pattern { get; }
+        public GreedLastPatternModel LastJudgedPattern { get; }
         public string JudgementText { get; }
         public string IgnoreReason { get; }
         public string MissReason { get; }
@@ -747,6 +751,8 @@ namespace GreedLast
             new GreedLastPatternModel("center_gate_clutch", GreedLastRunChannel.Center, GreedLastTimingType.Clutch, "정면 압박문", 0.55f, 1.28f, 0.13f, 0.36f, 1.72f, GreedLastAvoidanceType.Slide),
             new GreedLastPatternModel("right_blade_offbeat", GreedLastRunChannel.Right, GreedLastTimingType.Offbeat, "우측 엇박 칼날", 0.40f, 0.92f, 0.11f, 0.31f, 1.36f, GreedLastAvoidanceType.Twist),
             new GreedLastPatternModel("left_wall_clutch", GreedLastRunChannel.Left, GreedLastTimingType.Clutch, "좌측 회전 벽", 0.50f, 1.18f, 0.12f, 0.34f, 1.58f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("left_rotate_corridor_perfect", GreedLastRunChannel.Left, GreedLastTimingType.Perfect, "좌회전 통로 정렬", 0.46f, 1.05f, 0.10f, 0.30f, 1.48f, GreedLastAvoidanceType.Twist),
+            new GreedLastPatternModel("right_rotate_corridor_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우회전 통로 압박", 0.52f, 1.22f, 0.12f, 0.34f, 1.64f, GreedLastAvoidanceType.Twist),
             new GreedLastPatternModel("center_sand_perfect", GreedLastRunChannel.Center, GreedLastTimingType.Perfect, "중앙 모래 함몰", 0.44f, 1.00f, 0.10f, 0.29f, 1.42f, GreedLastAvoidanceType.Jump),
             new GreedLastPatternModel("right_pillar_clutch", GreedLastRunChannel.Right, GreedLastTimingType.Clutch, "우측 낙하 기둥", 0.58f, 1.34f, 0.13f, 0.37f, 1.78f, GreedLastAvoidanceType.Slide),
             new GreedLastPatternModel("left_falsebeat_offbeat", GreedLastRunChannel.Left, GreedLastTimingType.Offbeat, "좌측 엇박 발판", 0.38f, 0.88f, 0.11f, 0.30f, 1.32f, GreedLastAvoidanceType.Jump),
@@ -779,6 +785,8 @@ namespace GreedLast
         };
 
         private GreedLastPatternModel currentPattern = GreedLastPatternModel.Empty;
+        private GreedLastPatternModel lastJudgedPattern = GreedLastPatternModel.Empty;
+        private GreedLastPatternModel devNextPatternOverride = GreedLastPatternModel.Empty;
         private string lastSelectedPatternId = string.Empty;
         private string previousSelectedPatternId = string.Empty;
         private readonly string[] recentPatternFamilyKeys = new string[RecentPatternMemory];
@@ -1178,11 +1186,11 @@ namespace GreedLast
             switch (Mathf.Clamp(chapterProgress, 0, ChapterTargetPatterns - 1))
             {
                 case 1:
-                    return "복기 시작: 클러치 상단→↓숙이기부터 남은 단계를 확인합니다.";
+                    return "복기 시작: 클러치 상단→↓숙이기부터 남은 단계를 확인합니다. 정확→반격.";
                 case 2:
-                    return "복기 시작: 엇박 측면→↔비틀기 단계를 바로 확인합니다.";
+                    return "복기 시작: 엇박 측면→↔비틀기 단계를 바로 확인합니다. 정확→연쇄.";
                 default:
-                    return "정박 바닥→↑점프 · 클러치 상단→↓숙이기 · 엇박 측면→↔비틀기를 차례로 연습합니다.";
+                    return "정박 바닥→↑점프 정확→집중 · 클러치 상단→↓숙이기 정확→반격 · 엇박 측면→↔비틀기 정확→연쇄를 차례로 연습합니다.";
             }
         }
 
@@ -1194,7 +1202,9 @@ namespace GreedLast
             ResetRunStats();
             RegisterInitialFocusState();
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
             activePattern = false;
+            devNextPatternOverride = GreedLastPatternModel.Empty;
             inputConsumed = false;
             stopped = false;
             paused = false;
@@ -1241,7 +1251,9 @@ namespace GreedLast
             RegisterInitialFocusState();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
             activePattern = false;
+            devNextPatternOverride = GreedLastPatternModel.Empty;
             inputConsumed = false;
             stopped = false;
             paused = false;
@@ -1303,6 +1315,7 @@ namespace GreedLast
         public void Exit()
         {
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
             autoFlow = false;
@@ -1648,7 +1661,7 @@ namespace GreedLast
 
             if (startCountdownActive)
             {
-                PauseAt(now, "시작 카운트 일시정지\n재개를 누르면 카운트 뒤 이어집니다.");
+                PauseAt(now, "시작 카운트 일시정지\n재개를 누르면 2-1-GO 뒤 이어집니다.");
                 return;
             }
 
@@ -1661,20 +1674,34 @@ namespace GreedLast
                 return;
             }
 
-            PauseAt(now, "일시정지 - 재개를 누르면 같은 박자에서 이어집니다.");
+            PauseAt(now, "일시정지 - 재개를 누르면 2-1-GO 뒤 앞 박자 여유를 둡니다.");
         }
 
         public void PauseForAppBackground(float now)
         {
+            if (paused)
+            {
+                if (resumeCountdownActive)
+                {
+                    resumeCountdownActive = false;
+                    judgementText = startCountdownActive
+                        ? "앱 전환으로 재개 카운트가 멈췄습니다.\n재개를 누르면 시작 카운트부터 다시 이어집니다."
+                        : "앱 전환으로 재개 카운트가 멈췄습니다.\n재개를 누르면 2-1-GO 뒤 이어집니다.";
+                    Publish(now);
+                }
+
+                return;
+            }
+
             if (!paused && startCountdownActive)
             {
-                PauseAt(now, "앱 전환으로 시작 카운트가 멈췄습니다.\n재개를 누르면 이어집니다.");
+                PauseAt(now, "앱 전환으로 시작 카운트가 멈췄습니다.\n재개를 누르면 2-1-GO 뒤 이어집니다.");
                 return;
             }
 
             if (!paused && CanPauseNow())
             {
-                PauseAt(now, "앱 전환으로 일시정지되었습니다.\n재개를 누르면 이어집니다.");
+                PauseAt(now, "앱 전환으로 일시정지되었습니다.\n재개를 누르면 2-1-GO 뒤 앞 박자 여유를 둡니다.");
             }
         }
 
@@ -2105,6 +2132,7 @@ namespace GreedLast
 
         private void Resolve(GreedLastJudgementOutcome outcome)
         {
+            lastJudgedPattern = currentPattern;
             activePattern = false;
             ignoreReason = outcome.IgnoreReason;
             missReason = outcome.MissReason;
@@ -2975,6 +3003,25 @@ namespace GreedLast
             Publish();
         }
 
+        public void DropHealthForDangerTest()
+        {
+            if (stopped)
+            {
+                judgementText = "종료 상태에서는 피해 테스트를 적용하지 않습니다.";
+                Publish();
+                return;
+            }
+
+            int healthCap = BuildBonusHealthCap();
+            int previousHealth = health;
+            health = Mathf.Clamp(health - 1, 1, healthCap);
+            string result = health < previousHealth ? "테스트 피해 -1" : "테스트 체력 위험 유지";
+            judgementText = result
+                + " / 체력 " + health + "/" + healthCap
+                + "\n체력 가장자리 위험 비네트와 박자 펄스를 확인합니다.";
+            Publish();
+        }
+
         public void JumpToDevShortcut(GreedLastDevShortcut shortcut, float now)
         {
             if (shortcut == GreedLastDevShortcut.ReviewTargetCheck && infiniteMode)
@@ -2995,10 +3042,21 @@ namespace GreedLast
 
             if (shortcut == GreedLastDevShortcut.AvoidanceCycle)
             {
-                GreedLastAvoidanceType avoidanceType = (GreedLastAvoidanceType)(devAvoidanceCycleIndex % 3 + 1);
-                devAvoidanceCycleIndex = (devAvoidanceCycleIndex + 1) % 3;
+                int cycleIndex = devAvoidanceCycleIndex % 5;
+                devAvoidanceCycleIndex = (devAvoidanceCycleIndex + 1) % 5;
                 PrepareDevJump(now);
-                PrepareAvoidanceTestDevCheck(avoidanceType, now);
+                if (cycleIndex < 3)
+                {
+                    GreedLastAvoidanceType avoidanceType = (GreedLastAvoidanceType)(cycleIndex + 1);
+                    PrepareAvoidanceTestDevCheck(avoidanceType, now);
+                }
+                else
+                {
+                    PrepareRotationCorridorTestDevCheck(
+                        cycleIndex == 3 ? GreedLastRunChannel.Left : GreedLastRunChannel.Right,
+                        now);
+                }
+
                 Publish();
                 return;
             }
@@ -3101,6 +3159,31 @@ namespace GreedLast
                     + "\n카운트 뒤 대표 함정의 궤적·자세·판정 피드백을 확인합니다.");
         }
 
+        private void PrepareRotationCorridorTestDevCheck(GreedLastRunChannel channel, float now)
+        {
+            score = 0;
+            combo = 0;
+            distance = 0f;
+            ResetRunVitals();
+            chapterIndex = 1;
+            chapterProgress = 2;
+            patternIndex = chapterProgress;
+            phase = GreedLastRunPhase.RunPlaying;
+            SeedDevChoice(GreedLastChoiceKind.StartGift, "박자 감각");
+            string patternId = channel == GreedLastRunChannel.Left
+                ? "left_rotate_corridor_perfect"
+                : "right_rotate_corridor_clutch";
+            devNextPatternOverride = FindPatternById(patternId);
+            string direction = channel == GreedLastRunChannel.Left ? "좌회전" : "우회전";
+            string inputHint = channel == GreedLastRunChannel.Left
+                ? "Q / 좌 기울임"
+                : "E / 우 기울임";
+            PrepareStartCountdown(
+                now,
+                "테스트 동작 확인 - " + direction + " 통로"
+                    + "\n카운트 뒤 통로 기울기·주자 무게중심·" + inputHint + "을 확인합니다.");
+        }
+
         private void PrepareReviewTargetDevCheck(float now)
         {
             string target = reviewTargetText ?? string.Empty;
@@ -3157,6 +3240,7 @@ namespace GreedLast
             }
 
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
             stopped = false;
@@ -3345,6 +3429,8 @@ namespace GreedLast
             activeInfiniteLoadoutProfile = string.Empty;
             activeInfiniteLoadoutDisplayProfile = string.Empty;
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
+            devNextPatternOverride = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
             stopped = false;
@@ -3720,6 +3806,7 @@ namespace GreedLast
             RegisterInitialFocusState();
             distance = 0f;
             currentPattern = GreedLastPatternModel.Empty;
+            lastJudgedPattern = GreedLastPatternModel.Empty;
             activePattern = false;
             inputConsumed = false;
             stopped = false;
@@ -4627,7 +4714,10 @@ namespace GreedLast
                     + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
                     + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText)
                     + "\n" + BuildPracticeCompletionReviewText()
-                    + "\n다시 연습하거나 로비에서 일반 런을 시작하세요.";
+                    + "\n"
+                    + (successCount >= ChapterTargetPatterns && goodCount == 0 && missCount == 0
+                        ? "일반 런으로 바로 이어가거나 3축을 다시 확인하세요."
+                        : "다시 연습하거나 연습을 마친 뒤 일반 런을 시작하세요.");
                 ResetCurrentBundlePerformance();
                 return;
             }
@@ -5003,7 +5093,9 @@ namespace GreedLast
             inputConsumed = false;
             ignoreReason = string.Empty;
             missReason = string.Empty;
-            judgementText = "예고를 보고 같은 채널을 누르세요.";
+            judgementText = IsRotationPattern(currentPattern)
+                ? "회전 통로를 보고 Q/E 또는 같은 방향 채널을 누르세요."
+                : "예고를 보고 같은 채널을 누르세요.";
             if (!string.IsNullOrEmpty(recoveryCue))
             {
                 judgementText += "\n" + recoveryCue;
@@ -5020,6 +5112,13 @@ namespace GreedLast
 
         private GreedLastPatternModel SelectPatternFromDeck()
         {
+            if (devNextPatternOverride.IsValid)
+            {
+                GreedLastPatternModel overridePattern = devNextPatternOverride;
+                devNextPatternOverride = GreedLastPatternModel.Empty;
+                return overridePattern;
+            }
+
             int deckIndex = patternIndex;
             if (infiniteMode)
             {
@@ -5040,6 +5139,24 @@ namespace GreedLast
             }
 
             return patternDeck[FindReadablePatternIndex(deckIndex)];
+        }
+
+        private GreedLastPatternModel FindPatternById(string patternId)
+        {
+            if (string.IsNullOrWhiteSpace(patternId))
+            {
+                return GreedLastPatternModel.Empty;
+            }
+
+            for (int i = 0; i < patternDeck.Length; i += 1)
+            {
+                if (string.Equals(patternDeck[i].PatternId, patternId, StringComparison.Ordinal))
+                {
+                    return patternDeck[i];
+                }
+            }
+
+            return GreedLastPatternModel.Empty;
         }
 
         private int ApplyRecoveryPatternBias(int deckIndex)
@@ -5513,6 +5630,27 @@ namespace GreedLast
                 default:
                     return GreedLastAvoidanceType.Twist;
             }
+        }
+
+        public static bool IsRotationPattern(GreedLastPatternModel pattern)
+        {
+            if (!pattern.IsValid)
+            {
+                return false;
+            }
+
+            string patternId = pattern.PatternId ?? string.Empty;
+            if (patternId.IndexOf("rotate", StringComparison.OrdinalIgnoreCase) >= 0
+                || patternId.IndexOf("tilt", StringComparison.OrdinalIgnoreCase) >= 0
+                || patternId.IndexOf("corridor", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            string prompt = pattern.Prompt ?? string.Empty;
+            return prompt.Contains("좌회전", StringComparison.Ordinal)
+                || prompt.Contains("우회전", StringComparison.Ordinal)
+                || prompt.Contains("회전 통로", StringComparison.Ordinal);
         }
 
         private GreedLastTimingType BuildPreferredRouteTiming()
@@ -6364,6 +6502,7 @@ namespace GreedLast
             float staggerRemaining = Mathf.Max(0f, staggerUntil - now);
             SnapshotChanged?.Invoke(new GreedLastRunSnapshot(
                 currentPattern,
+                lastJudgedPattern,
                 judgementText,
                 ignoreReason,
                 missReason,
