@@ -31,6 +31,40 @@ namespace GreedLast.Editor
                         InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.InfiniteRecordBoard)),
                 "Boot, loading, lobby, and record screens must use subtitles that match their visible purpose.");
             Require(
+                InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.BootInit)
+                    && InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.ConnectChecking)
+                    && InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.LobbyReady)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.RunCoreTest)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.SaveLoadoutDraft)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowPrototypeEntranceBackdrop", GreedLastScreenState.InfiniteRecordBoard),
+                "The prototype entrance illustration must stay in title/loading/lobby staging and never compete with run or management screens.");
+            Require(
+                InvokeRuntimeUiFloat("BuildPrototypeEntranceBackdropAlpha", GreedLastScreenState.BootInit)
+                    > InvokeRuntimeUiFloat("BuildPrototypeEntranceBackdropAlpha", GreedLastScreenState.ConnectChecking)
+                    && InvokeRuntimeUiFloat("BuildPrototypeEntranceBackdropAlpha", GreedLastScreenState.ConnectChecking)
+                        > InvokeRuntimeUiFloat("BuildPrototypeEntranceBackdropAlpha", GreedLastScreenState.LobbyReady)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildPrototypeEntranceBackdropAlpha", GreedLastScreenState.RunCoreTest),
+                        0f),
+                "The entrance illustration must lead the title, soften through connection, and yield to playable lobby controls.");
+            Require(
+                !InvokeRuntimeUiStaticBool(
+                    "ShouldDeactivatePrototypeEntranceBackdrop",
+                    GreedLastScreenState.RunCoreTest,
+                    0.18f)
+                    && InvokeRuntimeUiStaticBool(
+                        "ShouldDeactivatePrototypeEntranceBackdrop",
+                        GreedLastScreenState.RunCoreTest,
+                        0.004f)
+                    && !InvokeRuntimeUiStaticBool(
+                        "ShouldDeactivatePrototypeEntranceBackdrop",
+                        GreedLastScreenState.LobbyReady,
+                        0f),
+                "The entrance illustration must crossfade behind run staging before it deactivates, while lobby staging remains available.");
+            Require(
+                Resources.Load<Texture2D>("GreedLast/PrototypeEntrance") != null,
+                "The generated prototype entrance illustration must be packaged as a Resources texture for editor and player builds.");
+            Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.BootInit)
                     && !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.ConnectChecking)
                     && InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.LobbyReady)
@@ -94,6 +128,20 @@ namespace GreedLast.Editor
                         InvokeRuntimeUiFloat("BuildCountdownBeatScheduleStartTime", 10f, 0f),
                         10f),
                 "Only a freshly committed final choice may postpone the first countdown click.");
+            Require(
+                Mathf.Approximately(
+                    InvokeRuntimeUiFloat("BuildNextBeatScheduleTime", 10f, 10.02f, 0.5f),
+                    10.5f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildNextBeatScheduleTime", 10f, 10.70f, 0.5f),
+                        11f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildNextBeatScheduleTime", 10f, 11.20f, 0.5f),
+                        11.70f)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildNextBeatScheduleTime", 0f, 4f, 0.5f),
+                        4.5f),
+                "Beat clicks must stay anchored through ordinary frame delay and restart cleanly after a long stall instead of accumulating drift or bursts.");
             float postChoiceStageDelay = InvokeRuntimeUiFloat("BuildStageTransitionStartDelay", 0.56f);
             float postChoiceCountdownDelay = InvokeRuntimeUiFloat("BuildChoiceConfirmationCountdownBeatDelay", false);
             Require(
@@ -5068,8 +5116,23 @@ namespace GreedLast.Editor
                     && InvokeRuntimeUiLabel("BuildHapticsButtonLabel", true) == "진동 ON"
                     && InvokeRuntimeUiLabel("BuildHapticsButtonLabel", false) == "진동 OFF"
                     && InvokeRuntimeUiLabel("BuildRotationTiltButtonLabel", true) == "기울임 ON"
-                    && InvokeRuntimeUiLabel("BuildRotationTiltButtonLabel", false) == "기울임 OFF",
-                "Run sensory setting labels must expose stable volume, haptic, and tilt states.");
+                    && InvokeRuntimeUiLabel("BuildRotationTiltButtonLabel", false) == "기울임 OFF"
+                    && InvokeRuntimeUiLabel("BuildMotionComfortButtonLabel", true) == "시야 안정 ON"
+                    && InvokeRuntimeUiLabel("BuildMotionComfortButtonLabel", false) == "시야 안정 OFF"
+                    && InvokeRuntimeUiLabel("BuildMotionComfortStatusText", true) == "안정"
+                    && InvokeRuntimeUiLabel("BuildMotionComfortStatusText", false) == "생동",
+                "Run sensory setting labels must expose stable volume, haptic, tilt, and motion-comfort states.");
+            Require(
+                InvokeRuntimeUiFloat("BuildMotionComfortMotionScale", true)
+                    < InvokeRuntimeUiFloat("BuildMotionComfortMotionScale", false)
+                    && InvokeRuntimeUiFloat("BuildMotionComfortRotationScale", true)
+                        < InvokeRuntimeUiFloat("BuildMotionComfortMotionScale", true)
+                    && InvokeRuntimeUiFloat("BuildMotionComfortShakeScale", true)
+                        < InvokeRuntimeUiFloat("BuildMotionComfortRotationScale", true)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildMotionComfortMotionScale", false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildMotionComfortRotationScale", false), 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildMotionComfortShakeScale", false), 1f),
+                "Motion comfort must reduce background motion, reduce limited-corridor rotation further, and suppress miss shake most without changing full-motion mode.");
             Require(
                 InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", true, false, false)
                     && InvokeRuntimeUiStaticBool("ShouldShowRotationTiltSetting", false, true, true)

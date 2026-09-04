@@ -15056,6 +15056,7 @@ namespace GreedLast
         private const string SfxVolumePrefsKey = "GreedLast.RuntimeUi.SfxVolume";
         private const string HapticsEnabledPrefsKey = "GreedLast.RuntimeUi.HapticsEnabled";
         private const string RotationTiltEnabledPrefsKey = "GreedLast.RuntimeUi.RotationTiltEnabled";
+        private const string MotionComfortEnabledPrefsKey = "GreedLast.RuntimeUi.MotionComfortEnabled";
         private static readonly Color32 ButtonNormalColor = new Color32(205, 166, 70, 255);
         private static readonly Color32 ButtonHighlightedColor = new Color32(238, 204, 114, 255);
         private static readonly Color32 ButtonPressedColor = new Color32(165, 124, 48, 255);
@@ -15080,6 +15081,9 @@ namespace GreedLast
         private GameObject rootPanel;
         private RectTransform rootPanelRect;
         private Image rootBackground;
+        private RawImage prototypeEntranceBackdrop;
+        private CanvasGroup prototypeEntranceBackdropCanvasGroup;
+        private GreedLastScreenState prototypeEntranceBackdropState;
         private Rect lastSafeArea;
         private int lastSafeAreaScreenWidth = -1;
         private int lastSafeAreaScreenHeight = -1;
@@ -15141,6 +15145,7 @@ namespace GreedLast
         private Button threatDownButton;
         private Button hapticsButton;
         private Button rotationTiltButton;
+        private Button motionComfortButton;
         private Button[] devShortcutButtons;
         private Button[] timingOffsetButtons;
         private Button[] sfxVolumeButtons;
@@ -15372,6 +15377,7 @@ namespace GreedLast
         private float sfxVolume = DefaultSfxVolume;
         private bool hapticsEnabled = true;
         private bool rotationTiltEnabled = true;
+        private bool motionComfortEnabled = true;
         private bool comboTierFeedbackPending;
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
@@ -15501,6 +15507,7 @@ namespace GreedLast
 
         private void Update()
         {
+            UpdatePrototypeEntranceBackdrop();
             if (beatMarker == null)
             {
                 return;
@@ -15628,14 +15635,20 @@ namespace GreedLast
 
             if (countdownBeatActive && Time.unscaledTime >= nextBeatSoundAt)
             {
-                nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
+                nextBeatSoundAt = BuildNextBeatScheduleTime(
+                    nextBeatSoundAt,
+                    Time.unscaledTime,
+                    BuildBeatInterval(latestRunSnapshot));
                 PlayRhythmPulse(latestRunSnapshot, BuildCountdownBeatVolume(latestRunSnapshot));
             }
             else if (runModeActive
                 && ShouldPlayLiveBeatClick(latestRunSnapshot)
                 && Time.unscaledTime >= nextBeatSoundAt)
             {
-                nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
+                nextBeatSoundAt = BuildNextBeatScheduleTime(
+                    nextBeatSoundAt,
+                    Time.unscaledTime,
+                    BuildBeatInterval(latestRunSnapshot));
                 PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot));
             }
 
@@ -15858,6 +15871,7 @@ namespace GreedLast
             EnsureUi();
             ApplySafeArea();
             TrackScreenEntranceTransitions(snapshot.State);
+            SetPrototypeEntranceBackdropState(snapshot.State);
             if (pauseMenuOverlay != null)
             {
                 pauseMenuOverlay.SetActive(false);
@@ -16013,6 +16027,7 @@ namespace GreedLast
             threatDownButton.gameObject.SetActive((showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike);
             hapticsButton.gameObject.SetActive(showDevTools && runLike);
             rotationTiltButton.gameObject.SetActive(false);
+            motionComfortButton.gameObject.SetActive(false);
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
                 devShortcutButtons[i].gameObject.SetActive(
@@ -16057,6 +16072,7 @@ namespace GreedLast
             threatDownButton.interactable = (showDevTools && (infiniteRunLike || growthBoardLike)) || lobbyDevLike;
             hapticsButton.interactable = showDevTools && runLike;
             rotationTiltButton.interactable = false;
+            motionComfortButton.interactable = false;
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
                 devShortcutButtons[i].interactable = showDevTools
@@ -16312,6 +16328,7 @@ namespace GreedLast
             }
             UpdateHapticsButtonLabel();
             UpdateRotationTiltButtonLabel();
+            UpdateMotionComfortButtonLabel();
             SetButtonLabel(timingOffsetButtons[0], "빠름 +20ms");
             SetButtonLabel(timingOffsetButtons[1], BuildTimingRecommendationButtonLabel(snapshot));
             SetButtonLabel(timingOffsetButtons[2], "늦음 -20ms");
@@ -16334,6 +16351,7 @@ namespace GreedLast
                     DevToolsEnabled,
                     Application.isMobilePlatform,
                     SystemInfo.supportsAccelerometer);
+            motionComfortButton.interactable = snapshot.Paused;
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
             {
                 timingOffsetButtons[i].interactable = !snapshot.Stopped;
@@ -16889,7 +16907,9 @@ namespace GreedLast
                 sfxVolume,
                 hapticsEnabled,
                 rotationTiltEnabled,
-                showRotationTiltSetting);
+                showRotationTiltSetting)
+                + " / 시야 "
+                + BuildMotionComfortStatusText(motionComfortEnabled);
         }
 
         private static string BuildPauseSettingsLineText(
@@ -17012,6 +17032,7 @@ namespace GreedLast
                     DevToolsEnabled,
                     Application.isMobilePlatform,
                     SystemInfo.supportsAccelerometer));
+            motionComfortButton.gameObject.SetActive(showPauseSettings);
 
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
@@ -17062,6 +17083,12 @@ namespace GreedLast
                     hapticsButton.GetComponent<RectTransform>(),
                     0.5f,
                     showRotationTiltSetting ? 0.175f : 0.23f,
+                    250f,
+                    58f);
+                SetAnchored(
+                    motionComfortButton.GetComponent<RectTransform>(),
+                    0.5f,
+                    showRotationTiltSetting ? 0.12f : 0.175f,
                     250f,
                     58f);
                 return;
@@ -25521,6 +25548,7 @@ namespace GreedLast
             SetButtonTone(threatDownButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(hapticsButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonTone(rotationTiltButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
+            SetButtonTone(motionComfortButton, ButtonNormalColor, ButtonHighlightedColor, ButtonPressedColor);
             SetButtonToneArray(devShortcutButtons);
             SetButtonToneArray(timingOffsetButtons);
             SetButtonToneArray(sfxVolumeButtons);
@@ -25591,6 +25619,8 @@ namespace GreedLast
             rootBackground = rootPanel.AddComponent<Image>();
             rootBackground.color = new Color32(11, 16, 18, 255);
 
+            CreatePrototypeEntranceBackdrop(rootPanel.transform);
+
             feedbackFlash = CreateRect("FeedbackFlash", rootPanel.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
             feedbackFlash.color = new Color32(255, 255, 255, 0);
             feedbackFlash.raycastTarget = false;
@@ -25657,6 +25687,7 @@ namespace GreedLast
             threatDownButton = CreateButton(rootPanel.transform, "ThreatDownButton", "PgDn 위협");
             hapticsButton = CreateButton(rootPanel.transform, "HapticsButton", BuildHapticsButtonLabel(true));
             rotationTiltButton = CreateButton(rootPanel.transform, "RotationTiltButton", BuildRotationTiltButtonLabel(true));
+            motionComfortButton = CreateButton(rootPanel.transform, "MotionComfortButton", BuildMotionComfortButtonLabel(true));
             devShortcutButtons = new Button[8];
             devShortcutButtons[0] = CreateButton(
                 rootPanel.transform,
@@ -25709,6 +25740,7 @@ namespace GreedLast
             SetAnchored(threatDownButton.GetComponent<RectTransform>(), 0.91f, 0.24f, 180f, 54f);
             SetAnchored(hapticsButton.GetComponent<RectTransform>(), 0.91f, 0.06f, 180f, 54f);
             SetAnchored(rotationTiltButton.GetComponent<RectTransform>(), 0.91f, 0.015f, 180f, 54f);
+            SetAnchored(motionComfortButton.GetComponent<RectTransform>(), 0.91f, 0.015f, 180f, 54f);
             SetAnchored(devShortcutButtons[0].GetComponent<RectTransform>(), 0.91f, 0.645f, 180f, 54f);
             SetAnchored(devShortcutButtons[1].GetComponent<RectTransform>(), 0.91f, 0.60f, 180f, 54f);
             SetAnchored(devShortcutButtons[2].GetComponent<RectTransform>(), 0.91f, 0.555f, 180f, 54f);
@@ -25737,6 +25769,7 @@ namespace GreedLast
             SetButtonFontSize(threatDownButton, 24);
             SetButtonFontSize(hapticsButton, 24);
             SetButtonFontSize(rotationTiltButton, 24);
+            SetButtonFontSize(motionComfortButton, 24);
             for (int i = 0; i < devShortcutButtons.Length; i += 1)
             {
                 SetButtonFontSize(devShortcutButtons[i], 24);
@@ -25774,6 +25807,7 @@ namespace GreedLast
             threatDownButton.onClick.AddListener(() => threatDownRequested?.Invoke());
             hapticsButton.onClick.AddListener(() => ToggleHaptics());
             rotationTiltButton.onClick.AddListener(() => ToggleRotationTiltPreference());
+            motionComfortButton.onClick.AddListener(() => ToggleMotionComfortPreference());
             devShortcutButtons[0].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.GiftChoice));
             devShortcutButtons[1].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.RelicChoice));
             devShortcutButtons[2].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.AfterCore));
@@ -27091,6 +27125,7 @@ namespace GreedLast
                 MaxSfxVolume);
             hapticsEnabled = PlayerPrefs.GetInt(HapticsEnabledPrefsKey, 1) == 1;
             rotationTiltEnabled = IsRotationTiltEnabledFromPrefs();
+            motionComfortEnabled = PlayerPrefs.GetInt(MotionComfortEnabledPrefsKey, 1) == 1;
             rhythmAudio = gameObject.AddComponent<AudioSource>();
             rhythmAudio.playOnAwake = false;
             rhythmAudio.loop = false;
@@ -28123,7 +28158,10 @@ namespace GreedLast
 
             float normalized = Mathf.Clamp01(remaining / LaneMissShakeDuration);
             float age = 1f - normalized;
-            return Mathf.Sin(age * Mathf.PI * 8f) * normalized * LaneMissShakePixels;
+            return Mathf.Sin(age * Mathf.PI * 8f)
+                * normalized
+                * LaneMissShakePixels
+                * BuildMotionComfortShakeScale(motionComfortEnabled);
         }
 
         private float BuildBeatMarkerMissImpact()
@@ -28148,7 +28186,10 @@ namespace GreedLast
 
             float normalized = Mathf.Clamp01(remaining / BeatMarkerMissImpactDuration);
             float age = 1f - normalized;
-            return Mathf.Sin(age * Mathf.PI * 10f) * normalized * BeatMarkerMissImpactShakePixels;
+            return Mathf.Sin(age * Mathf.PI * 10f)
+                * normalized
+                * BeatMarkerMissImpactShakePixels
+                * BuildMotionComfortShakeScale(motionComfortEnabled);
         }
 
         private float BuildBeatMarkerFocusGuardImpact()
@@ -29012,6 +29053,29 @@ namespace GreedLast
             return Mathf.Max(now, notBefore);
         }
 
+        private static float BuildNextBeatScheduleTime(float scheduledAt, float now, float interval)
+        {
+            float safeInterval = Mathf.Clamp(interval, 0.08f, 2f);
+            if (scheduledAt <= 0f)
+            {
+                return now + safeInterval;
+            }
+
+            float next = scheduledAt + safeInterval;
+            if (next > now)
+            {
+                return next;
+            }
+
+            int skippedIntervals = Mathf.FloorToInt((now - next) / safeInterval) + 1;
+            if (skippedIntervals > 1)
+            {
+                return now + safeInterval;
+            }
+
+            return next + safeInterval;
+        }
+
         private void TrackStagePresentation(GreedLastRunSnapshot snapshot)
         {
             if (snapshot.Stopped)
@@ -29295,6 +29359,118 @@ namespace GreedLast
                 rootBackground.color,
                 target,
                 1f - Mathf.Exp(-Time.unscaledDeltaTime * 3.4f));
+        }
+
+        private void CreatePrototypeEntranceBackdrop(Transform parent)
+        {
+            Texture2D texture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
+            if (texture == null)
+            {
+                return;
+            }
+
+            GameObject backdropObject = CreateRect(
+                "PrototypeEntranceBackdrop",
+                parent,
+                Vector2.zero,
+                Vector2.one,
+                Vector2.zero,
+                Vector2.zero);
+            prototypeEntranceBackdrop = backdropObject.AddComponent<RawImage>();
+            prototypeEntranceBackdrop.texture = texture;
+            prototypeEntranceBackdrop.color = new Color32(150, 158, 154, 255);
+            prototypeEntranceBackdrop.raycastTarget = false;
+
+            AspectRatioFitter fitter = backdropObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = texture.height > 0 ? (float)texture.width / texture.height : 16f / 9f;
+
+            prototypeEntranceBackdropCanvasGroup = backdropObject.AddComponent<CanvasGroup>();
+            prototypeEntranceBackdropCanvasGroup.alpha = 0f;
+            prototypeEntranceBackdropCanvasGroup.interactable = false;
+            prototypeEntranceBackdropCanvasGroup.blocksRaycasts = false;
+            prototypeEntranceBackdropState = GreedLastScreenState.BootInit;
+            backdropObject.SetActive(false);
+        }
+
+        private void SetPrototypeEntranceBackdropState(GreedLastScreenState state)
+        {
+            prototypeEntranceBackdropState = state;
+            if (prototypeEntranceBackdrop == null)
+            {
+                return;
+            }
+
+            bool visible = ShouldShowPrototypeEntranceBackdrop(state);
+            if (visible && !prototypeEntranceBackdrop.gameObject.activeSelf)
+            {
+                prototypeEntranceBackdropCanvasGroup.alpha = 0f;
+                prototypeEntranceBackdrop.gameObject.SetActive(true);
+            }
+        }
+
+        private void UpdatePrototypeEntranceBackdrop()
+        {
+            if (prototypeEntranceBackdrop == null
+                || prototypeEntranceBackdropCanvasGroup == null
+                || !prototypeEntranceBackdrop.gameObject.activeSelf)
+            {
+                return;
+            }
+
+            float targetAlpha = BuildPrototypeEntranceBackdropAlpha(prototypeEntranceBackdropState);
+            prototypeEntranceBackdropCanvasGroup.alpha = Mathf.Lerp(
+                prototypeEntranceBackdropCanvasGroup.alpha,
+                targetAlpha,
+                1f - Mathf.Exp(-Time.unscaledDeltaTime * 4.2f));
+
+            RectTransform rect = prototypeEntranceBackdrop.rectTransform;
+            float breath = 0.5f + Mathf.Sin(Time.unscaledTime * 0.62f) * 0.5f;
+            float motionScale = BuildMotionComfortMotionScale(motionComfortEnabled);
+            float scale = 1.025f + breath * 0.004f * motionScale;
+            rect.localScale = new Vector3(scale, scale, 1f);
+            rect.anchoredPosition = new Vector2(0f, Mathf.Lerp(-4f, 3f, breath) * motionScale);
+
+            if (ShouldDeactivatePrototypeEntranceBackdrop(
+                    prototypeEntranceBackdropState,
+                    prototypeEntranceBackdropCanvasGroup.alpha))
+            {
+                prototypeEntranceBackdropCanvasGroup.alpha = 0f;
+                prototypeEntranceBackdrop.gameObject.SetActive(false);
+            }
+        }
+
+        private static bool ShouldDeactivatePrototypeEntranceBackdrop(
+            GreedLastScreenState state,
+            float currentAlpha)
+        {
+            return !ShouldShowPrototypeEntranceBackdrop(state) && currentAlpha <= 0.005f;
+        }
+
+        private static bool ShouldShowPrototypeEntranceBackdrop(GreedLastScreenState state)
+        {
+            return state == GreedLastScreenState.BootInit
+                || state == GreedLastScreenState.ConnectChecking
+                || state == GreedLastScreenState.ConnectBlocked
+                || state == GreedLastScreenState.ReSyncPending
+                || state == GreedLastScreenState.LobbyReady;
+        }
+
+        private static float BuildPrototypeEntranceBackdropAlpha(GreedLastScreenState state)
+        {
+            switch (state)
+            {
+                case GreedLastScreenState.BootInit:
+                    return 0.54f;
+                case GreedLastScreenState.ConnectChecking:
+                case GreedLastScreenState.ConnectBlocked:
+                case GreedLastScreenState.ReSyncPending:
+                    return 0.38f;
+                case GreedLastScreenState.LobbyReady:
+                    return 0.30f;
+                default:
+                    return 0f;
+            }
         }
 
         private Color32 BuildRunLaneBaseColor(int laneIndex, float lanePulse)
@@ -30322,6 +30498,7 @@ namespace GreedLast
                 ? (latestRunSnapshot.ActivePattern ? 1f : 0.72f)
                 : visible ? 0.34f : 0f;
             motionStrength = Mathf.Clamp01(motionStrength + forwardPulse * 0.20f);
+            motionStrength *= BuildMotionComfortMotionScale(motionComfortEnabled);
             float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
             float stageMotionScale = visible ? BuildStageMotionScale(latestRunSnapshot) : 1f;
             float stageDepthScale = (visible ? BuildStageDepthScale(latestRunSnapshot) : 1f) * (1f + forwardPulse * 0.09f);
@@ -30343,6 +30520,7 @@ namespace GreedLast
                 && GreedLastRunCore.IsRotationPattern(latestRunSnapshot.Pattern)
                     ? BuildStraightRunRotationReadiness(latestRunSnapshot)
                     : 0f;
+            rotationReadiness *= BuildMotionComfortRotationScale(motionComfortEnabled);
             float rotationInputAlignment = BuildStraightRunRotationInputAlignment(
                 rotationDirection,
                 rotationReadiness,
@@ -44592,6 +44770,50 @@ namespace GreedLast
         private static string BuildRotationTiltButtonLabel(bool enabled)
         {
             return enabled ? "기울임 ON" : "기울임 OFF";
+        }
+
+        private void ToggleMotionComfortPreference()
+        {
+            motionComfortEnabled = !motionComfortEnabled;
+            PlayerPrefs.SetInt(MotionComfortEnabledPrefsKey, motionComfortEnabled ? 1 : 0);
+            PlayerPrefs.Save();
+            UpdateMotionComfortButtonLabel();
+            RefreshPauseSettingsPresentation();
+        }
+
+        private void UpdateMotionComfortButtonLabel()
+        {
+            if (motionComfortButton == null)
+            {
+                return;
+            }
+
+            SetButtonLabel(motionComfortButton, BuildMotionComfortButtonLabel(motionComfortEnabled));
+        }
+
+        private static string BuildMotionComfortButtonLabel(bool enabled)
+        {
+            return enabled ? "시야 안정 ON" : "시야 안정 OFF";
+        }
+
+        private static string BuildMotionComfortStatusText(bool enabled)
+        {
+            return enabled ? "안정" : "생동";
+        }
+
+        private static float BuildMotionComfortMotionScale(bool enabled)
+        {
+            return enabled ? 0.82f : 1f;
+        }
+
+        private static float BuildMotionComfortRotationScale(bool enabled)
+        {
+            return enabled ? 0.62f : 1f;
+        }
+
+        private static float BuildMotionComfortShakeScale(bool enabled)
+        {
+            return enabled ? 0.45f : 1f;
         }
 
         private static bool IsRotationTiltEnabledFromPrefs()

@@ -9,6 +9,9 @@ namespace GreedLast.Editor
     {
         private const string ScenePath = "Assets/Scenes/GreedLast_Boot.unity";
         private const string ResetProgressMenuPath = "Greed Last/Reset Prototype Progress (Keep Settings)";
+        private const string VerifiedBuildMenuPath = "Greed Last/Build Verified Windows Prototype";
+        private const string WindowsBuildDirectory = "Builds/GreedLastPrototype";
+        private const string WindowsBuildPath = WindowsBuildDirectory + "/GreedLastPrototype.exe";
 
         [MenuItem("Greed Last/Rebuild Boot Scene")]
         public static void Build()
@@ -57,6 +60,62 @@ namespace GreedLast.Editor
         private static bool ValidateResetPrototypeProgress()
         {
             return !EditorApplication.isPlayingOrWillChangePlaymode;
+        }
+
+        [MenuItem(VerifiedBuildMenuPath)]
+        public static void BuildVerifiedWindowsPrototype()
+        {
+            GreedLastPrototypeSmokeCheck.Run();
+            EnsureBootSceneInBuildSettings();
+            Directory.CreateDirectory(WindowsBuildDirectory);
+
+            var options = new BuildPlayerOptions
+            {
+                scenes = new[] { ScenePath },
+                locationPathName = WindowsBuildPath,
+                target = BuildTarget.StandaloneWindows64,
+                options = BuildOptions.None,
+            };
+            UnityEditor.Build.Reporting.BuildReport report = BuildPipeline.BuildPlayer(options);
+            if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    "Greed Last verified Windows build failed: " + report.summary.result);
+            }
+
+            Debug.Log(
+                "Greed Last verified Windows prototype built: "
+                + WindowsBuildPath
+                + " ("
+                + report.summary.totalSize
+                + " bytes)");
+            if (!Application.isBatchMode)
+            {
+                EditorUtility.DisplayDialog(
+                    "검증 빌드 완료",
+                    "스모크 검사를 통과한 Windows 프로토타입을 만들었습니다.\n\n" + WindowsBuildPath,
+                    "확인");
+            }
+        }
+
+        [MenuItem(VerifiedBuildMenuPath, true)]
+        private static bool ValidateBuildVerifiedWindowsPrototype()
+        {
+            return !EditorApplication.isPlayingOrWillChangePlaymode;
+        }
+
+        private static void EnsureBootSceneInBuildSettings()
+        {
+            if (!File.Exists(ScenePath))
+            {
+                Build();
+                return;
+            }
+
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(ScenePath, true),
+            };
         }
     }
 }
