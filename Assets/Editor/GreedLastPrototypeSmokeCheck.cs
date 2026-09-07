@@ -78,6 +78,157 @@ namespace GreedLast.Editor
                     && entranceTextureImporter.maxTextureSize <= 2048,
                 "The full-screen entrance illustration must use mobile-conscious UI texture settings without mipmaps, CPU readback, or repeating edges.");
             Require(
+                Resources.Load<Texture2D>("GreedLast/PrototypeRunCorridor") != null,
+                "The generated straight-run corridor must be packaged as a Resources texture for live gameplay staging.");
+            TextureImporter corridorTextureImporter = AssetImporter.GetAtPath(
+                "Assets/Resources/GreedLast/PrototypeRunCorridor.png") as TextureImporter;
+            Require(
+                corridorTextureImporter != null
+                    && !corridorTextureImporter.mipmapEnabled
+                    && !corridorTextureImporter.isReadable
+                    && corridorTextureImporter.wrapMode == TextureWrapMode.Clamp
+                    && corridorTextureImporter.maxTextureSize <= 2048,
+                "The full-screen run corridor must use mobile-conscious UI texture settings without mipmaps, CPU readback, or repeating edges.");
+            Require(
+                InvokeRuntimeUiStaticBool("ShouldShowPrototypeRunCorridorBackdrop", true, true)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowPrototypeRunCorridorBackdrop", true, false)
+                    && !InvokeRuntimeUiStaticBool("ShouldShowPrototypeRunCorridorBackdrop", false, true),
+                "The illustrated corridor must appear only while a run snapshot owns the playable screen.");
+            float liveCorridorAlpha = InvokeRuntimeUiFloat(
+                "BuildPrototypeRunCorridorBackdropAlpha",
+                true,
+                false,
+                false,
+                false,
+                false);
+            float stagedCorridorAlpha = InvokeRuntimeUiFloat(
+                "BuildPrototypeRunCorridorBackdropAlpha",
+                true,
+                false,
+                true,
+                false,
+                false);
+            float stoppedCorridorAlpha = InvokeRuntimeUiFloat(
+                "BuildPrototypeRunCorridorBackdropAlpha",
+                true,
+                false,
+                false,
+                false,
+                true);
+            Require(
+                liveCorridorAlpha > stagedCorridorAlpha
+                    && stagedCorridorAlpha > stoppedCorridorAlpha
+                    && stoppedCorridorAlpha > 0f
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildPrototypeRunCorridorBackdropAlpha",
+                            false,
+                            false,
+                            false,
+                            false,
+                            false),
+                        0f),
+                "The run corridor must lead active play, soften for countdown or choices, and recede further for terminal overlays.");
+            float fullMotionCorridorScale = InvokeRuntimeUiFloat(
+                "BuildPrototypeRunCorridorBackdropScale",
+                true,
+                true,
+                1f,
+                false);
+            float comfortCorridorScale = InvokeRuntimeUiFloat(
+                "BuildPrototypeRunCorridorBackdropScale",
+                true,
+                true,
+                1f,
+                true);
+            Require(
+                fullMotionCorridorScale > comfortCorridorScale
+                    && comfortCorridorScale
+                        > InvokeRuntimeUiFloat(
+                            "BuildPrototypeRunCorridorBackdropScale",
+                            true,
+                            false,
+                            1f,
+                            true)
+                    && Mathf.Approximately(
+                        InvokeRuntimeUiFloat(
+                            "BuildPrototypeRunCorridorBackdropScale",
+                            false,
+                            true,
+                            1f,
+                            false),
+                        1f)
+                    && Mathf.Abs(
+                        InvokeRuntimeUiFloat(
+                            "BuildPrototypeRunCorridorBackdropRotation",
+                            1f,
+                            1f,
+                            true))
+                        < Mathf.Abs(
+                            InvokeRuntimeUiFloat(
+                                "BuildPrototypeRunCorridorBackdropRotation",
+                                1f,
+                                1f,
+                                false))
+                    && InvokeRuntimeUiFloat(
+                        "BuildPrototypeRunCorridorBackdropRotation",
+                        -1f,
+                        1f,
+                        false) < 0f,
+                "The illustrated corridor must breathe only during motion and keep limited rotation gentler in comfort mode.");
+            Require(
+                Resources.Load<Texture2D>("GreedLast/PrototypeRunner") != null,
+                "The generated dokkaebi runner illustration must be packaged as a Resources texture for lobby and run presentation.");
+            TextureImporter runnerTextureImporter = AssetImporter.GetAtPath(
+                "Assets/Resources/GreedLast/PrototypeRunner.png") as TextureImporter;
+            Require(
+                runnerTextureImporter != null
+                    && !runnerTextureImporter.mipmapEnabled
+                    && !runnerTextureImporter.isReadable
+                    && runnerTextureImporter.wrapMode == TextureWrapMode.Clamp
+                    && runnerTextureImporter.alphaIsTransparency
+                    && runnerTextureImporter.maxTextureSize <= 1024,
+                "The transparent runner illustration must use compact mobile UI texture settings without mipmaps, CPU readback, or repeating edges.");
+            Require(
+                InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true)
+                    < InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", false)
+                    && InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true) >= 32
+                    && InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", false) == 255,
+                "The generated runner must keep readable procedural action accents while the missing-art fallback stays fully opaque.");
+            Color32 runnerIllustrationTint = InvokeRuntimeUiColor(
+                "BuildPrototypeRunnerIllustrationTint",
+                new Color32(221, 83, 68, 255));
+            Require(
+                runnerIllustrationTint.a >= 230
+                    && runnerIllustrationTint.r > runnerIllustrationTint.g
+                    && runnerIllustrationTint.g > 180,
+                "Runner feedback tint must preserve the illustration while still carrying judgement color.");
+            Require(
+                Resources.Load<Texture2D>("GreedLast/PrototypeTraps") != null,
+                "The generated three-action trap atlas must be packaged as a Resources texture for live run hazards.");
+            TextureImporter trapTextureImporter = AssetImporter.GetAtPath(
+                "Assets/Resources/GreedLast/PrototypeTraps.png") as TextureImporter;
+            Require(
+                trapTextureImporter != null
+                    && !trapTextureImporter.mipmapEnabled
+                    && !trapTextureImporter.isReadable
+                    && trapTextureImporter.wrapMode == TextureWrapMode.Clamp
+                    && trapTextureImporter.alphaIsTransparency
+                    && trapTextureImporter.maxTextureSize <= 2048,
+                "The transparent trap atlas must use mobile UI texture settings without mipmaps, CPU readback, or atlas-edge repeating.");
+            Require(
+                InvokeRuntimeUiInt("BuildPrototypeTrapProceduralAlpha", true, 220) < 64
+                    && InvokeRuntimeUiInt("BuildPrototypeTrapProceduralAlpha", true, 24) == 24
+                    && InvokeRuntimeUiInt("BuildPrototypeTrapProceduralAlpha", false, 220) == 220,
+                "Trap art must leave only a restrained procedural backing while preserving the original marker fallback.");
+            Color32 trapIllustrationTint = InvokeRuntimeUiColor(
+                "BuildPrototypeTrapIllustrationTint",
+                new Color32(207, 87, 65, 210));
+            Require(
+                trapIllustrationTint.a >= 238
+                    && trapIllustrationTint.r > trapIllustrationTint.g,
+                "Trap illustration tint must stay legible while carrying a restrained danger accent.");
+            Require(
                 !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.BootInit)
                     && !InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.ConnectChecking)
                     && InvokeRuntimeUiStaticBool("ShouldShowConnectionDevButton", true, GreedLastScreenState.LobbyReady)
@@ -12098,6 +12249,25 @@ namespace GreedLast.Editor
                             StringComparison.Ordinal),
                     "The active lane hint must pair the hazard, response name, exact-input payoff value, payoff role, and action symbol.");
                 Vector4 markerShape = InvokeRuntimeUiVector4("BuildTrapMarkerShapeLayout", snapshot.Pattern, 1f);
+                Vector4 trapAtlasUv = InvokeRuntimeUiVector4("BuildPrototypeTrapAtlasUv", snapshot.Pattern);
+                float expectedTrapAtlasX = expectedAvoidances[i] == GreedLastAvoidanceType.Jump
+                    ? 0f
+                    : expectedAvoidances[i] == GreedLastAvoidanceType.Slide ? 1f / 3f : 2f / 3f;
+                Require(
+                    Mathf.Approximately(trapAtlasUv.x, expectedTrapAtlasX)
+                        && Mathf.Approximately(trapAtlasUv.y, 0f)
+                        && Mathf.Approximately(trapAtlasUv.z, 1f / 3f)
+                        && Mathf.Approximately(trapAtlasUv.w, 1f),
+                    "Each authored avoidance must select its matching equal-width trap atlas cell.");
+                float expectedTrapMirror = expectedAvoidances[i] == GreedLastAvoidanceType.Twist
+                    && snapshot.Pattern.Channel == GreedLastRunChannel.Right
+                        ? -1f
+                        : 1f;
+                Require(
+                    Mathf.Approximately(
+                        InvokeRuntimeUiFloat("BuildPrototypeTrapIllustrationMirrorX", snapshot.Pattern),
+                        expectedTrapMirror),
+                    "Side-strike trap art must mirror only when its authored lane approaches from the opposite side.");
                 if (expectedAvoidances[i] == GreedLastAvoidanceType.Jump)
                 {
                     Require(

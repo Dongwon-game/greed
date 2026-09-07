@@ -15087,6 +15087,8 @@ namespace GreedLast
         private RawImage prototypeEntranceBackdrop;
         private CanvasGroup prototypeEntranceBackdropCanvasGroup;
         private GreedLastScreenState prototypeEntranceBackdropState;
+        private RawImage prototypeRunCorridorBackdrop;
+        private CanvasGroup prototypeRunCorridorBackdropCanvasGroup;
         private Rect lastSafeArea;
         private int lastSafeAreaScreenWidth = -1;
         private int lastSafeAreaScreenHeight = -1;
@@ -15203,6 +15205,7 @@ namespace GreedLast
         private Image[] runnerFootfallPips;
         private GameObject runnerAvatarRoot;
         private CanvasGroup runnerAvatarCanvasGroup;
+        private RawImage runnerIllustration;
         private Image runnerShadow;
         private Image runnerCoreGlow;
         private Image runnerPreparationCue;
@@ -15231,6 +15234,7 @@ namespace GreedLast
         private Image trapGlow;
         private Image[] trapApproachGhosts;
         private Image trapMarker;
+        private RawImage trapIllustration;
         private Text trapActionSymbolText;
         private Image trapCorridorShadow;
         private Image trapStrike;
@@ -15511,6 +15515,7 @@ namespace GreedLast
         private void Update()
         {
             UpdatePrototypeEntranceBackdrop();
+            UpdatePrototypeRunCorridorBackdrop();
             if (beatMarker == null)
             {
                 return;
@@ -25623,6 +25628,7 @@ namespace GreedLast
             rootBackground.color = new Color32(11, 16, 18, 255);
 
             CreatePrototypeEntranceBackdrop(rootPanel.transform);
+            CreatePrototypeRunCorridorBackdrop(rootPanel.transform);
 
             feedbackFlash = CreateRect("FeedbackFlash", rootPanel.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).AddComponent<Image>();
             feedbackFlash.color = new Color32(255, 255, 255, 0);
@@ -26567,6 +26573,23 @@ namespace GreedLast
             runnerAvatarCanvasGroup.interactable = false;
             runnerAvatarRoot.SetActive(false);
 
+            Texture2D runnerTexture = Resources.Load<Texture2D>("GreedLast/PrototypeRunner");
+            if (runnerTexture != null)
+            {
+                GameObject illustration = CreateRect(
+                    "RunnerIllustration",
+                    runnerAvatarRoot.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(138f, 207f));
+                runnerIllustration = illustration.AddComponent<RawImage>();
+                runnerIllustration.texture = runnerTexture;
+                runnerIllustration.color = new Color32(255, 255, 255, 240);
+                runnerIllustration.raycastTarget = false;
+                runnerIllustration.rectTransform.anchoredPosition = new Vector2(4f, 2f);
+            }
+
             Color32 bodyColor = PrototypeRunnerSkinColor;
             runnerHairBack = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerHairBack", 0.5f, 0.80f, 58f, 48f, PrototypeRunnerHairColor);
             runnerHead = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerHead", 0.5f, 0.81f, 34f, 36f, bodyColor);
@@ -26952,6 +26975,22 @@ namespace GreedLast
             trapMarker = trap.AddComponent<Image>();
             trapMarker.color = new Color32(207, 87, 65, 0);
             trapMarker.raycastTarget = false;
+
+            Texture2D trapTexture = Resources.Load<Texture2D>("GreedLast/PrototypeTraps");
+            if (trapTexture != null)
+            {
+                GameObject illustration = CreateRect(
+                    "TrapIllustration",
+                    trap.transform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(190f, 190f));
+                trapIllustration = illustration.AddComponent<RawImage>();
+                trapIllustration.texture = trapTexture;
+                trapIllustration.color = new Color32(255, 255, 255, 0);
+                trapIllustration.raycastTarget = false;
+            }
 
             trapActionSymbolText = CreateText(trap.transform, "ActionSymbol", string.Empty, 46, TextAnchor.MiddleCenter, FontStyle.Bold);
             trapActionSymbolText.rectTransform.anchorMin = Vector2.zero;
@@ -29474,6 +29513,169 @@ namespace GreedLast
                 default:
                     return 0f;
             }
+        }
+
+        private void CreatePrototypeRunCorridorBackdrop(Transform parent)
+        {
+            Texture2D texture = Resources.Load<Texture2D>("GreedLast/PrototypeRunCorridor");
+            if (texture == null)
+            {
+                return;
+            }
+
+            GameObject backdropObject = CreateRect(
+                "PrototypeRunCorridorBackdrop",
+                parent,
+                Vector2.zero,
+                Vector2.one,
+                Vector2.zero,
+                Vector2.zero);
+            prototypeRunCorridorBackdrop = backdropObject.AddComponent<RawImage>();
+            prototypeRunCorridorBackdrop.texture = texture;
+            prototypeRunCorridorBackdrop.color = new Color32(126, 143, 137, 255);
+            prototypeRunCorridorBackdrop.raycastTarget = false;
+
+            AspectRatioFitter fitter = backdropObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = texture.height > 0 ? (float)texture.width / texture.height : 16f / 9f;
+
+            prototypeRunCorridorBackdropCanvasGroup = backdropObject.AddComponent<CanvasGroup>();
+            prototypeRunCorridorBackdropCanvasGroup.alpha = 0f;
+            prototypeRunCorridorBackdropCanvasGroup.interactable = false;
+            prototypeRunCorridorBackdropCanvasGroup.blocksRaycasts = false;
+            backdropObject.SetActive(false);
+        }
+
+        private void UpdatePrototypeRunCorridorBackdrop()
+        {
+            if (prototypeRunCorridorBackdrop == null || prototypeRunCorridorBackdropCanvasGroup == null)
+            {
+                return;
+            }
+
+            bool visible = ShouldShowPrototypeRunCorridorBackdrop(runModeActive, hasRunSnapshot);
+            if (visible && !prototypeRunCorridorBackdrop.gameObject.activeSelf)
+            {
+                prototypeRunCorridorBackdropCanvasGroup.alpha = 0f;
+                prototypeRunCorridorBackdrop.gameObject.SetActive(true);
+            }
+
+            if (!prototypeRunCorridorBackdrop.gameObject.activeSelf)
+            {
+                return;
+            }
+
+            float targetAlpha = BuildPrototypeRunCorridorBackdropAlpha(
+                visible,
+                visible && latestRunSnapshot.Paused,
+                visible && (latestRunSnapshot.CountdownActive || latestRunSnapshot.ResumeCountdownActive),
+                visible && latestRunSnapshot.ChoiceActive,
+                visible && latestRunSnapshot.Stopped);
+            prototypeRunCorridorBackdropCanvasGroup.alpha = Mathf.Lerp(
+                prototypeRunCorridorBackdropCanvasGroup.alpha,
+                targetAlpha,
+                1f - Mathf.Exp(-Time.unscaledDeltaTime * 5.2f));
+
+            bool advancing = visible && ShouldAdvanceRunMotion(latestRunSnapshot);
+            float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            RectTransform rect = prototypeRunCorridorBackdrop.rectTransform;
+            float scale = BuildPrototypeRunCorridorBackdropScale(visible, advancing, pulse, motionComfortEnabled);
+            rect.localScale = new Vector3(scale, scale, 1f);
+            rect.anchoredPosition = new Vector2(
+                0f,
+                BuildPrototypeRunCorridorBackdropOffsetY(visible, advancing, pulse, motionComfortEnabled));
+
+            float rotationDirection = visible && latestRunSnapshot.ActivePattern
+                ? BuildRotationPatternDirection(latestRunSnapshot.Pattern)
+                : 0f;
+            float rotationReadiness = visible && latestRunSnapshot.ActivePattern
+                ? BuildStraightRunRotationReadiness(latestRunSnapshot)
+                : 0f;
+            rect.localEulerAngles = new Vector3(
+                0f,
+                0f,
+                BuildPrototypeRunCorridorBackdropRotation(
+                    rotationDirection,
+                    rotationReadiness,
+                    motionComfortEnabled));
+
+            if (!visible && prototypeRunCorridorBackdropCanvasGroup.alpha <= 0.005f)
+            {
+                prototypeRunCorridorBackdropCanvasGroup.alpha = 0f;
+                prototypeRunCorridorBackdrop.gameObject.SetActive(false);
+            }
+        }
+
+        private static bool ShouldShowPrototypeRunCorridorBackdrop(bool runModeActive, bool hasRunSnapshot)
+        {
+            return runModeActive && hasRunSnapshot;
+        }
+
+        private static float BuildPrototypeRunCorridorBackdropAlpha(
+            bool visible,
+            bool paused,
+            bool countdown,
+            bool choice,
+            bool stopped)
+        {
+            if (!visible)
+            {
+                return 0f;
+            }
+
+            if (paused || stopped)
+            {
+                return 0.30f;
+            }
+
+            if (countdown || choice)
+            {
+                return 0.36f;
+            }
+
+            return 0.44f;
+        }
+
+        private static float BuildPrototypeRunCorridorBackdropScale(
+            bool visible,
+            bool advancing,
+            float pulse,
+            bool motionComfortEnabled)
+        {
+            if (!visible)
+            {
+                return 1f;
+            }
+
+            float motionScale = BuildMotionComfortMotionScale(motionComfortEnabled);
+            float beatLift = advancing ? Mathf.Clamp01(pulse) * 0.010f : 0f;
+            return 1.022f + beatLift * motionScale;
+        }
+
+        private static float BuildPrototypeRunCorridorBackdropOffsetY(
+            bool visible,
+            bool advancing,
+            float pulse,
+            bool motionComfortEnabled)
+        {
+            if (!visible || !advancing)
+            {
+                return 0f;
+            }
+
+            return Mathf.Lerp(-2f, 5f, Mathf.Clamp01(pulse))
+                * BuildMotionComfortMotionScale(motionComfortEnabled);
+        }
+
+        private static float BuildPrototypeRunCorridorBackdropRotation(
+            float direction,
+            float readiness,
+            bool motionComfortEnabled)
+        {
+            return Mathf.Clamp(direction, -1f, 1f)
+                * Mathf.Clamp01(readiness)
+                * 1.6f
+                * BuildMotionComfortRotationScale(motionComfortEnabled);
         }
 
         private Color32 BuildRunLaneBaseColor(int laneIndex, float lanePulse)
@@ -32652,7 +32854,9 @@ namespace GreedLast
                 if (runnerResponseResult == GreedLastJudgementResult.Miss)
                 {
                     float decay = 1f - progress;
-                    float shake = Mathf.Sin(progress * Mathf.PI * 10f) * decay;
+                    float shake = Mathf.Sin(progress * Mathf.PI * 10f)
+                        * decay
+                        * BuildMotionComfortShakeScale(motionComfortEnabled);
                     avatarRect.anchoredPosition = new Vector2(shake * 26f, bob - arc * 16f);
                     avatarRect.localEulerAngles = new Vector3(0f, 0f, shake * 11f + channelDirection * arc * 7f);
                     avatarRect.localScale = new Vector3(1f + arc * 0.08f, 1f - arc * 0.12f, 1f);
@@ -34841,16 +35045,33 @@ namespace GreedLast
 
         private void SetRunnerBodyColor(Color32 color)
         {
-            SetRunnerPartColor(runnerHairBack, Color32.Lerp(PrototypeRunnerHairColor, color, 0.10f));
-            SetRunnerPartColor(runnerLeftHorn, Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f));
-            SetRunnerPartColor(runnerRightHorn, Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f));
-            SetRunnerPartColor(runnerHead, color);
-            SetRunnerPartColor(runnerTorso, color);
-            SetRunnerPartColor(runnerSash, Color32.Lerp(PrototypeRunnerSashColor, color, 0.22f));
-            SetRunnerPartColor(runnerLeftArm, color);
-            SetRunnerPartColor(runnerRightArm, color);
-            SetRunnerPartColor(runnerLeftLeg, color);
-            SetRunnerPartColor(runnerRightLeg, color);
+            bool hasIllustration = runnerIllustration != null;
+            int overlayAlpha = BuildRunnerProceduralOverlayAlpha(hasIllustration);
+            if (hasIllustration)
+            {
+                runnerIllustration.color = BuildPrototypeRunnerIllustrationTint(color);
+            }
+
+            SetRunnerPartColor(runnerHairBack, WithAlpha(Color32.Lerp(PrototypeRunnerHairColor, color, 0.10f), overlayAlpha));
+            SetRunnerPartColor(runnerLeftHorn, WithAlpha(Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f), overlayAlpha));
+            SetRunnerPartColor(runnerRightHorn, WithAlpha(Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f), overlayAlpha));
+            SetRunnerPartColor(runnerHead, WithAlpha(color, overlayAlpha));
+            SetRunnerPartColor(runnerTorso, WithAlpha(color, overlayAlpha));
+            SetRunnerPartColor(runnerSash, WithAlpha(Color32.Lerp(PrototypeRunnerSashColor, color, 0.22f), overlayAlpha));
+            SetRunnerPartColor(runnerLeftArm, WithAlpha(color, overlayAlpha));
+            SetRunnerPartColor(runnerRightArm, WithAlpha(color, overlayAlpha));
+            SetRunnerPartColor(runnerLeftLeg, WithAlpha(color, overlayAlpha));
+            SetRunnerPartColor(runnerRightLeg, WithAlpha(color, overlayAlpha));
+        }
+
+        private static int BuildRunnerProceduralOverlayAlpha(bool hasIllustration)
+        {
+            return hasIllustration ? 40 : 255;
+        }
+
+        private static Color32 BuildPrototypeRunnerIllustrationTint(Color32 bodyColor)
+        {
+            return WithAlpha(Color32.Lerp(new Color32(255, 255, 255, 255), bodyColor, 0.14f), 240);
         }
 
         private static void SetRunnerPartColor(Image part, Color32 color)
@@ -35045,7 +35266,10 @@ namespace GreedLast
                     BuildTrapMarkerBeatCueUrgencyColorBlend(markerBeatCueUrgency));
             }
 
-            trapMarker.color = markerColor;
+            trapMarker.color = WithAlpha(
+                markerColor,
+                BuildPrototypeTrapProceduralAlpha(trapIllustration != null, markerColor.a));
+            UpdatePrototypeTrapIllustration(latestRunSnapshot.Pattern, markerColor);
             float markerBaseScale = Mathf.Lerp(0.88f, 1.22f, coreNear) + entryPulse * 0.18f;
             trapMarker.rectTransform.localScale = new Vector3(
                 markerBaseScale * BuildTrapMarkerResponseScaleX(latestRunSnapshot.Pattern, coreNear, markerExactPulse, entryPulse)
@@ -36552,6 +36776,57 @@ namespace GreedLast
             resolvedTrapAfterimage.color = WithAlpha(resolvedTrapColor, alpha);
             UpdateResolvedAvoidanceTrail(resolvedTrapPattern, resolvedTrapResult, x, y, progress, fade);
             UpdateResolvedJudgementImpactWake(resolvedTrapPattern, resolvedTrapResult, progress, fade);
+        }
+
+        private void UpdatePrototypeTrapIllustration(GreedLastPatternModel pattern, Color32 markerColor)
+        {
+            if (trapIllustration == null)
+            {
+                return;
+            }
+
+            Vector4 uv = BuildPrototypeTrapAtlasUv(pattern);
+            trapIllustration.uvRect = new Rect(uv.x, uv.y, uv.z, uv.w);
+            trapIllustration.color = BuildPrototypeTrapIllustrationTint(markerColor);
+            trapIllustration.rectTransform.localScale = new Vector3(
+                BuildPrototypeTrapIllustrationMirrorX(pattern),
+                1f,
+                1f);
+        }
+
+        private static Vector4 BuildPrototypeTrapAtlasUv(GreedLastPatternModel pattern)
+        {
+            const float cellWidth = 1f / 3f;
+            switch (BuildRunnerResponseType(pattern))
+            {
+                case RunnerResponseType.Jump:
+                    return new Vector4(0f, 0f, cellWidth, 1f);
+                case RunnerResponseType.Slide:
+                    return new Vector4(cellWidth, 0f, cellWidth, 1f);
+                case RunnerResponseType.Twist:
+                    return new Vector4(cellWidth * 2f, 0f, cellWidth, 1f);
+                default:
+                    return new Vector4(cellWidth, 0f, cellWidth, 1f);
+            }
+        }
+
+        private static float BuildPrototypeTrapIllustrationMirrorX(GreedLastPatternModel pattern)
+        {
+            return BuildRunnerResponseType(pattern) == RunnerResponseType.Twist
+                && pattern.Channel == GreedLastRunChannel.Right
+                    ? -1f
+                    : 1f;
+        }
+
+        private static int BuildPrototypeTrapProceduralAlpha(bool hasIllustration, int baseAlpha)
+        {
+            int safeAlpha = Mathf.Clamp(baseAlpha, 0, 255);
+            return hasIllustration ? Mathf.Min(46, safeAlpha) : safeAlpha;
+        }
+
+        private static Color32 BuildPrototypeTrapIllustrationTint(Color32 markerColor)
+        {
+            return WithAlpha(Color32.Lerp(new Color32(255, 255, 255, 255), markerColor, 0.10f), 244);
         }
 
         private void UpdateResolvedAvoidanceTrail(
@@ -38084,6 +38359,11 @@ namespace GreedLast
             if (trapMarker != null)
             {
                 trapMarker.color = new Color32(207, 87, 65, 0);
+            }
+
+            if (trapIllustration != null)
+            {
+                trapIllustration.color = new Color32(255, 255, 255, 0);
             }
 
             HideTrapActionSymbol();
