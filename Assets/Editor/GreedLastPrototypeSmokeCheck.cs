@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -65,8 +66,9 @@ namespace GreedLast.Editor
                         GreedLastScreenState.LobbyReady,
                         0f),
                 "The entrance illustration must crossfade behind run staging before it deactivates, while lobby staging remains available.");
+            Texture2D entranceTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
             Require(
-                Resources.Load<Texture2D>("GreedLast/PrototypeEntrance") != null,
+                entranceTexture != null,
                 "The generated prototype entrance illustration must be packaged as a Resources texture for editor and player builds.");
             TextureImporter entranceTextureImporter = AssetImporter.GetAtPath(
                 "Assets/Resources/GreedLast/PrototypeEntrance.png") as TextureImporter;
@@ -74,11 +76,27 @@ namespace GreedLast.Editor
                 entranceTextureImporter != null
                     && !entranceTextureImporter.mipmapEnabled
                     && !entranceTextureImporter.isReadable
+                    && entranceTextureImporter.npotScale == TextureImporterNPOTScale.None
                     && entranceTextureImporter.wrapMode == TextureWrapMode.Clamp
-                    && entranceTextureImporter.maxTextureSize <= 2048,
+                    && entranceTextureImporter.maxTextureSize <= 2048
+                    && entranceTexture.width / (float)entranceTexture.height >= 1.65f
+                    && entranceTexture.width / (float)entranceTexture.height <= 1.90f,
                 "The full-screen entrance illustration must use mobile-conscious UI texture settings without mipmaps, CPU readback, or repeating edges.");
+            Texture2D lobbyTexture = Resources.Load<Texture2D>("GreedLast/PrototypeLobby");
+            TextureImporter lobbyTextureImporter = AssetImporter.GetAtPath(
+                "Assets/Resources/GreedLast/PrototypeLobby.png") as TextureImporter;
             Require(
-                Resources.Load<Texture2D>("GreedLast/PrototypeRunCorridor") != null,
+                lobbyTexture != null && lobbyTextureImporter != null
+                    && !lobbyTextureImporter.mipmapEnabled && !lobbyTextureImporter.isReadable
+                    && lobbyTextureImporter.npotScale == TextureImporterNPOTScale.None
+                    && lobbyTextureImporter.wrapMode == TextureWrapMode.Clamp
+                    && lobbyTextureImporter.maxTextureSize <= 2048
+                    && lobbyTexture.width / (float)lobbyTexture.height >= 1.65f
+                    && lobbyTexture.width / (float)lobbyTexture.height <= 1.90f,
+                "The character-free lobby plate must be packaged with preserved widescreen proportions and UI texture settings.");
+            Texture2D corridorTexture = Resources.Load<Texture2D>("GreedLast/PrototypeRunCorridor");
+            Require(
+                corridorTexture != null,
                 "The generated straight-run corridor must be packaged as a Resources texture for live gameplay staging.");
             TextureImporter corridorTextureImporter = AssetImporter.GetAtPath(
                 "Assets/Resources/GreedLast/PrototypeRunCorridor.png") as TextureImporter;
@@ -86,8 +104,11 @@ namespace GreedLast.Editor
                 corridorTextureImporter != null
                     && !corridorTextureImporter.mipmapEnabled
                     && !corridorTextureImporter.isReadable
+                    && corridorTextureImporter.npotScale == TextureImporterNPOTScale.None
                     && corridorTextureImporter.wrapMode == TextureWrapMode.Clamp
-                    && corridorTextureImporter.maxTextureSize <= 2048,
+                    && corridorTextureImporter.maxTextureSize <= 2048
+                    && corridorTexture.width / (float)corridorTexture.height >= 1.65f
+                    && corridorTexture.width / (float)corridorTexture.height <= 1.90f,
                 "The full-screen run corridor must use mobile-conscious UI texture settings without mipmaps, CPU readback, or repeating edges.");
             Require(
                 InvokeRuntimeUiStaticBool("ShouldShowPrototypeRunCorridorBackdrop", true, true)
@@ -176,8 +197,41 @@ namespace GreedLast.Editor
                         1f,
                         false) < 0f,
                 "The illustrated corridor must breathe only during motion and keep limited rotation gentler in comfort mode.");
+            Color32 quietCorridorTint = InvokeRuntimeUiColor(
+                "BuildPrototypeRunCorridorBackdropTint",
+                new Color32(255, 196, 74, 255),
+                false,
+                false,
+                false,
+                false,
+                0f);
+            Color32 escapeCorridorTint = InvokeRuntimeUiColor(
+                "BuildPrototypeRunCorridorBackdropTint",
+                new Color32(255, 196, 74, 255),
+                false,
+                true,
+                false,
+                false,
+                0f);
+            Color32 pressuredCorridorTint = InvokeRuntimeUiColor(
+                "BuildPrototypeRunCorridorBackdropTint",
+                new Color32(255, 196, 74, 255),
+                true,
+                false,
+                true,
+                true,
+                1f);
             Require(
-                Resources.Load<Texture2D>("GreedLast/PrototypeRunner") != null,
+                escapeCorridorTint.r > quietCorridorTint.r
+                    && escapeCorridorTint.g > quietCorridorTint.g
+                    && escapeCorridorTint.b < quietCorridorTint.b
+                    && pressuredCorridorTint.r > escapeCorridorTint.r
+                    && pressuredCorridorTint.g > escapeCorridorTint.g
+                    && pressuredCorridorTint.a == 255,
+                "The corridor art must pick up restrained chapter pressure, escape warmth, and focus or danger emphasis without replacing gameplay contrast.");
+            Texture2D runnerTexture = Resources.Load<Texture2D>("GreedLast/PrototypeRunner");
+            Require(
+                runnerTexture != null,
                 "The generated dokkaebi runner illustration must be packaged as a Resources texture for lobby and run presentation.");
             TextureImporter runnerTextureImporter = AssetImporter.GetAtPath(
                 "Assets/Resources/GreedLast/PrototypeRunner.png") as TextureImporter;
@@ -185,9 +239,13 @@ namespace GreedLast.Editor
                 runnerTextureImporter != null
                     && !runnerTextureImporter.mipmapEnabled
                     && !runnerTextureImporter.isReadable
+                    && runnerTextureImporter.npotScale == TextureImporterNPOTScale.None
                     && runnerTextureImporter.wrapMode == TextureWrapMode.Clamp
                     && runnerTextureImporter.alphaIsTransparency
-                    && runnerTextureImporter.maxTextureSize <= 1024,
+                    && runnerTextureImporter.DoesSourceTextureHaveAlpha()
+                    && runnerTextureImporter.maxTextureSize <= 1024
+                    && runnerTexture.width / (float)runnerTexture.height >= 0.62f
+                    && runnerTexture.width / (float)runnerTexture.height <= 0.70f,
                 "The transparent runner illustration must use compact mobile UI texture settings without mipmaps, CPU readback, or repeating edges.");
             Require(
                 InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true)
@@ -203,8 +261,9 @@ namespace GreedLast.Editor
                     && runnerIllustrationTint.r > runnerIllustrationTint.g
                     && runnerIllustrationTint.g > 180,
                 "Runner feedback tint must preserve the illustration while still carrying judgement color.");
+            Texture2D trapTexture = Resources.Load<Texture2D>("GreedLast/PrototypeTraps");
             Require(
-                Resources.Load<Texture2D>("GreedLast/PrototypeTraps") != null,
+                trapTexture != null,
                 "The generated three-action trap atlas must be packaged as a Resources texture for live run hazards.");
             TextureImporter trapTextureImporter = AssetImporter.GetAtPath(
                 "Assets/Resources/GreedLast/PrototypeTraps.png") as TextureImporter;
@@ -212,9 +271,13 @@ namespace GreedLast.Editor
                 trapTextureImporter != null
                     && !trapTextureImporter.mipmapEnabled
                     && !trapTextureImporter.isReadable
+                    && trapTextureImporter.npotScale == TextureImporterNPOTScale.None
                     && trapTextureImporter.wrapMode == TextureWrapMode.Clamp
                     && trapTextureImporter.alphaIsTransparency
-                    && trapTextureImporter.maxTextureSize <= 2048,
+                    && trapTextureImporter.DoesSourceTextureHaveAlpha()
+                    && trapTextureImporter.maxTextureSize <= 2048
+                    && trapTexture.width / (float)trapTexture.height >= 2.90f
+                    && trapTexture.width / (float)trapTexture.height <= 3.10f,
                 "The transparent trap atlas must use mobile UI texture settings without mipmaps, CPU readback, or atlas-edge repeating.");
             Require(
                 InvokeRuntimeUiInt("BuildPrototypeTrapProceduralAlpha", true, 220) < 64
@@ -1477,6 +1540,7 @@ namespace GreedLast.Editor
             VerifyResponsiveDetailPanelSizing();
             VerifyRuntimeBoardScreenRenderVisibility();
             VerifyRuntimeLobbyToRunVisualHandoff();
+            VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);
             VerifyClutchCounterPayoff(now + 840f);
             VerifyRoutePayoffContracts(now + 900f);
@@ -9563,6 +9627,14 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 1f);
                 InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
                 Require(lanePreviewRoot != null && lanePreviewRoot.activeSelf, "Lobby rendering must keep the lane preview visible.");
+                Require(
+                    !laneButtons[0].gameObject.activeSelf && !laneButtons[1].gameObject.activeSelf
+                        && !laneButtons[2].gameObject.activeSelf
+                        && !GetRuntimeUiField<Image>(ui, "judgementLine").enabled
+                        && !GetRuntimeUiField<Image>(ui, "beatMarker").enabled
+                        && GetRuntimeUiField<RawImage>(ui, "prototypeEntranceBackdrop").texture
+                            == Resources.Load<Texture2D>("GreedLast/PrototypeLobby"),
+                    "The illustrated lobby must show the character-free plate and one runtime runner without lane labels, a judgement line, or the old square marker.");
                 Require(subtitleText != null && !string.IsNullOrEmpty(subtitleText.text), "Lobby rendering must keep the mode subtitle visible.");
                 Require(
                     lobbyRunPortalPieces != null
@@ -9844,7 +9916,7 @@ namespace GreedLast.Editor
             }
         }
 
-        private static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui)
+        internal static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui)
         {
             Action action = null;
             Action<int> timingAction = null;
@@ -9937,6 +10009,11 @@ namespace GreedLast.Editor
 
                 ui.RenderRun(snapshot);
                 float handoffNow = Time.unscaledTime;
+                Require(
+                    GetRuntimeUiField<Button[]>(ui, "laneButtons")[0].gameObject.activeSelf
+                        && GetRuntimeUiField<Image>(ui, "judgementLine").enabled
+                        && !GetRuntimeUiField<Image>(ui, "beatMarker").enabled,
+                    "Starting a run from the clean illustrated lobby must restore the lane inputs and timing line without restoring the square behind the runner.");
                 SetRuntimeUiField(ui, "runEntranceHandoffStartedAt", handoffNow - 0.17f);
                 SetRuntimeUiField(ui, "runEntranceHandoffUntil", handoffNow + 0.17f);
                 InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 0.5f);
@@ -10154,6 +10231,144 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void VerifyRuntimeCleanViewFlow()
+        {
+            GameObject existingCamera = GameObject.Find("GreedLastCamera");
+            GameObject existingEventSystem = GameObject.Find("GreedLastEventSystem");
+            GameObject host = new GameObject("GreedLastCleanViewSmokeHost");
+            GameObject canvasRoot = null;
+
+            try
+            {
+                GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
+                InitializeRuntimeUiSmoke(ui);
+                canvasRoot = GetRuntimeUiField<GameObject>(ui, "rootPanel").transform.root.gameObject;
+                Button invincibleButton = GetRuntimeUiField<Button>(ui, "devInvincibleButton");
+                Button pauseButton = GetRuntimeUiField<Button>(ui, "pauseButton");
+                Button[] lanes = GetRuntimeUiField<Button[]>(ui, "laneButtons");
+                Button[] volumeButtons = GetRuntimeUiField<Button[]>(ui, "sfxVolumeButtons");
+                Button[] timingButtons = GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons");
+                CanvasGroup devGroup = invincibleButton.GetComponent<CanvasGroup>();
+                CanvasGroup volumeGroup = volumeButtons[0].GetComponent<CanvasGroup>();
+                CanvasGroup timingGroup = timingButtons[0].GetComponent<CanvasGroup>();
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot snapshot = default;
+                core.SnapshotChanged += value => snapshot = value;
+                float now = Time.realtimeSinceStartup;
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "Infinite", string.Empty, 0));
+                core.EnterInfiniteRun();
+                core.Tick(now + 3f);
+                core.ToggleDevInvincible();
+                Require(!snapshot.CountdownActive && snapshot.DevInvincible, "Clean view smoke must start from a live invincible run.");
+                ui.RenderRun(snapshot);
+                Require(invincibleButton.gameObject.activeSelf && invincibleButton.IsInteractable(), "Development tools must be available before enabling clean view.");
+
+                ui.ToggleDevCleanView();
+                ui.RenderRun(snapshot);
+                GreedLastRunSnapshot rendered = GetRuntimeUiValueField<GreedLastRunSnapshot>(ui, "latestRunSnapshot");
+                Require(
+                    devGroup.alpha == 0f && !devGroup.blocksRaycasts && !invincibleButton.IsInteractable()
+                        && volumeGroup.alpha == 0f && !volumeGroup.blocksRaycasts
+                        && timingGroup.alpha == 0f && !timingGroup.blocksRaycasts
+                        && pauseButton.gameObject.activeSelf && pauseButton.IsInteractable()
+                        && lanes[0].IsInteractable() && lanes[1].IsInteractable() && lanes[2].IsInteractable()
+                        && rendered.DevInvincible && rendered.Score == snapshot.Score
+                        && rendered.Distance == snapshot.Distance,
+                    "Clean view must hide and disable test/settings surfaces without changing the run or hiding gameplay inputs.");
+                Require(!GetRuntimeUiField<Text>(ui, "detailText").enabled,
+                    "Active gameplay must not cover the runner and judgement line with introductory paragraphs.");
+
+                core.TogglePause(now + 3.1f);
+                ui.RenderRun(snapshot);
+                Require(
+                    snapshot.Paused && volumeButtons[0].gameObject.activeSelf
+                        && volumeGroup.alpha == 1f && volumeGroup.blocksRaycasts && volumeButtons[0].IsInteractable()
+                        && timingGroup.alpha == 1f && timingGroup.blocksRaycasts && timingButtons[0].IsInteractable()
+                        && devGroup.alpha == 0f && !devGroup.blocksRaycasts && !lanes[0].IsInteractable(),
+                    "The pause menu must restore usable sensory settings while clean view keeps development controls hidden.");
+
+                VerifyPauseMenuGeometry(ui, volumeButtons, timingButtons);
+
+                core.TogglePause(now + 3.2f);
+                ui.RenderRun(snapshot);
+                Require(snapshot.ResumeCountdownActive && !lanes[0].IsInteractable(), "Clean view must not bypass resume countdown input protection.");
+                Require(!GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable()
+                        && GetRuntimeUiField<Text>(ui, "pauseMenuTitleText").text.StartsWith("재개 ", StringComparison.Ordinal),
+                    "Resume countdown must show its count and disable repeated resume clicks.");
+                core.Tick(now + 6f);
+                ui.RenderRun(snapshot);
+                Require(
+                    !snapshot.Paused && snapshot.DevInvincible
+                        && volumeGroup.alpha == 0f && !volumeGroup.blocksRaycasts
+                        && timingGroup.alpha == 0f && !timingGroup.blocksRaycasts
+                        && lanes[0].IsInteractable(),
+                    "Resuming must hide settings again while preserving invincibility and restoring live lane input.");
+
+                Transform root = GetRuntimeUiField<GameObject>(ui, "rootPanel").transform;
+                Require(volumeButtons[0].transform.parent == root && timingButtons[0].transform.parent == root
+                        && GetRuntimeUiField<Button>(ui, "nextPatternButton").transform.parent == root
+                        && GetRuntimeUiField<Button>(ui, "returnLobbyButton").transform.parent == root,
+                    "Leaving pause must return shared controls to the gameplay root, not the hidden menu.");
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+                Button connectionButton = GetRuntimeUiField<Button>(ui, "debugConnectionButton");
+                Require(GetRuntimeUiField<Text>(ui, "detailText").enabled,
+                    "Returning to a non-run screen must restore its result and lobby detail text.");
+                Require(
+                    connectionButton.gameObject.activeSelf && !connectionButton.IsInteractable()
+                        && connectionButton.GetComponent<CanvasGroup>().alpha == 0f,
+                    "Clean view must survive a run-to-lobby transition without exposing the connection test button.");
+                ui.ToggleDevCleanView();
+                Require(
+                    connectionButton.IsInteractable() && connectionButton.GetComponent<CanvasGroup>().alpha == 1f,
+                    "A second clean view toggle must restore the lobby test button without reloading the screen.");
+            }
+            finally
+            {
+                if (canvasRoot != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(canvasRoot);
+                }
+
+                DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
+                DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
+        private static void VerifyPauseMenuGeometry(GreedLastRuntimeUi ui, Button[] volume, Button[] timing)
+        {
+            RectTransform panel = GetRuntimeUiField<Image>(ui, "pauseMenuPanel").rectTransform;
+            Button comfort = GetRuntimeUiField<Button>(ui, "motionComfortButton");
+            var controls = new List<Button>(volume);
+            controls.AddRange(timing);
+            controls.Add(GetRuntimeUiField<Button>(ui, "nextPatternButton"));
+            controls.Add(GetRuntimeUiField<Button>(ui, "returnLobbyButton"));
+            controls.Add(GetRuntimeUiField<Button>(ui, "rotationTiltButton"));
+            controls.Add(GetRuntimeUiField<Button>(ui, "hapticsButton"));
+            controls.Add(comfort);
+            Canvas.ForceUpdateCanvases();
+            var corners = new Vector3[4];
+            var bounds = new List<Rect>();
+            foreach (Button button in controls)
+            {
+                Require(button.transform.parent == panel, "Pause controls must belong to the panel: " + button.name);
+                if (!button.gameObject.activeInHierarchy) continue;
+                button.GetComponent<RectTransform>().GetWorldCorners(corners);
+                Vector3 min = panel.InverseTransformPoint(corners[0]);
+                Vector3 max = panel.InverseTransformPoint(corners[2]);
+                Rect rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+                Require(panel.rect.Contains(rect.min) && panel.rect.Contains(rect.max),
+                    "Pause control must stay inside the panel at every aspect ratio: " + button.name);
+                foreach (Rect previous in bounds)
+                    Require(!rect.Overlaps(previous), "Pause controls must not overlap: " + button.name);
+                bounds.Add(rect);
+            }
+            Require(comfort.gameObject.activeInHierarchy && comfort.IsInteractable()
+                    && comfort.transform.GetSiblingIndex() > GetRuntimeUiField<Text>(ui, "pauseMenuBodyText").transform.GetSiblingIndex(),
+                "Motion comfort must be visible and clickable above the pause backdrop.");
+        }
+
         private static T GetRuntimeUiField<T>(GreedLastRuntimeUi ui, string fieldName) where T : class
         {
             FieldInfo field = typeof(GreedLastRuntimeUi).GetField(
@@ -10196,7 +10411,7 @@ namespace GreedLast.Editor
             return label == null ? string.Empty : label.text;
         }
 
-        private static GreedLastStateSnapshot BuildUiScreenSnapshot(
+        internal static GreedLastStateSnapshot BuildUiScreenSnapshot(
             GreedLastScreenState state,
             string headline,
             string detail,

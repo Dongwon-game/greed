@@ -12203,6 +12203,12 @@ namespace GreedLast
                 return false;
             }
 
+            if (Input.GetKeyDown(KeyCode.F11))
+            {
+                runtimeUi.ToggleDevCleanView();
+                return true;
+            }
+
             bool runState = IsRunState();
             bool stateDevTools = stateMachine.CurrentState == GreedLastScreenState.LobbyReady
                 || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard;
@@ -15074,7 +15080,8 @@ namespace GreedLast
         private static readonly Color32 PrototypeGoldColor = new Color32(224, 177, 74, 255);
         private static readonly Color32 PrototypeTealColor = new Color32(86, 156, 149, 255);
         private static readonly Color32 PrototypeVermilionColor = new Color32(214, 88, 68, 255);
-        private static readonly Color32 PrototypeRunnerSkinColor = new Color32(242, 210, 143, 255);
+        private static readonly Color32 PrototypeRunCorridorTintColor = new Color32(126, 143, 137, 255);
+        private static readonly Color32 PrototypeRunnerSkinColor = new Color32(154, 169, 86, 255);
         private static readonly Color32 PrototypeRunnerHairColor = new Color32(45, 64, 70, 255);
         private static readonly Color32 PrototypeRunnerHornColor = new Color32(246, 229, 167, 255);
         private static readonly Color32 PrototypeRunnerSashColor = new Color32(210, 78, 62, 255);
@@ -15085,6 +15092,8 @@ namespace GreedLast
         private RectTransform rootPanelRect;
         private Image rootBackground;
         private RawImage prototypeEntranceBackdrop;
+        private Texture2D prototypeEntranceTitleTexture;
+        private Texture2D prototypeLobbyTexture;
         private CanvasGroup prototypeEntranceBackdropCanvasGroup;
         private GreedLastScreenState prototypeEntranceBackdropState;
         private RawImage prototypeRunCorridorBackdrop;
@@ -15434,6 +15443,9 @@ namespace GreedLast
         private int recommendedGrowthLaneIndex = -1;
         private GreedLastRunSnapshot latestRunSnapshot;
         private bool hasRunSnapshot;
+        private bool devCleanViewEnabled;
+        private readonly List<CanvasGroup> devCleanViewGroups = new List<CanvasGroup>();
+        private readonly List<CanvasGroup> liveSettingCleanViewGroups = new List<CanvasGroup>();
 
         public bool RotationTiltEnabled => rotationTiltEnabled;
 
@@ -15510,6 +15522,43 @@ namespace GreedLast
         {
             devTrapVisualPreviewMode = (devTrapVisualPreviewMode + 1) % DevTrapVisualPreviewModeCount;
             ShowDevTrapVisualPreviewFeedback();
+        }
+
+        public void ToggleDevCleanView()
+        {
+            if (!DevToolsEnabled)
+            {
+                return;
+            }
+
+            devCleanViewEnabled = !devCleanViewEnabled;
+            ApplyDevCleanView();
+        }
+
+        private void ApplyDevCleanView()
+        {
+            bool cleanView = !DevToolsEnabled || devCleanViewEnabled;
+            bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
+            SetCleanViewGroupsVisible(devCleanViewGroups, !cleanView);
+            SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings);
+        }
+
+        private static void SetCleanViewGroupsVisible(List<CanvasGroup> groups, bool visible)
+        {
+            foreach (CanvasGroup group in groups)
+            {
+                group.alpha = visible ? 1f : 0f;
+                group.interactable = visible;
+                group.blocksRaycasts = visible;
+            }
+        }
+
+        private static void RegisterCleanViewControls(List<CanvasGroup> groups, params Component[] controls)
+        {
+            foreach (Component control in controls)
+            {
+                groups.Add(control.gameObject.AddComponent<CanvasGroup>());
+            }
         }
 
         private void Update()
@@ -15892,6 +15941,7 @@ namespace GreedLast
             subtitleText.text = string.Empty;
             string detail = BuildDetail(snapshot);
             detailText.text = detail;
+            detailText.enabled = true;
 
             bool lobbyLike = snapshot.State == GreedLastScreenState.LobbyReady
                 || snapshot.State == GreedLastScreenState.ReSyncPending;
@@ -15981,6 +16031,15 @@ namespace GreedLast
             {
                 lanePreviewRoot.SetActive(ShouldShowLanePreviewForScreen(snapshot.State));
             }
+
+            bool entranceLike = ShouldShowPrototypeEntranceBackdrop(snapshot.State);
+            for (int i = 0; i < laneButtons.Length; i += 1)
+            {
+                laneButtons[i].gameObject.SetActive(!entranceLike);
+                laneHitButtons[i].gameObject.SetActive(!entranceLike);
+            }
+            judgementLine.enabled = runLike;
+            beatMarker.enabled = runLike && runnerIllustration == null;
 
             if (judgementFeedbackText != null && !runLike)
             {
@@ -16224,6 +16283,7 @@ namespace GreedLast
             }
 
             ApplyButtonTones(snapshot, saveDraftLike);
+            ApplyDevCleanView();
         }
 
         public void RenderRun(GreedLastRunSnapshot snapshot)
@@ -16234,10 +16294,12 @@ namespace GreedLast
             bool hadPreviousSnapshot = hasRunSnapshot;
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
+            judgementLine.enabled = !snapshot.ChoiceActive && !snapshot.Stopped;
             TrackChoiceConfirmation(hadPreviousSnapshot, previousSnapshot, snapshot);
             TrackStagePresentation(snapshot);
             HideDebugText();
             RenderRunHeader(snapshot);
+            detailText.enabled = snapshot.Stopped;
             bool showDevTools = DevToolsEnabled && !snapshot.PracticeMode;
 
             string runState = snapshot.Stopped
@@ -16343,7 +16405,8 @@ namespace GreedLast
             SetButtonLabel(sfxVolumeButtons[0], "소리 -");
             UpdateSfxVolumeButtonLabel();
             SetButtonLabel(sfxVolumeButtons[2], "소리 +");
-            nextPatternButton.interactable = snapshot.Paused || (!snapshot.CountdownActive && (!snapshot.ChoiceActive || snapshot.Stopped));
+            nextPatternButton.interactable = !snapshot.ResumeCountdownActive
+                && (snapshot.Paused || (!snapshot.CountdownActive && (!snapshot.ChoiceActive || snapshot.Stopped)));
             pauseButton.interactable = !snapshot.Stopped && !snapshot.ChoiceActive && !snapshot.ResumeCountdownActive;
             infiniteTestStopButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
             focusMaxButton.interactable = showDevTools && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
@@ -16386,6 +16449,7 @@ namespace GreedLast
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
+            ApplyDevCleanView();
         }
 
         private static string PrefixDevShortcut(string shortcut, string label)
@@ -16608,7 +16672,9 @@ namespace GreedLast
 
             if (pauseMenuTitleText != null)
             {
-                pauseMenuTitleText.text = BuildRunPauseTitle(snapshot);
+                pauseMenuTitleText.text = snapshot.ResumeCountdownActive
+                    ? "재개 " + Mathf.CeilToInt(snapshot.ResumeCountdownRemainingSeconds)
+                    : BuildRunPauseTitle(snapshot);
             }
 
             if (pauseMenuBodyText != null)
@@ -16775,6 +16841,7 @@ namespace GreedLast
 
         private static string BuildRunNextActionButtonLabel(GreedLastRunSnapshot snapshot, bool normalClearReady)
         {
+            if (snapshot.ResumeCountdownActive) return "재개 준비";
             if (snapshot.Stopped)
             {
                 if (snapshot.PracticeMode)
@@ -16877,6 +16944,7 @@ namespace GreedLast
             BringButtonToFront(returnLobbyButton);
             BringButtonToFront(hapticsButton);
             BringButtonToFront(rotationTiltButton);
+            BringButtonToFront(motionComfortButton);
             BringButtonArrayToFront(sfxVolumeButtons);
             BringButtonArrayToFront(timingOffsetButtons);
         }
@@ -17075,30 +17143,28 @@ namespace GreedLast
 
         private void SetRunMenuButtonLayout(bool pauseMenu)
         {
+            Transform buttonParent = pauseMenu ? pauseMenuPanel.transform : rootPanel.transform;
+            SetRunMenuButtonParent(nextPatternButton, buttonParent);
+            SetRunMenuButtonParent(returnLobbyButton, buttonParent);
+            SetRunMenuButtonParent(rotationTiltButton, buttonParent);
+            SetRunMenuButtonParent(hapticsButton, buttonParent);
+            SetRunMenuButtonParent(motionComfortButton, buttonParent);
+            foreach (Button button in sfxVolumeButtons) SetRunMenuButtonParent(button, buttonParent);
+            foreach (Button button in timingOffsetButtons) SetRunMenuButtonParent(button, buttonParent);
+
             if (pauseMenu)
             {
-                SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.475f, 560f, 78f);
-                SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.415f, 420f, 64f);
-                SetAnchored(sfxVolumeButtons[0].GetComponent<RectTransform>(), 0.37f, 0.35f, 180f, 58f);
-                SetAnchored(sfxVolumeButtons[1].GetComponent<RectTransform>(), 0.5f, 0.35f, 220f, 58f);
-                SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.63f, 0.35f, 180f, 58f);
-                SetAnchored(timingOffsetButtons[0].GetComponent<RectTransform>(), 0.37f, 0.29f, 180f, 58f);
-                SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.5f, 0.29f, 220f, 58f);
-                SetAnchored(timingOffsetButtons[2].GetComponent<RectTransform>(), 0.63f, 0.29f, 180f, 58f);
+                SetPauseMenuControl(nextPatternButton, 0f, 300f, 820f);
+                SetPauseMenuControl(returnLobbyButton, 0f, 180f, 820f);
+                for (int i = 0; i < 3; i += 1)
+                {
+                    SetPauseMenuControl(sfxVolumeButtons[i], (i - 1) * 286f, 40f, 248f);
+                    SetPauseMenuControl(timingOffsetButtons[i], (i - 1) * 286f, -100f, 248f);
+                }
                 bool showRotationTiltSetting = rotationTiltButton.gameObject.activeSelf;
-                SetAnchored(rotationTiltButton.GetComponent<RectTransform>(), 0.5f, 0.23f, 250f, 58f);
-                SetAnchored(
-                    hapticsButton.GetComponent<RectTransform>(),
-                    0.5f,
-                    showRotationTiltSetting ? 0.175f : 0.23f,
-                    250f,
-                    58f);
-                SetAnchored(
-                    motionComfortButton.GetComponent<RectTransform>(),
-                    0.5f,
-                    showRotationTiltSetting ? 0.12f : 0.175f,
-                    250f,
-                    58f);
+                SetPauseMenuControl(rotationTiltButton, 0f, -248f, 820f);
+                SetPauseMenuControl(hapticsButton, 0f, showRotationTiltSetting ? -380f : -248f, 820f);
+                SetPauseMenuControl(motionComfortButton, 0f, showRotationTiltSetting ? -512f : -380f, 820f);
                 return;
             }
 
@@ -17119,6 +17185,18 @@ namespace GreedLast
         private void ResetSaveSlotUtilityButtonLayout()
         {
             SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.475f, 250f, 66f);
+        }
+
+        private static void SetRunMenuButtonParent(Button button, Transform parent)
+        {
+            if (button.transform.parent != parent) button.transform.SetParent(parent, false);
+        }
+
+        private static void SetPauseMenuControl(Button button, float x, float y, float width)
+        {
+            RectTransform rect = button.GetComponent<RectTransform>();
+            SetAnchored(rect, 0.5f, 0.5f, width, 92f);
+            rect.anchoredPosition = new Vector2(x, y);
         }
 
         private void SetRecordBoardButtonLayout()
@@ -25603,6 +25681,8 @@ namespace GreedLast
                 return;
             }
 
+            devCleanViewGroups.Clear();
+            liveSettingCleanViewGroups.Clear();
             EnsureCamera();
             EnsureEventSystem();
 
@@ -25659,11 +25739,11 @@ namespace GreedLast
             judgementFeedbackText.raycastTarget = false;
 
             stageTransitionText = CreateText(rootPanel.transform, "StageTransition", string.Empty, 50, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(stageTransitionText.rectTransform, 0.5f, 0.565f, 880f, 104f);
+            SetAnchored(stageTransitionText.rectTransform, 0.5f, 0.665f, 1000f, 104f);
             stageTransitionText.color = new Color32(255, 238, 181, 0);
             stageTransitionText.raycastTarget = false;
 
-            GameObject transitionLine = CreateRect("StageTransitionLine", rootPanel.transform, new Vector2(0.5f, 0.525f), new Vector2(0.5f, 0.525f), new Vector2(0.5f, 0.5f), new Vector2(420f, 6f));
+            GameObject transitionLine = CreateRect("StageTransitionLine", rootPanel.transform, new Vector2(0.5f, 0.63f), new Vector2(0.5f, 0.63f), new Vector2(0.5f, 0.5f), new Vector2(420f, 6f));
             stageTransitionLine = transitionLine.AddComponent<Image>();
             stageTransitionLine.color = new Color32(255, 238, 181, 0);
             stageTransitionLine.raycastTarget = false;
@@ -25835,6 +25915,15 @@ namespace GreedLast
             debugText = CreateText(rootPanel.transform, "Debug", string.Empty, 22, TextAnchor.LowerLeft, FontStyle.Normal);
             debugText.color = new Color32(125, 139, 143, 255);
             SetAnchored(debugText.rectTransform, 0.24f, 0.04f, 450f, 110f);
+
+            RegisterCleanViewControls(
+                devCleanViewGroups,
+                debugConnectionButton, devInvincibleButton, infiniteTestStopButton,
+                focusMaxButton, threatUpButton, threatDownButton, debugText);
+            RegisterCleanViewControls(devCleanViewGroups, devShortcutButtons);
+            RegisterCleanViewControls(liveSettingCleanViewGroups, timingOffsetButtons);
+            RegisterCleanViewControls(liveSettingCleanViewGroups, sfxVolumeButtons);
+            RegisterCleanViewControls(liveSettingCleanViewGroups, hapticsButton);
         }
 
         private void CreatePauseMenuOverlay(Transform parent)
@@ -25853,7 +25942,7 @@ namespace GreedLast
             pauseMenuSoftBlurBands[3] = CreatePauseSoftBlurBand("PauseMenuSoftBlurRight", new Vector2(0.78f, 0.12f), new Vector2(1f, 0.88f), new Color32(7, 14, 17, 96));
             pauseMenuSoftBlurBands[4] = CreatePauseSoftBlurBand("PauseMenuSoftFocusBand", new Vector2(0.12f, 0.34f), new Vector2(0.88f, 0.68f), new Color32(255, 238, 181, 18));
 
-            GameObject panel = CreateRect("PauseMenuPanel", pauseMenuOverlay.transform, new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.5f), new Vector2(760f, 1120f));
+            GameObject panel = CreateRect("PauseMenuPanel", pauseMenuOverlay.transform, new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.50f), new Vector2(0.5f, 0.5f), new Vector2(1040f, 1580f));
             pauseMenuPanel = panel.AddComponent<Image>();
             pauseMenuPanel.color = new Color32(18, 27, 30, 236);
             pauseMenuPanel.raycastTarget = false;
@@ -25863,11 +25952,13 @@ namespace GreedLast
             panelGlow.raycastTarget = false;
 
             pauseMenuTitleText = CreateText(panel.transform, "PauseMenuTitle", "일시정지 메뉴", 52, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(pauseMenuTitleText.rectTransform, 0.5f, 0.74f, 650f, 90f);
+            SetAnchored(pauseMenuTitleText.rectTransform, 0.5f, 0.5f, 900f, 90f);
+            pauseMenuTitleText.rectTransform.anchoredPosition = new Vector2(0f, 660f);
             pauseMenuTitleText.color = new Color32(237, 239, 231, 255);
 
             pauseMenuBodyText = CreateText(panel.transform, "PauseMenuBody", string.Empty, 29, TextAnchor.MiddleCenter, FontStyle.Normal);
-            SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.61f, 650f, 160f);
+            SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.5f, 900f, 238f);
+            pauseMenuBodyText.rectTransform.anchoredPosition = new Vector2(0f, 478f);
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
         }
 
@@ -27058,8 +27149,8 @@ namespace GreedLast
 
             CreateRunnerAvatar(laneRoot.transform);
 
-            activeActionCueText = CreateText(laneRoot.transform, "ActiveActionCue", string.Empty, 40, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(activeActionCueText.rectTransform, 0.5f, 0.315f, 760f, 82f);
+            activeActionCueText = CreateText(parent, "ActiveActionCue", string.Empty, 40, TextAnchor.MiddleCenter, FontStyle.Bold);
+            SetAnchored(activeActionCueText.rectTransform, 0.5f, 0.405f, 1000f, 90f);
             activeActionCueText.color = new Color32(255, 238, 181, 0);
             activeActionCueText.raycastTarget = false;
 
@@ -29405,7 +29496,11 @@ namespace GreedLast
 
         private void CreatePrototypeEntranceBackdrop(Transform parent)
         {
-            Texture2D texture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
+            prototypeEntranceTitleTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
+            prototypeLobbyTexture = Resources.Load<Texture2D>("GreedLast/PrototypeLobby");
+            Texture2D texture = prototypeEntranceTitleTexture != null
+                ? prototypeEntranceTitleTexture
+                : prototypeLobbyTexture;
             if (texture == null)
             {
                 return;
@@ -29444,6 +29539,18 @@ namespace GreedLast
             }
 
             bool visible = ShouldShowPrototypeEntranceBackdrop(state);
+            if (visible)
+            {
+                Texture2D texture = state == GreedLastScreenState.BootInit
+                    ? prototypeEntranceTitleTexture
+                    : prototypeLobbyTexture;
+                if (texture != null)
+                {
+                    prototypeEntranceBackdrop.texture = texture;
+                    prototypeEntranceBackdrop.GetComponent<AspectRatioFitter>().aspectRatio =
+                        (float)texture.width / texture.height;
+                }
+            }
             if (visible && !prototypeEntranceBackdrop.gameObject.activeSelf)
             {
                 prototypeEntranceBackdropCanvasGroup.alpha = 0f;
@@ -29532,7 +29639,7 @@ namespace GreedLast
                 Vector2.zero);
             prototypeRunCorridorBackdrop = backdropObject.AddComponent<RawImage>();
             prototypeRunCorridorBackdrop.texture = texture;
-            prototypeRunCorridorBackdrop.color = new Color32(126, 143, 137, 255);
+            prototypeRunCorridorBackdrop.color = PrototypeRunCorridorTintColor;
             prototypeRunCorridorBackdrop.raycastTarget = false;
 
             AspectRatioFitter fitter = backdropObject.AddComponent<AspectRatioFitter>();
@@ -29575,6 +29682,21 @@ namespace GreedLast
                 prototypeRunCorridorBackdropCanvasGroup.alpha,
                 targetAlpha,
                 1f - Mathf.Exp(-Time.unscaledDeltaTime * 5.2f));
+
+            Color32 targetTint = visible
+                ? BuildPrototypeRunCorridorBackdropTint(
+                    BuildRunAtmosphereAccent(latestRunSnapshot),
+                    latestRunSnapshot.InfiniteMode,
+                    latestRunSnapshot.Phase == GreedLastRunPhase.EscapeRunning
+                        || latestRunSnapshot.Phase == GreedLastRunPhase.ClearResolving,
+                    latestRunSnapshot.FocusStateActive,
+                    latestRunSnapshot.Health <= 1 && !latestRunSnapshot.Stopped,
+                    BuildTrapReadinessAtmosphereStrength(latestRunSnapshot))
+                : PrototypeRunCorridorTintColor;
+            prototypeRunCorridorBackdrop.color = Color.Lerp(
+                prototypeRunCorridorBackdrop.color,
+                targetTint,
+                1f - Mathf.Exp(-Time.unscaledDeltaTime * 4.4f));
 
             bool advancing = visible && ShouldAdvanceRunMotion(latestRunSnapshot);
             float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
@@ -29676,6 +29798,32 @@ namespace GreedLast
                 * Mathf.Clamp01(readiness)
                 * 1.6f
                 * BuildMotionComfortRotationScale(motionComfortEnabled);
+        }
+
+        private static Color32 BuildPrototypeRunCorridorBackdropTint(
+            Color32 atmosphereAccent,
+            bool infiniteMode,
+            bool escapePhase,
+            bool focusActive,
+            bool healthDanger,
+            float trapReadiness)
+        {
+            float blend = infiniteMode ? 0.18f : escapePhase ? 0.16f : 0.10f;
+            if (focusActive)
+            {
+                blend += 0.04f;
+            }
+
+            if (healthDanger)
+            {
+                blend += 0.03f;
+            }
+
+            blend += Mathf.Clamp01(trapReadiness) * 0.035f;
+            return Color32.Lerp(
+                PrototypeRunCorridorTintColor,
+                atmosphereAccent,
+                Mathf.Clamp(blend, 0.08f, 0.28f));
         }
 
         private Color32 BuildRunLaneBaseColor(int laneIndex, float lanePulse)
@@ -35353,7 +35501,7 @@ namespace GreedLast
                 return;
             }
 
-            if (!ShouldShowActiveActionCue(snapshot))
+            if (!ShouldShowActiveActionCue(snapshot) || judgementFeedbackUntil > Time.unscaledTime)
             {
                 HideActiveActionCue();
                 return;
