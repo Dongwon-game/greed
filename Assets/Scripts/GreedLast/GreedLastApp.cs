@@ -12612,7 +12612,7 @@ namespace GreedLast
 
             if (IsSelectedSaveSlotUsable(lobby))
             {
-                detail += BuildInfinitePreparationDetail();
+                detail = BuildInfinitePreparationDetail().TrimStart() + "\n\n" + detail;
             }
 
             if (!string.IsNullOrEmpty(notice))
@@ -12625,7 +12625,12 @@ namespace GreedLast
 
         private string BuildInfinitePreparationDetail()
         {
-            switch (infinitePreparationStep)
+            return BuildInfinitePreparationDetailForStep(infinitePreparationStep, infinitePreparationGift, infinitePreparationRelic);
+        }
+
+        public static string BuildInfinitePreparationDetailForStep(int step, string gift, string relic)
+        {
+            switch (step)
             {
                 case 0:
                     return "\n\n시작 정비 1/2 · 기프트 정비 선택"
@@ -12633,12 +12638,12 @@ namespace GreedLast
                         + "\n선택 전에는 사용 횟수가 차감되지 않습니다.";
                 case 1:
                     return "\n\n시작 정비 2/2 · 유물 정비 선택"
-                        + "\n기프트 정비: " + infinitePreparationGift
+                        + "\n기프트 정비: " + gift
                         + "\n좌 사막의 잔상 / 중 황금 박동 / 우 파라오의 각인";
                 default:
                     return "\n\n시작 정비 완료"
-                        + "\n기프트: " + infinitePreparationGift
-                        + " / 유물: " + infinitePreparationRelic
+                        + "\n기프트: " + gift
+                        + " / 유물: " + relic
                         + "\n이제 시작 확정 시에만 사용 횟수 1회가 차감됩니다."
                         + "\n좌 기프트 다시 / 중 유물 다시 / 우 선택 유지";
             }
@@ -15105,8 +15110,10 @@ namespace GreedLast
         private Text titleText;
         private Text subtitleText;
         private Text detailText;
+        private ScrollRect menuDetailScroll;
         private Text saveSlotModeText;
         private Text runHudText;
+        private string detailedRunHud = string.Empty;
         private Text debugText;
         private GameObject runGaugeRoot;
         private Image healthGaugeFill;
@@ -15539,8 +15546,34 @@ namespace GreedLast
         {
             bool cleanView = !DevToolsEnabled || devCleanViewEnabled;
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
+            if (pauseSettings) UpdatePauseMenuOverlay(latestRunSnapshot);
             SetCleanViewGroupsVisible(devCleanViewGroups, !cleanView);
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings);
+            if (runModeActive && hasRunSnapshot && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode)
+            {
+                CanvasGroup recommendation = timingOffsetButtons[1].GetComponent<CanvasGroup>();
+                recommendation.alpha = 1f;
+                recommendation.interactable = true;
+                recommendation.blocksRaycasts = true;
+            }
+            if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
+            {
+                runHudText.text = cleanView ? BuildCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
+                runHudText.fontSize = cleanView ? 38 : BuildRunHudFontSize(latestRunSnapshot, detailedRunHud);
+                if (cleanView)
+                    SetAnchored(runHudText.rectTransform, 0.5f, 0.265f, 1450f, 150f);
+                else
+                    UpdateRunHudLayout(detailedRunHud);
+                subtitleText.text = cleanView ? string.Empty : BuildModeSubtitleForScreen(
+                    latestRunSnapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest);
+            }
+        }
+
+        private static string BuildCompactLiveRunHud(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0")
+                + "m · 콤보 " + snapshot.Combo
+                + "\n정확 " + snapshot.SuccessCount + " · Good " + snapshot.GoodCount + " · Miss " + snapshot.MissCount;
         }
 
         private static void SetCleanViewGroupsVisible(List<CanvasGroup> groups, bool visible)
@@ -15927,6 +15960,7 @@ namespace GreedLast
         {
             EnsureUi();
             ApplySafeArea();
+            ResetMenuDetailLayout();
             TrackScreenEntranceTransitions(snapshot.State);
             SetPrototypeEntranceBackdropState(snapshot.State);
             if (pauseMenuOverlay != null)
@@ -15999,6 +16033,7 @@ namespace GreedLast
             if (!runLike)
             {
                 ClearJudgementHistory();
+                hasRunSnapshot = false;
             }
 
             detailText.fontSize = recordBoardLike
@@ -16283,6 +16318,7 @@ namespace GreedLast
             }
 
             ApplyButtonTones(snapshot, saveDraftLike);
+            ApplyMenuDetailLayout(snapshot);
             ApplyDevCleanView();
         }
 
@@ -16292,6 +16328,11 @@ namespace GreedLast
             ApplySafeArea();
             GreedLastRunSnapshot previousSnapshot = latestRunSnapshot;
             bool hadPreviousSnapshot = hasRunSnapshot;
+            if (!hadPreviousSnapshot || IsNewRunPresentation(previousSnapshot, snapshot))
+            {
+                ResetRunPresentation(snapshot);
+                hadPreviousSnapshot = false;
+            }
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
             judgementLine.enabled = !snapshot.ChoiceActive && !snapshot.Stopped;
@@ -16327,6 +16368,7 @@ namespace GreedLast
             runHudText.text = snapshot.InfiniteMode
                 ? BuildInfiniteRunHud(snapshot, runState)
                 : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
+            detailedRunHud = runHudText.text;
             runHudText.fontSize = BuildRunHudFontSize(snapshot, runHudText.text);
             UpdateRunHudLayout(runHudText.text);
             UpdateRunGauges(snapshot);
@@ -16449,7 +16491,213 @@ namespace GreedLast
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
+            ApplyStoppedRunPresentation(snapshot);
             ApplyDevCleanView();
+        }
+
+        private static bool IsNewRunPresentation(GreedLastRunSnapshot previous, GreedLastRunSnapshot current)
+        {
+            return (previous.Stopped && !current.Stopped)
+                || previous.InfiniteMode != current.InfiniteMode
+                || previous.PracticeMode != current.PracticeMode
+                || current.SuccessCount + current.GoodCount + current.MissCount
+                    < previous.SuccessCount + previous.GoodCount + previous.MissCount;
+        }
+
+        private void ResetRunPresentation(GreedLastRunSnapshot snapshot)
+        {
+            lastComboForBadge = snapshot.Combo;
+            lastGaugeHealth = snapshot.Health;
+            lastGaugeFocus = snapshot.Focus;
+            lastFocusStateActive = snapshot.FocusStateActive;
+            lastFeedbackScore = snapshot.Score;
+            lastFeedbackHealth = snapshot.Health;
+            lastJudgementText = snapshot.JudgementText;
+            lastTimingRecommendationReady = snapshot.HasTimingRecommendation;
+            comboTierFeedbackPending = false;
+            comboBreakBadgeCombo = 0;
+            comboTierBadgeLevel = 0;
+            comboBreakBadgeUntil = comboTierBadgeUntil = comboBadgePulseUntil = 0f;
+            healthGaugePulseUntil = focusGaugePulseUntil = focusStateActivationPulseUntil = 0f;
+            beatMarkerMissImpactUntil = beatMarkerFocusGuardUntil = beatMarkerSuccessPulseUntil = 0f;
+            beatMarkerGoodPulseUntil = beatMarkerComboBreakPulseUntil = beatMarkerComboTierPulseUntil = beatMarkerProfilePulseUntil = 0f;
+            judgementFeedbackUntil = judgementFeedbackPopUntil = judgementLinePulseUntil = 0f;
+            runnerResponseUntil = resolvedTrapUntil = forwardPayoffBurstUntil = rhythmBreakLineUntil = inputTimingTraceUntil = 0f;
+            threeActionExactBurstUntil = feedbackFlashUntil = downbeatPulseUntil = 0f;
+            stageTransitionUntil = choiceConfirmationUntil = 0f;
+            lastStagePresentationKey = string.Empty;
+            lastPresentedRunWasStopped = false;
+            stageTransitionCuePending = false;
+            judgementFeedbackText.text = string.Empty;
+            feedbackFlash.color = Color.clear;
+            ClearJudgementHistory();
+            for (int i = 0; i < laneButtons.Length; i++)
+            {
+                lanePressPulseUntil[i] = laneInputRippleUntil[i] = laneJudgementPulseUntil[i] = 0f;
+                laneJudgementTagUntil[i] = laneMissShakeUntil[i] = 0f;
+            }
+        }
+
+        private void ApplyStoppedRunPresentation(GreedLastRunSnapshot snapshot)
+        {
+            bool playing = !snapshot.Stopped;
+            lanePreviewRoot.SetActive(playing);
+            runGaugeRoot.SetActive(playing);
+            runProgressRoot.SetActive(playing);
+            runHudText.gameObject.SetActive(playing);
+            stageTransitionText.enabled = playing;
+            stageTransitionLine.enabled = playing;
+            if (!snapshot.Paused) SetButtonFontSize(timingOffsetButtons[1], 22);
+            if (playing) return;
+            comboBadgeRoot.SetActive(false);
+            judgementFeedbackText.text = string.Empty;
+            subtitleText.text = string.Empty;
+            detailText.text = BuildStoppedRunSummary(snapshot);
+            detailText.fontSize = 44;
+            detailText.resizeTextForBestFit = false;
+            SetAnchored(detailText.rectTransform, 0.5f, 0.53f, 1600f, 680f);
+            if (snapshot.PracticeMode)
+            {
+                bool hasCalibration = snapshot.HasTimingRecommendation || snapshot.TimingRecommendationApplied
+                    || Mathf.Abs(snapshot.InputTimingOffsetSeconds) >= 0.001f;
+                timingOffsetButtons[1].gameObject.SetActive(hasCalibration);
+                SetAnchored(timingOffsetButtons[1].GetComponent<RectTransform>(), 0.5f, 0.265f, 690f, 86f);
+                SetButtonFontSize(timingOffsetButtons[1], 34);
+            }
+        }
+
+        private static string BuildStoppedRunSummary(GreedLastRunSnapshot snapshot)
+        {
+            string outcome = snapshot.PracticeMode
+                ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "연습 완료" : "연습 중단"
+                : snapshot.InfiniteMode
+                    ? snapshot.Health <= 0 ? "무한모드 종료 · 체력 소진" : "무한모드 정산 완료"
+                    : snapshot.EscapeSucceeded ? "탈출 성공 · 공명핵 회수" : "탈출 실패 · 체력 소진";
+            string text = outcome + "\n\n"
+                + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m"
+                + "\n정확 " + snapshot.SuccessCount + " · Good " + snapshot.GoodCount + " · Miss " + snapshot.MissCount
+                + "\n최대 콤보 " + snapshot.MaxCombo;
+            if (snapshot.InfiniteMode)
+                text += " · " + snapshot.InfiniteSectionsCleared + "구간 · 최고 위협 " + snapshot.MaxInfiniteThreatLevel;
+            if (!snapshot.PracticeMode && !string.IsNullOrEmpty(snapshot.ActiveChoiceProfile))
+                text += "\n" + snapshot.ActiveChoiceProfile;
+            if (snapshot.SaveEligible && !snapshot.InfiniteMode && !snapshot.PracticeMode)
+                text += "\n\n저장 기회 1회";
+            if (snapshot.PracticeMode && snapshot.HasTimingRecommendation)
+                text += "\n추천 보정 " + FormatTimingRecommendation(snapshot);
+            return text;
+        }
+
+        private void CreateMenuDetailScroll(Transform parent)
+        {
+            GameObject scrollObject = CreateRect("MenuDetailScroll", parent, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            menuDetailScroll = scrollObject.AddComponent<ScrollRect>();
+            menuDetailScroll.horizontal = false;
+            menuDetailScroll.movementType = ScrollRect.MovementType.Clamped;
+            menuDetailScroll.scrollSensitivity = 70f;
+            GameObject viewport = CreateRect("Viewport", scrollObject.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            viewport.GetComponent<RectTransform>().offsetMax = new Vector2(-32f, 0f);
+            viewport.AddComponent<Image>().color = Color.clear;
+            viewport.AddComponent<RectMask2D>();
+            menuDetailScroll.viewport = viewport.GetComponent<RectTransform>();
+            GameObject track = CreateRect("Scrollbar", scrollObject.transform, new Vector2(1f, 0f), Vector2.one,
+                new Vector2(1f, 0.5f), new Vector2(14f, 0f));
+            track.AddComponent<Image>().color = new Color32(58, 73, 76, 130);
+            GameObject handle = CreateRect("Handle", track.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            Image handleImage = handle.AddComponent<Image>();
+            handleImage.color = new Color32(171, 203, 195, 240);
+            Scrollbar scrollbar = track.AddComponent<Scrollbar>();
+            scrollbar.handleRect = handle.GetComponent<RectTransform>();
+            scrollbar.targetGraphic = handleImage;
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            menuDetailScroll.verticalScrollbar = scrollbar;
+            menuDetailScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            scrollObject.SetActive(false);
+        }
+
+        private void ResetMenuDetailLayout()
+        {
+            if (menuDetailScroll != null)
+            {
+                detailText.transform.SetParent(rootPanel.transform, false);
+                detailText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                menuDetailScroll.content = null;
+                menuDetailScroll.gameObject.SetActive(false);
+            }
+            detailText.alignment = TextAnchor.UpperCenter;
+            detailText.resizeTextForBestFit = false;
+            RectTransform lanes = lanePreviewRoot.GetComponent<RectTransform>();
+            lanes.anchorMin = new Vector2(0.14f, 0.44f);
+            lanes.anchorMax = new Vector2(0.86f, 0.74f);
+            lanes.offsetMin = lanes.offsetMax = Vector2.zero;
+            for (int i = 0; i < laneImages.Length; i++)
+            {
+                laneImages[i].rectTransform.sizeDelta = new Vector2(195f, 520f);
+                laneHitButtons[i].GetComponent<RectTransform>().sizeDelta = new Vector2(230f, 580f);
+            }
+        }
+
+        private void ApplyMenuDetailLayout(GreedLastStateSnapshot snapshot)
+        {
+            bool slots = snapshot.State == GreedLastScreenState.SaveLoadoutDraft
+                || snapshot.State == GreedLastScreenState.InfiniteLoadoutSelect;
+            bool preparing = snapshot.State == GreedLastScreenState.InfiniteStartReady;
+            bool records = snapshot.State == GreedLastScreenState.InfiniteRecordBoard;
+            bool lobbyNotice = snapshot.State == GreedLastScreenState.LobbyReady && !string.IsNullOrWhiteSpace(detailText.text);
+            if (!slots && !preparing && !records && !lobbyNotice) return;
+            bool choices = slots || (preparing && IsSelectedSaveSlotUsable(snapshot));
+            if (!lobbyNotice) subtitleText.text = string.Empty;
+            if (preparing && IsSelectedSaveSlotUsable(snapshot))
+            {
+                string slotLabel = snapshot.SaveSlotLabels[snapshot.SelectedSaveSlotIndex];
+                subtitleText.text = IsSaveSlotFinalUseLabel(slotLabel)
+                    ? "마지막 1회 · 시작 후 슬롯 자동 비움"
+                    : "저장 조합 2회 사용 가능";
+            }
+            if (choices)
+            {
+                RectTransform lanes = lanePreviewRoot.GetComponent<RectTransform>();
+                lanes.anchorMin = new Vector2(0.18f, 0.245f);
+                lanes.anchorMax = new Vector2(0.82f, 0.465f);
+                lanes.offsetMin = lanes.offsetMax = Vector2.zero;
+                for (int i = 0; i < laneImages.Length; i++)
+                {
+                    laneImages[i].rectTransform.sizeDelta = new Vector2(460f, 330f);
+                    laneHitButtons[i].GetComponent<RectTransform>().sizeDelta = new Vector2(460f, 330f);
+                }
+                SetLaneLabelMode(40, true);
+                saveSlotModeText.gameObject.SetActive(false);
+                SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.315f, 0.205f, 450f, 80f);
+                SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.5f, 0.205f, 450f, 80f);
+                SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.685f, 0.205f, 450f, 80f);
+                if (preparing)
+                    SetAnchored(saveLoadoutButton.GetComponent<RectTransform>(), 0.5f, 0.205f, 690f, 80f);
+            }
+            else if (!lobbyNotice)
+            {
+                lanePreviewRoot.SetActive(false);
+            }
+
+            // Keep long comparison data readable in its own scrolling area, separate from selectable slots.
+            menuDetailScroll.gameObject.SetActive(true);
+            SetAnchored(menuDetailScroll.GetComponent<RectTransform>(), 0.5f, choices || lobbyNotice ? 0.62f : 0.55f,
+                1800f, choices || lobbyNotice ? 440f : preparing ? 720f : 850f);
+            detailText.transform.SetParent(menuDetailScroll.viewport, false);
+            detailText.fontSize = records ? 42 : 38;
+            detailText.alignment = TextAnchor.UpperLeft;
+            RectTransform content = detailText.rectTransform;
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = Vector2.one;
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = Vector2.zero;
+            menuDetailScroll.content = content;
+            Canvas.ForceUpdateCanvases();
+            content.sizeDelta = new Vector2(0f, Mathf.Max(menuDetailScroll.viewport.rect.height, detailText.preferredHeight + 16f));
+            menuDetailScroll.vertical = content.sizeDelta.y > menuDetailScroll.viewport.rect.height + 1f;
+            menuDetailScroll.verticalScrollbar.gameObject.SetActive(menuDetailScroll.vertical);
+            menuDetailScroll.StopMovement();
+            menuDetailScroll.verticalNormalizedPosition = 1f;
         }
 
         private static string PrefixDevShortcut(string shortcut, string label)
@@ -16679,6 +16927,14 @@ namespace GreedLast
 
             if (pauseMenuBodyText != null)
             {
+                if (!DevToolsEnabled || devCleanViewEnabled)
+                {
+                    pauseMenuBodyText.text = "체력 " + snapshot.Health + "/" + snapshot.MaxHealth
+                        + " · 집중 " + snapshot.Focus + "/" + snapshot.MaxFocus
+                        + "\n" + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m";
+                    pauseMenuBodyText.fontSize = 36;
+                    return;
+                }
                 string settingsLine = BuildPauseSettingsLine(snapshot);
                 string coachLine = BuildPauseCoachLine(snapshot);
                 string coachBlock = string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine;
@@ -17095,7 +17351,7 @@ namespace GreedLast
         {
             bool showSideTools = !snapshot.Paused;
             bool showPauseSettings = snapshot.Paused;
-            pauseButton.gameObject.SetActive(showSideTools);
+            pauseButton.gameObject.SetActive(showSideTools && !snapshot.Stopped);
             devInvincibleButton.gameObject.SetActive(showDevTools && showSideTools);
             infiniteTestStopButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
             focusMaxButton.gameObject.SetActive(showDevTools && showSideTools);
@@ -17180,6 +17436,11 @@ namespace GreedLast
             SetAnchored(sfxVolumeButtons[0].GetComponent<RectTransform>(), 0.91f, 0.195f, 180f, 54f);
             SetAnchored(sfxVolumeButtons[1].GetComponent<RectTransform>(), 0.91f, 0.15f, 180f, 54f);
             SetAnchored(sfxVolumeButtons[2].GetComponent<RectTransform>(), 0.91f, 0.105f, 180f, 54f);
+            SetButtonFontSize(hapticsButton, 24);
+            SetButtonFontSize(rotationTiltButton, 24);
+            SetButtonFontSize(motionComfortButton, 24);
+            foreach (Button button in sfxVolumeButtons) SetButtonFontSize(button, 22);
+            foreach (Button button in timingOffsetButtons) SetButtonFontSize(button, 22);
         }
 
         private void ResetSaveSlotUtilityButtonLayout()
@@ -17197,6 +17458,7 @@ namespace GreedLast
             RectTransform rect = button.GetComponent<RectTransform>();
             SetAnchored(rect, 0.5f, 0.5f, width, 92f);
             rect.anchoredPosition = new Vector2(x, y);
+            SetButtonFontSize(button, 36);
         }
 
         private void SetRecordBoardButtonLayout()
@@ -18894,6 +19156,8 @@ namespace GreedLast
                 || precisionActive
                 || snapshot.Stopped && snapshot.MaxCombo > 0
                 || stoppedPrecision;
+            if (!snapshot.Stopped && (stageTransitionCuePending || Time.unscaledTime < stageTransitionUntil))
+                showBadge = false;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
             {
@@ -25670,8 +25934,12 @@ namespace GreedLast
 
             if (button.targetGraphic != null)
             {
-                button.targetGraphic.color = button.interactable ? normal : ButtonDisabledColor;
+                // Selectable already applies the tint; tinting the source image too darkens it twice.
+                button.targetGraphic.color = Color.white;
             }
+            Text label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+                label.color = button.interactable ? new Color32(12, 16, 17, 255) : new Color32(218, 226, 224, 255);
         }
 
         private void EnsureUi()
@@ -25726,6 +25994,7 @@ namespace GreedLast
 
             detailText = CreateText(rootPanel.transform, "Detail", string.Empty, 33, TextAnchor.UpperCenter, FontStyle.Normal);
             SetAnchored(detailText.rectTransform, 0.5f, 0.59f, 850f, 260f);
+            CreateMenuDetailScroll(rootPanel.transform);
 
             saveSlotModeText = CreateText(rootPanel.transform, "SaveSlotMode", string.Empty, 22, TextAnchor.MiddleCenter, FontStyle.Bold);
             SetAnchored(saveSlotModeText.rectTransform, 0.895f, 0.53f, 250f, 76f);
@@ -26780,9 +27049,9 @@ namespace GreedLast
             runGaugeRoot = CreateRect("RunGaugeRoot", parent, new Vector2(0.5f, 0.345f), new Vector2(0.5f, 0.345f), new Vector2(0.5f, 0.5f), new Vector2(860f, 96f));
             runGaugeRoot.SetActive(false);
 
-            GameObject healthGaugeRoot = CreateRunGauge(runGaugeRoot.transform, "HealthGauge", "체력", 0.25f, new Color32(218, 86, 68, 220), out healthGaugeFill, out healthGaugeText);
+            GameObject healthGaugeRoot = CreateRunGauge(runGaugeRoot.transform, "HealthGauge", 0.25f, new Color32(218, 86, 68, 220), out healthGaugeFill, out healthGaugeText);
             CreateHealthDangerPips(healthGaugeRoot.transform);
-            GameObject focusGaugeRoot = CreateRunGauge(runGaugeRoot.transform, "FocusGauge", "집중", 0.75f, new Color32(86, 158, 184, 220), out focusGaugeFill, out focusGaugeText);
+            GameObject focusGaugeRoot = CreateRunGauge(runGaugeRoot.transform, "FocusGauge", 0.75f, new Color32(86, 158, 184, 220), out focusGaugeFill, out focusGaugeText);
             CreateFocusStateTimerPips(focusGaugeRoot.transform);
         }
 
@@ -26856,7 +27125,7 @@ namespace GreedLast
             }
         }
 
-        private GameObject CreateRunGauge(Transform parent, string name, string label, float x, Color32 fillColor, out Image fillImage, out Text valueText)
+        private GameObject CreateRunGauge(Transform parent, string name, float x, Color32 fillColor, out Image fillImage, out Text valueText)
         {
             GameObject gaugeRoot = CreateRect(name, parent, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(360f, 76f));
 
@@ -26868,13 +27137,8 @@ namespace GreedLast
             fillImage.color = fillColor;
             fillImage.raycastTarget = false;
 
-            Text labelText = CreateText(gaugeRoot.transform, name + "Label", label, 21, TextAnchor.MiddleLeft, FontStyle.Bold);
-            SetAnchored(labelText.rectTransform, 0.18f, 0.83f, 120f, 34f);
-            labelText.color = new Color32(190, 204, 204, 220);
-            labelText.raycastTarget = false;
-
-            valueText = CreateText(gaugeRoot.transform, name + "Value", string.Empty, 24, TextAnchor.MiddleRight, FontStyle.Bold);
-            SetAnchored(valueText.rectTransform, 0.76f, 0.83f, 170f, 34f);
+            valueText = CreateText(gaugeRoot.transform, name + "Value", string.Empty, 32, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetAnchored(valueText.rectTransform, 0.5f, 0.92f, 360f, 44f);
             valueText.color = new Color32(237, 239, 231, 240);
             valueText.raycastTarget = false;
 
@@ -27339,7 +27603,7 @@ namespace GreedLast
         {
             GameObject buttonObject = CreateRect(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(620f, 90f));
             Image image = buttonObject.AddComponent<Image>();
-            image.color = ButtonNormalColor;
+            image.color = Color.white;
 
             Button button = buttonObject.AddComponent<Button>();
             ColorBlock colors = button.colors;
@@ -47342,9 +47606,11 @@ namespace GreedLast
                     recommended,
                     noRefillSourceAvailable);
 
+                string actionSuffix = displaySlotState.EndsWith("\n" + actionHint, StringComparison.Ordinal)
+                    ? string.Empty : "\n" + actionHint;
                 laneLabelTexts[i].text = selected
-                    ? "선택\nS" + (i + 1) + "\n" + displaySlotState + "\n" + actionHint
-                    : "S" + (i + 1) + "\n" + displaySlotState + "\n" + actionHint;
+                    ? "선택\nS" + (i + 1) + "\n" + displaySlotState + actionSuffix
+                    : "S" + (i + 1) + "\n" + displaySlotState + actionSuffix;
                 laneLabelTexts[i].color = BuildSaveSlotLaneLabelColor(
                     slotChoiceRequired,
                     selected,

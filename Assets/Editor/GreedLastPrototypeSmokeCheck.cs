@@ -4207,7 +4207,7 @@ namespace GreedLast.Editor
                 "Only a clean first practice completion must turn its primary action into a seamless normal-run handoff.");
         }
 
-        private static GreedLastRunSnapshot RunPracticeReviewSample(
+        internal static GreedLastRunSnapshot RunPracticeReviewSample(
             float now,
             GreedLastJudgementResult[] outcomes)
         {
@@ -9902,6 +9902,7 @@ namespace GreedLast.Editor
                         && laneLabelTexts[1].text.Contains("기록", StringComparison.Ordinal)
                         && laneLabelTexts[2].text.Contains("장식", StringComparison.Ordinal),
                     "Profile-board page-one lane labels must point left to summary, center to record board, and right to badge details.");
+                VerifyReadableMenuAndResultLayouts(ui);
             }
             finally
             {
@@ -9914,6 +9915,159 @@ namespace GreedLast.Editor
                 DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
                 UnityEngine.Object.DestroyImmediate(host);
             }
+        }
+
+        private static void VerifyReadableMenuAndResultLayouts(GreedLastRuntimeUi ui)
+        {
+            string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.SaveLoadoutDraft, "저장 슬롯 선택", longDetail, 0,
+                saveCandidateAvailable: true, selectedSaveSlotIndex: 2));
+            ScrollRect scroll = GetRuntimeUiField<ScrollRect>(ui, "menuDetailScroll");
+            Text detail = GetRuntimeUiField<Text>(ui, "detailText");
+            RectTransform root = GetRuntimeUiField<RectTransform>(ui, "rootPanelRect");
+            Button[] lanes = GetRuntimeUiField<Button[]>(ui, "laneButtons");
+            Require(scroll.gameObject.activeSelf && scroll.content == detail.rectTransform && detail.fontSize >= 38,
+                "Management detail must stay readable in a dedicated scroll viewport.");
+            Require(scroll.content.rect.height > scroll.viewport.rect.height && scroll.verticalNormalizedPosition > 0.99f,
+                "Long comparison text must scroll from its beginning instead of shrinking or overflowing onto slots.");
+            Require(scroll.verticalScrollbar.gameObject.activeSelf, "Overflowing comparison text must expose its scrollbar.");
+            Rect viewportBounds = BoundsInRoot(scroll.GetComponent<RectTransform>(), root);
+            var slotBounds = new List<Rect>();
+            foreach (Button lane in lanes)
+            {
+                Rect bounds = BoundsInRoot(lane.GetComponent<RectTransform>(), root);
+                Require(!bounds.Overlaps(viewportBounds), "Slot choices must not overlap the comparison viewport.");
+                foreach (Rect previous in slotBounds)
+                    Require(!bounds.Overlaps(previous), "Slot choices must not overlap each other.");
+                slotBounds.Add(bounds);
+            }
+            scroll.OnScroll(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+            {
+                scrollDelta = new Vector2(0f, -6f),
+            });
+            Require(scroll.verticalNormalizedPosition < 0.99f, "Wheel input must move long management detail.");
+            scroll.verticalNormalizedPosition = 0f;
+            Require(scroll.content.anchoredPosition.y > 0f && detail.text.EndsWith("마지막 비교 항목", StringComparison.Ordinal),
+                "The bottom of long comparison text must remain reachable without discarding data.");
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRecordBoard, "기록", "[S] 1000", 2));
+            Require(Mathf.Abs(scroll.content.anchoredPosition.y) < 1f && detail.text == "[S] 1000",
+                "Changing screens must reset scroll position and retain only that screen's content.");
+            Require(!scroll.vertical && !scroll.verticalScrollbar.gameObject.activeSelf,
+                "Short records must disable dragging and hide a nonfunctional scrollbar.");
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteStartReady, "무한모드 준비",
+                GreedLastApp.BuildInfinitePreparationDetailForStep(0, string.Empty, string.Empty), 0));
+            Require(GetRuntimeUiField<GameObject>(ui, "lanePreviewRoot").activeSelf
+                && lanes[0].IsInteractable() && lanes[1].IsInteractable() && lanes[2].IsInteractable(),
+                "Readable infinite preparation must retain all three actionable gift choices.");
+            Require(GetRuntimeUiField<Text[]>(ui, "laneLabelTexts")[0].text.Contains("생존", StringComparison.Ordinal),
+                "Infinite preparation must show its current choice labels, not generic directions.");
+
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.EnterInfiniteRun(new GreedLastRunRecord(true, 500, 3, 0, 0, 2, 3, 0, 0, 20f,
+                "테스트 조합", "박자 감각", "집중 축", string.Empty, "집중 축", string.Empty));
+            core.ForceStopInfiniteRunForTest();
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "무한모드", string.Empty, 0));
+            ui.RenderRun(run);
+            Require(!scroll.gameObject.activeSelf && detail.transform.parent == root && detail.fontSize == 44,
+                "A result must leave the management scroll and use its own readable summary.");
+            Require(!GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").activeSelf
+                && !GetRuntimeUiField<GameObject>(ui, "runProgressRoot").activeSelf
+                && !GetRuntimeUiField<Text>(ui, "runHudText").gameObject.activeSelf
+                && !GetRuntimeUiField<GameObject>(ui, "lanePreviewRoot").activeSelf,
+                "Stopped results must not retain overlapping gameplay gauges, lanes, or debug-sized HUD text.");
+            Require(detail.text.Contains("정확", StringComparison.Ordinal) && detail.text.Contains("최대 콤보", StringComparison.Ordinal),
+                "Stopped results must preserve judgement and combo totals.");
+            core.RestartPractice(Time.realtimeSinceStartup);
+            ui.RenderRun(run);
+            Require(GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").activeSelf
+                && GetRuntimeUiField<GameObject>(ui, "lanePreviewRoot").activeSelf
+                && !detail.enabled && lanes[0].GetComponent<RectTransform>().sizeDelta.x == 195f,
+                "Restarting play must restore gameplay layout after visiting management and results.");
+
+            float clock = Time.realtimeSinceStartup;
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            Require(run.ActivePattern, "The presentation reset check needs a live fresh run.");
+            SetRuntimeUiField(ui, "lastComboForBadge", 6);
+            SetRuntimeUiField(ui, "comboBreakBadgeUntil", Time.unscaledTime + 5f);
+            SetRuntimeUiField(ui, "beatMarkerMissImpactUntil", Time.unscaledTime + 5f);
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "입구", string.Empty, 0));
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "연습", string.Empty, 0));
+            ui.RenderRun(run);
+            Require(GetRuntimeUiValueField<float>(ui, "comboBreakBadgeUntil") == 0f
+                && GetRuntimeUiValueField<float>(ui, "beatMarkerMissImpactUntil") == 0f
+                && !GetRuntimeUiField<GameObject>(ui, "comboBadgeRoot").activeSelf,
+                "A fresh run must clear old combo-loss and damage feedback, even if its first rendered snapshot is already active.");
+            GreedLastRunSnapshot beforePause = run;
+            core.TogglePause(clock + 0.1f);
+            Require(!InvokeRuntimeUiStaticBool("IsNewRunPresentation", beforePause, run),
+                "Pausing a run must not be mistaken for a new attempt.");
+            GreedLastRunSnapshot paused = run;
+            ui.RenderRun(beforePause);
+            SetRuntimeUiField(ui, "devCleanViewEnabled", false);
+            ui.ToggleDevCleanView();
+            Text hud = GetRuntimeUiField<Text>(ui, "runHudText");
+            string compactHud = hud.text;
+            Require(hud.fontSize == 38 && compactHud.Split('\n').Length == 2
+                && compactHud.Contains("콤보", StringComparison.Ordinal) && compactHud.Contains("Miss", StringComparison.Ordinal),
+                "Clean view must present readable score and judgement totals without the diagnostic paragraph.");
+            ui.RenderRun(paused);
+            Text pauseBody = GetRuntimeUiField<Text>(ui, "pauseMenuBodyText");
+            Require(pauseBody.fontSize == 36 && pauseBody.text.Split('\n').Length == 2,
+                "Clean pause must show concise live totals instead of a diagnostic paragraph.");
+            Require(GetRuntimeUiField<Button>(ui, "motionComfortButton").GetComponentInChildren<Text>().fontSize == 36
+                && GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons")[1].GetComponentInChildren<Text>().fontSize == 36,
+                "Pause setting buttons must use the readable menu font, including the shared calibration action.");
+            ui.RenderRun(beforePause);
+            Rect hudBounds = BoundsInRoot(hud.rectTransform, root);
+            Require(!hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").GetComponent<RectTransform>(), root))
+                && !hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<Button>(ui, "nextPatternButton").GetComponent<RectTransform>(), root)),
+                "Compact live totals must sit between the gauges and action buttons without overlap.");
+            ui.ToggleDevCleanView();
+            Require(hud.text != compactHud && hud.text == GetRuntimeUiField<string>(ui, "detailedRunHud"),
+                "Toggling clean view off must immediately restore developer detail without restarting play.");
+
+            GreedLastRunSnapshot practiceResult = RunPracticeReviewSample(Time.realtimeSinceStartup,
+                new[] { GreedLastJudgementResult.Good, GreedLastJudgementResult.Good, GreedLastJudgementResult.Good });
+            ui.ToggleDevCleanView();
+            ui.RenderRun(practiceResult);
+            Button recommendation = GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons")[1];
+            CanvasGroup recommendationGroup = recommendation.GetComponent<CanvasGroup>();
+            Require(practiceResult.HasTimingRecommendation && recommendation.gameObject.activeInHierarchy
+                && recommendation.IsInteractable() && recommendationGroup.alpha == 1f && recommendationGroup.blocksRaycasts,
+                "Practice results must expose the actionable timing recommendation even in clean view.");
+            Require(!GetRuntimeUiField<Button>(ui, "pauseButton").gameObject.activeSelf,
+                "A terminal result must not display an unusable pause button.");
+            Require(!BoundsInRoot(recommendation.GetComponent<RectTransform>(), root).Overlaps(BoundsInRoot(detail.rectTransform, root)),
+                "The practice calibration action must sit below the result summary, not over it.");
+            int calibrationClicks = 0;
+            SetRuntimeUiField<Action<int>>(ui, "timingOffsetRequested", amount => calibrationClicks++);
+            recommendation.onClick.Invoke();
+            SetRuntimeUiField<Action<int>>(ui, "timingOffsetRequested", null);
+            Require(calibrationClicks == 1, "The result calibration action must retain its callback.");
+            ui.RenderRun(beforePause);
+            Require(recommendationGroup.alpha == 0f && !recommendationGroup.blocksRaycasts
+                && recommendation.GetComponent<RectTransform>().anchorMin.x > 0.9f,
+                "Restarting from practice results must return calibration to the hidden live settings position.");
+            ui.ToggleDevCleanView();
+
+            Button action = GetRuntimeUiField<Button>(ui, "nextPatternButton");
+            action.interactable = false;
+            MethodInfo tone = typeof(GreedLastRuntimeUi).GetMethod("SetButtonTone", BindingFlags.Static | BindingFlags.NonPublic);
+            tone.Invoke(null, new object[] { action, new Color32(205, 166, 70, 255), new Color32(238, 204, 114, 255), new Color32(165, 124, 48, 255) });
+            Require(action.targetGraphic.color == Color.white && action.GetComponentInChildren<Text>().color.grayscale > 0.7f,
+                "A disabled action must retain a readable label and must not be tinted twice.");
+        }
+
+        private static Rect BoundsInRoot(RectTransform child, RectTransform root)
+        {
+            var corners = new Vector3[4];
+            child.GetWorldCorners(corners);
+            Vector3 min = root.InverseTransformPoint(corners[0]);
+            Vector3 max = root.InverseTransformPoint(corners[2]);
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         }
 
         internal static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui)

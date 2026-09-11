@@ -130,7 +130,9 @@
 
 일시정지에서는 공유 버튼들을 고정 메뉴판의 자식으로 배치한다. 가로 화면 너비에 따라 소리·보정 버튼이 메뉴 밖으로 벌어지던 문제와 `시야 안정` 버튼이 어두운 배경 뒤에 가리던 문제를 수정했다. 재개 숫자는 메뉴 제목에 나타나고 재개 준비 버튼은 카운트 중 비활성화된다. 재개 뒤에는 버튼들이 게임 루트로 돌아가며 숨겨진 메뉴에 남지 않는다.
 
-Unity 재생을 멈춘 뒤 `Greed Last > Capture Prototype Visual Checks`를 실행하면 `Logs/VisualChecks`에 9개 PNG가 생성된다. 타이틀, 로비, 시작 선택, 주행, 일시정지, 재개를 1280×720 기준으로 촬영하고 로비 1920×1080, 주행·일시정지 2340×1080 및 좌우 96픽셀 안전 여백을 추가 확인한다.
+Unity 재생을 멈춘 뒤 `Greed Last > Capture Prototype Visual Checks`를 실행하면 `Logs/VisualChecks`에 35개 시나리오 PNG가 생성된다. 타이틀부터 일반 런 클리어, S3 저장, 무한 정비 3단계, 마지막 사용과 자동 비움, 기록 4페이지, 덮어쓰기 비교와 포인터 드래그, 연습 결과 보정, 재시작까지 포함한다. 1280×720, 1920×1080, 2340×1080 및 좌우 96픽셀 안전 여백, 1024×768 태블릿을 비교한다. 폴더에는 이전 실행의 파일이 남을 수 있으므로 `latest-report.json`의 실행 시간, 성공 여부, 파일 목록으로 이번 실행을 구분한다.
+
+2026-09-11: 저장 비교 글자를 축소하는 대신 스크롤하고, 선택 슬롯을 넓혀 본문과 분리했다. 주행 수치는 클린 뷰에서 두 줄로 표시하고 체력·집중 중복 라벨을 없앴다. 결과 화면에서는 레인·게이지·이전 콤보 알림을 숨긴다. 일시정지 설정 글자는 커지고, 연습 결과의 추천 보정 버튼은 클린 뷰에서도 유지한다. 버튼 원본 색과 Selectable 색이 중복 곱해져 지나치게 어두워지던 처리도 수정했다.
 
 이 검사는 현재 씬과 저장 프로필을 수정하지 않는 임시 UI·코어를 사용한다. 실제 모바일 터치, 센서, 오디오 지연 검사나 사용자 전체 플레이를 대신하지 않는다. 카메라가 [Unity의 미리보기 씬](https://docs.unity3d.com/2021.3/Documentation/ScriptReference/SceneManagement.EditorSceneManager.NewPreviewScene.html)만 렌더링하므로 다른 프로그램이 앞을 가려도 화면을 비교할 수 있다.
 
@@ -139,6 +141,14 @@ Unity 재생을 멈춘 뒤 `Greed Last > Capture Prototype Visual Checks`를 실
 ## 빌드
 
 Unity 상단 `Greed Last > Build Verified Windows Prototype`을 사용한다. 전체 스모크가 통과한 경우에만 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 갱신한다.
+
+### 2026-09-11 검증
+
+- 전체 스모크와 Windows 빌드 성공: `Logs/prototype-readable-verified-20260911.log`
+- 35개 비어 있지 않은 화면과 주요 버튼 중심/글자 영역 153회 검사 성공: `Logs/prototype-readable-visual-20260911.log`
+- 저장 비교 본문의 포인터 드래그와 휠 스크롤 검사 통과. 짧은 기록은 드래그와 스크롤바를 함께 끈다.
+- 최신 캡처 목록과 해상도, 안전 여백, 픽셀 샘플/버튼 검사 건수: `Logs/VisualChecks/latest-report.json`
+- 위 숫자는 격리 시나리오와 반복 버튼 검사 횟수이며 서로 다른 버튼 153개나 실제 모바일 테스트 35회를 뜻하지 않는다.
 
 ### 2026-09-09 검증
 

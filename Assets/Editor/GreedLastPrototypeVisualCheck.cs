@@ -5,6 +5,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -18,10 +19,36 @@ namespace GreedLast.Editor
         private static GreedLastRuntimeUi ui;
         private static Canvas canvas;
         private static Camera camera;
+        private static EventSystem eventSystem;
         private static RenderTexture target;
         private static Frame currentFrame;
         private static double frameStartedAt;
         private static bool running;
+        private static int capturedFrameCount;
+        private static CaptureReport report;
+
+        [Serializable]
+        private sealed class CaptureReport
+        {
+            public string startedUtc;
+            public string completedUtc;
+            public string unityVersion;
+            public bool succeeded;
+            public string error;
+            public List<CaptureResult> frames = new List<CaptureResult>();
+        }
+
+        [Serializable]
+        private sealed class CaptureResult
+        {
+            public string file;
+            public int width;
+            public int height;
+            public float safeInset;
+            public int checkedButtons;
+            public int brightSamples;
+            public int detailSamples;
+        }
 
         private sealed class Frame
         {
@@ -46,6 +73,12 @@ namespace GreedLast.Editor
             }
 
             running = true;
+            capturedFrameCount = 0;
+            report = new CaptureReport
+            {
+                startedUtc = DateTime.UtcNow.ToString("O"),
+                unityVersion = Application.unityVersion,
+            };
             try
             {
                 captureScene = EditorSceneManager.NewPreviewScene();
@@ -66,6 +99,7 @@ namespace GreedLast.Editor
                 SceneManager.MoveGameObjectToScene(ui.gameObject, captureScene);
                 SceneManager.MoveGameObjectToScene(canvas.gameObject, captureScene);
                 GameObject createdEventSystem = GameObject.Find("GreedLastEventSystem");
+                eventSystem = createdEventSystem == null ? UnityEngine.Object.FindAnyObjectByType<EventSystem>() : createdEventSystem.GetComponent<EventSystem>();
                 if (existingEventSystem == null && createdEventSystem != null)
                 {
                     SceneManager.MoveGameObjectToScene(createdEventSystem, captureScene);
@@ -102,6 +136,13 @@ namespace GreedLast.Editor
                 Add("06-lobby-desktop", 1920, 1080, () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
                 Add("07-live-wide-safe", 2340, 1080, () => ShowRun(live), 96f);
                 Add("08-pause-wide-safe", 2340, 1080, () => ShowRun(paused), 96f);
+                AddSavedRunLoopFrames();
+                GreedLastRunSnapshot practiceResult = GreedLastPrototypeSmokeCheck.RunPracticeReviewSample(
+                    Time.realtimeSinceStartup,
+                    new[] { GreedLastJudgementResult.Good, GreedLastJudgementResult.Good, GreedLastJudgementResult.Good });
+                Add("25-practice-calibration", 1280, 720, () => ShowRun(practiceResult));
+                Add("26-practice-calibration-tablet", 1024, 768, () => ShowRun(practiceResult));
+                Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -129,8 +170,173 @@ namespace GreedLast.Editor
 
         private static void ShowRun(GreedLastRunSnapshot snapshot)
         {
-            ShowScreen(GreedLastScreenState.RunCoreTest, "피라미드 질주");
+            ShowScreen(snapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest, "피라미드 질주");
             ui.RenderRun(snapshot);
+        }
+
+        private static void AddSavedRunLoopFrames()
+        {
+            var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            var stateMachine = new GreedLastStateMachine(new GreedLastRequestGate());
+            GreedLastStateSnapshot screen = default;
+            stateMachine.StateChanged += value => screen = value;
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.Enter();
+            // Drive the real run core to completion without changing stored timing or profile data.
+            for (int step = 0; step < 100 && !run.Stopped; step++)
+            {
+                if (run.ChoiceActive)
+                {
+                    core.HandleInput(run.ChoiceKind == GreedLastChoiceKind.Node
+                        ? GreedLastRunChannel.Left : GreedLastRunChannel.Center, clock += 0.2f);
+                }
+                else if (run.StartCountdownActive)
+                {
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                }
+                else if (!run.ActivePattern)
+                {
+                    core.RequestNextPattern(clock += 2f);
+                }
+                else
+                {
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    Require(run.LastResult == GreedLastJudgementResult.Success, "The visual loop must resolve exact inputs.");
+                }
+            }
+            GreedLastRunRecord record = core.CreateRunRecord();
+            Require(run.EscapeSucceeded && record.IsValid, "The visual loop must finish a real normal run.");
+            GreedLastRunSnapshot clear = run;
+            Add("09-escape-result", 1280, 720, () => ShowRun(clear));
+            backend.RegisterClear(record);
+            stateMachine.SetSaveLoadoutDraft(backend.LoadLobby(),
+                backend.BuildRunClearSaveDraftNoticeMessage(record, false) + "\n\n" + backend.BuildSaveLoadoutClearSlotChoiceText(),
+                saveSlotChoiceRequired: true, saveLoadoutCandidateAvailable: true);
+            AddScreen("10-clear-slot-choice", screen);
+
+            backend.SelectSaveLoadoutSlot(2);
+            stateMachine.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(),
+                saveLoadoutCandidateAvailable: true);
+            AddScreen("11-right-slot-selected", screen);
+            GreedLastLobbySnapshot saved = backend.ConfirmSaveLoadout();
+            Require(!backend.HasSaveLoadoutCandidate && saved.SaveSlotOccupied[2]
+                && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[1], "Only the explicitly selected right slot may receive the candidate.");
+            stateMachine.SetLobbyReady(saved);
+            stateMachine.ShowLocalNotice(backend.BuildSaveConfirmMessage());
+            AddScreen("12-save-complete", screen);
+            backend.ConfirmSaveLoadout();
+            Require(!backend.HasSaveLoadoutCandidate, "A second confirmation must not recreate a consumed candidate.");
+            for (int step = 0; step < 3; step++)
+            {
+                stateMachine.SetInfiniteStartReady(backend.LoadLobby(),
+                    GreedLastApp.BuildInfinitePreparationDetailForStep(step, "집중 축", "황금 박동").TrimStart()
+                    + "\n\n" + backend.BuildInfiniteStartReadyText());
+                AddScreen("13-infinite-ready-step-" + step, screen);
+            }
+            Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord loadout, out _, out _), "The first entry must consume one use.");
+            core.EnterInfiniteRun(loadout);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            for (int pattern = 0; pattern < 3; pattern++)
+            {
+                if (pattern > 0) core.RequestNextPattern(clock += 2f);
+                Require(run.ActivePattern, "The infinite visual loop must contain three live traps.");
+                clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                core.HandleInput(run.Pattern.Channel, clock);
+                Require(run.LastResult == GreedLastJudgementResult.Success, "The saved loadout must remain playable.");
+            }
+            core.ForceStopInfiniteRunForTest();
+            GreedLastRunSnapshot infiniteResult = run;
+            Require(backend.RegisterInfiniteRun(core.CreateInfiniteRunRecord()), "The visual loop must register a real infinite record.");
+            Add("14-infinite-result", 1280, 720, () => ShowRun(infiniteResult));
+            stateMachine.SetInfiniteStartReady(backend.LoadLobby(),
+                GreedLastApp.BuildInfinitePreparationDetailForStep(2, "집중 축", "황금 박동").TrimStart()
+                + "\n\n" + backend.BuildInfiniteStartReadyText());
+            AddScreen("15-final-use-ready", screen);
+            Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord finalLoadout, out _, out _)
+                && finalLoadout.IsValid, "The second entry must retain a playable loadout after clearing its slot.");
+            GreedLastLobbySnapshot empty = backend.LoadLobby();
+            Require(!empty.SaveSlotOccupied[2] && !empty.SaveSlotUsable[2]
+                && !backend.TryConsumeSelectedSaveLoadout(out _, out _, out _), "The exhausted slot must be empty and reject a third entry.");
+            stateMachine.SetInfiniteLoadoutSelect(empty, backend.BuildInfiniteLoadoutSelectText());
+            AddScreen("16-exhausted-slot", screen);
+            for (int page = 0; page < 4; page++)
+            {
+                stateMachine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(page), page);
+                AddScreen("17-record-page-" + page, screen);
+            }
+
+            // A new clear can replace an occupied slot only through the existing confirmation view.
+            backend.RegisterClear(record);
+            backend.SelectSaveLoadoutSlot(1);
+            backend.ConfirmSaveLoadout();
+            backend.RegisterClear(record);
+            backend.SelectSaveLoadoutSlot(1);
+            stateMachine.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSelectedSaveLoadoutOverwritePreviewText(),
+                saveSlotOverwriteConfirmationPending: true, saveLoadoutCandidateAvailable: true);
+            AddScreen("18-overwrite-confirm", screen);
+            AddScreen("19-overwrite-wide-safe", screen, 2340, 1080, 96f);
+            AddScreen("19-overwrite-tablet", screen, 1024, 768);
+            GreedLastStateSnapshot overwrite = screen;
+            Add("20-overwrite-drag", 1280, 720, () =>
+            {
+                ui.Render(overwrite);
+                DragMenuDetail();
+            });
+            Add("20-overwrite-scrolled", 1280, 720, () =>
+            {
+                ui.Render(overwrite);
+                Read<ScrollRect>("menuDetailScroll").verticalNormalizedPosition = 0f;
+            });
+            core.RestartPractice(Time.realtimeSinceStartup - 4f);
+            core.Tick(Time.realtimeSinceStartup - 1f);
+            core.Tick(Time.realtimeSinceStartup);
+            GreedLastRunSnapshot restoredLive = run;
+            Add("21-run-after-menus", 1280, 720, () => ShowRun(restoredLive));
+            Add("22-run-tablet", 1024, 768, () => ShowRun(restoredLive));
+            core.TogglePause(Time.realtimeSinceStartup + 0.1f);
+            GreedLastRunSnapshot tabletPause = run;
+            Add("23-pause-tablet", 1024, 768, () => ShowRun(tabletPause));
+            backend.DiscardSaveLoadoutCandidate();
+            stateMachine.SetLobbyReady(backend.LoadLobby());
+            stateMachine.ShowLocalNotice(backend.BuildRunClearSkipSaveMessage(record));
+            AddScreen("24-skip-save-lobby", screen);
+        }
+
+        private static void AddScreen(string name, GreedLastStateSnapshot snapshot, int width = 1280, int height = 720, float inset = 0f)
+        {
+            Add(name, width, height, () => ui.Render(snapshot), inset);
+        }
+
+        private static void DragMenuDetail()
+        {
+            ScrollRect scroll = Read<ScrollRect>("menuDetailScroll");
+            Canvas.ForceUpdateCanvases();
+            Vector3 start = camera.WorldToScreenPoint(scroll.viewport.TransformPoint(scroll.viewport.rect.center));
+            var pointer = new PointerEventData(eventSystem) { position = start, button = PointerEventData.InputButton.Left };
+            var hits = new List<RaycastResult>();
+            canvas.GetComponent<GraphicRaycaster>().Raycast(pointer, hits);
+            Require(hits.Count > 0 && hits[0].gameObject.transform.IsChildOf(scroll.transform),
+                "Comparison dragging must start on the scroll viewport, not an underlying slot.");
+            pointer.pointerPressRaycast = hits[0];
+            scroll.OnInitializePotentialDrag(pointer);
+            scroll.OnBeginDrag(pointer);
+            pointer.position += Vector2.up * 100f;
+            scroll.OnDrag(pointer);
+            scroll.OnEndDrag(pointer);
+            scroll.StopMovement();
+            Require(scroll.content.anchoredPosition.y > 1f,
+                "Pointer dragging must move long comparison text without using the scrollbar.");
+        }
+
+        private static void Require(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
         }
 
         private static void BeginNextFrame()
@@ -165,7 +371,8 @@ namespace GreedLast.Editor
                     BeginNextFrame();
                     return;
                 }
-                Debug.Log("Greed Last visual checks captured: 9 nonblank frames in Logs/VisualChecks. These are isolated UI fixtures, not real-device input tests.");
+                Debug.Log("Greed Last visual checks captured: " + capturedFrameCount + " nonblank frames in Logs/VisualChecks. These are isolated UI fixtures, not real-device input tests.");
+                WriteCaptureReport(true, string.Empty);
                 Cleanup();
                 if (Application.isBatchMode)
                 {
@@ -175,6 +382,7 @@ namespace GreedLast.Editor
             catch (Exception exception)
             {
                 Debug.LogException(exception);
+                WriteCaptureReport(false, exception.Message);
                 Cleanup();
                 if (Application.isBatchMode)
                 {
@@ -197,6 +405,7 @@ namespace GreedLast.Editor
                 graphic.Rebuild(CanvasUpdate.PreRender);
             }
             camera.Render();
+            int checkedButtons = VerifyVisibleControlRaycasts();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
             try
@@ -227,6 +436,17 @@ namespace GreedLast.Editor
                 }
                 string path = "Logs/VisualChecks/" + currentFrame.Name + ".png";
                 File.WriteAllBytes(path, image.EncodeToPNG());
+                capturedFrameCount++;
+                report.frames.Add(new CaptureResult
+                {
+                    file = currentFrame.Name + ".png",
+                    width = target.width,
+                    height = target.height,
+                    safeInset = currentFrame.SafeInset,
+                    checkedButtons = checkedButtons,
+                    brightSamples = brightSamples,
+                    detailSamples = detailSamples,
+                });
                 Debug.Log("Visual frame: " + path + " / " + target.width + "x" + target.height);
             }
             finally
@@ -234,6 +454,83 @@ namespace GreedLast.Editor
                 RenderTexture.active = previous;
                 UnityEngine.Object.DestroyImmediate(image);
             }
+        }
+
+        private static int VerifyVisibleControlRaycasts()
+        {
+            bool paused = Read<GameObject>("pauseMenuOverlay").activeInHierarchy;
+            bool menu = Read<ScrollRect>("menuDetailScroll").gameObject.activeInHierarchy;
+            bool result = Read<Text>("detailText").enabled && Read<Text>("runHudText").gameObject.activeSelf == false
+                && Read<Button>("nextPatternButton").gameObject.activeInHierarchy;
+            if (!paused && !menu && !result) return 0;
+            Require(eventSystem != null, "Visible-control checks require the fixture's event system.");
+            var controls = new List<Button>
+            {
+                Read<Button>("nextPatternButton"), Read<Button>("returnLobbyButton"),
+            };
+            if (paused)
+            {
+                controls.Add(Read<Button>("hapticsButton"));
+                controls.Add(Read<Button>("rotationTiltButton"));
+                controls.Add(Read<Button>("motionComfortButton"));
+                controls.AddRange(Read<Button[]>("sfxVolumeButtons"));
+                controls.AddRange(Read<Button[]>("timingOffsetButtons"));
+            }
+            else
+            {
+                if (result) controls.Add(Read<Button[]>("timingOffsetButtons")[1]);
+                controls.AddRange(Read<Button[]>("laneButtons"));
+                controls.Add(Read<Button>("saveSlotDetailButton"));
+                controls.Add(Read<Button>("saveSlotRenameButton"));
+                controls.Add(Read<Button>("saveSlotDeleteButton"));
+                controls.Add(Read<Button>("saveLoadoutButton"));
+                controls.Add(Read<Button>("normalRunButton"));
+                controls.Add(Read<Button>("infiniteButton"));
+                controls.Add(Read<Button>("practiceRunButton"));
+            }
+            GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+            int checkedButtons = 0;
+            foreach (Button button in controls)
+            {
+                if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
+                RectTransform rect = button.GetComponent<RectTransform>();
+                Vector3 screenPoint = camera.WorldToScreenPoint(rect.TransformPoint(rect.rect.center));
+                var pointer = new PointerEventData(eventSystem) { position = screenPoint };
+                var hits = new List<RaycastResult>();
+                raycaster.Raycast(pointer, hits);
+                Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
+                    || hits[0].gameObject.transform.IsChildOf(button.transform)),
+                    currentFrame.Name + ": visible button is blocked at its center: " + button.name
+                    + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
+                VerifyButtonTextBounds(button);
+                checkedButtons++;
+            }
+            return checkedButtons;
+        }
+
+        private static void VerifyButtonTextBounds(Button button)
+        {
+            Text label = button.GetComponentInChildren<Text>();
+            if (label == null || !label.enabled || string.IsNullOrWhiteSpace(label.text)) return;
+            IList<UIVertex> vertices = label.cachedTextGenerator.verts;
+            Require(vertices.Count > 0, currentFrame.Name + ": missing button label: " + button.name);
+            Rect rect = label.rectTransform.rect;
+            const float tolerance = 3f;
+            foreach (UIVertex vertex in vertices)
+            {
+                Vector3 point = vertex.position / label.pixelsPerUnit;
+                Require(point.x >= rect.xMin - tolerance && point.x <= rect.xMax + tolerance
+                    && point.y >= rect.yMin - tolerance && point.y <= rect.yMax + tolerance,
+                    currentFrame.Name + ": button label exceeds its text area: " + button.name);
+            }
+        }
+
+        private static void WriteCaptureReport(bool succeeded, string error)
+        {
+            report.completedUtc = DateTime.UtcNow.ToString("O");
+            report.succeeded = succeeded;
+            report.error = error;
+            File.WriteAllText("Logs/VisualChecks/latest-report.json", JsonUtility.ToJson(report, true));
         }
 
         private static T Read<T>(string name) where T : class
@@ -262,6 +559,7 @@ namespace GreedLast.Editor
             ui = null;
             canvas = null;
             camera = null;
+            eventSystem = null;
             Frames.Clear();
             running = false;
         }
