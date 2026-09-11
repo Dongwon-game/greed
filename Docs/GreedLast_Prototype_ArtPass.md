@@ -144,6 +144,10 @@ Unity 상단 `Greed Last > Build Verified Windows Prototype`을 사용한다. �
 
 ### 2026-09-11 검증
 
+- 최종 간결한 동작·판정 표시 반영 후 전체 스모크·앱 콜백 통합 검사·Windows 빌드 성공: `Logs/prototype-feedback-verified-20260911.log`.
+- 최신 캡처는 53장, 버튼 중심/글자 검사 153회, 보이는 동작·판정 글자 영역 검사 18회 통과: `Logs/prototype-feedback-visual-20260911.log`. 아래 35장은 이전 체크포인트다. 추가 장면은 세 회피 동작과 좌우 회전, 정확/Good/Miss 결과 및 선택 경계다.
+- 접근 장면은 합성 코어 시계로 판정점 80ms 전임을 확인한다. 클린 뷰의 동작과 판정은 두 줄이며, 글자 잘림과 게이지 겹침을 검사한다. 메뉴에 가려진 주행 요소는 이 검사에서 제외한다.
+
 - 실제 앱 콜백 통합 검사와 최종 Windows 빌드 성공: `Logs/prototype-app-loop-verified-20260911.log`. 첫 정확 연습→일반 런 직행→S3 저장→무한 준비 취소→2회 소진→기록→보충 런→저장 포기 확인을 버튼 PointerDown/Up/Click으로 구동했다. 임시 백엔드만 쓰며 테스트 중 바꾼 연습 완료 플래그는 finally에서 복원한다.
 
 - 전체 스모크와 Windows 빌드 성공: `Logs/prototype-readable-verified-20260911.log`

@@ -10102,9 +10102,33 @@ namespace GreedLast.Editor
                     "Clean runtime rendering must select the compact cue without changing the input platform: " + action.text);
                 Require(action.preferredHeight <= action.rectTransform.rect.height + 1f,
                     "Both compact action lines must fit without vertical clipping.");
+                GreedLastRunSnapshot active = run;
                 core.TogglePause(clock + 0.1f);
                 Require(string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false)),
                     "Paused gameplay must hide its active cue.");
+
+                // Test the real published outcome separately from the pause visibility assertion.
+                core.TogglePause(clock + 0.2f);
+                core.Tick(clock += 3f);
+                core.HandleInput(active.Pattern.Channel == GreedLastRunChannel.Left
+                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left,
+                    clock + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
+                Require(run.LastResult == GreedLastJudgementResult.Miss, "Compact failure checks need a real wrong-channel outcome.");
+                string feedback = InvokeRuntimeUiLabel("BuildCompactJudgementFeedbackText", run, true, false);
+                Require(feedback.Split('\n').Length == 2 && feedback.Contains("Miss", StringComparison.Ordinal)
+                    && feedback.Contains("정답", StringComparison.Ordinal) && feedback.Contains("체력 " + run.Health, StringComparison.Ordinal),
+                    "Compact failure feedback must retain the correction and actual health without a long paragraph.");
+                ui.RenderRun(run);
+                Text judgement = GetRuntimeUiField<Text>(ui, "judgementFeedbackText");
+                if (!run.ChoiceActive)
+                {
+                    Require(judgement.fontSize == 40 && judgement.preferredHeight <= judgement.rectTransform.rect.height + 1f,
+                        "Compact judgement feedback must fit its two-line area.");
+                    RectTransform root = GetRuntimeUiField<RectTransform>(ui, "rootPanelRect");
+                    Require(!BoundsInRoot(judgement.rectTransform, root).Overlaps(BoundsInRoot(
+                        GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").GetComponent<RectTransform>(), root)),
+                        "Compact judgement feedback must not cover health and focus gauges.");
+                }
             }
             SetRuntimeUiField(ui, "devCleanViewEnabled", false);
         }

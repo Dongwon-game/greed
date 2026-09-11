@@ -46,6 +46,7 @@ namespace GreedLast.Editor
             public int height;
             public float safeInset;
             public int checkedButtons;
+            public int checkedFeedbackAreas;
             public int brightSamples;
             public int detailSamples;
         }
@@ -192,7 +193,10 @@ namespace GreedLast.Editor
                 core.Tick(clock += 1f);
                 Require(run.ActivePattern, "Avoidance capture requires a live trap.");
                 core.Tick(clock + run.Pattern.CoreSeconds - 0.08f);
+                PublishAt(core, clock + run.Pattern.CoreSeconds - 0.08f);
                 GreedLastRunSnapshot approach = run;
+                Require(Mathf.Abs(approach.CoreDeltaSeconds + 0.08f) < 0.001f,
+                    "Approach frames must show the trap 80ms before its real judgement point.");
                 string name = names[index];
                 Add("28-approach-" + name, 1280, 720, () => ShowRun(approach));
                 if (index == 3)
@@ -238,6 +242,13 @@ namespace GreedLast.Editor
                     }, settleSeconds: 0.16);
                 }
             }
+        }
+
+        private static void PublishAt(GreedLastRunCore core, float time)
+        {
+            // The fixture advances a synthetic clock; publish using that same clock, not wall time.
+            typeof(GreedLastRunCore).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(float) }, null).Invoke(core, new object[] { time });
         }
 
         private static void AddSavedRunLoopFrames()
@@ -472,6 +483,7 @@ namespace GreedLast.Editor
             }
             camera.Render();
             int checkedButtons = VerifyVisibleControlRaycasts();
+            int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
             try
@@ -510,6 +522,7 @@ namespace GreedLast.Editor
                     height = target.height,
                     safeInset = currentFrame.SafeInset,
                     checkedButtons = checkedButtons,
+                    checkedFeedbackAreas = checkedFeedbackAreas,
                     brightSamples = brightSamples,
                     detailSamples = detailSamples,
                 });
@@ -574,12 +587,43 @@ namespace GreedLast.Editor
             return checkedButtons;
         }
 
+        private static int VerifyVisibleFeedbackAreas()
+        {
+            if (Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
+            RectTransform root = Read<RectTransform>("rootPanelRect");
+            GameObject gauges = Read<GameObject>("runGaugeRoot");
+            int count = 0;
+            foreach (string field in new[] { "activeActionCueText", "judgementFeedbackText" })
+            {
+                Text label = Read<Text>(field);
+                if (!label.gameObject.activeInHierarchy || !label.enabled || label.color.a < 0.01f
+                    || string.IsNullOrWhiteSpace(label.text)) continue;
+                VerifyTextBounds(label);
+                Require(label.preferredHeight <= label.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": feedback text is vertically clipped: " + label.name);
+                if (gauges.activeInHierarchy)
+                {
+                    Bounds textBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, label.rectTransform);
+                    Bounds gaugeBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, gauges.transform);
+                    Require(!textBounds.Intersects(gaugeBounds),
+                        currentFrame.Name + ": feedback overlaps the health/focus gauges: " + label.name);
+                }
+                count++;
+            }
+            return count;
+        }
+
         private static void VerifyButtonTextBounds(Button button)
         {
             Text label = button.GetComponentInChildren<Text>();
             if (label == null || !label.enabled || string.IsNullOrWhiteSpace(label.text)) return;
+            VerifyTextBounds(label);
+        }
+
+        private static void VerifyTextBounds(Text label)
+        {
             IList<UIVertex> vertices = label.cachedTextGenerator.verts;
-            Require(vertices.Count > 0, currentFrame.Name + ": missing button label: " + button.name);
+            Require(vertices.Count > 0, currentFrame.Name + ": missing text: " + label.name);
             Rect rect = label.rectTransform.rect;
             const float tolerance = 3f;
             foreach (UIVertex vertex in vertices)
@@ -587,7 +631,7 @@ namespace GreedLast.Editor
                 Vector3 point = vertex.position / label.pixelsPerUnit;
                 Require(point.x >= rect.xMin - tolerance && point.x <= rect.xMax + tolerance
                     && point.y >= rect.yMin - tolerance && point.y <= rect.yMax + tolerance,
-                    currentFrame.Name + ": button label exceeds its text area: " + button.name);
+                    currentFrame.Name + ": text exceeds its area: " + label.name);
             }
         }
 

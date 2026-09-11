@@ -43839,8 +43839,11 @@ namespace GreedLast
                 return;
             }
 
-            string feedbackText = BuildJudgementFeedbackText(snapshot);
-            if (timingRecommendationJustReady)
+            bool compact = !DevToolsEnabled || devCleanViewEnabled;
+            string feedbackText = compact
+                ? BuildCompactJudgementFeedbackText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                : BuildJudgementFeedbackText(snapshot);
+            if (timingRecommendationJustReady && !compact)
             {
                 feedbackText += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
             }
@@ -43850,6 +43853,11 @@ namespace GreedLast
                 snapshot.Pattern.Channel,
                 snapshot.LastResult,
                 reviewTargetAchievementJustReached);
+            if (compact)
+            {
+                judgementFeedbackText.fontSize = 40;
+                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
+            }
             ApplyJudgementFeedbackOffset(1f);
             judgementFeedbackText.text = feedbackText;
             judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot);
@@ -44033,6 +44041,33 @@ namespace GreedLast
             }
 
             return channel == GreedLastRunChannel.Right ? 1f : 0f;
+        }
+
+        private static string BuildCompactJudgementFeedbackText(
+            GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool rotationTiltAvailable)
+        {
+            GreedLastPatternModel pattern = BuildJudgementFeedbackPattern(snapshot);
+            string action = BuildRunnerResponseSymbol(pattern) + " " + BuildActiveActionResponseLabel(pattern);
+            switch (snapshot.LastResult)
+            {
+                case GreedLastJudgementResult.Success:
+                    string bonus = snapshot.LastCenterHit ? BuildTimingActionPayoffTag(pattern) : "회피 성공";
+                    return "정확 · " + action + "\n" + bonus + " · 콤보 " + snapshot.Combo;
+                case GreedLastJudgementResult.Good:
+                    string timing = TryExtractSignedTimingDelta(snapshot.JudgementText, out float delta)
+                        ? (delta < 0f ? "빠름 " : "늦음 ") + Mathf.RoundToInt(Mathf.Abs(delta) * 1000f) + "ms"
+                        : "타이밍 보정";
+                    return "Good · " + action + "\n" + timing + " · 콤보 " + snapshot.Combo;
+                case GreedLastJudgementResult.Miss:
+                    string reason = snapshot.MissReason == "wrong_channel"
+                        ? "정답 " + BuildActiveActionCueInputHintForCapabilities(pattern, devToolsEnabled, rotationTiltAvailable)
+                        : snapshot.MissReason == "no_input" ? "입력 없음"
+                        : snapshot.MissReason == "too_early" ? "너무 빠름"
+                        : snapshot.MissReason == "too_late" ? "너무 늦음" : "회피 실패";
+                    return "Miss · " + action + "\n" + reason + " · 체력 " + snapshot.Health;
+                default:
+                    return string.Empty;
+            }
         }
 
         private static string BuildJudgementFeedbackText(GreedLastRunSnapshot snapshot)
@@ -46264,12 +46299,17 @@ namespace GreedLast
 
         private static string BuildActiveTimingActionCuePayoffTag(GreedLastRunSnapshot snapshot)
         {
-            if (IsRecoveryPattern(snapshot.Pattern))
+            return BuildTimingActionPayoffTag(snapshot.Pattern);
+        }
+
+        private static string BuildTimingActionPayoffTag(GreedLastPatternModel pattern)
+        {
+            if (IsRecoveryPattern(pattern))
             {
                 return "복구+" + GreedLastRunCore.RecoveryPrecisionScoreBonus;
             }
 
-            switch (snapshot.Pattern.TimingType)
+            switch (pattern.TimingType)
             {
                 case GreedLastTimingType.Perfect:
                     return "집중+" + GreedLastRunCore.PerfectFocusChargeBonus;
