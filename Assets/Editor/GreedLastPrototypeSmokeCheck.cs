@@ -1539,6 +1539,7 @@ namespace GreedLast.Editor
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
             VerifyRuntimeBoardScreenRenderVisibility();
+            GreedLastPrototypeAppLoopCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);

@@ -144,6 +144,8 @@ Unity 상단 `Greed Last > Build Verified Windows Prototype`을 사용한다. �
 
 ### 2026-09-11 검증
 
+- 실제 앱 콜백 통합 검사와 최종 Windows 빌드 성공: `Logs/prototype-app-loop-verified-20260911.log`. 첫 정확 연습→일반 런 직행→S3 저장→무한 준비 취소→2회 소진→기록→보충 런→저장 포기 확인을 버튼 PointerDown/Up/Click으로 구동했다. 임시 백엔드만 쓰며 테스트 중 바꾼 연습 완료 플래그는 finally에서 복원한다.
+
 - 전체 스모크와 Windows 빌드 성공: `Logs/prototype-readable-verified-20260911.log`
 - 35개 비어 있지 않은 화면과 주요 버튼 중심/글자 영역 153회 검사 성공: `Logs/prototype-readable-visual-20260911.log`
 - 저장 비교 본문의 포인터 드래그와 휠 스크롤 검사 통과. 짧은 기록은 드래그와 스크롤바를 함께 끈다.
