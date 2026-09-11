@@ -35771,7 +35771,10 @@ namespace GreedLast
                 return;
             }
 
-            string cue = BuildActiveActionCueText(snapshot);
+            bool compact = !DevToolsEnabled || devCleanViewEnabled;
+            string cue = compact
+                ? BuildCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                : BuildActiveActionCueText(snapshot);
             if (string.IsNullOrEmpty(cue))
             {
                 HideActiveActionCue();
@@ -35803,7 +35806,7 @@ namespace GreedLast
             }
 
             activeActionCueText.text = cue;
-            activeActionCueText.fontSize = BuildActiveActionCueFontSize(cue, coreNear, exactPulse);
+            activeActionCueText.fontSize = compact ? 38 : BuildActiveActionCueFontSize(cue, coreNear, exactPulse);
             int cueAlpha = Mathf.Clamp(
                 BuildActiveActionCueAlpha(coreNear, readinessPulse)
                     + BuildActiveActionCueDownbeatAlphaLift(downbeatPulse),
@@ -46128,6 +46131,23 @@ namespace GreedLast
             }
 
             return "준비 " + secondsToCore.ToString("0.00") + "s";
+        }
+
+        private static string BuildCompactActiveActionCueText(
+            GreedLastRunSnapshot snapshot,
+            bool devToolsEnabled,
+            bool rotationTiltAvailable)
+        {
+            if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
+                return string.Empty;
+
+            string action = BuildTrapApproachLabel(snapshot.Pattern) + " → "
+                + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + BuildActiveActionResponseLabel(snapshot.Pattern);
+            if (GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
+                action += " · " + BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable);
+
+            return action + "\n정확 +" + BuildActiveExactScorePreview(snapshot)
+                + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);
         }
 
         private static string BuildActiveActionCueText(GreedLastRunSnapshot snapshot)

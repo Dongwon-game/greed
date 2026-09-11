@@ -56,6 +56,7 @@ namespace GreedLast.Editor
             public int Width;
             public int Height;
             public float SafeInset;
+            public double SettleSeconds = 0.5;
             public Action Show;
         }
 
@@ -143,6 +144,7 @@ namespace GreedLast.Editor
                 Add("25-practice-calibration", 1280, 720, () => ShowRun(practiceResult));
                 Add("26-practice-calibration-tablet", 1024, 768, () => ShowRun(practiceResult));
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
+                AddAvoidanceFrames();
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -158,9 +160,9 @@ namespace GreedLast.Editor
         [MenuItem(MenuPath, true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
-        private static void Add(string name, int width, int height, Action show, float safeInset = 0f)
+        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5)
         {
-            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset });
+            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset, SettleSeconds = settleSeconds });
         }
 
         private static void ShowScreen(GreedLastScreenState state, string title)
@@ -172,6 +174,70 @@ namespace GreedLast.Editor
         {
             ShowScreen(snapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest, "피라미드 질주");
             ui.RenderRun(snapshot);
+        }
+
+        private static void AddAvoidanceFrames()
+        {
+            string[] names = { "floor", "overhead", "side", "rotate-left", "rotate-right" };
+            for (int index = 0; index < names.Length; index++)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.Enter();
+                float clock = Time.realtimeSinceStartup;
+                for (int cycle = 0; cycle <= index; cycle++)
+                    core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Avoidance capture requires a live trap.");
+                core.Tick(clock + run.Pattern.CoreSeconds - 0.08f);
+                GreedLastRunSnapshot approach = run;
+                string name = names[index];
+                Add("28-approach-" + name, 1280, 720, () => ShowRun(approach));
+                if (index == 3)
+                    Add("29-rotation-tablet", 1024, 768, () => ShowRun(approach));
+                if (index == 4)
+                    Add("29-rotation-wide-safe", 2340, 1080, () => ShowRun(approach), 96f);
+
+                GreedLastRunChannel channel = run.Pattern.Channel;
+                float exact = clock + run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                core.HandleInput(channel, exact);
+                Require(run.LastResult == GreedLastJudgementResult.Success, "Exact avoidance captures must resolve successfully.");
+                GreedLastRunSnapshot resolved = run;
+                Add("30-exact-" + name, 1280, 720, () =>
+                {
+                    ShowRun(approach);
+                    ui.RenderRun(resolved);
+                }, settleSeconds: 0.16);
+
+                if (index >= 3) continue;
+                foreach (bool miss in new[] { false, true })
+                {
+                    var outcomeCore = new GreedLastRunCore();
+                    GreedLastRunSnapshot outcome = default;
+                    outcomeCore.SnapshotChanged += value => outcome = value;
+                    outcomeCore.Enter();
+                    for (int cycle = 0; cycle <= index; cycle++)
+                        outcomeCore.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                    outcomeCore.Tick(clock += 2f);
+                    outcomeCore.Tick(clock += 1f);
+                    GreedLastRunSnapshot before = outcome;
+                    float delta = miss ? 0f : (outcome.Pattern.SuccessWindowSeconds + outcome.Pattern.GoodWindowSeconds) * 0.5f;
+                    GreedLastRunChannel input = miss
+                        ? (channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                        : channel;
+                    outcomeCore.HandleInput(input, clock + outcome.Pattern.CoreSeconds - outcomeCore.InputTimingOffsetSeconds + delta);
+                    Require(outcome.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good),
+                        "Outcome captures must reflect the core's actual judgement.");
+                    GreedLastRunSnapshot after = outcome;
+                    Add((miss ? "32-miss-" : "31-good-") + name, 1280, 720, () =>
+                    {
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                    }, settleSeconds: 0.16);
+                }
+            }
         }
 
         private static void AddSavedRunLoopFrames()
@@ -361,7 +427,7 @@ namespace GreedLast.Editor
             try
             {
                 typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
-                if (EditorApplication.timeSinceStartup - frameStartedAt < 0.5)
+                if (EditorApplication.timeSinceStartup - frameStartedAt < currentFrame.SettleSeconds)
                 {
                     return;
                 }

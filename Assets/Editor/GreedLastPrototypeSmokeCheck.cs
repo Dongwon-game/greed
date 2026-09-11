@@ -9920,6 +9920,7 @@ namespace GreedLast.Editor
 
         private static void VerifyReadableMenuAndResultLayouts(GreedLastRuntimeUi ui)
         {
+            VerifyCompactActionCues(ui);
             string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.SaveLoadoutDraft, "저장 슬롯 선택", longDetail, 0,
                 saveCandidateAvailable: true, selectedSaveSlotIndex: 2));
@@ -10060,6 +10061,52 @@ namespace GreedLast.Editor
             tone.Invoke(null, new object[] { action, new Color32(205, 166, 70, 255), new Color32(238, 204, 114, 255), new Color32(165, 124, 48, 255) });
             Require(action.targetGraphic.color == Color.white && action.GetComponentInChildren<Text>().color.grayscale > 0.7f,
                 "A disabled action must retain a readable label and must not be tinted twice.");
+        }
+
+        private static void VerifyCompactActionCues(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            string[] responses = { "점프", "숙이기", "비틀기", "좌회전", "우회전" };
+            float clock = Time.realtimeSinceStartup;
+            for (int i = 0; i < responses.Length; i++)
+            {
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Compact action checks require a live avoidance pattern.");
+                string cue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false);
+                Require(cue.Split('\n').Length == 2 && cue.Contains(responses[i], StringComparison.Ordinal)
+                    && cue.Contains("정확 +" + InvokeRuntimeUiInt("BuildActiveExactScorePreview", run), StringComparison.Ordinal),
+                    "Every compact cue must retain its actual action and exact-score preview in two lines.");
+                Require(!cue.Contains("보정+", StringComparison.Ordinal) && !cue.Contains("위험 →", StringComparison.Ordinal),
+                    "Clean gameplay must not repeat the long timing and comparison paragraph.");
+                if (i >= 3)
+                {
+                    string mobile = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, false, true);
+                    string fallback = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, false, false);
+                    Require(mobile.Contains("중립→", StringComparison.Ordinal) && mobile.Contains("기울임", StringComparison.Ordinal)
+                        && fallback.Contains("탭", StringComparison.Ordinal) && !fallback.Contains("기울임", StringComparison.Ordinal),
+                        "Compact rotation cues must preserve neutral-to-tilt guidance and the sensor-unavailable tap fallback.");
+                }
+
+                ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "피라미드 질주", string.Empty, 0));
+                SetRuntimeUiField(ui, "devCleanViewEnabled", true);
+                ui.RenderRun(run);
+                typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+                Text action = GetRuntimeUiField<Text>(ui, "activeActionCueText");
+                Require(action.fontSize == 38 && action.text == InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true,
+                    InvokeRuntimeUiStaticBool("IsRuntimeRotationTiltAvailable")),
+                    "Clean runtime rendering must select the compact cue without changing the input platform: " + action.text);
+                Require(action.preferredHeight <= action.rectTransform.rect.height + 1f,
+                    "Both compact action lines must fit without vertical clipping.");
+                core.TogglePause(clock + 0.1f);
+                Require(string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false)),
+                    "Paused gameplay must hide its active cue.");
+            }
+            SetRuntimeUiField(ui, "devCleanViewEnabled", false);
         }
 
         private static Rect BoundsInRoot(RectTransform child, RectTransform root)
