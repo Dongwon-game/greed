@@ -142,8 +142,6 @@ Unity 재생을 멈춘 뒤 `Greed Last > Capture Prototype Visual Checks`를 실
 
 Unity 상단 `Greed Last > Build Verified Windows Prototype`을 사용한다. 전체 스모크가 통과한 경우에만 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 갱신한다.
 
-### 2026-09-11 검증
-
 ### 2026-09-13 최신 검증
 
 - 클린 뷰의 입력 머리글을 레인 위로 분리했다. 실제 주자는 1.4배 확대했고, 선택 중에는 숨긴다. 로비 주자는 유지한다.
