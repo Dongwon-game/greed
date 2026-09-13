@@ -146,6 +146,7 @@ namespace GreedLast.Editor
                 Add("26-practice-calibration-tablet", 1024, 768, () => ShowRun(practiceResult));
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
+                AddGameplayChoiceFrames();
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -175,6 +176,30 @@ namespace GreedLast.Editor
         {
             ShowScreen(snapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest, "피라미드 질주");
             ui.RenderRun(snapshot);
+        }
+
+        private static void AddGameplayChoiceFrames()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.Enter();
+            GreedLastRunSnapshot start = run;
+            Add("33-start-choice-tablet", 1024, 768, () => ShowRun(start));
+            core.JumpToDevShortcut(GreedLastDevShortcut.GiftChoice, clock);
+            GreedLastRunSnapshot gift = run;
+            Add("34-gift-choice", 1280, 720, () => ShowRun(gift));
+            Add("35-gift-choice-tablet", 1024, 768, () => ShowRun(gift));
+            core.JumpToDevShortcut(GreedLastDevShortcut.RelicChoice, clock);
+            GreedLastRunSnapshot relic = run;
+            Add("36-relic-choice", 1280, 720, () => ShowRun(relic));
+            Add("37-relic-choice-tablet", 1024, 768, () => ShowRun(relic));
+            core.HandleInput(GreedLastRunChannel.Center, clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            GreedLastRunSnapshot live = run;
+            Add("38-live-after-choice", 1280, 720, () => ShowRun(live));
         }
 
         private static void AddAvoidanceFrames()
@@ -541,7 +566,9 @@ namespace GreedLast.Editor
             bool menu = Read<ScrollRect>("menuDetailScroll").gameObject.activeInHierarchy;
             bool result = Read<Text>("detailText").enabled && Read<Text>("runHudText").gameObject.activeSelf == false
                 && Read<Button>("nextPatternButton").gameObject.activeInHierarchy;
-            if (!paused && !menu && !result) return 0;
+            bool choice = Read<bool>("runModeActive") && Read<bool>("hasRunSnapshot")
+                && Read<GreedLastRunSnapshot>("latestRunSnapshot").ChoiceActive;
+            if (!paused && !menu && !result && !choice) return 0;
             Require(eventSystem != null, "Visible-control checks require the fixture's event system.");
             var controls = new List<Button>
             {
@@ -643,9 +670,9 @@ namespace GreedLast.Editor
             File.WriteAllText("Logs/VisualChecks/latest-report.json", JsonUtility.ToJson(report, true));
         }
 
-        private static T Read<T>(string name) where T : class
+        private static T Read<T>(string name)
         {
-            return typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui) as T;
+            return (T)typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
         }
 
         private static void ReleaseTarget()

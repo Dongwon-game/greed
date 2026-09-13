@@ -15087,6 +15087,7 @@ namespace GreedLast
         private static readonly Color32 PrototypeVermilionColor = new Color32(214, 88, 68, 255);
         private static readonly Color32 PrototypeRunCorridorTintColor = new Color32(126, 143, 137, 255);
         private static readonly Color32 PrototypeRunnerSkinColor = new Color32(154, 169, 86, 255);
+        private const float PrototypeRunAvatarScale = 1.4f;
         private static readonly Color32 PrototypeRunnerHairColor = new Color32(45, 64, 70, 255);
         private static readonly Color32 PrototypeRunnerHornColor = new Color32(246, 229, 167, 255);
         private static readonly Color32 PrototypeRunnerSashColor = new Color32(210, 78, 62, 255);
@@ -15566,6 +15567,7 @@ namespace GreedLast
                     UpdateRunHudLayout(detailedRunHud);
                 subtitleText.text = cleanView ? string.Empty : BuildModeSubtitleForScreen(
                     latestRunSnapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest);
+                UpdateLaneLabels(latestRunSnapshot);
             }
         }
 
@@ -16634,6 +16636,7 @@ namespace GreedLast
             {
                 laneImages[i].rectTransform.sizeDelta = new Vector2(195f, 520f);
                 laneHitButtons[i].GetComponent<RectTransform>().sizeDelta = new Vector2(230f, 580f);
+                SetLaneLabelRect(laneLabelTexts[i], false);
             }
         }
 
@@ -33140,7 +33143,7 @@ namespace GreedLast
                 return;
             }
 
-            bool runVisible = runModeActive && hasRunSnapshot;
+            bool runVisible = runModeActive && hasRunSnapshot && !latestRunSnapshot.ChoiceActive && !latestRunSnapshot.Stopped;
             bool lobbyVisible = ShouldShowLobbyRunner(
                 lobbyRunPortalVisible,
                 runModeActive,
@@ -33559,6 +33562,9 @@ namespace GreedLast
                 shadowAlpha *= entranceAlpha;
             }
 
+            avatarRect.localScale = new Vector3(avatarRect.localScale.x * PrototypeRunAvatarScale,
+                avatarRect.localScale.y * PrototypeRunAvatarScale, avatarRect.localScale.z);
+            shadowScaleX *= 1.25f;
             shadowScaleX = BuildRunnerShadowContactScaleX(shadowScaleX, groundContact, recoveryPressure);
             float shadowScaleY = BuildRunnerShadowContactScaleY(shadowScaleX, groundContact, recoveryPressure);
             shadowAlpha = BuildRunnerShadowContactAlpha(shadowAlpha, groundContact, recoveryPressure);
@@ -46922,12 +46928,39 @@ namespace GreedLast
                 return;
             }
 
+            bool cleanHeader = (!DevToolsEnabled || devCleanViewEnabled) && !snapshot.ChoiceActive;
+            for (int i = 0; i < laneImages.Length; i++)
+            {
+                laneImages[i].rectTransform.sizeDelta = snapshot.ChoiceActive
+                    ? new Vector2(440f, 410f) : new Vector2(195f, 520f);
+                laneHitButtons[i].GetComponent<RectTransform>().sizeDelta = snapshot.ChoiceActive
+                    ? new Vector2(460f, 430f) : new Vector2(230f, 580f);
+                SetLaneLabelRect(laneLabelTexts[i], cleanHeader);
+            }
+
             if (snapshot.ChoiceActive)
             {
-                SetLaneLabelMode(27, true);
+                SetLaneLabelMode(38, true);
                 laneLabelTexts[0].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceLeft);
                 laneLabelTexts[1].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceCenter);
                 laneLabelTexts[2].text = BuildChoiceLaneLabel(snapshot, snapshot.ChoiceRight);
+                return;
+            }
+
+            if (cleanHeader)
+            {
+                int target = snapshot.ActivePattern && !snapshot.Paused && !snapshot.CountdownActive && !snapshot.Stopped
+                    ? Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2) : -1;
+                SetLaneLabelMode(36, false);
+                for (int i = 0; i < laneLabelTexts.Length; i++)
+                {
+                    string direction = i == 0 ? "좌" : i == 1 ? "중" : "우";
+                    string hint = i == target
+                        ? BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                        : BuildRunChannelInputHintForMode((GreedLastRunChannel)(i + 1), DevToolsEnabled);
+                    laneLabelTexts[i].text = direction + "\n" + hint;
+                }
+                SetRunLaneLabelColors(target, snapshot);
                 return;
             }
 
@@ -46960,6 +46993,25 @@ namespace GreedLast
         private static string BuildRunLaneBaseLabel(int laneIndex, bool compact)
         {
             return BuildRunLaneBaseLabelForMode(laneIndex, compact, DevToolsEnabled);
+        }
+
+        private static void SetLaneLabelRect(Text label, bool header)
+        {
+            RectTransform rect = label.rectTransform;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            if (header)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1.15f);
+                rect.sizeDelta = new Vector2(360f, 100f);
+                rect.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = new Vector2(12f, 12f);
+                rect.offsetMax = new Vector2(-12f, -12f);
+            }
         }
 
         private static string BuildRunLaneBaseLabelForMode(int laneIndex, bool compact, bool devToolsEnabled)

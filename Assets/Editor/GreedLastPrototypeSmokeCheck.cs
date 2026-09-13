@@ -9920,6 +9920,7 @@ namespace GreedLast.Editor
 
         private static void VerifyReadableMenuAndResultLayouts(GreedLastRuntimeUi ui)
         {
+            VerifyPlayfieldReadability(ui);
             VerifyCompactActionCues(ui);
             string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.SaveLoadoutDraft, "저장 슬롯 선택", longDetail, 0,
@@ -10061,6 +10062,47 @@ namespace GreedLast.Editor
             tone.Invoke(null, new object[] { action, new Color32(205, 166, 70, 255), new Color32(238, 204, 114, 255), new Color32(165, 124, 48, 255) });
             Require(action.targetGraphic.color == Color.white && action.GetComponentInChildren<Text>().color.grayscale > 0.7f,
                 "A disabled action must retain a readable label and must not be tinted twice.");
+        }
+
+        private static void VerifyPlayfieldReadability(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "기프트 선택", string.Empty, 0));
+            ui.RenderRun(run);
+            MethodInfo update = typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic);
+            update.Invoke(ui, null);
+            Image[] lanes = GetRuntimeUiField<Image[]>(ui, "laneImages");
+            Text[] labels = GetRuntimeUiField<Text[]>(ui, "laneLabelTexts");
+            Require(run.ChoiceActive && lanes[0].rectTransform.sizeDelta.x == 440f && labels[0].fontSize == 38,
+                "Gameplay choices must use wider, readable selection areas.");
+            Require(!GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").activeSelf,
+                "The runner must not cover the center gameplay choice.");
+            for (int i = 0; i < labels.Length; i++)
+                Require(labels[i].rectTransform.anchorMin == Vector2.zero && labels[i].preferredHeight <= labels[i].rectTransform.rect.height,
+                    "Choice descriptions must remain inside the expanded choice area.");
+
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            SetRuntimeUiField(ui, "devCleanViewEnabled", true);
+            ui.RenderRun(run);
+            update.Invoke(ui, null);
+            Require(lanes[0].rectTransform.sizeDelta.x == 195f && labels[0].rectTransform.anchorMin.y > 1f
+                && labels[0].text.Split('\n').Length == 2 && !labels[0].text.Contains("충전", StringComparison.Ordinal),
+                "Clean gameplay must restore the input area and move concise input labels above the artwork.");
+            RectTransform avatar = GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
+            Require(avatar.gameObject.activeSelf && avatar.localScale.y > 1.2f,
+                "The live runner must be larger than the old preview while retaining its motion transform.");
+            ui.ToggleDevCleanView();
+            Require(labels[0].rectTransform.anchorMin == Vector2.zero && labels[0].text.Contains("정확", StringComparison.Ordinal),
+                "F11 must immediately restore the developer lane detail.");
+            ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRecordBoard, "기록", "100점", 2));
+            Require(labels[0].rectTransform.anchorMin == Vector2.zero,
+                "Leaving play must restore stretched labels for menu and slot presentation.");
         }
 
         private static void VerifyCompactActionCues(GreedLastRuntimeUi ui)
@@ -10245,10 +10287,12 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiInstance(ui, "UpdateLobbyRunPortal", 0.5f);
                 InvokeRuntimeUiInstance(ui, "UpdateRunnerAvatar");
                 RectTransform runnerRect = runnerAvatarRoot.GetComponent<RectTransform>();
+                float runAvatarScale = (float)typeof(GreedLastRuntimeUi)
+                    .GetField("PrototypeRunAvatarScale", BindingFlags.Static | BindingFlags.NonPublic).GetRawConstantValue();
                 Require(
                     lobbyRunPortalPieces[3].color.a > 0
                         && runnerAvatarCanvasGroup.alpha < 1f
-                        && runnerRect.localScale.x < 1f
+                        && runnerRect.localScale.x < runAvatarScale
                         && runnerRect.anchoredPosition.y < -10f,
                     "The runtime lobby-to-run handoff must keep a fading threshold behind a runner that is still moving forward from its lobby scale.");
                 SetRuntimeUiField(ui, "runEntranceHandoffStartedAt", handoffNow - 0.35f);
@@ -10261,8 +10305,8 @@ namespace GreedLast.Editor
                         && lobbyRunPortalPieces[3].color.a == 0
                         && Mathf.Approximately(runnerAvatarCanvasGroup.alpha, 1f)
                         && runnerRect.anchoredPosition.y < 0f
-                        && runnerRect.localScale.x > 1f
-                        && runnerRect.localScale.y < 1f
+                        && runnerRect.localScale.x > runAvatarScale
+                        && runnerRect.localScale.y < runAvatarScale
                         && launchGatePieces[0].color.a > 0
                         && launchGatePieces[1].color.a > 0,
                     "A real start countdown must crouch the runner behind a visible launch gate.");
@@ -10384,8 +10428,8 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiInstance(ui, "UpdateTempleDepthBackdrop");
                 Require(
                     runnerRect.anchoredPosition.y < 0f
-                        && runnerRect.localScale.x > 1f
-                        && runnerRect.localScale.y < 1f
+                        && runnerRect.localScale.x > runAvatarScale
+                        && runnerRect.localScale.y < runAvatarScale
                         && launchGatePieces[0].color.a > 0
                         && launchGatePieces[1].color.a > 0
                         && runEntryTrapRevealPieces[0].color.a == 0
