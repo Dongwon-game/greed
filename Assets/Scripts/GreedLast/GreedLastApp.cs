@@ -18839,7 +18839,7 @@ namespace GreedLast
         {
             if (snapshot.ChoiceActive)
             {
-                return "루트 선택  챕터 " + snapshot.ChapterIndex;
+                return BuildChoiceScreenTitle(snapshot) + " · 챕터 " + snapshot.ChapterIndex;
             }
 
             if (snapshot.CoreRetrieved)

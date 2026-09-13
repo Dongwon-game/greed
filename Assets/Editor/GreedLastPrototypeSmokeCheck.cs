@@ -10078,6 +10078,8 @@ namespace GreedLast.Editor
             Text[] labels = GetRuntimeUiField<Text[]>(ui, "laneLabelTexts");
             Require(run.ChoiceActive && lanes[0].rectTransform.sizeDelta.x == 440f && labels[0].fontSize == 38,
                 "Gameplay choices must use wider, readable selection areas.");
+            Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("시작 기프트 선택", StringComparison.Ordinal),
+                "Start-gift progress must not be mislabeled as a route choice.");
             Require(!GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").activeSelf,
                 "The runner must not cover the center gameplay choice.");
             for (int i = 0; i < labels.Length; i++)
@@ -10103,6 +10105,12 @@ namespace GreedLast.Editor
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRecordBoard, "기록", "100점", 2));
             Require(labels[0].rectTransform.anchorMin == Vector2.zero,
                 "Leaving play must restore stretched labels for menu and slot presentation.");
+            core.JumpToDevShortcut(GreedLastDevShortcut.GiftChoice, clock);
+            Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("기프트 선택", StringComparison.Ordinal),
+                "Gift selection progress must describe the current choice.");
+            core.JumpToDevShortcut(GreedLastDevShortcut.RelicChoice, clock);
+            Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("유물 선택", StringComparison.Ordinal),
+                "Relic selection progress must describe the current choice.");
         }
 
         private static void VerifyCompactActionCues(GreedLastRuntimeUi ui)

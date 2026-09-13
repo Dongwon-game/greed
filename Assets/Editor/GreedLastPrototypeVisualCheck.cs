@@ -46,6 +46,8 @@ namespace GreedLast.Editor
             public int height;
             public float safeInset;
             public int checkedButtons;
+            public int checkedControlPoints;
+            public int checkedLaneLabels;
             public int checkedFeedbackAreas;
             public int brightSamples;
             public int detailSamples;
@@ -507,8 +509,9 @@ namespace GreedLast.Editor
                 graphic.Rebuild(CanvasUpdate.PreRender);
             }
             camera.Render();
-            int checkedButtons = VerifyVisibleControlRaycasts();
+            int checkedButtons = VerifyVisibleControlRaycasts(out int checkedControlPoints);
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
+            int checkedLaneLabels = VerifyLanePresentation();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
             try
@@ -547,6 +550,8 @@ namespace GreedLast.Editor
                     height = target.height,
                     safeInset = currentFrame.SafeInset,
                     checkedButtons = checkedButtons,
+                    checkedControlPoints = checkedControlPoints,
+                    checkedLaneLabels = checkedLaneLabels,
                     checkedFeedbackAreas = checkedFeedbackAreas,
                     brightSamples = brightSamples,
                     detailSamples = detailSamples,
@@ -560,8 +565,9 @@ namespace GreedLast.Editor
             }
         }
 
-        private static int VerifyVisibleControlRaycasts()
+        private static int VerifyVisibleControlRaycasts(out int checkedPoints)
         {
+            checkedPoints = 0;
             bool paused = Read<GameObject>("pauseMenuOverlay").activeInHierarchy;
             bool menu = Read<ScrollRect>("menuDetailScroll").gameObject.activeInHierarchy;
             bool result = Read<Text>("detailText").enabled && Read<Text>("runHudText").gameObject.activeSelf == false
@@ -600,18 +606,57 @@ namespace GreedLast.Editor
             {
                 if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 RectTransform rect = button.GetComponent<RectTransform>();
-                Vector3 screenPoint = camera.WorldToScreenPoint(rect.TransformPoint(rect.rect.center));
-                var pointer = new PointerEventData(eventSystem) { position = screenPoint };
-                var hits = new List<RaycastResult>();
-                raycaster.Raycast(pointer, hits);
-                Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
-                    || hits[0].gameObject.transform.IsChildOf(button.transform)),
-                    currentFrame.Name + ": visible button is blocked at its center: " + button.name
-                    + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
+                Vector2[] samples = choice
+                    ? new[] { new Vector2(0.5f, 0.5f), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.06f),
+                        new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.94f) }
+                    : new[] { new Vector2(0.5f, 0.5f) };
+                foreach (Vector2 sample in samples)
+                {
+                    Vector2 localPoint = rect.rect.min + Vector2.Scale(rect.rect.size, sample);
+                    Vector3 screenPoint = camera.WorldToScreenPoint(rect.TransformPoint(localPoint));
+                    var pointer = new PointerEventData(eventSystem) { position = screenPoint };
+                    var hits = new List<RaycastResult>();
+                    raycaster.Raycast(pointer, hits);
+                    Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
+                        || hits[0].gameObject.transform.IsChildOf(button.transform)),
+                        currentFrame.Name + ": visible button is blocked at " + sample + ": " + button.name
+                        + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
+                    checkedPoints++;
+                }
                 VerifyButtonTextBounds(button);
                 checkedButtons++;
             }
             return checkedButtons;
+        }
+
+        private static int VerifyLanePresentation()
+        {
+            if (!Read<bool>("runModeActive") || !Read<bool>("hasRunSnapshot")
+                || Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
+            GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
+            if (run.Stopped) return 0;
+            if (run.ChoiceActive)
+                Require(!Read<GameObject>("runnerAvatarRoot").activeInHierarchy,
+                    currentFrame.Name + ": the runner covers the choice surface.");
+            int count = 0;
+            foreach (Text label in Read<Text[]>("laneLabelTexts"))
+            {
+                VerifyTextBounds(label);
+                Require(label.preferredHeight <= label.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": lane text is clipped: " + label.text);
+                var corners = new Vector3[4];
+                label.rectTransform.GetWorldCorners(corners);
+                foreach (Vector3 corner in corners)
+                {
+                    Vector3 screen = camera.WorldToScreenPoint(corner);
+                    Require(screen.x >= 0 && screen.x <= target.width && screen.y >= 0 && screen.y <= target.height,
+                        currentFrame.Name + ": lane label lies outside the viewport.");
+                }
+                Require(run.ChoiceActive || label.rectTransform.anchorMin.y > 1f,
+                    currentFrame.Name + ": clean input labels must stay above the live artwork.");
+                count++;
+            }
+            return count;
         }
 
         private static int VerifyVisibleFeedbackAreas()
