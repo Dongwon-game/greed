@@ -345,6 +345,11 @@ namespace GreedLast.Editor
                     GreedLastApp.BuildInfinitePreparationDetailForStep(step, "집중 축", "황금 박동").TrimStart()
                     + "\n\n" + backend.BuildInfiniteStartReadyText());
                 AddScreen("13-infinite-ready-step-" + step, screen);
+                if (step == 2)
+                {
+                    AddScreen("13-infinite-ready-small", screen, 960, 540);
+                    AddScreen("13-infinite-ready-tablet", screen, 1024, 768);
+                }
             }
             Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord loadout, out _, out _), "The first entry must consume one use.");
             core.EnterInfiniteRun(loadout);
@@ -401,6 +406,18 @@ namespace GreedLast.Editor
                 ui.Render(overwrite);
                 Read<ScrollRect>("menuDetailScroll").verticalNormalizedPosition = 0f;
             });
+            stateMachine.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSelectedSaveLoadoutDeletePreviewText(),
+                saveSlotDeleteConfirmationPending: true, saveLoadoutCandidateAvailable: true);
+            AddScreen("20-delete-confirm-small", screen, 960, 540);
+            stateMachine.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSelectedSaveLoadoutRenamePreviewText(),
+                saveSlotRenameConfirmationPending: true, saveLoadoutCandidateAvailable: true);
+            AddScreen("20-rename-confirm-tablet", screen, 1024, 768);
+            stateMachine.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildSelectedSaveLoadoutDeletePreviewText(),
+                saveSlotDeleteConfirmationPending: true);
+            AddScreen("20-infinite-delete-tablet", screen, 1024, 768);
+            stateMachine.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildSelectedSaveLoadoutRenamePreviewText(),
+                saveSlotRenameConfirmationPending: true);
+            AddScreen("20-infinite-rename-small", screen, 960, 540);
             core.RestartPractice(Time.realtimeSinceStartup - 4f);
             core.Tick(Time.realtimeSinceStartup - 1f);
             core.Tick(Time.realtimeSinceStartup);

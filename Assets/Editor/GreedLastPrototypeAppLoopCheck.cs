@@ -163,6 +163,7 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
+                VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
                 Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations.");
             }
             finally
@@ -297,6 +298,69 @@ namespace GreedLast.Editor
             Require(backend.LoadLobby().SaveSlotLabels[2] == originalSlot,
                 "Reselection must not mutate or consume the stored loadout.");
             FinishPreparationTransition(app);
+        }
+
+        private static void VerifyAppPauseLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
+            Click(ui, "practiceRunButton");
+            Write(core, "startCountdownEndsAt", 0f);
+            core.Tick(Time.realtimeSinceStartup);
+            core.RequestNextPattern(Time.realtimeSinceStartup);
+            Require(latest().ActivePattern && !latest().Paused, "Lifecycle checks need an active practice trap.");
+            GreedLastRunSnapshot beforePause = latest();
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+            Require(latest().Paused && !latest().ResumeCountdownActive,
+                "Losing app focus must show a paused run, not start a resume countdown.");
+            for (int lane = 0; lane < 3; lane++)
+            {
+                Require(!Read<Button[]>(ui, "laneButtons")[lane].IsInteractable(),
+                    "Every gameplay lane must be disabled behind the pause menu.");
+                Method(app, "HandleRunChannelInput").Invoke(app, new object[] { (GreedLastRunChannel)(lane + 1) });
+            }
+            Require(latest().Paused && !latest().ResumeCountdownActive,
+                "Gameplay keys, including the center key, must not dismiss the pause menu.");
+            core.Tick(Time.realtimeSinceStartup + 60f);
+            Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+            Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+            Require(latest().Paused && !latest().ResumeCountdownActive
+                && latest().Health == beforePause.Health && latest().Score == beforePause.Score
+                && Mathf.Approximately(latest().Distance, beforePause.Distance)
+                && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                "Background time and foreground callbacks must preserve the paused run without damage or lobby resync.");
+            Click(ui, "nextPatternButton");
+            float resumeEnd = Read<float>(core, "resumeCountdownEndsAt");
+            Require(latest().ResumeCountdownActive && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
+                "The explicit resume button must start its countdown and disable repeated clicks.");
+            Method(app, "RequestToggleRunPause").Invoke(app, null);
+            Require(Read<float>(core, "resumeCountdownEndsAt") == resumeEnd,
+                "A repeated pause/resume key during countdown must not restart or shorten it.");
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+            Require(latest().Paused && !latest().ResumeCountdownActive,
+                "Losing focus during resume countdown must return to a stable pause menu.");
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+            Click(ui, "nextPatternButton");
+            Write(core, "resumeCountdownEndsAt", 0f);
+            core.Tick(Time.realtimeSinceStartup);
+            Require(!latest().Paused && !latest().CountdownActive && latest().ActivePattern
+                && latest().Health == beforePause.Health && latest().Score == beforePause.Score,
+                "A fresh explicit resume must restore the same trap and preserve its score and health.");
+            Require(latest().ElapsedSeconds < beforePause.ElapsedSeconds,
+                "The resumed trap must move back by its lead-in buffer, not land immediately.");
+            for (int lane = 0; lane < 3; lane++)
+                Require(Read<Button[]>(ui, "laneButtons")[lane].IsInteractable(),
+                    "All gameplay lanes must become interactive after the countdown finishes.");
+            Click(ui, "pauseButton");
+            Click(ui, "returnLobbyButton");
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                "Leaving a paused practice must return to the lobby without a save candidate.");
+            for (int slot = 0; slot < savedLabels.Length; slot++)
+                Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
+                    "Practice pause/resume/exit must not consume existing saved loadouts.");
+            Debug.Log("Greed Last app pause lifecycle passed: background -> paused input isolation -> explicit resume -> interrupted countdown -> lead-in buffer -> lobby with saved slots intact.");
         }
 
         private static void RunToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)

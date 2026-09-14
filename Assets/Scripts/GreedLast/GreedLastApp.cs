@@ -13148,11 +13148,6 @@ namespace GreedLast
             {
                 if (runCore.IsPaused)
                 {
-                    if (channel == GreedLastRunChannel.Center)
-                    {
-                        RequestToggleRunPause();
-                    }
-
                     return;
                 }
 
