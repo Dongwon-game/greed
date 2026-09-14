@@ -10642,6 +10642,7 @@ namespace GreedLast
         private const float RunLaneInputRepeatBlockSeconds = 0.075f;
         private const float RunEntryLaneInputBlockSeconds = 0.34f;
         private const float RunChoiceTransitionInputBlockSeconds = 0.18f;
+        private const float SaveConfirmationInputBlockSeconds = 0.35f;
         private const float RotationTiltInputThreshold = 0.42f;
         private const float RotationTiltReleaseThreshold = 0.18f;
         private const float RotationTiltRepeatBlockSeconds = 0.22f;
@@ -10675,6 +10676,8 @@ namespace GreedLast
         private float lastRunLaneInputAt;
         private float runEntryLaneInputBlockUntil;
         private float runChoiceInputBlockUntil;
+        private float infinitePreparationInputBlockUntil;
+        private float saveConfirmationInputBlockUntil;
         private float lastRotationTiltInputAt = -10f;
         private float lastRotationDragInputAt = -10f;
         private float rotationDragStartX;
@@ -12620,6 +12623,7 @@ namespace GreedLast
                 detail = notice + "\n\n" + detail;
             }
 
+            infinitePreparationInputBlockUntil = Time.realtimeSinceStartup + RunChoiceTransitionInputBlockSeconds;
             stateMachine.SetInfiniteStartReady(lobby, detail);
         }
 
@@ -12651,6 +12655,11 @@ namespace GreedLast
 
         private void SelectInfinitePreparation(GreedLastRunChannel channel)
         {
+            if (Time.realtimeSinceStartup < infinitePreparationInputBlockUntil)
+            {
+                return;
+            }
+
             GreedLastLobbySnapshot lobby = backend.LoadLobby();
             if (!IsSelectedSaveSlotUsable(lobby))
             {
@@ -12694,6 +12703,7 @@ namespace GreedLast
 
         private void ResetInfinitePreparation()
         {
+            infinitePreparationInputBlockUntil = 0f;
             infinitePreparationStep = 0;
             infinitePreparationGift = string.Empty;
             infinitePreparationRelic = string.Empty;
@@ -12958,6 +12968,7 @@ namespace GreedLast
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
+                if (Time.realtimeSinceStartup < infinitePreparationInputBlockUntil) return;
                 GreedLastLobbySnapshot visibleLobbySnapshot = stateMachine.LobbySnapshot;
                 if (ShouldOpenRecommendedSlotBeforeInfiniteStart(visibleLobbySnapshot))
                 {
@@ -13100,6 +13111,8 @@ namespace GreedLast
 
         private void HandleRunChannelInput(GreedLastRunChannel channel)
         {
+            if (channel < GreedLastRunChannel.Left || channel > GreedLastRunChannel.Right) return;
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
                 SelectInfinitePreparation(channel);
@@ -13329,6 +13342,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutOverwriteConfirmation(string notice)
         {
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = true;
             saveDraftSkipConfirmPending = false;
@@ -13351,6 +13365,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutDeleteConfirmation()
         {
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveDraftSkipConfirmPending = false;
@@ -13369,6 +13384,7 @@ namespace GreedLast
 
         private void OpenInfiniteLoadoutDeleteConfirmation()
         {
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
@@ -13382,6 +13398,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutRenameConfirmation(string notice)
         {
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
             saveDraftSkipConfirmPending = false;
@@ -13404,6 +13421,7 @@ namespace GreedLast
 
         private void OpenInfiniteLoadoutRenameConfirmation(string notice)
         {
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = true;
@@ -13663,6 +13681,7 @@ namespace GreedLast
 
         private void RequestRenameSaveLoadoutSlot()
         {
+            if (saveSlotRenameConfirmPending && Time.realtimeSinceStartup < saveConfirmationInputBlockUntil) return;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
@@ -13719,6 +13738,7 @@ namespace GreedLast
 
         private void RequestDeleteSaveLoadoutSlot()
         {
+            if (saveSlotDeleteConfirmPending && Time.realtimeSinceStartup < saveConfirmationInputBlockUntil) return;
             saveSlotDetailViewActive = false;
             saveSlotRenameConfirmPending = false;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
@@ -13984,8 +14004,11 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
                 bool skippedClearSave = backend.HasSaveLoadoutCandidate;
+                if (skippedClearSave && saveDraftSkipConfirmPending
+                    && Time.realtimeSinceStartup < saveConfirmationInputBlockUntil) return;
                 if (skippedClearSave && !saveDraftSkipConfirmPending)
                 {
+                    saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
                     saveDraftSkipConfirmPending = true;
                     OpenSaveLoadoutDraft(
                         backend.LoadSelectedSaveSlotView(),
@@ -14651,6 +14674,7 @@ namespace GreedLast
 
         private void ConfirmSaveLoadoutAndReturn()
         {
+            if (saveDraftOverwriteConfirmPending && Time.realtimeSinceStartup < saveConfirmationInputBlockUntil) return;
             if (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending)
             {
                 RefreshSaveLoadoutPendingConfirmation(saveSlotDeleteConfirmPending

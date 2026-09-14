@@ -44,6 +44,9 @@ namespace GreedLast.Editor
                 Bind(ui, app, "nextPatternRequested", "RequestNextRunPattern");
                 Bind(ui, app, "returnLobbyRequested", "RequestReturnToLobby");
                 Bind(ui, app, "pauseRequested", "RequestToggleRunPause");
+                Bind(ui, app, "saveSlotDetailRequested", "RequestShowSaveLoadoutDetail");
+                Bind(ui, app, "saveSlotRenameRequested", "RequestRenameSaveLoadoutSlot");
+                Bind(ui, app, "saveSlotDeleteRequested", "RequestDeleteSaveLoadoutSlot");
                 Write(ui, "runChannelRequested", Method(app, "HandleRunChannelInput").CreateDelegate(typeof(Action<GreedLastRunChannel>), app));
                 state.StateChanged += ui.Render;
                 core.SnapshotChanged += (Action<GreedLastRunSnapshot>)Method(app, "HandleRunSnapshotChanged")
@@ -74,6 +77,9 @@ namespace GreedLast.Editor
                     "The actual clear action must open explicit slot selection with one candidate.");
                 Require(!Read<Button>(ui, "nextPatternButton").IsInteractable(),
                     "Saving must remain locked until a slot is explicitly chosen.");
+                Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.None });
+                Require(Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
+                    "An invalid channel must not implicitly select S3 and unlock saving.");
                 Click(Read<Button[]>(ui, "laneButtons")[2]);
                 Click(ui, "nextPatternButton");
                 GreedLastLobbySnapshot saved = backend.LoadLobby();
@@ -86,6 +92,13 @@ namespace GreedLast.Editor
                     Click(ui, "infiniteButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "The lobby infinite action must open preparation.");
                     string before = backend.LoadLobby().SaveSlotLabels[2];
+                    Click(Read<Button[]>(ui, "laneButtons")[1]);
+                    Require(Read<int>(app, "infinitePreparationStep") == 0,
+                        "The entry tap must not carry through into a preparation choice.");
+                    FinishPreparationTransition(app);
+                    Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.None });
+                    Require(Read<int>(app, "infinitePreparationStep") == 0,
+                        "An invalid channel must not silently select the left preparation option.");
                     if (use == 0)
                     {
                         Click(Read<Button[]>(ui, "laneButtons")[0]);
@@ -93,13 +106,24 @@ namespace GreedLast.Editor
                         Require(backend.LoadLobby().SaveSlotLabels[2] == before,
                             "Leaving gift preparation must not consume the selected loadout.");
                         Click(ui, "infiniteButton");
+                        FinishPreparationTransition(app);
                     }
                     Click(Read<Button[]>(ui, "laneButtons")[1]);
+                    Click(Read<Button[]>(ui, "laneButtons")[1]);
+                    Require(Read<int>(app, "infinitePreparationStep") == 1,
+                        "A rapid second tap must not choose a relic before its choices can be read.");
+                    FinishPreparationTransition(app);
                     Click(Read<Button[]>(ui, "laneButtons")[1]);
                     Require(Read<int>(app, "infinitePreparationStep") == 2,
                         "The gift and relic lane presses must both resolve before start confirmation.");
                     Require(backend.LoadLobby().SaveSlotLabels[2] == before,
                         "Gift and relic preparation callbacks must not consume a use before start confirmation.");
+                    Click(ui, "nextPatternButton");
+                    Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                        && backend.LoadLobby().SaveSlotLabels[2] == before,
+                        "The relic selection must not spill into start confirmation or consume a use.");
+                    FinishPreparationTransition(app);
+                    if (use == 0) VerifyPreparationReselection(app, ui, backend, before);
                     Click(ui, "nextPatternButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode,
                         "Start confirmation must enter infinite mode through the app, not merely render its screen.");
@@ -132,9 +156,14 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
                     "The first skip-save action must request confirmation while preserving the candidate.");
                 Click(ui, "returnLobbyButton");
+                Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
+                    "A rapid second skip-save tap must preserve the candidate while confirmation appears.");
+                FinishSaveConfirmation(app);
+                Click(ui, "returnLobbyButton");
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                     "Confirming skip-save must discard the candidate and return to the lobby.");
-                Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> preparation cancel -> two infinite uses -> records -> refill -> skip-save confirmation.");
+                VerifySavedSlotConfirmations(app, ui, backend, state);
+                Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations.");
             }
             finally
             {
@@ -146,6 +175,128 @@ namespace GreedLast.Editor
                 DestroyCreated("GreedLastCamera", existingCamera);
                 DestroyCreated("GreedLastEventSystem", existingEvents);
             }
+        }
+
+        private static void FinishPreparationTransition(GreedLastApp app)
+        {
+            // Advance only the input guard, not wall time or the user's saved profile.
+            Write(app, "infinitePreparationInputBlockUntil", 0f);
+        }
+
+        private static void FinishSaveConfirmation(GreedLastApp app)
+        {
+            Write(app, "saveConfirmationInputBlockUntil", 0f);
+        }
+
+        private static void VerifySavedSlotConfirmations(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state)
+        {
+            for (int screen = 0; screen < 2; screen++)
+            {
+                backend.AddSampleSaveLoadoutForTest(out _);
+                if (!backend.LoadLobby().SaveSlotOccupied[1]) backend.AddSampleSaveLoadoutForTest(out _);
+                state.SetLobbyReady(backend.LoadLobby());
+                if (screen == 1) Click(ui, "infiniteButton");
+                Click(ui, "saveLoadoutButton");
+                Require(state.CurrentState == (screen == 0 ? GreedLastScreenState.SaveLoadoutDraft
+                        : GreedLastScreenState.InfiniteLoadoutSelect),
+                    "Slot confirmation checks must cover both real management entry paths.");
+                Button[] slots = Read<Button[]>(ui, "laneButtons");
+                Click(slots[0]);
+                GreedLastRunRecord original = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0];
+                int remaining = Read<int[]>(backend, "saveLoadoutUsesRemaining")[0];
+                Click(ui, "saveSlotRenameButton");
+                Click(ui, "saveSlotRenameButton");
+                Require(Read<bool>(app, "saveSlotRenameConfirmPending")
+                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(original),
+                    "A rename double tap must leave the original slot unchanged in both management screens.");
+                FinishSaveConfirmation(app);
+                Click(ui, "saveSlotRenameButton");
+                Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].LoadoutName != original.LoadoutName
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == remaining,
+                    "A deliberate rename confirmation must change only the name, not remaining uses.");
+                GreedLastRunRecord renamed = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0];
+                Click(ui, "saveSlotDeleteButton");
+                Click(ui, "saveSlotDeleteButton");
+                Require(Read<bool>(app, "saveSlotDeleteConfirmPending")
+                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(renamed),
+                    "A delete double tap must preserve the slot until a deliberate confirmation.");
+                Click(slots[1]);
+                Require(!Read<bool>(app, "saveSlotDeleteConfirmPending"),
+                    "Selecting another slot must cancel deletion of the previous target immediately.");
+                Click(ui, "saveSlotDeleteButton");
+                Click(ui, "saveSlotDetailButton");
+                Require(!Read<bool>(app, "saveSlotDeleteConfirmPending")
+                    && backend.LoadLobby().SaveSlotOccupied[1],
+                    "Cancel must remain available even while the delete confirmation guard is active.");
+                Click(ui, "saveSlotDeleteButton");
+                FinishSaveConfirmation(app);
+                Click(ui, "saveSlotDeleteButton");
+                Require(!backend.LoadLobby().SaveSlotOccupied[1]
+                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(renamed),
+                    "Confirmed deletion must remove only the newly selected slot, not the earlier target.");
+                Click(ui, "returnLobbyButton");
+            }
+
+            backend.AddSampleSaveLoadoutForTest(out _);
+            backend.AddSampleClearCandidateForTest(out _);
+            state.SetLobbyReady(backend.LoadLobby());
+            Click(ui, "saveLoadoutButton");
+            Button[] saveSlots = Read<Button[]>(ui, "laneButtons");
+            GreedLastRunRecord first = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0];
+            GreedLastRunRecord second = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1];
+            Click(saveSlots[0]);
+            Click(ui, "nextPatternButton");
+            Click(ui, "nextPatternButton");
+            Require(Read<bool>(app, "saveDraftOverwriteConfirmPending") && backend.HasSaveLoadoutCandidate
+                && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(first),
+                "A rapid overwrite double tap must preserve both the stored slot and the one-shot candidate.");
+            FinishSaveConfirmation(app);
+            Click(saveSlots[1]);
+            Require(!Read<bool>(app, "saveDraftOverwriteConfirmPending"),
+                "Changing overwrite targets must require a new confirmation, even after the old guard expired.");
+            Click(ui, "nextPatternButton");
+            Click(ui, "nextPatternButton");
+            Require(backend.HasSaveLoadoutCandidate && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Equals(second),
+                "The replacement target must receive its own guarded confirmation.");
+            FinishSaveConfirmation(app);
+            Click(ui, "nextPatternButton");
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
+                && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(first)
+                && !Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Equals(second),
+                "A deliberate overwrite must replace only S2 and consume the candidate exactly once.");
+            Click(ui, "saveLoadoutButton");
+            Require(!backend.HasSaveLoadoutCandidate,
+                "Reopening saved loadouts after overwrite must not restore the consumed save opportunity.");
+            Click(ui, "returnLobbyButton");
+        }
+
+        private static void VerifyPreparationReselection(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, string originalSlot)
+        {
+            Click(Read<Button[]>(ui, "laneButtons")[0]);
+            Click(Read<Button[]>(ui, "laneButtons")[0]);
+            Require(Read<int>(app, "infinitePreparationStep") == 0
+                && Read<string>(app, "infinitePreparationGift") == string.Empty
+                && Read<string>(app, "infinitePreparationRelic") == string.Empty,
+                "Gift reselection must clear both previous choices and absorb its double tap.");
+            FinishPreparationTransition(app);
+            Click(Read<Button[]>(ui, "laneButtons")[2]);
+            FinishPreparationTransition(app);
+            Click(Read<Button[]>(ui, "laneButtons")[0]);
+            FinishPreparationTransition(app);
+            string gift = Read<string>(app, "infinitePreparationGift");
+            Click(Read<Button[]>(ui, "laneButtons")[1]);
+            Click(Read<Button[]>(ui, "laneButtons")[1]);
+            Require(Read<int>(app, "infinitePreparationStep") == 1
+                && Read<string>(app, "infinitePreparationGift") == gift
+                && Read<string>(app, "infinitePreparationRelic") == string.Empty,
+                "Relic reselection must keep its gift and wait for a fresh relic tap.");
+            FinishPreparationTransition(app);
+            Click(Read<Button[]>(ui, "laneButtons")[2]);
+            Require(backend.LoadLobby().SaveSlotLabels[2] == originalSlot,
+                "Reselection must not mutate or consume the stored loadout.");
+            FinishPreparationTransition(app);
         }
 
         private static void RunToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
