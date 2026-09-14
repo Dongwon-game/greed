@@ -15180,6 +15180,7 @@ namespace GreedLast
         private Image[] laneTargetGlows;
         private Text[] laneJudgementTagTexts;
         private bool[] laneHoldActive;
+        private HashSet<int>[] laneHeldPointers;
         private bool[] laneKeyboardHoldActive;
         private float[] lanePressPulseUntil;
         private float[] laneInputRippleUntil;
@@ -15961,6 +15962,7 @@ namespace GreedLast
         public void Render(GreedLastStateSnapshot snapshot)
         {
             EnsureUi();
+            ClearLanePointerHolds();
             ApplySafeArea();
             ResetMenuDetailLayout();
             TrackScreenEntranceTransitions(snapshot.State);
@@ -16535,6 +16537,7 @@ namespace GreedLast
             ClearJudgementHistory();
             for (int i = 0; i < laneButtons.Length; i++)
             {
+                ClearLanePointerHold(i);
                 lanePressPulseUntil[i] = laneInputRippleUntil[i] = laneJudgementPulseUntil[i] = 0f;
                 laneJudgementTagUntil[i] = laneMissShakeUntil[i] = 0f;
             }
@@ -27161,6 +27164,7 @@ namespace GreedLast
             laneTargetGlows = new Image[3];
             laneJudgementTagTexts = new Text[3];
             laneHoldActive = new bool[3];
+            laneHeldPointers = new[] { new HashSet<int>(), new HashSet<int>(), new HashSet<int>() };
             laneKeyboardHoldActive = new bool[3];
             lanePressPulseUntil = new float[3];
             laneInputRippleUntil = new float[3];
@@ -27422,6 +27426,7 @@ namespace GreedLast
             activeActionCueText.raycastTarget = false;
 
             timingGuideText = CreateText(laneRoot.transform, "TimingGuide", string.Empty, 28, TextAnchor.MiddleCenter, FontStyle.Bold);
+            timingGuideText.raycastTarget = false;
             SetAnchored(timingGuideText.rectTransform, 0.5f, 0.04f, 760f, 64f);
             timingGuideText.color = new Color32(218, 226, 218, 220);
         }
@@ -27481,18 +27486,21 @@ namespace GreedLast
             {
                 eventID = EventTriggerType.PointerDown,
             };
-            entry.callback.AddListener(_ =>
+            entry.callback.AddListener(data =>
             {
-                if (gateButton != null && !gateButton.interactable)
+                if (!(data is PointerEventData pointer)
+                    || pointer.button != PointerEventData.InputButton.Left
+                    || gateButton == null || !gateButton.IsActive() || !gateButton.IsInteractable())
                 {
                     return;
                 }
 
-                if (laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
+                if (!laneHeldPointers[laneIndex].Add(pointer.pointerId))
                 {
-                    laneHoldActive[laneIndex] = true;
+                    return;
                 }
 
+                laneHoldActive[laneIndex] = true;
                 runChannelRequested?.Invoke((GreedLastRunChannel)(laneIndex + 1));
             });
             trigger.triggers.Add(entry);
@@ -27507,14 +27515,47 @@ namespace GreedLast
             {
                 eventID = eventType,
             };
-            entry.callback.AddListener(_ =>
+            entry.callback.AddListener(data =>
             {
-                if (laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
+                if (eventType == EventTriggerType.Cancel)
                 {
-                    laneHoldActive[laneIndex] = false;
+                    ClearLanePointerHold(laneIndex);
+                }
+                else if (data is PointerEventData pointer && pointer.button == PointerEventData.InputButton.Left)
+                {
+                    laneHeldPointers[laneIndex].Remove(pointer.pointerId);
+                    laneHoldActive[laneIndex] = laneHeldPointers[laneIndex].Count > 0;
                 }
             });
             trigger.triggers.Add(entry);
+        }
+
+        private void ClearLanePointerHold(int laneIndex)
+        {
+            if (laneHeldPointers == null || laneIndex < 0 || laneIndex >= laneHeldPointers.Length) return;
+            laneHeldPointers[laneIndex].Clear();
+            laneHoldActive[laneIndex] = false;
+        }
+
+        private void ClearLanePointerHolds()
+        {
+            if (laneHeldPointers == null) return;
+            for (int i = 0; i < laneHeldPointers.Length; i++) ClearLanePointerHold(i);
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus) ClearLanePointerHolds();
+        }
+
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused) ClearLanePointerHolds();
+        }
+
+        private void OnDisable()
+        {
+            ClearLanePointerHolds();
         }
 
         private void CreateAudio()
@@ -35558,6 +35599,7 @@ namespace GreedLast
                 ApplyStaggerRecoveryVisuals();
                 if (timingGuideText != null)
                 {
+                    timingGuideText.fontSize = !DevToolsEnabled || devCleanViewEnabled ? 36 : 28;
                     timingGuideText.text = ShouldShowRunWaitingTimingGuide(latestRunSnapshot)
                         ? "다음 함정 대기"
                         : string.Empty;
@@ -35717,7 +35759,10 @@ namespace GreedLast
                     ShouldShowDownbeatPulse(latestRunSnapshot) ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime) : 0f,
                     coreNear,
                     guideExactLock);
-                timingGuideText.text = BuildTimingGuideLabel(latestRunSnapshot);
+                bool compactGuide = !DevToolsEnabled || devCleanViewEnabled;
+                timingGuideText.fontSize = compactGuide ? 36 : 28;
+                timingGuideText.text = compactGuide
+                    ? BuildCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
                 Color32 guideColor = GetTimingGuideColor(latestRunSnapshot);
                 if (exactPulse > 0f)
                 {
@@ -46084,6 +46129,17 @@ namespace GreedLast
             return Mathf.Clamp(seconds, 0.012f, 0.032f);
         }
 
+        private static string BuildCompactTimingGuideLabel(GreedLastRunSnapshot snapshot)
+        {
+            if (!ShouldShowActivePatternVisuals(snapshot) || !snapshot.Pattern.IsValid) return string.Empty;
+            if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds) return "놓침";
+            if (snapshot.CoreDeltaSeconds > snapshot.Pattern.SuccessWindowSeconds) return "늦음 · Good 가능";
+
+            string beat = Mathf.Abs(snapshot.CoreDeltaSeconds) <= BuildCenterHitWindow(snapshot.Pattern)
+                ? "정박" : BuildActivePatternBeatCue(snapshot);
+            return beat + " · 정확 ±" + Mathf.RoundToInt(snapshot.Pattern.SuccessWindowSeconds * 1000f) + "ms";
+        }
+
         private static string BuildTimingGuideLabel(GreedLastRunSnapshot snapshot)
         {
             if (snapshot.ResumeCountdownActive)
@@ -46954,11 +47010,8 @@ namespace GreedLast
                 SetLaneLabelMode(36, false);
                 for (int i = 0; i < laneLabelTexts.Length; i++)
                 {
-                    string direction = i == 0 ? "좌" : i == 1 ? "중" : "우";
-                    string hint = i == target
-                        ? BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
-                        : BuildRunChannelInputHintForMode((GreedLastRunChannel)(i + 1), DevToolsEnabled);
-                    laneLabelTexts[i].text = direction + "\n" + hint;
+                    laneLabelTexts[i].text = BuildCleanRunLaneLabel(i, i == target ? snapshot.Pattern : default,
+                        DevToolsEnabled, IsRuntimeRotationTiltAvailable());
                 }
                 SetRunLaneLabelColors(target, snapshot);
                 return;
@@ -46993,6 +47046,21 @@ namespace GreedLast
         private static string BuildRunLaneBaseLabel(int laneIndex, bool compact)
         {
             return BuildRunLaneBaseLabelForMode(laneIndex, compact, DevToolsEnabled);
+        }
+
+        private static string BuildCleanRunLaneLabel(int laneIndex, GreedLastPatternModel pattern,
+            bool devToolsEnabled, bool rotationTiltAvailable)
+        {
+            if (laneIndex >= 0 && laneIndex < 3 && pattern.IsValid
+                && (int)pattern.Channel == laneIndex + 1 && GreedLastRunCore.IsRotationPattern(pattern)
+                && (devToolsEnabled || rotationTiltAvailable))
+            {
+                string direction = laneIndex == 0 ? "좌" : laneIndex == 1 ? "중" : "우";
+                return direction + "\n" + BuildActiveActionCueInputHintForCapabilities(pattern,
+                    devToolsEnabled, rotationTiltAvailable);
+            }
+
+            return BuildRunLaneBaseLabelForMode(laneIndex, false, devToolsEnabled);
         }
 
         private static void SetLaneLabelRect(Text label, bool header)
@@ -48473,10 +48541,7 @@ namespace GreedLast
 
         private void SetLaneInputInteractable(int laneIndex, bool interactable)
         {
-            if (!interactable && laneHoldActive != null && laneIndex >= 0 && laneIndex < laneHoldActive.Length)
-            {
-                laneHoldActive[laneIndex] = false;
-            }
+            if (!interactable) ClearLanePointerHold(laneIndex);
 
             if (!interactable && laneKeyboardHoldActive != null && laneIndex >= 0 && laneIndex < laneKeyboardHoldActive.Length)
             {

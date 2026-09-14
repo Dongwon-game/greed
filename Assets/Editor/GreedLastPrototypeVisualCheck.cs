@@ -47,6 +47,7 @@ namespace GreedLast.Editor
             public float safeInset;
             public int checkedButtons;
             public int checkedControlPoints;
+            public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
             public int checkedFeedbackAreas;
             public int brightSamples;
@@ -140,6 +141,9 @@ namespace GreedLast.Editor
                 Add("06-lobby-desktop", 1920, 1080, () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
                 Add("07-live-wide-safe", 2340, 1080, () => ShowRun(live), 96f);
                 Add("08-pause-wide-safe", 2340, 1080, () => ShowRun(paused), 96f);
+                Add("08-live-small", 960, 540, () => ShowRun(live));
+                Add("08-pause-small", 960, 540, () => ShowRun(paused));
+                Add("08-resume-tablet", 1024, 768, () => ShowRun(resume));
                 AddSavedRunLoopFrames();
                 GreedLastRunSnapshot practiceResult = GreedLastPrototypeSmokeCheck.RunPracticeReviewSample(
                     Time.realtimeSinceStartup,
@@ -510,6 +514,7 @@ namespace GreedLast.Editor
             }
             camera.Render();
             int checkedButtons = VerifyVisibleControlRaycasts(out int checkedControlPoints);
+            int checkedBlockedLanePoints = VerifyPausedLaneRaycasts();
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
             int checkedLaneLabels = VerifyLanePresentation();
             RenderTexture previous = RenderTexture.active;
@@ -551,6 +556,7 @@ namespace GreedLast.Editor
                     safeInset = currentFrame.SafeInset,
                     checkedButtons = checkedButtons,
                     checkedControlPoints = checkedControlPoints,
+                    checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,
                     checkedFeedbackAreas = checkedFeedbackAreas,
                     brightSamples = brightSamples,
@@ -574,11 +580,15 @@ namespace GreedLast.Editor
                 && Read<Button>("nextPatternButton").gameObject.activeInHierarchy;
             bool choice = Read<bool>("runModeActive") && Read<bool>("hasRunSnapshot")
                 && Read<GreedLastRunSnapshot>("latestRunSnapshot").ChoiceActive;
-            if (!paused && !menu && !result && !choice) return 0;
+            bool live = Read<bool>("runModeActive") && Read<bool>("hasRunSnapshot") && !paused
+                && !Read<GreedLastRunSnapshot>("latestRunSnapshot").Stopped;
+            bool lobby = Read<Button>("practiceRunButton").gameObject.activeInHierarchy;
+            if (!paused && !menu && !result && !choice && !live && !lobby) return 0;
             Require(eventSystem != null, "Visible-control checks require the fixture's event system.");
             var controls = new List<Button>
             {
                 Read<Button>("nextPatternButton"), Read<Button>("returnLobbyButton"),
+                Read<Button>("pauseButton"),
             };
             if (paused)
             {
@@ -592,6 +602,7 @@ namespace GreedLast.Editor
             {
                 if (result) controls.Add(Read<Button[]>("timingOffsetButtons")[1]);
                 controls.AddRange(Read<Button[]>("laneButtons"));
+                if (live) controls.AddRange(Read<Button[]>("laneHitButtons"));
                 controls.Add(Read<Button>("saveSlotDetailButton"));
                 controls.Add(Read<Button>("saveSlotRenameButton"));
                 controls.Add(Read<Button>("saveSlotDeleteButton"));
@@ -606,7 +617,7 @@ namespace GreedLast.Editor
             {
                 if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 RectTransform rect = button.GetComponent<RectTransform>();
-                Vector2[] samples = choice
+                Vector2[] samples = choice || (live && IsLaneControl(button))
                     ? new[] { new Vector2(0.5f, 0.5f), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.06f),
                         new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.94f) }
                     : new[] { new Vector2(0.5f, 0.5f) };
@@ -617,8 +628,7 @@ namespace GreedLast.Editor
                     var pointer = new PointerEventData(eventSystem) { position = screenPoint };
                     var hits = new List<RaycastResult>();
                     raycaster.Raycast(pointer, hits);
-                    Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
-                        || hits[0].gameObject.transform.IsChildOf(button.transform)),
+                    Require(hits.Count > 0 && IsExpectedControlHit(button, hits[0].gameObject),
                         currentFrame.Name + ": visible button is blocked at " + sample + ": " + button.name
                         + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
                     checkedPoints++;
@@ -627,6 +637,45 @@ namespace GreedLast.Editor
                 checkedButtons++;
             }
             return checkedButtons;
+        }
+
+        private static bool IsLaneControl(Button button)
+        {
+            return Array.IndexOf(Read<Button[]>("laneButtons"), button) >= 0
+                || Array.IndexOf(Read<Button[]>("laneHitButtons"), button) >= 0;
+        }
+
+        private static bool IsExpectedControlHit(Button button, GameObject hit)
+        {
+            if (hit == button.gameObject || hit.transform.IsChildOf(button.transform)) return true;
+            // The transparent touch margin and visible lane share one channel and one pointer owner set.
+            int index = Array.IndexOf(Read<Button[]>("laneHitButtons"), button);
+            if (index < 0) return false;
+            Button lane = Read<Button[]>("laneButtons")[index];
+            return hit == lane.gameObject || hit.transform.IsChildOf(lane.transform);
+        }
+
+        private static int VerifyPausedLaneRaycasts()
+        {
+            GameObject overlay = Read<GameObject>("pauseMenuOverlay");
+            if (!overlay.activeInHierarchy) return 0;
+            GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+            int count = 0;
+            foreach (Button lane in Read<Button[]>("laneHitButtons"))
+            {
+                RectTransform rect = lane.GetComponent<RectTransform>();
+                foreach (float x in new[] { 0.06f, 0.5f, 0.94f })
+                {
+                    Vector2 local = rect.rect.min + Vector2.Scale(rect.rect.size, new Vector2(x, 0.5f));
+                    var pointer = new PointerEventData(eventSystem) { position = camera.WorldToScreenPoint(rect.TransformPoint(local)) };
+                    var hits = new List<RaycastResult>();
+                    raycaster.Raycast(pointer, hits);
+                    Require(hits.Count > 0 && hits[0].gameObject.transform.IsChildOf(overlay.transform),
+                        currentFrame.Name + ": pause or countdown input leaks through to a lane: " + lane.name);
+                    count++;
+                }
+            }
+            return count;
         }
 
         private static int VerifyLanePresentation()
@@ -665,7 +714,7 @@ namespace GreedLast.Editor
             RectTransform root = Read<RectTransform>("rootPanelRect");
             GameObject gauges = Read<GameObject>("runGaugeRoot");
             int count = 0;
-            foreach (string field in new[] { "activeActionCueText", "judgementFeedbackText" })
+            foreach (string field in new[] { "activeActionCueText", "judgementFeedbackText", "timingGuideText" })
             {
                 Text label = Read<Text>(field);
                 if (!label.gameObject.activeInHierarchy || !label.enabled || label.color.a < 0.01f

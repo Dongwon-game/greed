@@ -9921,7 +9921,9 @@ namespace GreedLast.Editor
         private static void VerifyReadableMenuAndResultLayouts(GreedLastRuntimeUi ui)
         {
             VerifyPlayfieldReadability(ui);
+            VerifyCompactTimingGuide(ui);
             VerifyCompactActionCues(ui);
+            GreedLastPrototypePointerCheck.Run(ui);
             string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.SaveLoadoutDraft, "저장 슬롯 선택", longDetail, 0,
                 saveCandidateAvailable: true, selectedSaveSlotIndex: 2));
@@ -10066,6 +10068,7 @@ namespace GreedLast.Editor
 
         private static void VerifyPlayfieldReadability(GreedLastRuntimeUi ui)
         {
+            VerifyCleanRunLaneLabels();
             var core = new GreedLastRunCore();
             GreedLastRunSnapshot run = default;
             core.SnapshotChanged += value => run = value;
@@ -10111,6 +10114,88 @@ namespace GreedLast.Editor
             core.JumpToDevShortcut(GreedLastDevShortcut.RelicChoice, clock);
             Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("유물 선택", StringComparison.Ordinal),
                 "Relic selection progress must describe the current choice.");
+        }
+
+        private static void VerifyCleanRunLaneLabels()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            float clock = Time.realtimeSinceStartup;
+            string[] directions = { "좌", "중", "우" };
+            string[] keys = { "A/←", "S/Space", "D/→" };
+            for (int action = 0; action < 5; action++)
+            {
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Lane-header coverage requires an active pattern.");
+                for (int lane = 0; lane < 3; lane++)
+                {
+                    bool rotationTarget = action >= 3 && (int)run.Pattern.Channel == lane + 1;
+                    string desktop = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, true, false);
+                    string mobile = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, false, true);
+                    string fallback = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, false, false);
+                    Require(fallback == directions[lane] + "\n탭",
+                        "Touch headers must identify the lane once, without repeating the direction in the tap line.");
+                    Require(desktop == directions[lane] + "\n" + (rotationTarget
+                            ? (lane == 0 ? "Q/A/←" : "E/D/→") : keys[lane]),
+                        "Clean desktop headers must retain actual keyboard inputs, including the active rotation lane.");
+                    Require(mobile == (rotationTarget ? directions[lane] + "\n중립→" + directions[lane] + " 기울임" : fallback),
+                        "Only the active sensor-supported rotation lane may request neutral-to-tilt input.");
+                }
+            }
+            Require(InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", 0, default(GreedLastPatternModel), false, true) == "좌\n탭"
+                && InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", -1, run.Pattern, false, true) == "-",
+                "Inactive and invalid header lanes must not retain a previous rotation hint.");
+        }
+
+        private static void VerifyCompactTimingGuide(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            Require(InvokeRuntimeUiLabel("BuildCompactTimingGuideLabel", run) == string.Empty,
+                "Choices must not inherit a live timing prompt.");
+            MethodInfo publish = typeof(GreedLastRunCore).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(float) }, null);
+            float clock = Time.realtimeSinceStartup;
+            for (int action = 0; action < 5; action++)
+            {
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Compact timing checks require a live trap.");
+                float success = run.Pattern.SuccessWindowSeconds;
+                float good = run.Pattern.GoodWindowSeconds;
+                float coreTime = clock + run.Pattern.CoreSeconds;
+                string window = " · 정확 ±" + Mathf.RoundToInt(success * 1000f) + "ms";
+                float[] deltas = { -0.8f, -success * 0.85f, 0f, success * 0.85f, (success + good) * 0.5f, good + 0.02f };
+                foreach (float delta in deltas)
+                {
+                    publish.Invoke(core, new object[] { coreTime + delta });
+                    Require(Mathf.Abs(run.CoreDeltaSeconds - delta) < 0.001f, "The guide fixture must use its synthetic publication time.");
+                    string label = InvokeRuntimeUiLabel("BuildCompactTimingGuideLabel", run);
+                    string expected = delta > good ? "놓침" : delta > success ? "늦음 · Good 가능"
+                        : Mathf.Abs(delta) < 0.001f ? "정박" + window
+                        : InvokeRuntimeUiLabel("BuildActivePatternBeatCue", run) + window;
+                    Require(label == expected && !label.Contains("\n", StringComparison.Ordinal),
+                        "Compact timing must reflect the actual beat and success/Good boundaries in one line: " + label);
+                    ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Timing", string.Empty, 0));
+                    SetRuntimeUiField(ui, "devCleanViewEnabled", true);
+                    ui.RenderRun(run);
+                    typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+                    Text guide = GetRuntimeUiField<Text>(ui, "timingGuideText");
+                    Require(guide.text == expected && guide.fontSize == 36 && guide.preferredHeight <= guide.rectTransform.rect.height,
+                        "The real clean UI must render the concise timing guide without clipping.");
+                }
+                core.TogglePause(clock);
+                Require(InvokeRuntimeUiLabel("BuildCompactTimingGuideLabel", run) == string.Empty,
+                    "Pause must hide live timing prompts instead of telling the player to hit now.");
+            }
+            ui.ToggleDevCleanView();
         }
 
         private static void VerifyCompactActionCues(GreedLastRuntimeUi ui)
