@@ -12047,6 +12047,11 @@ namespace GreedLast
 
             if (Input.GetMouseButtonDown(0))
             {
+                if (runtimeUi == null || runtimeUi.IsPointerOverInteractiveUi(Input.mousePosition))
+                {
+                    ResetRotationDragTracking();
+                    return false;
+                }
                 rotationDragTracking = true;
                 rotationDragStartX = Input.mousePosition.x;
                 rotationDragVisualAxis = 0f;
@@ -27564,6 +27569,17 @@ namespace GreedLast
         {
             if (laneHeldPointers == null) return;
             for (int i = 0; i < laneHeldPointers.Length; i++) ClearLanePointerHold(i);
+        }
+
+        public bool IsPointerOverInteractiveUi(Vector2 screenPoint)
+        {
+            EventSystem events = EventSystem.current;
+            if (events == null) return false;
+            var hits = new List<RaycastResult>();
+            events.RaycastAll(new PointerEventData(events) { position = screenPoint }, hits);
+            if (hits.Count == 0) return false;
+            Transform hit = hits[0].gameObject.transform;
+            return hit.GetComponentInParent<Selectable>() != null || hit.GetComponentInParent<ScrollRect>() != null;
         }
 
         private void OnApplicationFocus(bool hasFocus)

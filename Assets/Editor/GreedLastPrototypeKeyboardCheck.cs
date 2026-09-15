@@ -61,7 +61,180 @@ namespace GreedLast.Editor
             }
         }
 
-        internal static void VerifyActionClick(EventSystem system, Button button, Vector2 screenPoint)
+        internal static void VerifyActionClick(GreedLastRuntimeUi ui, EventSystem system, Button button, Vector2 screenPoint)
+        {
+            int clicks = 0;
+            UnityEngine.Events.UnityAction countClick = () => clicks++;
+            button.onClick.AddListener(countClick);
+            try
+            {
+                WithPointerInput(system, button.gameObject, screenPoint, (input, module) =>
+                {
+                    Require(ui.IsPointerOverInteractiveUi(screenPoint), "A command must block rotation-drag initiation.");
+                    input.MouseEnabled = true;
+                    input.MousePosition = screenPoint;
+                    input.MouseDown = input.MouseHeld = true;
+                    module.Process();
+                    Require(clicks == 0, "An action button must wait for pointer release: " + button.name);
+                    input.MouseDown = false;
+                    for (int frame = 0; frame < 3; frame++) module.Process();
+                    Require(clicks == 0, "Holding a command must not execute it: " + button.name);
+                    input.MouseHeld = false;
+                    input.MouseUp = true;
+                    module.Process();
+                    Require(clicks == 1, "A rendered command must receive exactly one real-module click: " + button.name);
+                    input.MouseUp = false;
+                    input.MousePosition = new Vector2(-1000f, -1000f);
+                    module.Process();
+                    Require(clicks == 1, "Submit/Cancel must not add an action after pointer release.");
+
+                    input.MouseEnabled = false;
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Stationary));
+                    Require(clicks == 1, "A touch command must also wait for release.");
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Canceled));
+                    Require(clicks == 1, "System-canceled touch must not execute a command: " + button.name);
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Ended));
+                    Require(clicks == 2, "The next completed touch must execute once after cancellation.");
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Ended));
+                    Require(clicks == 2, "Releasing outside a command must cancel the click.");
+                });
+            }
+            finally
+            {
+                button.onClick.RemoveListener(countClick);
+            }
+        }
+
+        internal static void VerifyLaneInput(GreedLastRuntimeUi ui, EventSystem system, Button button,
+            Vector2 screenPoint, int laneIndex)
+        {
+            FieldInfo callback = typeof(GreedLastRuntimeUi).GetField("runChannelRequested", BindingFlags.Instance | BindingFlags.NonPublic);
+            object originalCallback = callback.GetValue(ui);
+            var held = (bool[])typeof(GreedLastRuntimeUi).GetField("laneHoldActive", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+            int calls = 0;
+            callback.SetValue(ui, (Action<GreedLastRunChannel>)(channel =>
+            {
+                Require((int)channel == laneIndex + 1, "A rendered lane must route to its own channel: " + button.name);
+                calls++;
+            }));
+            try
+            {
+                WithPointerInput(system, button.gameObject, screenPoint, (input, module) =>
+                {
+                    Require(ui.IsPointerOverInteractiveUi(screenPoint), "Lane taps must not also initiate a rotation drag.");
+                    var panel = ((GameObject)typeof(GreedLastRuntimeUi).GetField("rootPanel", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .GetValue(ui)).GetComponent<RectTransform>();
+                    Camera camera = button.GetComponentInParent<Canvas>().worldCamera;
+                    Vector2 emptyCorridor = camera.WorldToScreenPoint(panel.TransformPoint(panel.rect.min
+                        + Vector2.Scale(panel.rect.size, new Vector2(0.1f, 0.4f))));
+                    Require(!ui.IsPointerOverInteractiveUi(emptyCorridor), "Empty corridor space must remain available for a test drag.");
+                    input.MouseEnabled = true;
+                    input.MousePosition = screenPoint;
+                    input.MouseDown = input.MouseHeld = true;
+                    module.Process();
+                    Require(calls == 1 && held[laneIndex], "The real module must submit a lane on down: " + button.name);
+                    input.MouseDown = false;
+                    for (int frame = 0; frame < 3; frame++) module.Process();
+                    Require(calls == 1 && held[laneIndex], "Holding a lane must not repeat its input.");
+                    input.MouseHeld = false;
+                    input.MouseUp = true;
+                    module.Process();
+                    Require(calls == 1 && !held[laneIndex], "Releasing a lane must clear its hold without a second input.");
+                    input.MouseUp = false;
+                    input.MousePosition = new Vector2(-1000f, -1000f);
+                    module.Process();
+                    input.MouseEnabled = false;
+
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began), TouchAt(81, screenPoint, TouchPhase.Began));
+                    Require(calls == 3 && held[laneIndex], "Two fingers must remain distinct lane taps.");
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Ended), TouchAt(81, screenPoint, TouchPhase.Stationary));
+                    Require(calls == 3 && held[laneIndex], "One released finger must leave the other finger held.");
+                    TouchFrame(input, module, TouchAt(81, screenPoint, TouchPhase.Canceled));
+                    Require(calls == 3 && !held[laneIndex], "Canceling the last finger must clear the hold without another input.");
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Ended));
+                    Require(calls == 4 && !held[laneIndex], "Reusing a released finger ID must produce exactly one new tap.");
+                    TouchFrame(input, module, TouchAt(82, screenPoint, TouchPhase.Canceled));
+                    Require(calls == 4 && !held[laneIndex], "An orphan cancellation must not create a new lane press.");
+
+                    // Mobile platforms can expose both a touch and an emulated mouse in the same frame.
+                    input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                    input.MousePosition = screenPoint;
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Began));
+                    input.MouseDown = input.MouseHeld = false;
+                    input.MouseUp = true;
+                    TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Ended));
+                    Require(calls == 5 && !held[laneIndex], "Touch and its emulated mouse must not produce duplicate rhythm input.");
+                });
+            }
+            finally
+            {
+                callback.SetValue(ui, originalCallback);
+            }
+        }
+
+        internal static void VerifyScrollInput(GreedLastRuntimeUi ui, EventSystem system, ScrollRect scroll,
+            Vector2 screenPoint, float dragPixels)
+        {
+            Vector2 originalPosition = scroll.content.anchoredPosition;
+            FieldInfo callback = typeof(GreedLastRuntimeUi).GetField("runChannelRequested", BindingFlags.Instance | BindingFlags.NonPublic);
+            object originalCallback = callback.GetValue(ui);
+            int laneCalls = 0;
+            callback.SetValue(ui, (Action<GreedLastRunChannel>)(_ => laneCalls++));
+            try
+            {
+                WithPointerInput(system, scroll.gameObject, screenPoint, (input, module) =>
+                {
+                    Require(ui.IsPointerOverInteractiveUi(screenPoint), "Scrolling text must not initiate a rotation drag.");
+                    scroll.verticalNormalizedPosition = 1f;
+                    input.MouseEnabled = true;
+                    input.MousePosition = screenPoint;
+                    input.ScrollDelta = Vector2.down;
+                    module.Process();
+                    input.ScrollDelta = Vector2.zero;
+                    Require(scroll.content.anchoredPosition.y > 1f, "The actual input module must scroll long text with the wheel.");
+                    scroll.StopMovement();
+                    scroll.verticalNormalizedPosition = 1f;
+                    input.MousePosition = new Vector2(-1000f, -1000f);
+                    module.Process();
+                    input.MouseEnabled = false;
+                    TouchFrame(input, module, TouchAt(90, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(90, screenPoint + Vector2.up * dragPixels * 0.5f, TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(90, screenPoint + Vector2.up * dragPixels, TouchPhase.Moved));
+                    Require(scroll.content.anchoredPosition.y > 1f, "A real-module touch drag must move the comparison text.");
+                    TouchFrame(input, module, TouchAt(90, screenPoint + Vector2.up * dragPixels, TouchPhase.Canceled));
+                    scroll.StopMovement();
+                    float afterCancel = scroll.content.anchoredPosition.y;
+                    TouchFrame(input, module, TouchAt(90, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(90, screenPoint, TouchPhase.Ended));
+                    Require(Mathf.Abs(scroll.content.anchoredPosition.y - afterCancel) < 1f,
+                        "A new tap after canceled scrolling must not reuse the previous drag offset.");
+                    Require(laneCalls == 0, "Scrolling comparison or records must never select an underlying slot.");
+                });
+            }
+            finally
+            {
+                callback.SetValue(ui, originalCallback);
+                scroll.StopMovement();
+                scroll.content.anchoredPosition = originalPosition;
+            }
+        }
+
+        private static Touch TouchAt(int id, Vector2 point, TouchPhase phase)
+            => new Touch { fingerId = id, position = point, rawPosition = point, phase = phase, type = TouchType.Direct };
+
+        private static void TouchFrame(GreedLastPrototypeKeyboardInput input, StandaloneInputModule module, params Touch[] touches)
+        {
+            input.Touches = touches;
+            module.Process();
+        }
+
+        private static void WithPointerInput(EventSystem system, GameObject control, Vector2 screenPoint,
+            Action<GreedLastPrototypeKeyboardInput, StandaloneInputModule> check)
         {
             Require(!system.sendNavigationEvents, "Visual clicks must use the production keyboard-isolation setting.");
             StandaloneInputModule module = system.GetComponent<StandaloneInputModule>();
@@ -71,47 +244,65 @@ namespace GreedLast.Editor
             object originalModuleSystem = moduleSystem.GetValue(module);
             FieldInfo focus = typeof(EventSystem).GetField("m_HasFocus", BindingFlags.Instance | BindingFlags.NonPublic);
             bool originalFocus = system.isFocused;
-            GraphicRaycaster raycaster = button.GetComponentInParent<Canvas>().GetComponent<GraphicRaycaster>();
+            GameObject originalSelection = system.currentSelectedGameObject;
+            EventSystem originalCurrent = EventSystem.current;
+            var systems = (System.Collections.Generic.List<EventSystem>)typeof(EventSystem)
+                .GetField("m_EventSystems", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+            bool addedSystem = !systems.Contains(system);
+            GraphicRaycaster raycaster = control.GetComponentInParent<Canvas>().GetComponent<GraphicRaycaster>();
             var registeredRaycasters = RaycasterManager.GetRaycasters();
             bool addedRaycaster = !registeredRaycasters.Contains(raycaster);
             GameObject host = new GameObject("GreedLastPointerModuleProbe");
-            int clicks = 0;
-            UnityEngine.Events.UnityAction countClick = () => clicks++;
-            button.onClick.AddListener(countClick);
+            GreedLastPrototypeKeyboardInput input = null;
             try
             {
-                var input = host.AddComponent<GreedLastPrototypeKeyboardInput>();
+                input = host.AddComponent<GreedLastPrototypeKeyboardInput>();
                 moduleSystem.SetValue(module, system);
                 module.inputOverride = input;
                 focus.SetValue(system, true);
+                // Preview scenes do not run the event system's normal registration lifecycle.
+                if (addedSystem) systems.Add(system);
+                EventSystem.current = system;
                 if (addedRaycaster) registeredRaycasters.Add(raycaster);
                 var hits = new System.Collections.Generic.List<RaycastResult>();
                 system.RaycastAll(new PointerEventData(system) { position = screenPoint }, hits);
-                Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
-                    || hits[0].gameObject.transform.IsChildOf(button.transform)),
-                    "The input module's raycast must reach the action button: " + button.name);
-                input.MouseEnabled = true;
-                input.MousePosition = screenPoint;
-                input.MouseDown = input.MouseHeld = true;
-                module.Process();
-                Require(clicks == 0, "An action button must wait for pointer release: " + button.name);
-                input.MouseDown = input.MouseHeld = false;
-                input.MouseUp = true;
-                module.Process();
-                Require(clicks == 1, "A rendered action button must receive exactly one real-module click: " + button.name);
-                input.MouseUp = false;
-                input.MousePosition = new Vector2(-1000f, -1000f);
-                module.Process();
-                Require(clicks == 1, "Held Submit/Cancel inputs must not add another action after pointer release.");
+                Require(hits.Count > 0 && (hits[0].gameObject == control
+                    || hits[0].gameObject.transform.IsChildOf(control.transform)),
+                    "The input module's raycast must reach its control: " + control.name);
+                check(input, module);
             }
             finally
             {
-                button.onClick.RemoveListener(countClick);
-                module.inputOverride = originalInput;
-                moduleSystem.SetValue(module, originalModuleSystem);
-                focus.SetValue(system, originalFocus);
-                if (addedRaycaster) registeredRaycasters.Remove(raycaster);
-                UnityEngine.Object.DestroyImmediate(host);
+                // Release synthetic pointers outside the UI, including when an assertion fails.
+                try
+                {
+                    if (input != null)
+                    {
+                        input.MouseEnabled = false;
+                        Touch[] canceled = input.Touches;
+                        for (int i = 0; i < canceled.Length; i++)
+                            canceled[i] = TouchAt(canceled[i].fingerId, new Vector2(-1000f, -1000f), TouchPhase.Canceled);
+                        module.Process();
+                        input.Touches = Array.Empty<Touch>();
+                        input.MouseEnabled = true;
+                        input.MouseDown = input.MouseHeld = false;
+                        input.MouseUp = true;
+                        input.MousePosition = new Vector2(-1000f, -1000f);
+                        input.ScrollDelta = Vector2.zero;
+                        module.Process();
+                    }
+                }
+                finally
+                {
+                    module.inputOverride = originalInput;
+                    moduleSystem.SetValue(module, originalModuleSystem);
+                    system.SetSelectedGameObject(originalSelection);
+                    focus.SetValue(system, originalFocus);
+                    if (addedSystem) systems.Remove(system);
+                    if (originalCurrent != null) EventSystem.current = originalCurrent;
+                    if (addedRaycaster) registeredRaycasters.Remove(raycaster);
+                    UnityEngine.Object.DestroyImmediate(host);
+                }
             }
         }
 

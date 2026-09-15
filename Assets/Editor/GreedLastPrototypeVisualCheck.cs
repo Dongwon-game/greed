@@ -47,6 +47,8 @@ namespace GreedLast.Editor
             public float safeInset;
             public int checkedButtons;
             public int checkedModuleClicks;
+            public int checkedModuleLaneInputs;
+            public int checkedModuleScrolls;
             public int checkedControlPoints;
             public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
@@ -536,6 +538,8 @@ namespace GreedLast.Editor
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
             int checkedLaneLabels = VerifyLanePresentation();
             int checkedModuleClicks = VerifyActionModuleClick();
+            int checkedModuleLaneInputs = VerifyLaneModuleInputs();
+            int checkedModuleScrolls = VerifyMenuModuleScroll();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
             try
@@ -575,6 +579,8 @@ namespace GreedLast.Editor
                     safeInset = currentFrame.SafeInset,
                     checkedButtons = checkedButtons,
                     checkedModuleClicks = checkedModuleClicks,
+                    checkedModuleLaneInputs = checkedModuleLaneInputs,
+                    checkedModuleScrolls = checkedModuleScrolls,
                     checkedControlPoints = checkedControlPoints,
                     checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,
@@ -667,10 +673,52 @@ namespace GreedLast.Editor
                 Button button = Read<Button>(field);
                 if (!button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 Vector2 point = camera.WorldToScreenPoint(button.transform.position);
-                GreedLastPrototypeKeyboardCheck.VerifyActionClick(eventSystem, button, point);
+                GreedLastPrototypeKeyboardCheck.VerifyActionClick(ui, eventSystem, button, point);
                 return 1;
             }
             return 0;
+        }
+
+        private static int VerifyLaneModuleInputs()
+        {
+            if (!Read<bool>("runModeActive") || !Read<bool>("hasRunSnapshot")
+                || Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
+            GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
+            if (run.Stopped) return 0;
+            Button[] lanes = Read<Button[]>("laneButtons");
+            Button[] margins = Read<Button[]>("laneHitButtons");
+            int count = 0;
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                Button lane = lanes[i];
+                if (!lane.gameObject.activeInHierarchy || !lane.IsInteractable()) continue;
+                GreedLastPrototypeKeyboardCheck.VerifyLaneInput(ui, eventSystem, lane,
+                    camera.WorldToScreenPoint(lane.transform.position), i);
+                count++;
+                Button margin = margins[i];
+                if (run.ChoiceActive || !margin.gameObject.activeInHierarchy || !margin.IsInteractable()) continue;
+                RectTransform rect = margin.GetComponent<RectTransform>();
+                foreach (float edge in new[] { 0.06f, 0.94f })
+                {
+                    Vector2 local = rect.rect.min + rect.rect.size * edge;
+                    GreedLastPrototypeKeyboardCheck.VerifyLaneInput(ui, eventSystem, margin,
+                        camera.WorldToScreenPoint(rect.TransformPoint(local)), i);
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private static int VerifyMenuModuleScroll()
+        {
+            ScrollRect scroll = Read<ScrollRect>("menuDetailScroll");
+            if (!scroll.gameObject.activeInHierarchy || !scroll.vertical || scroll.content == null) return 0;
+            RectTransform rect = scroll.viewport;
+            Vector2 start = camera.WorldToScreenPoint(rect.TransformPoint(rect.rect.center));
+            Vector2 top = camera.WorldToScreenPoint(rect.TransformPoint(new Vector2(rect.rect.center.x, rect.rect.yMax)));
+            GreedLastPrototypeKeyboardCheck.VerifyScrollInput(ui, eventSystem, scroll, start,
+                Mathf.Min(80f, Mathf.Abs(top.y - start.y) * 0.75f));
+            return 1;
         }
 
         private static bool IsLaneControl(Button button)
