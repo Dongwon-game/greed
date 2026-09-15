@@ -142,6 +142,15 @@ Unity 재생을 멈춘 뒤 `Greed Last > Capture Prototype Visual Checks`를 실
 
 Unity 상단 `Greed Last > Build Verified Windows Prototype`을 사용한다. 전체 스모크가 통과한 경우에만 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 갱신한다.
 
+### 2026-09-15 입력 모듈 검증
+
+- Enter/Space/방향키를 게임과 Unity 기본 UI가 중복 처리하지 않게 했다. 일반 버튼과 확대 터치 영역 모두 자동 키보드 탐색을 끄고 앱 키 입력 경로만 유지한다.
+- 회전 테스트 드래그는 일시정지·창 전환·선택·로비에서 초기화한다. 기존 그래픽과 모바일 센서 판정은 유지한다.
+- 실제 입력 모듈에서 기본 Submit/Cancel 발생 대조 조건과 프로토타입 차단 조건을 검사했다. 화면 캡처에서도 마우스 누르기→놓기 클릭이 한 번만 전달되는지 67회 검사한다. 사용자 설정을 저장하는 버튼은 자동 클릭하지 않는다.
+- 전체 스모크·앱 콜백·Windows 빌드: `Logs/prototype-inputmodule-verified-20260915.log`.
+- 68장 화면과 버튼 479회·입력 위치 1267곳·메뉴 뒤 차단 54곳·레인 글자 93회·피드백 영역 40회·입력 모듈 클릭 67회 통과: `Logs/prototype-inputmodule-visual-20260915.log`.
+- 최신 목록 `Logs/VisualChecks/latest-report.json`에 `checkedModuleClicks`도 기록한다. 고정 화면과 합성 입력 검사이며 실제 기기 플레이는 별도다.
+
 ### 2026-09-14 최종 준비·저장·재개 검증
 
 - 무한 준비의 선택/재선택/시작 연타를 0.18초 동안 막고, 삭제·덮어쓰기·이름 변경·저장 포기는 0.35초 뒤 새 입력으로 확정한다. 취소와 대상 슬롯 변경은 즉시 가능하다.

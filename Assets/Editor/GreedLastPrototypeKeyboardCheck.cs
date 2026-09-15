@@ -61,6 +61,60 @@ namespace GreedLast.Editor
             }
         }
 
+        internal static void VerifyActionClick(EventSystem system, Button button, Vector2 screenPoint)
+        {
+            Require(!system.sendNavigationEvents, "Visual clicks must use the production keyboard-isolation setting.");
+            StandaloneInputModule module = system.GetComponent<StandaloneInputModule>();
+            Require(module != null, "Visual clicks require the standalone input module.");
+            BaseInput originalInput = module.inputOverride;
+            FieldInfo moduleSystem = typeof(BaseInputModule).GetField("m_EventSystem", BindingFlags.Instance | BindingFlags.NonPublic);
+            object originalModuleSystem = moduleSystem.GetValue(module);
+            FieldInfo focus = typeof(EventSystem).GetField("m_HasFocus", BindingFlags.Instance | BindingFlags.NonPublic);
+            bool originalFocus = system.isFocused;
+            GraphicRaycaster raycaster = button.GetComponentInParent<Canvas>().GetComponent<GraphicRaycaster>();
+            var registeredRaycasters = RaycasterManager.GetRaycasters();
+            bool addedRaycaster = !registeredRaycasters.Contains(raycaster);
+            GameObject host = new GameObject("GreedLastPointerModuleProbe");
+            int clicks = 0;
+            UnityEngine.Events.UnityAction countClick = () => clicks++;
+            button.onClick.AddListener(countClick);
+            try
+            {
+                var input = host.AddComponent<GreedLastPrototypeKeyboardInput>();
+                moduleSystem.SetValue(module, system);
+                module.inputOverride = input;
+                focus.SetValue(system, true);
+                if (addedRaycaster) registeredRaycasters.Add(raycaster);
+                var hits = new System.Collections.Generic.List<RaycastResult>();
+                system.RaycastAll(new PointerEventData(system) { position = screenPoint }, hits);
+                Require(hits.Count > 0 && (hits[0].gameObject == button.gameObject
+                    || hits[0].gameObject.transform.IsChildOf(button.transform)),
+                    "The input module's raycast must reach the action button: " + button.name);
+                input.MouseEnabled = true;
+                input.MousePosition = screenPoint;
+                input.MouseDown = input.MouseHeld = true;
+                module.Process();
+                Require(clicks == 0, "An action button must wait for pointer release: " + button.name);
+                input.MouseDown = input.MouseHeld = false;
+                input.MouseUp = true;
+                module.Process();
+                Require(clicks == 1, "A rendered action button must receive exactly one real-module click: " + button.name);
+                input.MouseUp = false;
+                input.MousePosition = new Vector2(-1000f, -1000f);
+                module.Process();
+                Require(clicks == 1, "Held Submit/Cancel inputs must not add another action after pointer release.");
+            }
+            finally
+            {
+                button.onClick.RemoveListener(countClick);
+                module.inputOverride = originalInput;
+                moduleSystem.SetValue(module, originalModuleSystem);
+                focus.SetValue(system, originalFocus);
+                if (addedRaycaster) registeredRaycasters.Remove(raycaster);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);

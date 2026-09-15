@@ -46,6 +46,7 @@ namespace GreedLast.Editor
             public int height;
             public float safeInset;
             public int checkedButtons;
+            public int checkedModuleClicks;
             public int checkedControlPoints;
             public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
@@ -534,6 +535,7 @@ namespace GreedLast.Editor
             int checkedBlockedLanePoints = VerifyPausedLaneRaycasts();
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
             int checkedLaneLabels = VerifyLanePresentation();
+            int checkedModuleClicks = VerifyActionModuleClick();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
             try
@@ -572,6 +574,7 @@ namespace GreedLast.Editor
                     height = target.height,
                     safeInset = currentFrame.SafeInset,
                     checkedButtons = checkedButtons,
+                    checkedModuleClicks = checkedModuleClicks,
                     checkedControlPoints = checkedControlPoints,
                     checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,
@@ -654,6 +657,20 @@ namespace GreedLast.Editor
                 checkedButtons++;
             }
             return checkedButtons;
+        }
+
+        private static int VerifyActionModuleClick()
+        {
+            // Only callback-only commands are clicked; settings buttons persist preferences directly.
+            foreach (string field in new[] { "nextPatternButton", "returnLobbyButton", "normalRunButton", "practiceRunButton" })
+            {
+                Button button = Read<Button>(field);
+                if (!button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
+                Vector2 point = camera.WorldToScreenPoint(button.transform.position);
+                GreedLastPrototypeKeyboardCheck.VerifyActionClick(eventSystem, button, point);
+                return 1;
+            }
+            return 0;
         }
 
         private static bool IsLaneControl(Button button)
