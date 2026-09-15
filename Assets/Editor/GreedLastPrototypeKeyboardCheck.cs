@@ -169,6 +169,29 @@ namespace GreedLast.Editor
                     input.MouseUp = true;
                     TouchFrame(input, module, TouchAt(80, screenPoint, TouchPhase.Ended));
                     Require(calls == 5 && !held[laneIndex], "Touch and its emulated mouse must not produce duplicate rhythm input.");
+
+                    input.MouseEnabled = input.MouseUp = false;
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Began));
+                    Require(calls == 6 && held[laneIndex], "Focus-loss checks need a held touch.");
+                    typeof(GreedLastRuntimeUi).GetMethod("OnApplicationFocus", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(ui, new object[] { false });
+                    Require(!held[laneIndex], "Focus loss must release the real module's lane highlight.");
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Stationary));
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Ended));
+                    Require(calls == 6 && !held[laneIndex], "Returning with a stale held touch must not replay its press.");
+
+                    var lanes = (Button[])typeof(GreedLastRuntimeUi).GetField("laneButtons", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                    int neighbor = (laneIndex + 1) % lanes.Length;
+                    Vector2 neighborPoint = camera.WorldToScreenPoint(lanes[neighbor].transform.position);
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(83, neighborPoint, TouchPhase.Moved));
+                    Require(calls == 7 && !held[laneIndex] && !held[neighbor],
+                        "Dragging across lanes must release the old hold without pressing the neighboring lane.");
+                    TouchFrame(input, module, TouchAt(83, neighborPoint, TouchPhase.Ended));
+                    Require(calls == 7, "Releasing over another lane must not submit a new rhythm input.");
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Ended));
+                    Require(calls == 8 && !held[laneIndex], "A fresh press after a cross-lane drag must work normally.");
                 });
             }
             finally
