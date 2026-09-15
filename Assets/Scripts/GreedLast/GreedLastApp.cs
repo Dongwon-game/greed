@@ -10810,6 +10810,11 @@ namespace GreedLast
         {
             latestAppRunSnapshot = snapshot;
             hasLatestAppRunSnapshot = true;
+            if (!snapshot.ActivePattern || snapshot.Paused || snapshot.CountdownActive
+                || !GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
+            {
+                ResetRotationDragTracking();
+            }
             if (runtimeUi != null)
             {
                 PublishRotationTiltGateState();
@@ -12036,11 +12041,7 @@ namespace GreedLast
                 && GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern);
             if (!activeRotationPattern || runCore.IsPaused)
             {
-                if (!Input.GetMouseButton(0))
-                {
-                    ResetRotationDragTracking();
-                }
-
+                ResetRotationDragTracking();
                 return false;
             }
 
@@ -12319,6 +12320,7 @@ namespace GreedLast
 
         private void OnApplicationPause(bool pauseStatus)
         {
+            ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
             if (pauseStatus && PauseRunForAppBackground())
@@ -12336,6 +12338,7 @@ namespace GreedLast
 
         private void OnApplicationFocus(bool hasFocus)
         {
+            ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
             if (!hasFocus)
@@ -27500,6 +27503,7 @@ namespace GreedLast
 
         private void AddLanePointerDown(GameObject target, Button gateButton, int laneIndex)
         {
+            gateButton.navigation = new Navigation { mode = Navigation.Mode.None };
             EventTrigger trigger = target.AddComponent<EventTrigger>();
             EventTrigger.Entry entry = new EventTrigger.Entry
             {
@@ -27653,12 +27657,16 @@ namespace GreedLast
 
         private static void EnsureEventSystem()
         {
-            if (FindAnyObjectByType<EventSystem>() != null)
+            EventSystem existing = FindAnyObjectByType<EventSystem>();
+            if (existing != null)
             {
+                existing.sendNavigationEvents = false;
                 return;
             }
 
             GameObject eventSystem = new GameObject("GreedLastEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            // GreedLastApp owns keyboard commands; Submit/Move would also activate the last clicked button.
+            eventSystem.GetComponent<EventSystem>().sendNavigationEvents = false;
             PreserveDuringPlay(eventSystem);
         }
 
@@ -27669,6 +27677,7 @@ namespace GreedLast
             image.color = Color.white;
 
             Button button = buttonObject.AddComponent<Button>();
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
             ColorBlock colors = button.colors;
             colors.normalColor = ButtonNormalColor;
             colors.highlightedColor = ButtonHighlightedColor;

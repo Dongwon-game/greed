@@ -164,6 +164,7 @@ namespace GreedLast.Editor
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
+                VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
                 Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations.");
             }
             finally
@@ -361,6 +362,60 @@ namespace GreedLast.Editor
                 Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
                     "Practice pause/resume/exit must not consume existing saved loadouts.");
             Debug.Log("Greed Last app pause lifecycle passed: background -> paused input isolation -> explicit resume -> interrupted countdown -> lead-in buffer -> lobby with saved slots intact.");
+        }
+
+        private static void VerifyRotationDragLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            Click(ui, "normalRunButton");
+            float clock = Time.realtimeSinceStartup;
+            for (int cycle = 0; cycle < 4; cycle++)
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+            Write(core, "startCountdownEndsAt", 0f);
+            core.Tick(clock);
+            core.RequestNextPattern(clock);
+            Require(latest().ActivePattern && GreedLastRunCore.IsRotationPattern(latest().Pattern),
+                "Drag lifecycle checks require a live rotation corridor.");
+            ArmRotationDrag(app);
+            core.Tick(clock);
+            Require(Read<bool>(app, "rotationDragTracking"),
+                "A normal live rotation update must preserve an in-progress drag.");
+            core.TogglePause(clock);
+            RequireRotationDragReleased(app, "Pausing a rotation must discard the held mouse drag.");
+            ArmRotationDrag(app);
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+            RequireRotationDragReleased(app, "Losing focus must discard a drag even when the core was already paused.");
+            ArmRotationDrag(app);
+            Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+            RequireRotationDragReleased(app, "App suspension must discard its old mouse start position and direction.");
+            core.TogglePause(clock);
+            Write(core, "resumeCountdownEndsAt", 0f);
+            core.Tick(clock);
+            ArmRotationDrag(app);
+            core.JumpToDevShortcut(GreedLastDevShortcut.GiftChoice, clock);
+            RequireRotationDragReleased(app, "Leaving rotation for a choice must not carry the old drag into another corridor.");
+            ArmRotationDrag(app);
+            Click(ui, "returnLobbyButton");
+            RequireRotationDragReleased(app, "Returning to the lobby must clear pending rotation feedback.");
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                "An interrupted rotation test must not create a successful-clear save candidate.");
+            Debug.Log("Greed Last drag lifecycle passed: live tracking -> pause -> focus loss -> app suspension -> choice -> lobby cleanup.");
+        }
+
+        private static void ArmRotationDrag(GreedLastApp app)
+        {
+            Write(app, "rotationDragTracking", true);
+            Write(app, "rotationDragStartX", 100f);
+            Write(app, "rotationDragVisualAxis", 0.5f);
+            Write(app, "rotationDragHeldDirection", 1);
+        }
+
+        private static void RequireRotationDragReleased(GreedLastApp app, string message)
+        {
+            Require(!Read<bool>(app, "rotationDragTracking") && Read<float>(app, "rotationDragStartX") == 0f
+                && Read<float>(app, "rotationDragVisualAxis") == 0f && Read<int>(app, "rotationDragHeldDirection") == 0,
+                message);
         }
 
         private static void RunToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)

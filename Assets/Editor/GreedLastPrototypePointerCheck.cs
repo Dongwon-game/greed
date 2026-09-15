@@ -10,6 +10,7 @@ namespace GreedLast.Editor
     {
         public static void Run(GreedLastRuntimeUi ui)
         {
+            GreedLastPrototypeKeyboardCheck.Run(ui);
             FieldInfo callback = Field("runChannelRequested");
             object previousCallback = callback.GetValue(ui);
             CanvasGroup group = null;
