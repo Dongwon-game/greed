@@ -312,7 +312,10 @@ namespace GreedLast.Editor
             core.RequestNextPattern(Time.realtimeSinceStartup);
             Require(latest().ActivePattern && !latest().Paused, "Lifecycle checks need an active practice trap.");
             GreedLastRunSnapshot beforePause = latest();
+            AudioSource audio = Read<AudioSource>(ui, "rhythmAudio");
+            Method(ui, "OnApplicationFocus").Invoke(ui, new object[] { false });
             Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+            Require(audio.mute, "UI-first focus loss must mute the app-connected audio source.");
             Require(latest().Paused && !latest().ResumeCountdownActive,
                 "Losing app focus must show a paused run, not start a resume countdown.");
             for (int lane = 0; lane < 3; lane++)
@@ -325,8 +328,14 @@ namespace GreedLast.Editor
                 "Gameplay keys, including the center key, must not dismiss the pause menu.");
             core.Tick(Time.realtimeSinceStartup + 60f);
             Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+            Method(ui, "OnApplicationPause").Invoke(ui, new object[] { true });
             Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+            Method(ui, "OnApplicationPause").Invoke(ui, new object[] { false });
+            Require(audio.mute, "Resuming the app before focus returns must keep the source muted.");
             Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+            Method(ui, "OnApplicationFocus").Invoke(ui, new object[] { true });
+            Require(audio.mute == (Read<float>(ui, "sfxVolume") <= 0f),
+                "Full foreground restoration must respect the user's sound setting.");
             Require(latest().Paused && !latest().ResumeCountdownActive
                 && latest().Health == beforePause.Health && latest().Score == beforePause.Score
                 && Mathf.Approximately(latest().Distance, beforePause.Distance)
@@ -336,16 +345,30 @@ namespace GreedLast.Editor
             float resumeEnd = Read<float>(core, "resumeCountdownEndsAt");
             Require(latest().ResumeCountdownActive && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
                 "The explicit resume button must start its countdown and disable repeated clicks.");
+            Method(ui, "Update").Invoke(ui, null);
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1, "The actual resume button must start the UI's first countdown beat.");
             Method(app, "RequestToggleRunPause").Invoke(app, null);
             Require(Read<float>(core, "resumeCountdownEndsAt") == resumeEnd,
                 "A repeated pause/resume key during countdown must not restart or shorten it.");
+            Write(ui, "rhythmBeatIndex", 3);
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime + 100f);
             Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+            Method(ui, "OnApplicationFocus").Invoke(ui, new object[] { false });
             Require(latest().Paused && !latest().ResumeCountdownActive,
                 "Losing focus during resume countdown must return to a stable pause menu.");
+            Require(audio.mute && Read<int>(ui, "rhythmBeatIndex") == 0,
+                "App-first focus loss must synchronously clear countdown audio without waiting for UI Update.");
             Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+            Method(ui, "OnApplicationFocus").Invoke(ui, new object[] { true });
             Click(ui, "nextPatternButton");
+            Method(ui, "Update").Invoke(ui, null);
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1, "The second real resume callback must restart at the first beat.");
             Write(core, "resumeCountdownEndsAt", 0f);
             core.Tick(Time.realtimeSinceStartup);
+            Method(ui, "Update").Invoke(ui, null);
+            Require(Read<int>(ui, "rhythmBeatIndex") == 2, "The app-connected GO transition must emit one release beat.");
+            Method(ui, "Update").Invoke(ui, null);
+            Require(Read<int>(ui, "rhythmBeatIndex") == 2, "The release beat must not duplicate on the next UI update.");
             Require(!latest().Paused && !latest().CountdownActive && latest().ActivePattern
                 && latest().Health == beforePause.Health && latest().Score == beforePause.Score,
                 "A fresh explicit resume must restore the same trap and preserve its score and health.");
@@ -361,7 +384,7 @@ namespace GreedLast.Editor
             for (int slot = 0; slot < savedLabels.Length; slot++)
                 Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
                     "Practice pause/resume/exit must not consume existing saved loadouts.");
-            Debug.Log("Greed Last app pause lifecycle passed: background -> paused input isolation -> explicit resume -> interrupted countdown -> lead-in buffer -> lobby with saved slots intact.");
+            Debug.Log("Greed Last app pause lifecycle passed: background audio in both callback orders -> paused input isolation -> real-button first beat -> interrupted countdown reset -> single GO -> lead-in buffer -> lobby with saved slots intact.");
         }
 
         private static void VerifyRotationDragLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
