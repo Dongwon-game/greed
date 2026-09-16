@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
@@ -6,6 +7,63 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeAudioCheck
     {
+        internal static void ReleaseEditorAudio(GameObject host)
+        {
+            if (host == null) return;
+            Require(!Application.isPlaying, "Explicit audio cleanup is for isolated Edit-mode fixtures only.");
+            GreedLastRuntimeUi ui = host.GetComponent<GreedLastRuntimeUi>();
+            if (ui != null) Call(ui, "OnDestroy");
+        }
+
+        public static void VerifyOwnedClipLifecycle()
+        {
+            Require(!Application.isPlaying, "Clip ownership checks require Edit mode.");
+            AudioClip shared = AudioClip.Create("shared_audio_ownership_control", 64, 1, 44100, false);
+            var allocated = new List<AudioClip>();
+            GameObject host = null;
+            try
+            {
+                for (int cycle = 0; cycle < 3; cycle++)
+                {
+                    host = new GameObject("GreedLastAudioOwnershipCheck");
+                    GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
+                    Call(ui, "CreateAudio");
+                    var clips = new HashSet<AudioClip>();
+                    foreach (FieldInfo field in typeof(GreedLastRuntimeUi).GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+                    {
+                        if (field.FieldType == typeof(AudioClip) && field.GetValue(ui) is AudioClip clip) clips.Add(clip);
+                        if (field.FieldType == typeof(AudioClip[]) && field.GetValue(ui) is AudioClip[] array)
+                            foreach (AudioClip item in array) if (item != null) clips.Add(item);
+                    }
+                    Require(clips.Count == 30, "Every audio-only UI instance must create its 30 prototype tones.");
+                    allocated.AddRange(clips);
+                    Read<AudioSource>(ui, "rhythmAudio").clip = shared;
+                    Call(ui, "OnDisable");
+                    foreach (AudioClip clip in clips)
+                        Require(clip != null, "A temporary UI disable must preserve its sounds for re-enable.");
+                    Call(ui, "OnEnable");
+                    ReleaseEditorAudio(host);
+                    ReleaseEditorAudio(host);
+                    UnityEngine.Object.DestroyImmediate(host);
+                    host = null;
+                    foreach (AudioClip clip in clips)
+                        Require(clip == null, "Destroying the owning UI must release every generated audio clip.");
+                    Require(shared != null, "Destroying one UI must not release an externally supplied clip.");
+                }
+                Debug.Log("Greed Last audio ownership passed: three explicit Edit-mode teardown cycles released 90 owned tones, preserved an external clip and tolerated duplicate cleanup.");
+            }
+            finally
+            {
+                if (host != null)
+                {
+                    ReleaseEditorAudio(host);
+                    UnityEngine.Object.DestroyImmediate(host);
+                }
+                foreach (AudioClip clip in allocated) if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (shared != null) UnityEngine.Object.DestroyImmediate(shared);
+            }
+        }
+
         public static void Run(GreedLastRuntimeUi ui)
         {
             Require(!Application.isPlaying, "Audio state checks require an isolated Edit-mode UI.");

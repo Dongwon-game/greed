@@ -172,6 +172,7 @@ namespace GreedLast.Editor
                 if (hadPracticeKey) PlayerPrefs.SetInt(PracticeKey, practiceValue);
                 else PlayerPrefs.DeleteKey(PracticeKey);
                 PlayerPrefs.Save();
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
                 if (canvasRoot != null) UnityEngine.Object.DestroyImmediate(canvasRoot);
                 DestroyCreated("GreedLastCamera", existingCamera);

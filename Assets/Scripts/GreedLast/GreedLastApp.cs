@@ -15297,6 +15297,7 @@ namespace GreedLast
         private Image stageTransitionLine;
         private Image feedbackFlash;
         private AudioSource rhythmAudio;
+        private readonly List<AudioClip> ownedAudioClips = new List<AudioClip>();
         private bool sensoryHasFocus = true;
         private bool sensoryAppPaused;
         private bool sensoryComponentEnabled = true;
@@ -27633,6 +27634,19 @@ namespace GreedLast
             sensoryComponentEnabled = false;
             RefreshAudioPlaybackState();
             ClearLanePointerHolds();
+        }
+
+        private void OnDestroy()
+        {
+            StopRhythmAudio();
+            // Only generated tones belong to this UI; imported or externally assigned clips do not.
+            foreach (AudioClip clip in ownedAudioClips)
+            {
+                if (clip == null) continue;
+                if (Application.isPlaying) Destroy(clip);
+                else DestroyImmediate(clip);
+            }
+            ownedAudioClips.Clear();
         }
 
         private void CreateAudio()
@@ -45788,7 +45802,7 @@ namespace GreedLast
             return "감각: 소리 " + volumePercent + "%·진동 " + (hapticsOn ? "ON" : "OFF") + rotationTiltText;
         }
 
-        private static AudioClip CreateTone(string name, float frequency, float duration, float gain)
+        private AudioClip CreateTone(string name, float frequency, float duration, float gain)
         {
             const int sampleRate = 44100;
             int samples = Mathf.CeilToInt(sampleRate * duration);
@@ -45801,11 +45815,12 @@ namespace GreedLast
             }
 
             AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
+            ownedAudioClips.Add(clip);
             clip.SetData(data, 0);
             return clip;
         }
 
-        private static AudioClip CreateSweepTone(string name, float startFrequency, float endFrequency, float duration, float gain)
+        private AudioClip CreateSweepTone(string name, float startFrequency, float endFrequency, float duration, float gain)
         {
             const int sampleRate = 44100;
             int samples = Mathf.CeilToInt(sampleRate * duration);
@@ -45821,11 +45836,12 @@ namespace GreedLast
             }
 
             AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
+            ownedAudioClips.Add(clip);
             clip.SetData(data, 0);
             return clip;
         }
 
-        private static AudioClip CreateDoubleTone(string name, float firstFrequency, float secondFrequency, float duration, float gain)
+        private AudioClip CreateDoubleTone(string name, float firstFrequency, float secondFrequency, float duration, float gain)
         {
             const int sampleRate = 44100;
             int samples = Mathf.CeilToInt(sampleRate * duration);
@@ -45842,6 +45858,7 @@ namespace GreedLast
             }
 
             AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
+            ownedAudioClips.Add(clip);
             clip.SetData(data, 0);
             return clip;
         }

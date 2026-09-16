@@ -865,6 +865,7 @@ namespace GreedLast.Editor
             EditorApplication.update -= Tick;
             AssemblyReloadEvents.beforeAssemblyReload -= Cleanup;
             ReleaseTarget();
+            if (ui != null) GreedLastPrototypeAudioCheck.ReleaseEditorAudio(ui.gameObject);
             if (captureScene.IsValid()) EditorSceneManager.ClosePreviewScene(captureScene);
             if (ui != null) UnityEngine.Object.DestroyImmediate(ui.gameObject);
             if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas.gameObject);

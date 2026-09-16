@@ -1538,6 +1538,7 @@ namespace GreedLast.Editor
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
+            GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();
             VerifyRuntimeBoardScreenRenderVisibility();
             GreedLastPrototypeAppLoopCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
@@ -9914,6 +9915,7 @@ namespace GreedLast.Editor
 
                 DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
                 DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
             }
         }
@@ -10591,6 +10593,7 @@ namespace GreedLast.Editor
 
                 DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
                 DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
             }
         }
@@ -10696,6 +10699,7 @@ namespace GreedLast.Editor
 
                 DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
                 DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
             }
         }
@@ -10891,6 +10895,7 @@ namespace GreedLast.Editor
 
                 DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
                 DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
             }
         }
