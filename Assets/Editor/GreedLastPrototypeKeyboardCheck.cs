@@ -176,6 +176,8 @@ namespace GreedLast.Editor
                     typeof(GreedLastRuntimeUi).GetMethod("OnApplicationFocus", BindingFlags.Instance | BindingFlags.NonPublic)
                         .Invoke(ui, new object[] { false });
                     Require(!held[laneIndex], "Focus loss must release the real module's lane highlight.");
+                    typeof(GreedLastRuntimeUi).GetMethod("OnApplicationFocus", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(ui, new object[] { true });
                     TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Stationary));
                     TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Ended));
                     Require(calls == 6 && !held[laneIndex], "Returning with a stale held touch must not replay its press.");

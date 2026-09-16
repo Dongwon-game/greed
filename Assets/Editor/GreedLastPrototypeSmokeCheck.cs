@@ -9923,6 +9923,7 @@ namespace GreedLast.Editor
             VerifyPlayfieldReadability(ui);
             VerifyCompactTimingGuide(ui);
             VerifyCompactActionCues(ui);
+            GreedLastPrototypeAudioCheck.Run(ui);
             GreedLastPrototypePointerCheck.Run(ui);
             string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.SaveLoadoutDraft, "저장 슬롯 선택", longDetail, 0,

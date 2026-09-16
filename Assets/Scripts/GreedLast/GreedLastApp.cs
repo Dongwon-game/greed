@@ -15297,6 +15297,9 @@ namespace GreedLast
         private Image stageTransitionLine;
         private Image feedbackFlash;
         private AudioSource rhythmAudio;
+        private bool sensoryHasFocus = true;
+        private bool sensoryAppPaused;
+        private bool sensoryComponentEnabled = true;
         private AudioClip beatClip;
         private AudioClip downbeatClip;
         private AudioClip focusBeatClip;
@@ -15990,6 +15993,11 @@ namespace GreedLast
         {
             EnsureUi();
             ClearLanePointerHolds();
+            if (runModeActive && snapshot.State != GreedLastScreenState.RunCoreTest
+                && snapshot.State != GreedLastScreenState.InfiniteRun)
+            {
+                StopRhythmAudio();
+            }
             ApplySafeArea();
             ResetMenuDetailLayout();
             TrackScreenEntranceTransitions(snapshot.State);
@@ -16064,6 +16072,7 @@ namespace GreedLast
             if (!runLike)
             {
                 ClearJudgementHistory();
+                ResetRhythmBeatSchedule();
                 hasRunSnapshot = false;
             }
 
@@ -16359,6 +16368,13 @@ namespace GreedLast
             ApplySafeArea();
             GreedLastRunSnapshot previousSnapshot = latestRunSnapshot;
             bool hadPreviousSnapshot = hasRunSnapshot;
+            if (snapshot.Paused && !snapshot.ResumeCountdownActive
+                && (!hadPreviousSnapshot || !previousSnapshot.Paused || previousSnapshot.ResumeCountdownActive))
+            {
+                StopRhythmAudio();
+                // A suspended app may not run Update between interrupting and restarting a countdown.
+                ResetRhythmBeatSchedule();
+            }
             if (!hadPreviousSnapshot || IsNewRunPresentation(previousSnapshot, snapshot))
             {
                 ResetRunPresentation(snapshot);
@@ -16537,6 +16553,8 @@ namespace GreedLast
 
         private void ResetRunPresentation(GreedLastRunSnapshot snapshot)
         {
+            ResetRhythmBeatSchedule();
+            choiceConfirmationCountdownBeatNotBefore = 0f;
             lastComboForBadge = snapshot.Combo;
             lastGaugeHealth = snapshot.Health;
             lastGaugeFocus = snapshot.Focus;
@@ -16568,6 +16586,14 @@ namespace GreedLast
                 lanePressPulseUntil[i] = laneInputRippleUntil[i] = laneJudgementPulseUntil[i] = 0f;
                 laneJudgementTagUntil[i] = laneMissShakeUntil[i] = 0f;
             }
+        }
+
+        private void ResetRhythmBeatSchedule()
+        {
+            lastCountdownBeatActive = false;
+            lastCountdownWasResume = false;
+            nextBeatSoundAt = 0f;
+            rhythmBeatIndex = 0;
         }
 
         private void ApplyStoppedRunPresentation(GreedLastRunSnapshot snapshot)
@@ -27584,16 +27610,28 @@ namespace GreedLast
 
         private void OnApplicationFocus(bool hasFocus)
         {
+            sensoryHasFocus = hasFocus;
+            RefreshAudioPlaybackState();
             if (!hasFocus) ClearLanePointerHolds();
         }
 
         private void OnApplicationPause(bool paused)
         {
+            sensoryAppPaused = paused;
+            RefreshAudioPlaybackState();
             if (paused) ClearLanePointerHolds();
+        }
+
+        private void OnEnable()
+        {
+            sensoryComponentEnabled = true;
+            RefreshAudioPlaybackState();
         }
 
         private void OnDisable()
         {
+            sensoryComponentEnabled = false;
+            RefreshAudioPlaybackState();
             ClearLanePointerHolds();
         }
 
@@ -27610,7 +27648,7 @@ namespace GreedLast
             rhythmAudio.playOnAwake = false;
             rhythmAudio.loop = false;
             rhythmAudio.spatialBlend = 0f;
-            rhythmAudio.volume = BuildAudioSourceBaseVolume();
+            RefreshAudioPlaybackState();
 
             beatClip = CreateTone("beat_tick", 760f, 0.045f, 0.18f);
             downbeatClip = CreateDoubleTone("downbeat_pulse", 220f, 440f, 0.085f, 0.20f);
@@ -45492,10 +45530,28 @@ namespace GreedLast
 
         private void PlayClip(AudioClip clip, float volume)
         {
-            if (rhythmAudio != null && clip != null)
+            if (CanPlaySensoryFeedback && sfxVolume > 0f && rhythmAudio != null
+                && rhythmAudio.isActiveAndEnabled && clip != null)
             {
-                rhythmAudio.PlayOneShot(clip, BuildEffectiveSfxVolume(volume, sfxVolume));
+                // The source owns the master gain so changes also affect sounds already playing.
+                rhythmAudio.PlayOneShot(clip, BuildEffectiveSfxVolume(volume, BuildAudioSourceBaseVolume()));
             }
+        }
+
+        private bool CanPlaySensoryFeedback => sensoryComponentEnabled && isActiveAndEnabled
+            && sensoryHasFocus && !sensoryAppPaused;
+
+        private void RefreshAudioPlaybackState()
+        {
+            if (rhythmAudio == null) return;
+            rhythmAudio.volume = BuildEffectiveSfxVolume(BuildAudioSourceBaseVolume(), sfxVolume);
+            rhythmAudio.mute = !CanPlaySensoryFeedback || sfxVolume <= 0f;
+            if (rhythmAudio.mute) StopRhythmAudio();
+        }
+
+        private void StopRhythmAudio()
+        {
+            if (rhythmAudio != null) rhythmAudio.Stop();
         }
 
         private static float BuildEffectiveSfxVolume(float clipVolume, float masterVolume)
@@ -45510,7 +45566,7 @@ namespace GreedLast
 
         private void PlayHaptic(float seconds)
         {
-            if (!hapticsEnabled)
+            if (!hapticsEnabled || !CanPlaySensoryFeedback)
             {
                 return;
             }
@@ -45664,10 +45720,7 @@ namespace GreedLast
         private void SetSfxVolume(float value)
         {
             sfxVolume = Mathf.Clamp(value, MinSfxVolume, MaxSfxVolume);
-            if (rhythmAudio != null)
-            {
-                rhythmAudio.volume = BuildAudioSourceBaseVolume();
-            }
+            RefreshAudioPlaybackState();
 
             PlayerPrefs.SetFloat(SfxVolumePrefsKey, sfxVolume);
             PlayerPrefs.Save();

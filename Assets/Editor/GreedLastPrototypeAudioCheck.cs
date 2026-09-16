@@ -1,0 +1,249 @@
+using System;
+using System.Reflection;
+using UnityEngine;
+
+namespace GreedLast.Editor
+{
+    internal static class GreedLastPrototypeAudioCheck
+    {
+        public static void Run(GreedLastRuntimeUi ui)
+        {
+            Require(!Application.isPlaying, "Audio state checks require an isolated Edit-mode UI.");
+            AudioSource source = Read<AudioSource>(ui, "rhythmAudio");
+            Require(source != null, "The prototype must create its real audio source.");
+            float originalVolume = Read<float>(ui, "sfxVolume");
+            bool originalFocus = Read<bool>(ui, "sensoryHasFocus");
+            bool originalPause = Read<bool>(ui, "sensoryAppPaused");
+            bool originalEnabled = Read<bool>(ui, "sensoryComponentEnabled");
+            bool originalHaptics = Read<bool>(ui, "hapticsEnabled");
+            float originalHapticTime = Read<float>(ui, "lastHapticAt");
+            try
+            {
+                // Change only transient state, never the user's sound or vibration preferences.
+                Write(ui, "hapticsEnabled", true);
+                Call(ui, "OnApplicationFocus", true);
+                Call(ui, "OnApplicationPause", false);
+                Call(ui, "OnEnable");
+                SetTransientVolume(ui, 0.5f);
+                Require(CanPlay(ui) && !source.mute && Mathf.Approximately(source.volume, 0.5f),
+                    "The source must own the master gain once, including for already-playing voices.");
+                Require(Mathf.Approximately(source.volume * 0.4f, 0.2f), "Authored 40% at master 50% must remain 20%, not double-scaled.");
+                SetTransientVolume(ui, 0f);
+                Require(source.mute && Mathf.Approximately(source.volume, 0f), "Zero volume must immediately mute the source.");
+                Require(CanPlay(ui), "Sound mute must not disable the separate vibration preference.");
+                Write(ui, "lastHapticAt", -10f);
+                Call(ui, "PlayHaptic", 0.03f);
+                Require(Read<float>(ui, "lastHapticAt") >= 0f, "Muted sound must still allow enabled foreground vibration.");
+                Write(ui, "hapticsEnabled", false);
+                Write(ui, "lastHapticAt", -10f);
+                Call(ui, "PlayHaptic", 0.03f);
+                Require(Read<float>(ui, "lastHapticAt") == -10f, "Vibration OFF must block feedback even in the foreground.");
+                Write(ui, "hapticsEnabled", true);
+                SetTransientVolume(ui, 0.65f);
+                Require(!source.mute && Mathf.Approximately(source.volume, 0.65f), "Restoring sound must use the selected master value.");
+
+                Call(ui, "OnApplicationFocus", false);
+                RequireBlocked(ui, source, "Focus loss");
+                Call(ui, "OnApplicationPause", true);
+                Call(ui, "OnApplicationFocus", true);
+                RequireBlocked(ui, source, "Focus returning before app resume");
+                Call(ui, "OnApplicationPause", false);
+                Require(CanPlay(ui) && !source.mute, "Audio may reopen only after both focus and app resume.");
+
+                Call(ui, "OnApplicationFocus", false);
+                Call(ui, "OnApplicationPause", true);
+                Call(ui, "OnApplicationPause", false);
+                RequireBlocked(ui, source, "App resume before focus returning");
+                Call(ui, "OnApplicationFocus", true);
+                Require(CanPlay(ui) && !source.mute, "The reverse callback order must also restore audio.");
+
+                Call(ui, "OnDisable");
+                SetTransientVolume(ui, 0.25f);
+                RequireBlocked(ui, source, "Disabled UI with changed sound setting");
+                Call(ui, "OnEnable");
+                Require(CanPlay(ui) && !source.mute && Mathf.Approximately(source.volume, 0.25f),
+                    "Re-enabling the UI must restore the selected volume, not a hardcoded maximum.");
+                Call(ui, "OnApplicationPause", true);
+                Call(ui, "OnDisable");
+                Call(ui, "OnEnable");
+                RequireBlocked(ui, source, "Re-enabling while the app remains paused");
+                Call(ui, "OnApplicationPause", false);
+
+                Write(ui, "lastHapticAt", -10f);
+                Call(ui, "PlayHaptic", 0.03f);
+                Require(Read<float>(ui, "lastHapticAt") >= 0f, "Foreground feedback must still pass its haptic gate.");
+                VerifyBeatLifecycle(ui);
+                VerifyOpeningCountdown(ui);
+                Debug.Log("Greed Last audio state checks passed: master gain once, immediate mute, independent haptics, focus/pause callback order, disable/re-enable and blocked background feedback. No device audio capture was performed.");
+            }
+            finally
+            {
+                Write(ui, "sfxVolume", originalVolume);
+                Write(ui, "sensoryHasFocus", originalFocus);
+                Write(ui, "sensoryAppPaused", originalPause);
+                Write(ui, "sensoryComponentEnabled", originalEnabled);
+                Write(ui, "hapticsEnabled", originalHaptics);
+                Write(ui, "lastHapticAt", originalHapticTime);
+                Call(ui, "RefreshAudioPlaybackState");
+            }
+        }
+
+        private static void VerifyBeatLifecycle(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            Require(run.ActivePattern, "Beat checks need an active practice trap.");
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Audio check", string.Empty, 0));
+            ui.RenderRun(run);
+            Write(ui, "lastCountdownBeatActive", false);
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime - 1f);
+            int before = Read<int>(ui, "rhythmBeatIndex");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "A live UI update must emit one due beat, not a catch-up burst.");
+
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            before = Read<int>(ui, "rhythmBeatIndex");
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime - 10f);
+            Call(ui, "Update");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before, "Paused UI updates must not emit gameplay beats.");
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            Write(ui, "choiceConfirmationCountdownBeatNotBefore", 0f);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1, "A resume countdown must start at its first beat.");
+
+            // Backgrounding can prevent any UI Update between interrupting and restarting a countdown.
+            Write(ui, "rhythmBeatIndex", 3);
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime + 100f);
+            core.PauseForAppBackground(clock += 0.1f);
+            ui.RenderRun(run);
+            Require(run.Paused && !run.ResumeCountdownActive, "The interrupted countdown must be a stable pause.");
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1,
+                "A restarted countdown must discard the previous beat schedule even without an intervening UI frame.");
+
+            core.Tick(clock += 2f);
+            ui.RenderRun(run);
+            Require(!run.Paused && !run.CountdownActive && run.ActivePattern, "GO must restore the active trap.");
+            before = Read<int>(ui, "rhythmBeatIndex");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "GO must emit its release beat exactly once.");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "The next frame must wait for the following beat interval.");
+
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            Call(ui, "Update");
+            Require(Read<bool>(ui, "lastCountdownBeatActive"), "A second resume must establish its countdown state.");
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime + 100f);
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            // A new screen can replace the countdown before the old screen gets another Update.
+            core.RestartPractice(clock += 0.1f);
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Practice", string.Empty, 0));
+            ui.RenderRun(run);
+            Write(ui, "choiceConfirmationCountdownBeatNotBefore", 0f);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1 && !Read<bool>(ui, "lastCountdownWasResume"),
+                "A fresh run reached without an intervening lobby Update must begin its own first beat.");
+
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            before = Read<int>(ui, "rhythmBeatIndex");
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime - 10f);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before, "Lobby updates must not replay a due gameplay beat.");
+            Debug.Log("Greed Last beat lifecycle passed: live tick -> silent pause -> resume -> interrupted countdown without UI frames -> fresh first beat -> single GO -> immediate new run -> lobby isolation.");
+        }
+
+        private static void VerifyOpeningCountdown(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Practice", string.Empty, 0));
+            ui.RenderRun(run);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == 1, "Opening countdown must begin with one beat.");
+
+            core.PauseForAppBackground(clock += 0.2f);
+            ui.RenderRun(run);
+            Call(ui, "OnApplicationFocus", false);
+            Call(ui, "OnApplicationPause", true);
+            float remaining = run.StartCountdownRemainingSeconds;
+            float distance = run.Distance;
+            core.Tick(clock += 3600f);
+            ui.RenderRun(run);
+            Call(ui, "Update");
+            Require(run.Paused && Mathf.Approximately(run.StartCountdownRemainingSeconds, remaining)
+                && Mathf.Approximately(run.Distance, distance) && !run.ActivePattern,
+                "Long background time must not consume the opening countdown or spawn a trap.");
+            Require(Read<int>(ui, "rhythmBeatIndex") == 0, "The backgrounded opening must remain silent without accumulating beats.");
+
+            Call(ui, "OnApplicationFocus", true);
+            Require(!CanPlay(ui), "Focus alone must not reopen sensory feedback while the app is paused.");
+            Call(ui, "OnApplicationPause", false);
+            core.TogglePause(clock += 0.1f);
+            ui.RenderRun(run);
+            Call(ui, "Update");
+            Require(run.ResumeCountdownActive && Read<int>(ui, "rhythmBeatIndex") == 1,
+                "Returning to the opening must start a fresh resume beat without catch-up audio.");
+            core.Tick(clock += 1.5f);
+            ui.RenderRun(run);
+            Require(!run.Paused && run.StartCountdownActive && !run.ActivePattern,
+                "Completing resume must preserve the unfinished opening, not release a trap early.");
+            int before = Read<int>(ui, "rhythmBeatIndex");
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime + 100f);
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before, "The unfinished opening must not emit a premature GO cue.");
+            core.Tick(clock += 2f);
+            ui.RenderRun(run);
+            Require(!run.CountdownActive && !run.ActivePattern && run.AutoFlow,
+                "Opening completion must leave the pre-trap buffer intact.");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "Actual opening completion must emit one GO cue.");
+            Call(ui, "Update");
+            Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "GO must not burst through missed background beats.");
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            Debug.Log("Greed Last opening audio lifecycle passed: first count -> simulated hour in background -> fresh resume -> preserved opening -> single GO and pre-trap buffer. No real waiting or device audio capture.");
+        }
+
+        private static void RequireBlocked(GreedLastRuntimeUi ui, AudioSource source, string context)
+        {
+            Require(!CanPlay(ui) && source.mute, context + " must keep sound and vibration blocked.");
+            Write(ui, "lastHapticAt", -10f);
+            Call(ui, "PlayHaptic", 0.03f);
+            Require(Read<float>(ui, "lastHapticAt") == -10f, context + " must not enqueue a haptic.");
+        }
+
+        private static void SetTransientVolume(GreedLastRuntimeUi ui, float value)
+        {
+            Write(ui, "sfxVolume", value);
+            Call(ui, "RefreshAudioPlaybackState");
+        }
+
+        private static bool CanPlay(GreedLastRuntimeUi ui) => (bool)typeof(GreedLastRuntimeUi)
+            .GetProperty("CanPlaySensoryFeedback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+        private static FieldInfo Field(string name) => typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+        private static T Read<T>(GreedLastRuntimeUi ui, string name) => (T)Field(name).GetValue(ui);
+        private static void Write(GreedLastRuntimeUi ui, string name, object value) => Field(name).SetValue(ui, value);
+        private static void Call(GreedLastRuntimeUi ui, string name, params object[] args)
+            => typeof(GreedLastRuntimeUi).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, args);
+        private static void Require(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
+        }
+    }
+}

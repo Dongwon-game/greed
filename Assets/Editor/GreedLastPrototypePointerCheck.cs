@@ -69,6 +69,8 @@ namespace GreedLast.Editor
                     typeof(GreedLastRuntimeUi).GetMethod(lifecycle, BindingFlags.Instance | BindingFlags.NonPublic)
                         .Invoke(ui, new object[] { lifecycle == "OnApplicationPause" });
                     Require(!held[0], "Backgrounding must clear a pointer even when a choice does not pause the core.");
+                    typeof(GreedLastRuntimeUi).GetMethod(lifecycle, BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(ui, new object[] { lifecycle == "OnApplicationFocus" });
                     Down(lane, first);
                     Require(calls == beforeFocusReturn + 1, "A released-outside pointer ID must be usable after returning.");
                     Up(lane, first);
@@ -120,6 +122,7 @@ namespace GreedLast.Editor
                 // Edit-mode fixtures invoke Unity lifecycle hooks explicitly.
                 typeof(GreedLastRuntimeUi).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
                 Require(!held[0], "Disabling the UI must release a held choice pointer without needing a core pause.");
+                typeof(GreedLastRuntimeUi).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
                 int beforeChoiceReturn = calls;
                 Down(lane, first);
                 Require(calls == beforeChoiceReturn + 1, "The same finger ID must work when the choice UI returns.");
