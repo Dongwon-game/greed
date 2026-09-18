@@ -53,6 +53,7 @@ namespace GreedLast.Editor
             public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
             public int checkedFeedbackAreas;
+            public int checkedRunnerCueClearances;
             public int brightSamples;
             public int detailSamples;
         }
@@ -158,6 +159,7 @@ namespace GreedLast.Editor
                 AddAvoidanceFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
+                AddCombinedFeedbackFrames();
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -227,6 +229,62 @@ namespace GreedLast.Editor
         private static void ShowScreen(GreedLastScreenState state, string title)
         {
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(state, title, string.Empty, 0));
+        }
+
+        private static void AddCombinedFeedbackFrames()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.Enter();
+            core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            clock += run.Pattern.CoreSeconds - 0.08f;
+            core.Tick(clock);
+            PublishAt(core, clock);
+            GreedLastRunSnapshot healthy = run;
+            core.DropHealthForDangerTest();
+            core.DropHealthForDangerTest();
+            PublishAt(core, clock);
+            GreedLastRunSnapshot low = run;
+            Require(low.Health == 1 && low.ActivePattern && !low.Stopped,
+                "Danger captures need a live low-health trap.");
+            Add("46-low-health-small", 960, 540, () => { ShowRun(healthy); ui.RenderRun(low); }, settleSeconds: 0.16);
+            Add("47-low-health-wide-safe", 2340, 1080, () => { ShowRun(healthy); ui.RenderRun(low); }, 96f, 0.16);
+            core.FillFocusForTest();
+            PublishAt(core, clock);
+            GreedLastRunSnapshot focused = run;
+            Require(focused.FocusStateActive && focused.Health == 1, "Focus/danger must be active together.");
+            Add("48-focus-danger-small", 960, 540, () => { ShowRun(low); ui.RenderRun(focused); }, settleSeconds: 0.16);
+            Add("49-focus-danger-tablet", 1024, 768, () => { ShowRun(low); ui.RenderRun(focused); }, settleSeconds: 0.16);
+
+            core.JumpToDevShortcut(GreedLastDevShortcut.AfterCore, clock += 3f);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            core.FillFocusForTest();
+            PublishAt(core, clock);
+            GreedLastRunSnapshot escape = run;
+            Require(escape.CoreRetrieved && escape.FocusStateActive && !escape.Stopped,
+                "Escape captures must retain the core and active focus.");
+            Add("50-escape-focus-small", 960, 540, () => ShowRun(escape));
+            Add("51-escape-focus-wide-safe", 2340, 1080, () => ShowRun(escape), 96f);
+
+            core.EnterInfiniteRun();
+            core.Tick(clock = Time.realtimeSinceStartup + 3f);
+            core.Tick(clock += 1f);
+            for (int i = 1; i < 5; i++) core.RaiseInfiniteThreatForTest();
+            core.DropHealthForDangerTest();
+            core.DropHealthForDangerTest();
+            core.FillFocusForTest();
+            PublishAt(core, clock);
+            GreedLastRunSnapshot pressure = run;
+            Require(pressure.InfiniteMode && pressure.ActivePattern && pressure.FocusStateActive
+                && pressure.Health == 1 && pressure.InfiniteThreatLevel == 5,
+                "Pressure captures must combine a real trap, max threat, low health and focus.");
+            Add("52-infinite-pressure-small", 960, 540, () => ShowRun(pressure));
+            Add("53-infinite-pressure-tablet", 1024, 768, () => ShowRun(pressure));
         }
 
         private static void ShowRun(GreedLastRunSnapshot snapshot)
@@ -585,6 +643,7 @@ namespace GreedLast.Editor
             int checkedButtons = VerifyVisibleControlRaycasts(out int checkedControlPoints);
             int checkedBlockedLanePoints = VerifyPausedLaneRaycasts();
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
+            int checkedRunnerCueClearances = VerifyRunnerCueClearance();
             int checkedLaneLabels = VerifyLanePresentation();
             int checkedModuleClicks = VerifyActionModuleClick();
             int checkedModuleLaneInputs = VerifyLaneModuleInputs();
@@ -634,6 +693,7 @@ namespace GreedLast.Editor
                     checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,
                     checkedFeedbackAreas = checkedFeedbackAreas,
+                    checkedRunnerCueClearances = checkedRunnerCueClearances,
                     brightSamples = brightSamples,
                     detailSamples = detailSamples,
                 });
@@ -860,6 +920,29 @@ namespace GreedLast.Editor
                     Require(!textBounds.Intersects(gaugeBounds),
                         currentFrame.Name + ": feedback overlaps the health/focus gauges: " + label.name);
                 }
+                count++;
+            }
+            return count;
+        }
+
+        private static int VerifyRunnerCueClearance()
+        {
+            if (Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
+            Text guide = Read<Text>("timingGuideText");
+            if (!guide.gameObject.activeInHierarchy || !guide.enabled || guide.color.a < 0.01f
+                || string.IsNullOrWhiteSpace(guide.text)) return 0;
+            Transform parent = guide.transform.parent;
+            Bounds text = RectTransformUtility.CalculateRelativeRectTransformBounds(parent, guide.rectTransform);
+            var cues = new List<Graphic> { Read<Image>("runnerPreparationCue"), Read<Text>("runnerPreparationSymbolText") };
+            cues.AddRange(Read<Image[]>("runnerFootfallPips"));
+            int count = 0;
+            foreach (Graphic cue in cues)
+            {
+                if (cue == null || !cue.gameObject.activeInHierarchy || !cue.enabled || cue.color.a < 0.01f) continue;
+                Bounds area = RectTransformUtility.CalculateRelativeRectTransformBounds(parent, cue.rectTransform);
+                bool sharesWidth = area.max.x > text.min.x && area.min.x < text.max.x;
+                Require(!sharesWidth || area.min.y >= text.max.y + 7f,
+                    currentFrame.Name + ": runner cue crosses the timing guide: " + cue.name);
                 count++;
             }
             return count;

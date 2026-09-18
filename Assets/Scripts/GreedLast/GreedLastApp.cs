@@ -15255,6 +15255,7 @@ namespace GreedLast
         private Image runnerCoreGlow;
         private Image runnerPreparationCue;
         private Text runnerPreparationSymbolText;
+        private readonly Vector3[] runnerCueCorners = new Vector3[4];
         private Image runnerHairBack;
         private Image runnerLeftHorn;
         private Image runnerRightHorn;
@@ -15909,6 +15910,7 @@ namespace GreedLast
             UpdateRunnerAvatar();
             UpdateStageTransitionBanner();
             UpdateRunTimingVisuals();
+            KeepRunnerCuesAboveTimingGuide();
             UpdateResolvedTrapAfterimage();
             UpdateJudgementHistoryDots();
             ApplyFocusStateAuraBand();
@@ -34024,6 +34026,44 @@ namespace GreedLast
                     runnerPreparationSymbolText.gameObject.SetActive(true);
                 }
             }
+        }
+
+        private void KeepRunnerCuesAboveTimingGuide()
+        {
+            if (timingGuideText == null || !timingGuideText.isActiveAndEnabled
+                || timingGuideText.color.a < 0.01f || string.IsNullOrWhiteSpace(timingGuideText.text)) return;
+
+            Transform parent = timingGuideText.transform.parent;
+            Rect guide = GetRunnerCueBounds(timingGuideText.rectTransform, parent);
+            KeepRunnerCueAboveGuide(runnerPreparationCue, parent, guide);
+            KeepRunnerCueAboveGuide(runnerPreparationSymbolText, parent, guide);
+            if (runnerFootfallPips == null) return;
+            foreach (Image pip in runnerFootfallPips) KeepRunnerCueAboveGuide(pip, parent, guide);
+        }
+
+        private void KeepRunnerCueAboveGuide(Graphic cue, Transform parent, Rect guide)
+        {
+            if (cue == null || !cue.isActiveAndEnabled || cue.color.a < 0.01f) return;
+            Rect area = GetRunnerCueBounds(cue.rectTransform, parent);
+            if (area.xMax <= guide.xMin || area.xMin >= guide.xMax) return;
+            float lift = guide.yMax + 8f - area.yMin;
+            if (lift <= 0f) return;
+            // Measure after pose/rotation and text pulses so foot effects never strike through the HUD.
+            cue.rectTransform.position += parent.TransformVector(new Vector3(0f, lift, 0f));
+        }
+
+        private Rect GetRunnerCueBounds(RectTransform rect, Transform parent)
+        {
+            rect.GetWorldCorners(runnerCueCorners);
+            Vector2 min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            Vector2 max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+            for (int i = 0; i < runnerCueCorners.Length; i++)
+            {
+                Vector2 point = parent.InverseTransformPoint(runnerCueCorners[i]);
+                min = Vector2.Min(min, point);
+                max = Vector2.Max(max, point);
+            }
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         }
 
         private void UpdateRunnerFootfallPips(
