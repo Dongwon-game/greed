@@ -65,6 +65,7 @@ namespace GreedLast.Editor
             public float SafeInset;
             public double SettleSeconds = 0.5;
             public Action Show;
+            public Action BeforeUpdate;
         }
 
         [MenuItem(MenuPath)]
@@ -156,13 +157,15 @@ namespace GreedLast.Editor
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
                 AddGameplayChoiceFrames();
+                AddBeatPulseFrames(live, resume);
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
                 AssemblyReloadEvents.beforeAssemblyReload += Cleanup;
             }
-            catch
+            catch (Exception exception)
             {
+                WriteCaptureReport(false, exception.Message);
                 Cleanup();
                 throw;
             }
@@ -171,9 +174,54 @@ namespace GreedLast.Editor
         [MenuItem(MenuPath, true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
-        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5)
+        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null)
         {
-            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset, SettleSeconds = settleSeconds });
+            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset, SettleSeconds = settleSeconds, BeforeUpdate = beforeUpdate });
+        }
+
+        private static void AddBeatPulseFrames(GreedLastRunSnapshot live, GreedLastRunSnapshot resume)
+        {
+            // Freeze only transient fixture timing, never gameplay clocks or saved preferences.
+            void Prepare(bool peak)
+            {
+                Write("beatPhase", 0f);
+                Write("lastCountdownBeatActive", Read<GreedLastRunSnapshot>("latestRunSnapshot").ResumeCountdownActive);
+                Write("rhythmBeatIndex", 1);
+                Write("downbeatPulseUntil", 0f);
+                Write("rhythmPulseStartedAt", -1f);
+                Write("nextBeatSoundAt", Time.unscaledTime + (peak ? -1f : 100f));
+            }
+            var contactCore = new GreedLastRunCore();
+            GreedLastRunSnapshot contact = default;
+            contactCore.SnapshotChanged += value => contact = value;
+            float contactClock = Time.realtimeSinceStartup;
+            contactCore.RestartPractice(contactClock);
+            contactCore.Tick(contactClock += 2f);
+            contactCore.Tick(contactClock += 1f);
+            contactCore.Tick(contactClock + contact.Pattern.CoreSeconds - 0.08f);
+            PublishAt(contactCore, contactClock + contact.Pattern.CoreSeconds - 0.08f);
+            Require(contact.ActivePattern && Mathf.Abs(contact.CoreDeltaSeconds) < 0.1f,
+                "Beat comparison frames must show a trap near its actual contact window.");
+            Add("40-beat-rest-small", 960, 540, () => ShowRun(contact), beforeUpdate: () => Prepare(false));
+            Add("41-beat-peak-small", 960, 540, () => ShowRun(contact), beforeUpdate: () => Prepare(true));
+            Add("42-beat-muted-peak-wide", 2340, 1080, () => ShowRun(live), 96f, beforeUpdate: () =>
+            {
+                Prepare(true);
+                Write("sfxVolume", 0f);
+                typeof(GreedLastRuntimeUi).GetMethod("RefreshAudioPlaybackState", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+            });
+            Add("43-beat-resume-tablet", 1024, 768, () => ShowRun(resume), beforeUpdate: () => Prepare(true));
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot infinite = default;
+            core.SnapshotChanged += value => infinite = value;
+            core.EnterInfiniteRun();
+            core.Tick(Time.realtimeSinceStartup + 3f);
+            core.Tick(Time.realtimeSinceStartup + 4f);
+            for (int i = 1; i < 5; i++) core.RaiseInfiniteThreatForTest();
+            Require(infinite.InfiniteThreatLevel == 5 && infinite.ActivePattern && !infinite.Stopped && !infinite.CountdownActive,
+                "Beat captures require the live highest-threat fixture.");
+            Add("44-beat-fast-rest", 1280, 720, () => ShowRun(infinite), beforeUpdate: () => Prepare(false));
+            Add("45-beat-fast-peak", 1280, 720, () => ShowRun(infinite), beforeUpdate: () => Prepare(true));
         }
 
         private static void ShowScreen(GreedLastScreenState state, string title)
@@ -488,6 +536,7 @@ namespace GreedLast.Editor
         {
             try
             {
+                currentFrame.BeforeUpdate?.Invoke();
                 typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
                 if (EditorApplication.timeSinceStartup - frameStartedAt < currentFrame.SettleSeconds)
                 {
@@ -840,6 +889,7 @@ namespace GreedLast.Editor
 
         private static void WriteCaptureReport(bool succeeded, string error)
         {
+            Directory.CreateDirectory("Logs/VisualChecks");
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
@@ -849,6 +899,11 @@ namespace GreedLast.Editor
         private static T Read<T>(string name)
         {
             return (T)typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+        }
+
+        private static void Write(string name, object value)
+        {
+            typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(ui, value);
         }
 
         private static void ReleaseTarget()

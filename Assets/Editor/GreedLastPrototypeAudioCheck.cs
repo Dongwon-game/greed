@@ -132,6 +132,8 @@ namespace GreedLast.Editor
                 Require(Read<float>(ui, "lastHapticAt") >= 0f, "Foreground feedback must still pass its haptic gate.");
                 VerifyBeatLifecycle(ui);
                 VerifyOpeningCountdown(ui);
+                VerifySynchronizedPulseCurve();
+                VerifyInfiniteBeatTempos(ui);
                 Debug.Log("Greed Last audio state checks passed: master gain once, immediate mute, independent haptics, focus/pause callback order, disable/re-enable and blocked background feedback. No device audio capture was performed.");
             }
             finally
@@ -164,9 +166,27 @@ namespace GreedLast.Editor
             int before = Read<int>(ui, "rhythmBeatIndex");
             Call(ui, "Update");
             Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "A live UI update must emit one due beat, not a catch-up burst.");
+            Require(Mathf.Approximately(Pulse(ui), 1f), "The visual pulse must peak on the same UI frame as its beat event.");
+            Write(ui, "beatPhase", 100.75f);
+            Require(Mathf.Approximately(Pulse(ui), 1f), "Ambient movement phase must not shift a gameplay beat.");
+            Write(ui, "rhythmPulseStartedAt", Time.unscaledTime - 1f);
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime + 100f);
+            Write(ui, "downbeatPulseUntil", 0f);
+            Call(ui, "Update");
+            float restingScale = Read<UnityEngine.UI.Image>(ui, "beatMarker").rectTransform.localScale.x;
+            Require(Pulse(ui) == 0f, "An expired beat must not generate a periodic phantom flash.");
+            float volume = Read<float>(ui, "sfxVolume");
+            SetTransientVolume(ui, 0f);
+            Write(ui, "nextBeatSoundAt", Time.unscaledTime - 1f);
+            Call(ui, "Update");
+            Require(Mathf.Approximately(Pulse(ui), 1f)
+                && Read<UnityEngine.UI.Image>(ui, "beatMarker").rectTransform.localScale.x > restingScale,
+                "Muted sound must preserve the rendered beat pulse in the very same frame.");
+            SetTransientVolume(ui, volume);
 
             core.TogglePause(clock += 0.1f);
             ui.RenderRun(run);
+            Require(Pulse(ui) == 0f, "Opening a pause menu must immediately clear its visible beat pulse.");
             before = Read<int>(ui, "rhythmBeatIndex");
             Write(ui, "nextBeatSoundAt", Time.unscaledTime - 10f);
             Call(ui, "Update");
@@ -177,6 +197,7 @@ namespace GreedLast.Editor
             Write(ui, "choiceConfirmationCountdownBeatNotBefore", 0f);
             Call(ui, "Update");
             Require(Read<int>(ui, "rhythmBeatIndex") == 1, "A resume countdown must start at its first beat.");
+            Require(Mathf.Approximately(Pulse(ui), 1f), "Resume sound and visual pulse must restart together.");
 
             // Backgrounding can prevent any UI Update between interrupting and restarting a countdown.
             Write(ui, "rhythmBeatIndex", 3);
@@ -221,6 +242,7 @@ namespace GreedLast.Editor
             Write(ui, "nextBeatSoundAt", Time.unscaledTime - 10f);
             Call(ui, "Update");
             Require(Read<int>(ui, "rhythmBeatIndex") == before, "Lobby updates must not replay a due gameplay beat.");
+            Require(Pulse(ui) == 0f, "The lobby must not retain a gameplay pulse.");
             Debug.Log("Greed Last beat lifecycle passed: live tick -> silent pause -> resume -> interrupted countdown without UI frames -> fresh first beat -> single GO -> immediate new run -> lobby isolation.");
         }
 
@@ -276,6 +298,62 @@ namespace GreedLast.Editor
             Require(Read<int>(ui, "rhythmBeatIndex") == before + 1, "GO must not burst through missed background beats.");
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
             Debug.Log("Greed Last opening audio lifecycle passed: first count -> simulated hour in background -> fresh resume -> preserved opening -> single GO and pre-trap buffer. No real waiting or device audio capture.");
+        }
+
+        private static float Pulse(GreedLastRuntimeUi ui) => (float)typeof(GreedLastRuntimeUi)
+            .GetMethod("GetGameplayBeatPulse", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+
+        private static void VerifyInfiniteBeatTempos(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.EnterInfiniteRun();
+            core.Tick(clock + 3f);
+            core.Tick(clock + 4f);
+            Require(run.InfiniteMode && run.ActivePattern && !run.CountdownActive && !run.Stopped,
+                "Tempo checks must enter a live infinite run through the real core.");
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "Tempo check", string.Empty, 0));
+            for (int threat = 1; threat <= 5; threat++)
+            {
+                if (threat > 1) core.RaiseInfiniteThreatForTest();
+                Require(run.InfiniteThreatLevel == threat, "The tempo fixture must visit every threat exactly once.");
+                ui.RenderRun(run);
+                Write(ui, "lastCountdownBeatActive", false);
+                Write(ui, "nextBeatSoundAt", Time.unscaledTime - 10f);
+                int before = Read<int>(ui, "rhythmBeatIndex");
+                Call(ui, "Update");
+                float expectedInterval = Mathf.Lerp(0.5f, 0.36f, (threat - 1) / 4f);
+                Require(Read<int>(ui, "rhythmBeatIndex") == before + 1 && Pulse(ui) == 1f,
+                    "Each threat must issue one sound event and one simultaneous visual peak.");
+                Require(Mathf.Approximately(Read<float>(ui, "rhythmPulseInterval"), expectedInterval)
+                    && Mathf.Abs(Read<float>(ui, "nextBeatSoundAt") - Time.unscaledTime - expectedInterval) < 0.002f,
+                    "The visual envelope and next sound must use the same actual threat tempo.");
+                Call(ui, "Update");
+                Require(Read<int>(ui, "rhythmBeatIndex") == before + 1,
+                    "A slow frame must not replay the skipped beats after changing threat.");
+            }
+            core.ForceStopInfiniteRunForTest();
+            ui.RenderRun(run);
+            Require(Pulse(ui) == 0f, "An infinite result must hide its last running beat immediately.");
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            Debug.Log("Greed Last infinite tempo checks passed: five real-core threat levels, shared sound/visual intervals, one event after a late frame and stopped-result isolation.");
+        }
+
+        private static void VerifySynchronizedPulseCurve()
+        {
+            MethodInfo curve = typeof(GreedLastRuntimeUi).GetMethod("BuildSynchronizedBeatPulse", BindingFlags.Static | BindingFlags.NonPublic);
+            float At(float elapsed, float interval) => (float)curve.Invoke(null, new object[] { elapsed, interval });
+            foreach (float interval in new[] { 0.5f, 0.465f, 0.43f, 0.395f, 0.36f })
+            {
+                Require(At(0f, interval) == 1f && At(0.08f, interval) > 0f && At(0.08f, interval) < 1f,
+                    "Every normal/infinite tempo must peak on the event and decay smoothly.");
+                Require(At(interval, interval) == 0f && At(interval * 4f, interval) == 0f,
+                    "Visual beats must not repeat without a new audio-schedule event.");
+            }
+            Require(At(-0.1f, 0.5f) == 0f && At(0f, 0f) == 0f, "Future or missing beats must not light the HUD.");
+            Debug.Log("Greed Last synchronized beat visuals passed: shared event peak, same-frame marker update, independent ambient motion, muted visuals, no phantom pulses, pause/resume reset and five tempos.");
         }
 
         private static void RequireBlocked(GreedLastRuntimeUi ui, AudioSource source, string context)

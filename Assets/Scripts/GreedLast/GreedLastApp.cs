@@ -15353,6 +15353,8 @@ namespace GreedLast
         private Action<GreedLastDevShortcut> devShortcutRequested;
         private Action<GreedLastRunChannel> runChannelRequested;
         private float beatPhase;
+        private float rhythmPulseStartedAt = -1f;
+        private float rhythmPulseInterval = 0.5f;
         private float nextBeatSoundAt;
         private bool lastCountdownBeatActive;
         private bool lastCountdownWasResume;
@@ -15637,9 +15639,19 @@ namespace GreedLast
                 return;
             }
 
+            UpdateRhythmBeatSchedule();
+            if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
+            {
+                UpdateHealthDangerPips(latestRunSnapshot);
+                UpdateFocusStateTimerPips(latestRunSnapshot);
+                ApplyFocusStateGaugePulse(latestRunSnapshot,
+                    Mathf.Clamp01(latestRunSnapshot.FocusStateRemainingSeconds / FocusStateUiDurationSeconds));
+                UpdateEscapeGatePips(latestRunSnapshot, BuildRunProgressStagePulse(),
+                    BuildForwardPayoffBurstPulse(forwardPayoffBurstUntil - Time.unscaledTime, forwardPayoffBurstStrength));
+            }
             float beatSpeed = BuildBeatVisualSpeed(latestRunSnapshot);
             beatPhase += Time.unscaledDeltaTime * beatSpeed;
-            float pulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float pulse = runModeActive ? GetGameplayBeatPulse() : 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
             bool transientFeedbackActive = CanShowRunTransientFeedback();
             float missImpact = transientFeedbackActive ? BuildBeatMarkerMissImpact() : 0f;
             float focusGuardImpact = transientFeedbackActive ? BuildBeatMarkerFocusGuardImpact() : 0f;
@@ -15708,73 +15720,6 @@ namespace GreedLast
             ApplyRunHudBeatPulse(pulse, downbeatImpact);
             UpdateRunAtmosphere();
             UpdateHealthDangerEdges();
-
-            bool countdownBeatActive = runModeActive && BuildCountdownBeatActive(latestRunSnapshot);
-            bool launchReleaseStarted = ShouldStartStraightRunLaunchRelease(
-                lastCountdownBeatActive,
-                countdownBeatActive,
-                runModeActive,
-                IsLiveRunControlWindow(latestRunSnapshot));
-            if (launchReleaseStarted)
-            {
-                straightRunLaunchReleaseStartedAt = Time.unscaledTime;
-                straightRunLaunchReleaseUntil = Time.unscaledTime + StraightRunLaunchReleaseDuration;
-                straightRunLaunchReleaseWasResume = lastCountdownWasResume;
-                runEntryTrapRevealPending = ShouldQueueRunEntryTrapReveal(
-                    true,
-                    lastCountdownWasResume,
-                    latestRunSnapshot.SuccessCount,
-                    latestRunSnapshot.GoodCount,
-                    latestRunSnapshot.MissCount);
-                PlayRhythmPulse(
-                    latestRunSnapshot,
-                    BuildStraightRunLaunchCueVolume(
-                        true,
-                        lastCountdownWasResume,
-                        latestRunSnapshot.ActivePattern,
-                        latestRunSnapshot.InfiniteMode,
-                        latestRunSnapshot.InfiniteThreatLevel));
-                PlayHaptic(BuildStraightRunLaunchHapticDuration(
-                    true,
-                    lastCountdownWasResume,
-                    latestRunSnapshot.ActivePattern,
-                    latestRunSnapshot.InfiniteMode,
-                    latestRunSnapshot.InfiniteThreatLevel));
-                nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
-            }
-            if (ShouldResetCountdownBeatSchedule(lastCountdownBeatActive, countdownBeatActive))
-            {
-                nextBeatSoundAt = BuildCountdownBeatScheduleStartTime(
-                    Time.unscaledTime,
-                    choiceConfirmationCountdownBeatNotBefore);
-                rhythmBeatIndex = 0;
-            }
-
-            if (countdownBeatActive)
-            {
-                lastCountdownWasResume = latestRunSnapshot.ResumeCountdownActive;
-            }
-
-            lastCountdownBeatActive = countdownBeatActive;
-
-            if (countdownBeatActive && Time.unscaledTime >= nextBeatSoundAt)
-            {
-                nextBeatSoundAt = BuildNextBeatScheduleTime(
-                    nextBeatSoundAt,
-                    Time.unscaledTime,
-                    BuildBeatInterval(latestRunSnapshot));
-                PlayRhythmPulse(latestRunSnapshot, BuildCountdownBeatVolume(latestRunSnapshot));
-            }
-            else if (runModeActive
-                && ShouldPlayLiveBeatClick(latestRunSnapshot)
-                && Time.unscaledTime >= nextBeatSoundAt)
-            {
-                nextBeatSoundAt = BuildNextBeatScheduleTime(
-                    nextBeatSoundAt,
-                    Time.unscaledTime,
-                    BuildBeatInterval(latestRunSnapshot));
-                PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot));
-            }
 
             if (!saveSlotModeActive)
             {
@@ -16595,6 +16540,8 @@ namespace GreedLast
             lastCountdownWasResume = false;
             nextBeatSoundAt = 0f;
             rhythmBeatIndex = 0;
+            rhythmPulseStartedAt = -1f;
+            downbeatPulseUntil = 0f;
         }
 
         private void ApplyStoppedRunPresentation(GreedLastRunSnapshot snapshot)
@@ -17669,7 +17616,7 @@ namespace GreedLast
             float activationPulse = activationRemaining > 0f
                 ? Mathf.Sin(Mathf.Clamp01(activationRemaining / FocusStateActivationPulseDuration) * Mathf.PI)
                 : 0f;
-            float livePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float livePulse = GetGameplayBeatPulse();
 
             if (focusGaugeFill != null)
             {
@@ -17699,7 +17646,7 @@ namespace GreedLast
             }
 
             bool visible = ShouldShowFocusStateTimerPips(snapshot);
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float downbeatPulse = visible && ShouldShowDownbeatPulse(snapshot)
                 ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime)
                 : 0f;
@@ -17829,7 +17776,7 @@ namespace GreedLast
 
             float dangerStrength = BuildHealthDangerStrength(snapshot);
             bool visible = ShouldShowHealthDangerPips(snapshot, dangerStrength);
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float hitPulse = BuildRunGaugePulse(healthGaugePulseUntil);
             float downbeatPulse = visible && ShouldShowDownbeatPulse(snapshot)
                 ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime)
@@ -17964,7 +17911,7 @@ namespace GreedLast
                 dangerStrength = 0f;
             }
 
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float hitPulse = BuildRunGaugePulse(healthGaugePulseUntil);
             float alpha = BuildHealthDangerEdgeAlpha(dangerStrength, beatPulse, hitPulse);
             float thickness = BuildHealthDangerEdgeThickness(dangerStrength, beatPulse, hitPulse);
@@ -18312,7 +18259,7 @@ namespace GreedLast
             }
 
             bool visible = ShouldShowEscapeGatePips(snapshot);
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float downbeatPulse = visible && ShouldShowDownbeatPulse(snapshot)
                 ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime)
                 : 0f;
@@ -29017,7 +28964,7 @@ namespace GreedLast
             }
 
             float activationImpact = BuildBeatMarkerFocusGuardImpact();
-            float livePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float livePulse = GetGameplayBeatPulse();
             float urgencyPulse = BuildFocusStateUrgencyPulse(latestRunSnapshot.FocusStateRemainingSeconds, livePulse);
             float focusPulse = Mathf.Max(activationImpact, 0.32f + livePulse * 0.34f, urgencyPulse);
 
@@ -29858,8 +29805,83 @@ namespace GreedLast
                 && !snapshot.ChoiceActive;
         }
 
+        private void UpdateRhythmBeatSchedule()
+        {
+            bool countdownBeatActive = runModeActive && BuildCountdownBeatActive(latestRunSnapshot);
+            bool launchReleaseStarted = ShouldStartStraightRunLaunchRelease(
+                lastCountdownBeatActive,
+                countdownBeatActive,
+                runModeActive,
+                IsLiveRunControlWindow(latestRunSnapshot));
+            if (launchReleaseStarted)
+            {
+                straightRunLaunchReleaseStartedAt = Time.unscaledTime;
+                straightRunLaunchReleaseUntil = Time.unscaledTime + StraightRunLaunchReleaseDuration;
+                straightRunLaunchReleaseWasResume = lastCountdownWasResume;
+                runEntryTrapRevealPending = ShouldQueueRunEntryTrapReveal(
+                    true,
+                    lastCountdownWasResume,
+                    latestRunSnapshot.SuccessCount,
+                    latestRunSnapshot.GoodCount,
+                    latestRunSnapshot.MissCount);
+                PlayRhythmPulse(
+                    latestRunSnapshot,
+                    BuildStraightRunLaunchCueVolume(
+                        true,
+                        lastCountdownWasResume,
+                        latestRunSnapshot.ActivePattern,
+                        latestRunSnapshot.InfiniteMode,
+                        latestRunSnapshot.InfiniteThreatLevel));
+                PlayHaptic(BuildStraightRunLaunchHapticDuration(
+                    true,
+                    lastCountdownWasResume,
+                    latestRunSnapshot.ActivePattern,
+                    latestRunSnapshot.InfiniteMode,
+                    latestRunSnapshot.InfiniteThreatLevel));
+                nextBeatSoundAt = Time.unscaledTime + BuildBeatInterval(latestRunSnapshot);
+            }
+            if (ShouldResetCountdownBeatSchedule(lastCountdownBeatActive, countdownBeatActive))
+            {
+                nextBeatSoundAt = BuildCountdownBeatScheduleStartTime(
+                    Time.unscaledTime,
+                    choiceConfirmationCountdownBeatNotBefore);
+                rhythmBeatIndex = 0;
+            }
+            if (countdownBeatActive) lastCountdownWasResume = latestRunSnapshot.ResumeCountdownActive;
+            lastCountdownBeatActive = countdownBeatActive;
+
+            if (countdownBeatActive && Time.unscaledTime >= nextBeatSoundAt)
+            {
+                nextBeatSoundAt = BuildNextBeatScheduleTime(nextBeatSoundAt, Time.unscaledTime, BuildBeatInterval(latestRunSnapshot));
+                PlayRhythmPulse(latestRunSnapshot, BuildCountdownBeatVolume(latestRunSnapshot));
+            }
+            else if (runModeActive && ShouldPlayLiveBeatClick(latestRunSnapshot) && Time.unscaledTime >= nextBeatSoundAt)
+            {
+                nextBeatSoundAt = BuildNextBeatScheduleTime(nextBeatSoundAt, Time.unscaledTime, BuildBeatInterval(latestRunSnapshot));
+                PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot));
+            }
+        }
+
+        private float GetGameplayBeatPulse()
+        {
+            if (!runModeActive || !hasRunSnapshot || rhythmPulseStartedAt < 0f
+                || (!BuildCountdownBeatActive(latestRunSnapshot) && !ShouldPlayLiveBeatClick(latestRunSnapshot))) return 0f;
+            return BuildSynchronizedBeatPulse(Time.unscaledTime - rhythmPulseStartedAt, rhythmPulseInterval);
+        }
+
+        private static float BuildSynchronizedBeatPulse(float elapsed, float interval)
+        {
+            if (elapsed < 0f || interval <= 0f) return 0f;
+            float duration = Mathf.Min(0.18f, interval * 0.45f);
+            float remaining = 1f - Mathf.Clamp01(elapsed / duration);
+            return remaining * remaining * (3f - 2f * remaining);
+        }
+
         private void PlayRhythmPulse(GreedLastRunSnapshot snapshot, float volume)
         {
+            // Shared event timing keeps visual beats available even when sound is muted.
+            rhythmPulseStartedAt = Time.unscaledTime;
+            rhythmPulseInterval = BuildBeatInterval(snapshot);
             bool downbeat = rhythmBeatIndex % 4 == 0;
             PlayClip(beatClip, volume);
             if (BuildCountdownBeatActive(snapshot))
@@ -33710,7 +33732,7 @@ namespace GreedLast
             runnerShadow.color = new Color32(0, 0, 0, (byte)Mathf.Clamp(Mathf.RoundToInt(shadowAlpha), 0, 180));
             if (coreVisible)
             {
-                float corePulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+                float corePulse = GetGameplayBeatPulse();
                 float readyPulse = focusReadyGlow * Mathf.Lerp(0.62f, 1f, corePulse);
                 float readyDownbeatLift = BuildFocusReadyCoreDownbeatLift(
                     ShouldShowDownbeatPulse(latestRunSnapshot) ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime) : 0f,
@@ -35929,7 +35951,7 @@ namespace GreedLast
             }
 
             float exactPulse = BuildExactTimingPulse();
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float readinessPulse = BuildActiveActionCueReadinessPulse(coreNear, exactPulse, beatPulse);
             float beatCueUrgency = BuildActiveBeatCueUrgency(snapshot);
             float downbeatPulse = ShouldShowDownbeatPulse(snapshot)
@@ -36402,7 +36424,7 @@ namespace GreedLast
 
             float pulse = BuildJudgementLinePulse();
             float exactPulse = BuildExactTimingPulse();
-            float beatPulse = 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
+            float beatPulse = GetGameplayBeatPulse();
             float contactPulse = BuildJudgementLineContactStrength(
                 latestRunSnapshot.ActivePattern,
                 latestRunSnapshot.Paused || latestRunSnapshot.CountdownActive || latestRunSnapshot.Stopped || latestRunSnapshot.ChoiceActive,
@@ -42225,7 +42247,7 @@ namespace GreedLast
                     latestRunSnapshot.CoreDeltaSeconds,
                     beatInterval,
                     i);
-                float pipBeatPulse = 0.5f + Mathf.Sin((beatPhase + i * 0.11f) * Mathf.PI * 2f) * 0.5f;
+                float pipBeatPulse = GetGameplayBeatPulse();
                 float pipPulse = BuildTimingBeatPipPulse(readiness, exactPulse, pipBeatPulse, i);
                 float pipDownbeatLift = BuildTimingBeatPipDownbeatLift(downbeatPulse, readiness, i);
                 float pipExactLock = BuildTimingBeatPipExactLock(exactPulse, i);
