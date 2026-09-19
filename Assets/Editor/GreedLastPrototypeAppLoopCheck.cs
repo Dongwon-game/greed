@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -9,6 +10,57 @@ namespace GreedLast.Editor
     internal static class GreedLastPrototypeAppLoopCheck
     {
         private const string PracticeKey = "GreedLast.Onboarding.PracticeCompleted";
+        private const string PointerMenuPath = "Greed Last/Run Rendered Input Loop Check";
+        private static bool usePointerModule;
+        private static bool useTouch;
+        private static int pointerClicks;
+        private static Camera pointerCamera;
+        private static RenderTexture pointerTarget;
+        private static GreedLastRuntimeUi pointerUi;
+        private static Vector2Int pointerSize;
+        private static Vector4 pointerInsets;
+        public static int LastPointerClickCount => pointerClicks;
+        public static int LastPointerCaseCount { get; private set; }
+
+        [MenuItem(PointerMenuPath)]
+        public static void RunPointerLoop()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule,
+                "Pointer-loop checks require an isolated Edit-mode fixture.");
+            Require(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
+                "The rendered pointer loop requires a graphics device; do not use -nographics.");
+            pointerClicks = 0;
+            LastPointerCaseCount = 0;
+            usePointerModule = true;
+            try
+            {
+                RunPointerCase(false, 1280, 720, Vector4.zero);
+                RunPointerCase(true, 960, 540, new Vector4(12f, 16f, 32f, 8f));
+                RunPointerCase(true, 2340, 1080, new Vector4(120f, 36f, 24f, 18f));
+                RunPointerCase(true, 2340, 1080, new Vector4(24f, 36f, 120f, 18f));
+                RunPointerCase(true, 1024, 768, Vector4.zero);
+                Debug.Log("Greed Last full pointer loop passed: " + pointerClicks
+                    + " actual-module mouse/touch clicks in " + LastPointerCaseCount
+                    + " clean-view layouts across practice, clear, save, preparation, two-use depletion, records and confirmations. Synthetic input and isolated backend only.");
+            }
+            finally
+            {
+                usePointerModule = false;
+                useTouch = false;
+            }
+        }
+
+        [MenuItem(PointerMenuPath, true)]
+        private static bool CanRunPointerLoop() => !usePointerModule && !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        private static void RunPointerCase(bool touch, int width, int height, Vector4 insets)
+        {
+            useTouch = touch;
+            pointerSize = new Vector2Int(width, height);
+            pointerInsets = insets;
+            Run();
+            LastPointerCaseCount++;
+        }
 
         public static void Run()
         {
@@ -27,6 +79,12 @@ namespace GreedLast.Editor
                 GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
                 GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui);
                 canvasRoot = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
+                if (usePointerModule)
+                {
+                    pointerUi = ui;
+                    CreatePointerViewport(canvasRoot.GetComponent<Canvas>());
+                    ui.ToggleDevCleanView();
+                }
                 var gate = new GreedLastRequestGate();
                 var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                 var state = new GreedLastStateMachine(gate);
@@ -168,6 +226,7 @@ namespace GreedLast.Editor
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
+                VerifyGameplayLaneOutcomes(app, ui, backend, state, core, () => run);
                 VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
                 Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations.");
             }
@@ -177,6 +236,16 @@ namespace GreedLast.Editor
                 else PlayerPrefs.DeleteKey(PracticeKey);
                 PlayerPrefs.Save();
                 GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                if (pointerCamera != null) pointerCamera.targetTexture = null;
+                if (pointerTarget != null)
+                {
+                    pointerTarget.Release();
+                    UnityEngine.Object.DestroyImmediate(pointerTarget);
+                }
+                if (pointerCamera != null) UnityEngine.Object.DestroyImmediate(pointerCamera.gameObject);
+                pointerCamera = null;
+                pointerTarget = null;
+                pointerUi = null;
                 UnityEngine.Object.DestroyImmediate(host);
                 if (canvasRoot != null) UnityEngine.Object.DestroyImmediate(canvasRoot);
                 DestroyCreated("GreedLastCamera", existingCamera);
@@ -188,6 +257,27 @@ namespace GreedLast.Editor
         {
             // Advance only the input guard, not wall time or the user's saved profile.
             Write(app, "infinitePreparationInputBlockUntil", 0f);
+        }
+
+        private static void CreatePointerViewport(Canvas canvas)
+        {
+            pointerCamera = new GameObject("GreedPointerLoopCamera", typeof(Camera)).GetComponent<Camera>();
+            pointerCamera.orthographic = true;
+            pointerCamera.orthographicSize = 5f;
+            pointerCamera.transform.position = new Vector3(0f, 0f, -10f);
+            pointerCamera.clearFlags = CameraClearFlags.SolidColor;
+            pointerCamera.enabled = false;
+            pointerTarget = new RenderTexture(pointerSize.x, pointerSize.y, 24, RenderTextureFormat.ARGB32);
+            pointerTarget.Create();
+            pointerCamera.targetTexture = pointerTarget;
+            canvas.GetComponent<CanvasScaler>().enabled = false;
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = pointerCamera;
+            canvas.scaleFactor = pointerSize.y / 1920f;
+            RectTransform rect = canvas.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(1920f * pointerSize.x / pointerSize.y, 1920f);
+            rect.position = Vector3.zero;
+            rect.localScale = Vector3.one * (10f / 1920f);
         }
 
         private static void FinishSaveConfirmation(GreedLastApp app)
@@ -392,6 +482,58 @@ namespace GreedLast.Editor
             Debug.Log("Greed Last app pause lifecycle passed: background audio in both callback orders -> paused input isolation -> real-button first beat -> interrupted countdown reset -> single GO -> lead-in buffer -> lobby with saved slots intact.");
         }
 
+        private static void VerifyGameplayLaneOutcomes(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
+            Click(ui, "practiceRunButton");
+            Write(core, "startCountdownEndsAt", 0f);
+            core.Tick(Time.realtimeSinceStartup);
+            var expected = new[] { GreedLastJudgementResult.Success, GreedLastJudgementResult.Good, GreedLastJudgementResult.Miss };
+            for (int step = 0; step < expected.Length; step++)
+            {
+                if (!latest().ActivePattern) core.RequestNextPattern(Time.realtimeSinceStartup);
+                GreedLastRunSnapshot before = latest();
+                Require(before.ActivePattern && !before.Stopped, "Gameplay input checks need a live practice trap.");
+                int lane = (int)before.Pattern.Channel - 1;
+                if (step == 2) lane = (lane + 1) % 3;
+                float delta = step == 1
+                    ? -(before.Pattern.SuccessWindowSeconds + before.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                Click(Read<Button[]>(ui, "laneButtons")[lane], () =>
+                {
+                    // Place the isolated trap at its test timestamp, after rendering but before module input.
+                    Write(core, "patternStartedAt", Time.realtimeSinceStartup + core.InputTimingOffsetSeconds
+                        - before.Pattern.CoreSeconds - delta);
+                    Write(app, "runEntryLaneInputBlockUntil", 0f);
+                    Write(app, "runChoiceInputBlockUntil", 0f);
+                    Method(app, "ResetRunLaneInputGuard").Invoke(app, null);
+                });
+                GreedLastRunSnapshot after = latest();
+                Require(after.LastResult == expected[step],
+                    "The visible lane must route through the app to its expected judgement: " + expected[step]);
+                Require(after.SuccessCount + after.GoodCount + after.MissCount
+                    == before.SuccessCount + before.GoodCount + before.MissCount + 1,
+                    "Pointer down and release must resolve a gameplay trap exactly once.");
+                Require(step == 2 ? after.Health < before.Health : after.Health == before.Health,
+                    "Correct and Good lane input must preserve health; wrong-lane input must apply damage.");
+                Require(step == 2 || after.Score > before.Score,
+                    "A successful real lane callback must also grant its score reward.");
+                foreach (bool held in Read<bool[]>(ui, "laneHoldActive"))
+                    Require(!held, "Resolved lane release must not leave a pressed highlight behind.");
+            }
+            Require(latest().Stopped && latest().PracticeMode
+                && latest().SuccessCount == 1 && latest().GoodCount == 1 && latest().MissCount == 1,
+                "Three real gameplay inputs must finish the practice with one of each judgement.");
+            Click(ui, "returnLobbyButton");
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                "A mixed practice result must return without creating a save candidate.");
+            for (int slot = 0; slot < savedLabels.Length; slot++)
+                Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
+                    "Gameplay pointer checks must not consume a saved loadout.");
+            Debug.Log("Greed Last gameplay lane loop passed: actual app routing -> exact, Good and wrong lane -> one judgement per press/release -> score, damage, released highlights and saved-slot isolation. Trap timestamps are synthetic.");
+        }
+
         private static void VerifyRotationDragLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
             GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
             Func<GreedLastRunSnapshot> latest)
@@ -506,10 +648,32 @@ namespace GreedLast.Editor
         }
 
         private static void Click(GreedLastRuntimeUi ui, string field) => Click(Read<Button>(ui, field));
-        private static void Click(Button button)
+        private static void Click(Button button, Action beforePress = null)
         {
             Require(button.gameObject.activeInHierarchy && button.IsInteractable(), "The callback target must be visible and enabled: " + button.name);
+            if (usePointerModule)
+            {
+                Method(pointerUi, "ApplySafeAreaSample").Invoke(pointerUi, new object[]
+                {
+                    new Rect(pointerInsets.x, pointerInsets.y,
+                        pointerSize.x - pointerInsets.x - pointerInsets.z,
+                        pointerSize.y - pointerInsets.y - pointerInsets.w),
+                    pointerSize.x, pointerSize.y, false,
+                });
+                Canvas.ForceUpdateCanvases();
+                foreach (Graphic graphic in button.GetComponentInParent<Canvas>().GetComponentsInChildren<Graphic>())
+                {
+                    graphic.SetAllDirty();
+                    graphic.Rebuild(CanvasUpdate.PreRender);
+                }
+                pointerCamera.Render();
+                EventSystem system = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+                GreedLastPrototypeKeyboardCheck.ClickOnce(system, button, useTouch, beforePress);
+                pointerClicks++;
+                return;
+            }
             var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+            beforePress?.Invoke();
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerUpHandler);
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);

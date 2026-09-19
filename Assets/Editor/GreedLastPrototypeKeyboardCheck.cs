@@ -61,6 +61,33 @@ namespace GreedLast.Editor
             }
         }
 
+        internal static void ClickOnce(EventSystem system, Button button, bool touch, Action beforePress = null)
+        {
+            Canvas canvas = button.GetComponentInParent<Canvas>();
+            Canvas.ForceUpdateCanvases();
+            Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            Vector2 point = RectTransformUtility.WorldToScreenPoint(camera, button.transform.position);
+            WithPointerInput(system, button.gameObject, point, (input, module) =>
+            {
+                beforePress?.Invoke();
+                if (touch)
+                {
+                    TouchFrame(input, module, TouchAt(71, point, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(71, point, TouchPhase.Ended));
+                }
+                else
+                {
+                    input.MouseEnabled = true;
+                    input.MousePosition = point;
+                    input.MouseDown = input.MouseHeld = true;
+                    module.Process();
+                    input.MouseDown = input.MouseHeld = false;
+                    input.MouseUp = true;
+                    module.Process();
+                }
+            });
+        }
+
         internal static void VerifyActionClick(GreedLastRuntimeUi ui, EventSystem system, Button button, Vector2 screenPoint)
         {
             int clicks = 0;
@@ -293,7 +320,8 @@ namespace GreedLast.Editor
                 system.RaycastAll(new PointerEventData(system) { position = screenPoint }, hits);
                 Require(hits.Count > 0 && (hits[0].gameObject == control
                     || hits[0].gameObject.transform.IsChildOf(control.transform)),
-                    "The input module's raycast must reach its control: " + control.name);
+                    "The input module's raycast must reach its control: " + control.name
+                    + " at " + screenPoint + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
                 check(input, module);
             }
             finally
