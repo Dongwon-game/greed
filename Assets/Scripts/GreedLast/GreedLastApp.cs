@@ -10317,6 +10317,7 @@ namespace GreedLast
         private GreedLastLobbySnapshot lobbySnapshot;
         private string currentDetail = string.Empty;
         private int recordBoardPageIndex = -1;
+        private bool coreActionsAllowed;
 
         public GreedLastStateMachine(GreedLastRequestGate requestGate)
         {
@@ -10327,6 +10328,7 @@ namespace GreedLast
 
         public GreedLastScreenState CurrentState { get; private set; }
         public GreedLastConnectBlockReason BlockReason { get; private set; }
+        public bool CoreActionsEnabled => coreActionsAllowed && !requestGate.Busy;
 
         public GreedLastLobbySnapshot LobbySnapshot => lobbySnapshot;
         public string CurrentDetail => currentDetail;
@@ -10367,15 +10369,27 @@ namespace GreedLast
             Publish("피라미드 입구", snapshot.Message, coreActionsEnabled: true, retryVisible: false);
         }
 
-        public void SetReSyncPending(string message, bool coreActionsEnabled)
+        public void SetLobbySyncWarning(GreedLastLobbySnapshot snapshot)
+        {
+            lobbySnapshot = snapshot;
+            SetReSyncPending(snapshot.Message, coreActionsEnabled: true);
+        }
+
+        public void SetReSyncPending(string message, bool coreActionsEnabled,
+            GreedLastConnectBlockReason blockReason = GreedLastConnectBlockReason.None)
         {
             CurrentState = GreedLastScreenState.ReSyncPending;
-            Publish("재동기화 필요", message, coreActionsEnabled, retryVisible: true);
+            BlockReason = blockReason;
+            Publish(coreActionsEnabled ? "입구 정보 확인" : "재동기화 필요", message, coreActionsEnabled, retryVisible: true);
         }
 
         public void ShowLocalNotice(string message)
         {
-            Publish("피라미드 입구", message, CurrentState == GreedLastScreenState.LobbyReady, retryVisible: false);
+            bool resyncPending = CurrentState == GreedLastScreenState.ReSyncPending;
+            string headline = resyncPending
+                ? (coreActionsAllowed ? "입구 정보 확인" : "재동기화 필요")
+                : "피라미드 입구";
+            Publish(headline, message, coreActionsAllowed, retryVisible: resyncPending);
         }
 
         public void SetRunCoreTest()
@@ -10595,6 +10609,7 @@ namespace GreedLast
             bool saveLoadoutCandidateAvailable = false)
         {
             currentDetail = detail ?? string.Empty;
+            coreActionsAllowed = coreActionsEnabled;
             bool effectiveSaveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable
                 || lobbySnapshot.SaveLoadoutCandidateAvailable;
             StateChanged?.Invoke(new GreedLastStateSnapshot(
@@ -10603,7 +10618,7 @@ namespace GreedLast
                 headline,
                 detail,
                 requestGate.Busy,
-                coreActionsEnabled && !requestGate.Busy,
+                CoreActionsEnabled,
                 lobbySnapshot.FirstSaveCompleted,
                 lobbySnapshot.SaveLoadoutUnlocked,
                 lobbySnapshot.InfiniteUnlocked,
@@ -12432,7 +12447,7 @@ namespace GreedLast
 
             if (snapshot.AuxiliaryWarning)
             {
-                stateMachine.SetReSyncPending(snapshot.Message, coreActionsEnabled: true);
+                stateMachine.SetLobbySyncWarning(snapshot);
             }
             else
             {
@@ -12473,7 +12488,7 @@ namespace GreedLast
                 if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady
                     || stateMachine.CurrentState == GreedLastScreenState.ReSyncPending)
                 {
-                    stateMachine.SetReSyncPending(connectResult.Message, coreActionsEnabled: false);
+                    stateMachine.SetReSyncPending(connectResult.Message, coreActionsEnabled: false, blockReason: connectResult.Reason);
                 }
                 else
                 {
@@ -12485,7 +12500,14 @@ namespace GreedLast
 
             GreedLastLobbySnapshot snapshot = backend.ReSyncLobby();
             requestGate.Complete(token);
-            stateMachine.SetLobbyReady(snapshot);
+            if (snapshot.AuxiliaryWarning)
+            {
+                stateMachine.SetLobbySyncWarning(snapshot);
+            }
+            else
+            {
+                stateMachine.SetLobbyReady(snapshot);
+            }
         }
 
         private void RequestNormalRun()
@@ -12940,8 +12962,9 @@ namespace GreedLast
 
         private bool TryBeginLobbyAction(out GreedLastRequestToken token)
         {
-            if (stateMachine.CurrentState != GreedLastScreenState.LobbyReady
-                && stateMachine.CurrentState != GreedLastScreenState.ReSyncPending)
+            if (!stateMachine.CoreActionsEnabled
+                || (stateMachine.CurrentState != GreedLastScreenState.LobbyReady
+                    && stateMachine.CurrentState != GreedLastScreenState.ReSyncPending))
             {
                 token = default;
                 return false;
@@ -12959,7 +12982,8 @@ namespace GreedLast
             }
             else
             {
-                stateMachine.SetReSyncPending("개발 확인용으로 네트워크 OFF 상태가 되었습니다.", coreActionsEnabled: false);
+                stateMachine.SetReSyncPending("개발 확인용으로 네트워크 OFF 상태가 되었습니다.", coreActionsEnabled: false,
+                    blockReason: GreedLastConnectBlockReason.NetworkUnavailable);
             }
         }
 
@@ -23905,6 +23929,10 @@ namespace GreedLast
 
             if (snapshot.State == GreedLastScreenState.ReSyncPending)
             {
+                if (snapshot.CoreActionsEnabled)
+                {
+                    return ShouldHideLobbyDetail(snapshot.Detail) ? "일부 정보 갱신 대기" : snapshot.Detail;
+                }
                 return snapshot.Detail
                     + "\n\n핵심 버튼은 최신 상태 확인 뒤 다시 열립니다.";
             }

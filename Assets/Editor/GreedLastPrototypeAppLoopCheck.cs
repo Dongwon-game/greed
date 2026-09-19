@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -113,7 +115,7 @@ namespace GreedLast.Editor
                 GreedLastRunSnapshot run = default;
                 core.SnapshotChanged += value => run = value;
                 PlayerPrefs.SetInt(PracticeKey, 0);
-                state.SetLobbyReady(backend.LoadLobby());
+                VerifyBootAndReconnect(app, ui, backend, state, gate);
 
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
@@ -145,6 +147,7 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
                     && saved.SaveSlotOccupied[2] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[1],
                     "The actual S3 button and confirmation must consume the candidate only into S3.");
+                VerifyBootAndReconnect(app, ui, backend, state, gate);
 
                 for (int use = 0; use < 2; use++)
                 {
@@ -251,6 +254,144 @@ namespace GreedLast.Editor
                 DestroyCreated("GreedLastCamera", existingCamera);
                 DestroyCreated("GreedLastEventSystem", existingEvents);
             }
+        }
+
+        private static void VerifyBootAndReconnect(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRequestGate gate)
+        {
+            GreedLastLobbySnapshot original = backend.LoadLobby();
+            var visited = new List<GreedLastScreenState>();
+            Action<GreedLastStateSnapshot> observe = snapshot => visited.Add(snapshot.State);
+            state.StateChanged += observe;
+            try
+            {
+                AdvanceRoutine(app, "BootThenConnect", () =>
+                {
+                    Require(gate.Busy, "Every boot wait must retain its request token.");
+                    AssertLobbyCommandsLocked(app, ui, state, gate);
+                    IEnumerator duplicate = (IEnumerator)Method(app, "BootThenConnect").Invoke(app, null);
+                    Require(!duplicate.MoveNext(), "A second boot must not replace an active request.");
+                });
+                Require(visited.Count == 4 && visited[0] == GreedLastScreenState.BootInit
+                    && visited[1] == GreedLastScreenState.ConnectChecking
+                    && visited[2] == GreedLastScreenState.LobbyLoading
+                    && visited[3] == GreedLastScreenState.LobbyReady && !gate.Busy,
+                    "The real boot routines must visit title, connection, lobby loading and ready exactly once.");
+                string[] fields = { "online", "maintenance", "versionMatched", "sessionValid" };
+                var reasons = new[] { GreedLastConnectBlockReason.NetworkUnavailable, GreedLastConnectBlockReason.Maintenance,
+                    GreedLastConnectBlockReason.VersionMismatch, GreedLastConnectBlockReason.SessionInvalid };
+                for (int test = 0; test < fields.Length; test++)
+                {
+                    bool healthy = fields[test] != "maintenance";
+                    Write(backend, fields[test], !healthy);
+                    try
+                    {
+                        AdvanceRoutine(app, "ConnectThenLoadLobby");
+                        Require(state.CurrentState == GreedLastScreenState.ConnectBlocked && state.BlockReason == reasons[test]
+                            && !gate.Busy && Read<Button>(ui, "retryButton").IsInteractable(),
+                            "A failed connection must release its token and offer a retry: " + reasons[test]);
+                        AssertLobbyCommandsLocked(app, ui, state, gate);
+                        state.ShowLocalNotice("연결 상태를 다시 확인해야 합니다.");
+                        Require(!state.CoreActionsEnabled && Read<Button>(ui, "retryButton").gameObject.activeSelf,
+                            "A notice must preserve a blocked lobby and its retry route.");
+                        if (test == 1)
+                        {
+                            Write(backend, "online", false);
+                            try
+                            {
+                                AdvanceRoutine(app, "RetrySyncRoutine");
+                                Require(state.BlockReason == GreedLastConnectBlockReason.NetworkUnavailable,
+                                    "A new retry failure must replace the earlier maintenance reason.");
+                            }
+                            finally { Write(backend, "online", true); }
+                        }
+                        AdvanceRoutine(app, "RetrySyncRoutine");
+                        Require(state.CurrentState == GreedLastScreenState.ReSyncPending && !gate.Busy
+                            && state.BlockReason == reasons[test],
+                            "A failed retry must remain blocked without leaking its request token.");
+                        AssertLobbyCommandsLocked(app, ui, state, gate);
+                    }
+                    finally { Write(backend, fields[test], healthy); }
+                    AdvanceRoutine(app, "RetrySyncRoutine", () => AssertLobbyCommandsLocked(app, ui, state, gate));
+                    Require(state.CurrentState == GreedLastScreenState.LobbyReady && !gate.Busy
+                        && state.BlockReason == GreedLastConnectBlockReason.None,
+                        "Recovery must reopen the lobby without the earlier connection block.");
+                }
+
+                // A warning must carry the freshly loaded slots, not the previous screen's cache.
+                state.SetLobbyReady(new GreedLastMockBackend(false, false).LoadLobby());
+                Write(backend, "auxiliaryWarning", true);
+                try
+                {
+                    AdvanceRoutine(app, "LoadLobby");
+                    Require(state.CurrentState == GreedLastScreenState.ReSyncPending && !gate.Busy
+                        && Read<Button>(ui, "normalRunButton").IsInteractable(),
+                        "An auxiliary-only warning must keep the loaded lobby usable.");
+                    Require(state.LobbySnapshot.SaveSlotOccupied.Length == original.SaveSlotOccupied.Length,
+                        "A warning lobby must retain its loaded slot snapshot.");
+                    for (int slot = 0; slot < original.SaveSlotOccupied.Length; slot++)
+                        Require(state.LobbySnapshot.SaveSlotOccupied[slot] == original.SaveSlotOccupied[slot]
+                            && state.LobbySnapshot.SaveSlotLabels[slot] == original.SaveSlotLabels[slot],
+                            "An auxiliary warning must not replace a loaded saved slot with stale lobby data.");
+                    AdvanceRoutine(app, "RetrySyncRoutine", () => AssertLobbyCommandsLocked(app, ui, state, gate));
+                    Require(state.CurrentState == GreedLastScreenState.ReSyncPending && state.CoreActionsEnabled
+                        && state.BlockReason == GreedLastConnectBlockReason.None,
+                        "A repeated auxiliary warning must preserve usable data without retaining an old connection error.");
+                    Require(gate.TryBegin(GreedLastRequestKind.LobbyAction, out GreedLastRequestToken warningToken),
+                        "The warning-only lobby must permit a fresh action after the request ends.");
+                    Require(!state.CoreActionsEnabled, "The action lock must also reflect a newly active request.");
+                    gate.Complete(warningToken);
+                    Require(state.CoreActionsEnabled, "Completing an action must restore the warning lobby's allowed state.");
+                    state.ShowLocalNotice("저장 정보 확인 완료");
+                    Require(state.CoreActionsEnabled && Read<Button>(ui, "normalRunButton").IsInteractable()
+                        && Read<Button>(ui, "retryButton").gameObject.activeSelf,
+                        "A local notice must preserve a usable warning lobby and its retry option.");
+                    string body = Read<Text>(ui, "detailText").text;
+                    Require(!body.Contains("다시 열립니다"), "A usable warning must not claim its active commands are locked.");
+                }
+                finally { Write(backend, "auxiliaryWarning", false); }
+                AdvanceRoutine(app, "RetrySyncRoutine");
+                for (int slot = 0; slot < original.SaveSlotLabels.Length; slot++)
+                    Require(backend.LoadLobby().SaveSlotLabels[slot] == original.SaveSlotLabels[slot],
+                        "Boot failures and retries must not consume or change a saved loadout.");
+                Debug.Log("Greed Last boot/reconnect checks passed: ordered boot, duplicate request lock, four simulated failure reasons, locked app commands, fresh warning snapshot and preserved saved slots. Coroutine waits are advanced without real network traffic.");
+            }
+            finally { state.StateChanged -= observe; }
+        }
+
+        private static void AssertLobbyCommandsLocked(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastStateMachine state, GreedLastRequestGate gate)
+        {
+            GreedLastScreenState before = state.CurrentState;
+            int requestId = gate.ActiveRequestId;
+            Require(!Read<Button>(ui, "normalRunButton").IsInteractable(), "A blocked/loading lobby must disable its normal-run button.");
+            foreach (string command in new[] { "RequestPracticeRun", "RequestNormalRun", "RequestSaveLoadout",
+                "RequestInfiniteRun", "RequestInfiniteRecordBoard", "RequestGrowthBoard", "RequestProfileBoard" })
+            {
+                Method(app, command).Invoke(app, null);
+                Require(state.CurrentState == before && gate.ActiveRequestId == requestId,
+                    "A blocked/loading lobby must also reject the app command, not only disable its button: " + command);
+            }
+        }
+
+        private static void AdvanceRoutine(GreedLastApp app, string name, Action atWait = null)
+        {
+            int steps = 0;
+            void Drain(IEnumerator routine)
+            {
+                try
+                {
+                    while (routine.MoveNext())
+                    {
+                        Require(++steps <= 24, "Boot/retry fixture exceeded its bounded coroutine steps.");
+                        if (routine.Current is WaitForSecondsRealtime) atWait?.Invoke();
+                        else if (routine.Current is IEnumerator child) Drain(child);
+                        else throw new InvalidOperationException("Unexpected boot/retry yield type.");
+                    }
+                }
+                finally { (routine as IDisposable)?.Dispose(); }
+            }
+            Drain((IEnumerator)Method(app, name).Invoke(app, null));
         }
 
         private static void FinishPreparationTransition(GreedLastApp app)

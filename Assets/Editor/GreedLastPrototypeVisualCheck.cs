@@ -180,6 +180,7 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("60-lobby", () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
                 AddRetainedViewportFrames("61-choice", () => ShowRun(choice));
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
+                AddConnectionFrames();
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -271,6 +272,52 @@ namespace GreedLast.Editor
         private static void ShowScreen(GreedLastScreenState state, string title)
         {
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(state, title, string.Empty, 0));
+        }
+
+        private static void AddConnectionFrames()
+        {
+            var gate = new GreedLastRequestGate();
+            var state = new GreedLastStateMachine(gate);
+            var backend = new GreedLastMockBackend(false, false);
+            backend.AddSampleSaveLoadoutForTest(out _);
+            GreedLastStateSnapshot snapshot = default;
+            state.StateChanged += value => snapshot = value;
+            void Capture(string name, int width, int height, float safeInset = 0f)
+            {
+                GreedLastStateSnapshot frame = snapshot;
+                Add(name, width, height, () =>
+                {
+                    ui.Render(frame);
+                    Require(Read<Button>("normalRunButton").IsInteractable() == frame.CoreActionsEnabled,
+                        name + ": connection state and normal-run interaction must agree.");
+                    Require(Read<Button>("retryButton").gameObject.activeSelf
+                        == (frame.RetryVisible || frame.State == GreedLastScreenState.ConnectBlocked),
+                        name + ": retry visibility must match the current request state.");
+                }, safeInset);
+            }
+            state.SetLobbyReady(backend.LoadLobby());
+            Require(gate.TryBegin(GreedLastRequestKind.ConnectCheck, out GreedLastRequestToken token),
+                "Connection captures need their actual request gate.");
+            state.SetConnectChecking();
+            Capture("67-connect-loading", 1280, 720);
+            gate.Complete(token);
+            state.SetConnectBlocked(GreedLastConnectBlockReason.NetworkUnavailable, "네트워크 연결을 확인할 수 없습니다.");
+            Capture("68-connect-blocked-small", 960, 540);
+            state.SetReSyncPending("네트워크 연결을 확인할 수 없습니다.", false, GreedLastConnectBlockReason.NetworkUnavailable);
+            Capture("69-resync-blocked-tablet", 1024, 768);
+            Require(gate.TryBegin(GreedLastRequestKind.ReSync, out token), "Retry capture needs an active request.");
+            state.SetReSyncPending("최신 로비 상태를 다시 확인하고 있습니다.", false);
+            Capture("70-resync-busy-wide", 2340, 1080, 96f);
+            gate.Complete(token);
+            state.SetLobbySyncWarning(backend.LoadLobby());
+            Capture("71-resync-warning-small", 960, 540);
+            state.ShowLocalNotice("저장 정보 확인 완료");
+            Capture("71-warning-notice-tablet", 1024, 768);
+            state.SetReSyncPending("네트워크 연결을 확인할 수 없습니다.", false, GreedLastConnectBlockReason.NetworkUnavailable);
+            state.ShowLocalNotice("연결 상태를 다시 확인해야 합니다.");
+            Capture("71-blocked-notice-small", 960, 540);
+            state.SetLobbyReady(backend.LoadLobby());
+            Capture("72-recovered-lobby", 1280, 720);
         }
 
         private static void AddCombinedFeedbackFrames()
@@ -861,7 +908,7 @@ namespace GreedLast.Editor
             // Only callback-only commands are clicked; settings buttons persist preferences directly.
             int count = 0;
             foreach (string field in new[] { "nextPatternButton", "returnLobbyButton", "normalRunButton", "practiceRunButton",
-                "saveLoadoutButton", "infiniteButton", "infiniteRecordButton" })
+                "saveLoadoutButton", "infiniteButton", "infiniteRecordButton", "retryButton" })
             {
                 Button button = Read<Button>(field);
                 if (!button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
