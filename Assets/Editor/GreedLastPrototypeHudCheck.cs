@@ -7,6 +7,81 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeHudCheck
     {
+        internal static void VerifyRunTransitions(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            void Draw()
+            {
+                ui.RenderRun(run);
+                Canvas.ForceUpdateCanvases();
+                Call(ui, "Update");
+            }
+            bool Visible(Graphic graphic) => graphic != null && graphic.isActiveAndEnabled && graphic.color.a >= 0.01f;
+            void RequireHidden(string context)
+            {
+                Require(!Visible(Read<Image>(ui, "runnerPreparationCue"))
+                    && !Visible(Read<Text>(ui, "runnerPreparationSymbolText")), context + " must hide preparation cues.");
+                foreach (Image pip in Read<Image[]>(ui, "runnerFootfallPips"))
+                    Require(!Visible(pip), context + " must hide running footfall cues.");
+            }
+            void BeginLive()
+            {
+                core.Enter();
+                core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock += 3f);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "HUD transition", string.Empty, 0));
+                Draw();
+                Require(run.ActivePattern && !run.Paused && !run.Stopped, "The transition fixture must restore a live trap.");
+                bool hasFootfall = false;
+                foreach (Image pip in Read<Image[]>(ui, "runnerFootfallPips")) hasFootfall |= Visible(pip);
+                Require(hasFootfall, "Fresh live runs must restore visible footfall cues.");
+            }
+
+            BeginLive();
+            for (int cycle = 0; cycle < 2; cycle++)
+            {
+                core.TogglePause(clock += 0.1f);
+                Draw();
+                Require(run.Paused, "Pause transitions must reach the real paused core state.");
+                RequireHidden("Pause");
+                core.TogglePause(clock += 0.1f);
+                Draw();
+                Require(run.ResumeCountdownActive, "Resume transitions must pass through the countdown.");
+                RequireHidden("Resume countdown");
+                core.Tick(clock += 2f);
+                Draw();
+                Require(!run.Paused && !run.CountdownActive, "The resume countdown must release live play.");
+            }
+            core.JumpToDevShortcut(GreedLastDevShortcut.GiftChoice, clock += 1f);
+            Draw();
+            Require(run.ChoiceActive, "Choice transitions must reach a real gift selection.");
+            RequireHidden("Gift choice");
+            BeginLive();
+            core.EnterInfiniteRun();
+            core.Tick(clock = Time.realtimeSinceStartup + 3f);
+            core.Tick(clock += 1f);
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "HUD infinite", string.Empty, 0));
+            Draw();
+            core.ForceStopInfiniteRunForTest();
+            Draw();
+            Require(run.Stopped, "Result transitions must reach a stopped core state.");
+            RequireHidden("Infinite result");
+            foreach (GreedLastScreenState state in new[] { GreedLastScreenState.LobbyReady, GreedLastScreenState.SaveLoadoutDraft, GreedLastScreenState.InfiniteRecordBoard })
+            {
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(state, "HUD menu", string.Empty, 0));
+                Call(ui, "Update");
+                RequireHidden(state.ToString());
+            }
+            BeginLive();
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            Call(ui, "Update");
+            Debug.Log("Greed Last HUD transitions passed: repeated pause/countdown/GO, choice, fresh run, infinite result, lobby, save and record screens hide/restore their own runner cues.");
+        }
+
         internal static void Run()
         {
             var host = new GameObject("GreedHudClearanceCheck", typeof(RectTransform));
@@ -110,6 +185,10 @@ namespace GreedLast.Editor
 
         private static void Set(GreedLastRuntimeUi ui, string name, object value)
             => typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(ui, value);
+        private static T Read<T>(GreedLastRuntimeUi ui, string name)
+            => (T)typeof(GreedLastRuntimeUi).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+        private static void Call(GreedLastRuntimeUi ui, string name)
+            => typeof(GreedLastRuntimeUi).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);

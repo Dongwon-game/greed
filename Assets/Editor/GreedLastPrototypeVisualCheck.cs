@@ -45,6 +45,7 @@ namespace GreedLast.Editor
             public int width;
             public int height;
             public float safeInset;
+            public Vector4 safeInsets;
             public int checkedButtons;
             public int checkedModuleClicks;
             public int checkedModuleLaneInputs;
@@ -64,6 +65,7 @@ namespace GreedLast.Editor
             public int Width;
             public int Height;
             public float SafeInset;
+            public Vector4 SafeInsets;
             public double SettleSeconds = 0.5;
             public Action Show;
             public Action BeforeUpdate;
@@ -160,6 +162,12 @@ namespace GreedLast.Editor
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
+                Add("54-live-notch-left", 2340, 1080, () => ShowRun(live), safeInsets: new Vector4(120f, 36f, 24f, 18f));
+                Add("55-live-notch-right", 2340, 1080, () => ShowRun(live), safeInsets: new Vector4(24f, 36f, 120f, 18f));
+                Add("56-pause-notch-left", 2340, 1080, () => ShowRun(paused), safeInsets: new Vector4(120f, 36f, 24f, 18f));
+                Add("57-resume-notch-right", 2340, 1080, () => ShowRun(resume), safeInsets: new Vector4(24f, 36f, 120f, 18f));
+                Add("58-choice-safe-small", 960, 540, () => ShowRun(choice), safeInsets: new Vector4(32f, 16f, 12f, 8f));
+                Add("59-pause-safe-small", 960, 540, () => ShowRun(paused), safeInsets: new Vector4(12f, 16f, 32f, 8f));
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -176,9 +184,11 @@ namespace GreedLast.Editor
         [MenuItem(MenuPath, true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
-        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null)
+        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null, Vector4? safeInsets = null)
         {
-            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset, SettleSeconds = settleSeconds, BeforeUpdate = beforeUpdate });
+            Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset,
+                SafeInsets = safeInsets ?? new Vector4(safeInset, 0f, safeInset, 0f),
+                SettleSeconds = settleSeconds, BeforeUpdate = beforeUpdate });
         }
 
         private static void AddBeatPulseFrames(GreedLastRunSnapshot live, GreedLastRunSnapshot resume)
@@ -587,6 +597,8 @@ namespace GreedLast.Editor
             canvasRect.rotation = Quaternion.identity;
             canvasRect.localScale = Vector3.one * (10f / 1920f);
             currentFrame.Show();
+            ApplyCaptureSafeArea();
+            Canvas.ForceUpdateCanvases();
             frameStartedAt = EditorApplication.timeSinceStartup;
         }
 
@@ -626,13 +638,22 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void ApplyCaptureSafeArea()
+        {
+            RectTransform root = Read<RectTransform>("rootPanelRect");
+            Vector4 inset = currentFrame.SafeInsets; // Left, bottom, right, top in output pixels.
+            Require(inset.x >= 0f && inset.y >= 0f && inset.z >= 0f && inset.w >= 0f
+                && inset.x + inset.z < currentFrame.Width && inset.y + inset.w < currentFrame.Height,
+                "Capture safe area must leave a positive visible region.");
+            root.anchorMin = new Vector2(inset.x / currentFrame.Width, inset.y / currentFrame.Height);
+            root.anchorMax = new Vector2(1f - inset.z / currentFrame.Width, 1f - inset.w / currentFrame.Height);
+            root.offsetMin = root.offsetMax = Vector2.zero;
+        }
+
         private static void CaptureFrame()
         {
             RectTransform root = Read<RectTransform>("rootPanelRect");
-            float inset = currentFrame.SafeInset / currentFrame.Width;
-            root.anchorMin = new Vector2(inset, 0);
-            root.anchorMax = new Vector2(1f - inset, 1f);
-            root.offsetMin = root.offsetMax = Vector2.zero;
+            ApplyCaptureSafeArea();
             Canvas.ForceUpdateCanvases();
             foreach (Graphic graphic in canvas.GetComponentsInChildren<Graphic>())
             {
@@ -685,6 +706,7 @@ namespace GreedLast.Editor
                     width = target.width,
                     height = target.height,
                     safeInset = currentFrame.SafeInset,
+                    safeInsets = currentFrame.SafeInsets,
                     checkedButtons = checkedButtons,
                     checkedModuleClicks = checkedModuleClicks,
                     checkedModuleLaneInputs = checkedModuleLaneInputs,
@@ -752,6 +774,7 @@ namespace GreedLast.Editor
             {
                 if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 RectTransform rect = button.GetComponent<RectTransform>();
+                VerifyControlSafeBounds(rect);
                 Vector2[] samples = choice || (live && IsLaneControl(button))
                     ? new[] { new Vector2(0.5f, 0.5f), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.06f),
                         new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.94f) }
@@ -772,6 +795,20 @@ namespace GreedLast.Editor
                 checkedButtons++;
             }
             return checkedButtons;
+        }
+
+        private static void VerifyControlSafeBounds(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            Vector4 safe = currentFrame.SafeInsets;
+            foreach (Vector3 corner in corners)
+            {
+                Vector3 point = camera.WorldToScreenPoint(corner);
+                Require(point.x >= safe.x - 1f && point.x <= currentFrame.Width - safe.z + 1f
+                    && point.y >= safe.y - 1f && point.y <= currentFrame.Height - safe.w + 1f,
+                    currentFrame.Name + ": control extends outside the safe area: " + rect.name + " at " + point);
+            }
         }
 
         private static int VerifyActionModuleClick()

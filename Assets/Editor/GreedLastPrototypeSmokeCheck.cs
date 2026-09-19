@@ -9926,6 +9926,7 @@ namespace GreedLast.Editor
             VerifyCompactTimingGuide(ui);
             VerifyCompactActionCues(ui);
             GreedLastPrototypeHudCheck.Run();
+            GreedLastPrototypeHudCheck.VerifyRunTransitions(ui);
             GreedLastPrototypeAudioCheck.Run(ui);
             GreedLastPrototypePointerCheck.Run(ui);
             string longDetail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n") + "마지막 비교 항목";

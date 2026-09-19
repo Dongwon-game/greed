@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Security.Cryptography;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -12,6 +14,20 @@ namespace GreedLast.Editor
         private const string VerifiedBuildMenuPath = "Greed Last/Build Verified Windows Prototype";
         private const string WindowsBuildDirectory = "Builds/GreedLastPrototype";
         private const string WindowsBuildPath = WindowsBuildDirectory + "/GreedLastPrototype.exe";
+
+        [Serializable]
+        private sealed class VerifiedBuildInfo
+        {
+            public string verifiedAtUtc;
+            public string unityVersion;
+            public string target;
+            public bool smokePassed;
+            public bool developmentBuild;
+            public string executablePath;
+            public string executableSha256;
+            public string runtimeAssemblyPath;
+            public string runtimeAssemblySha256;
+        }
 
         [MenuItem("Greed Last/Rebuild Boot Scene")]
         public static void Build()
@@ -83,6 +99,7 @@ namespace GreedLast.Editor
                     "Greed Last verified Windows build failed: " + report.summary.result);
             }
 
+            WriteVerifiedBuildInfo();
             Debug.Log(
                 "Greed Last verified Windows prototype built: "
                 + WindowsBuildPath
@@ -102,6 +119,32 @@ namespace GreedLast.Editor
         private static bool ValidateBuildVerifiedWindowsPrototype()
         {
             return !EditorApplication.isPlayingOrWillChangePlaymode;
+        }
+
+        private static void WriteVerifiedBuildInfo()
+        {
+            const string assemblyPath = "GreedLastPrototype_Data/Managed/Assembly-CSharp.dll";
+            var info = new VerifiedBuildInfo
+            {
+                verifiedAtUtc = DateTime.UtcNow.ToString("O"),
+                unityVersion = Application.unityVersion,
+                target = BuildTarget.StandaloneWindows64.ToString(),
+                smokePassed = true,
+                developmentBuild = false,
+                executablePath = Path.GetFileName(WindowsBuildPath),
+                executableSha256 = HashFile(WindowsBuildPath),
+                runtimeAssemblyPath = assemblyPath,
+                runtimeAssemblySha256 = HashFile(Path.Combine(WindowsBuildDirectory, assemblyPath)),
+            };
+            // Hash game code as well as Unity's reusable launcher; its timestamp alone is not a build ID.
+            File.WriteAllText(Path.Combine(WindowsBuildDirectory, "VerifiedBuildInfo.json"), JsonUtility.ToJson(info, true));
+        }
+
+        private static string HashFile(string path)
+        {
+            using (var stream = File.OpenRead(path))
+            using (var sha = SHA256.Create())
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty);
         }
 
         private static void EnsureBootSceneInBuildSettings()
