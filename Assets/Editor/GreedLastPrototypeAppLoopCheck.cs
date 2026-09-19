@@ -48,6 +48,7 @@ namespace GreedLast.Editor
                 Bind(ui, app, "saveSlotRenameRequested", "RequestRenameSaveLoadoutSlot");
                 Bind(ui, app, "saveSlotDeleteRequested", "RequestDeleteSaveLoadoutSlot");
                 Write(ui, "runChannelRequested", Method(app, "HandleRunChannelInput").CreateDelegate(typeof(Action<GreedLastRunChannel>), app));
+                ui.ViewportChanged += (Action)Method(app, "HandleViewportChanged").CreateDelegate(typeof(Action), app);
                 state.StateChanged += ui.Render;
                 core.SnapshotChanged += (Action<GreedLastRunSnapshot>)Method(app, "HandleRunSnapshotChanged")
                     .CreateDelegate(typeof(Action<GreedLastRunSnapshot>), app);
@@ -105,6 +106,9 @@ namespace GreedLast.Editor
                         Click(ui, "returnLobbyButton");
                         Require(backend.LoadLobby().SaveSlotLabels[2] == before,
                             "Leaving gift preparation must not consume the selected loadout.");
+                        RectTransform restoredSave = Read<Button>(ui, "saveLoadoutButton").GetComponent<RectTransform>();
+                        Require(Mathf.Approximately(restoredSave.anchorMin.y, 0.29f) && Mathf.Approximately(restoredSave.sizeDelta.y, 92f),
+                            "Leaving preparation must restore the save command above infinite entry, not retain the preparation position.");
                         Click(ui, "infiniteButton");
                         FinishPreparationTransition(app);
                     }
@@ -405,6 +409,7 @@ namespace GreedLast.Editor
             core.Tick(clock);
             Require(Read<bool>(app, "rotationDragTracking"),
                 "A normal live rotation update must preserve an in-progress drag.");
+            VerifyRotationViewportLifecycle(app, ui, core, latest);
             core.TogglePause(clock);
             RequireRotationDragReleased(app, "Pausing a rotation must discard the held mouse drag.");
             ArmRotationDrag(app);
@@ -425,6 +430,40 @@ namespace GreedLast.Editor
             Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                 "An interrupted rotation test must not create a successful-clear save candidate.");
             Debug.Log("Greed Last drag lifecycle passed: live tracking -> pause -> focus loss -> app suspension -> choice -> lobby cleanup.");
+        }
+
+        private static void VerifyRotationViewportLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
+        {
+            MethodInfo sample = Method(ui, "ApplySafeAreaSample");
+            var area = new Rect(120, 36, 2196, 1026);
+            sample.Invoke(ui, new object[] { area, 2340, 1080, true });
+            ArmRotationDrag(app);
+            sample.Invoke(ui, new object[] { area, 2340, 1080, false });
+            Require(Read<bool>(app, "rotationDragTracking"), "An unchanged viewport must not cancel a live gesture.");
+            Write(app, "rotationTiltReady", true);
+            Write(app, "rotationTiltAxisInitialized", true);
+            Write(app, "rotationTiltFilteredAxis", 0.7f);
+            Write(app, "rotationTiltHeldDirection", 1);
+            Write(app, "rotationTiltCandidateDirection", 1);
+            Write(app, "rotationTiltCandidateSince", 5f);
+            GreedLastRunSnapshot before = latest();
+            sample.Invoke(ui, new object[] { new Rect(24, 36, 2196, 1026), 2340, 1080, false });
+            RequireRotationDragReleased(app, "Moving the safe area must discard the previous drag coordinate system.");
+            Require(!Read<bool>(app, "rotationTiltReady") && !Read<bool>(app, "rotationTiltAxisInitialized")
+                && Read<int>(app, "rotationTiltHeldDirection") == 0 && Read<int>(app, "rotationTiltCandidateDirection") == 0,
+                "A viewport change must require a fresh neutral sensor sample, not confirm the old tilt.");
+            Require(latest().Equals(before), "Viewport changes must not judge a trap, pause the core or consume run state.");
+            ArmRotationDrag(app);
+            sample.Invoke(ui, new object[] { new Rect(), 0, 0, true });
+            Require(Read<bool>(app, "rotationDragTracking"), "Rejected viewport samples must not interrupt the gesture repeatedly.");
+            sample.Invoke(ui, new object[] { new Rect(0, 0, 960, 540), 960, 540, false });
+            RequireRotationDragReleased(app, "A window resize must also discard the old drag start.");
+            ui.SendMessage("LateUpdate", SendMessageOptions.RequireReceiver);
+            ArmRotationDrag(app);
+            core.Tick(Time.realtimeSinceStartup);
+            Require(Read<bool>(app, "rotationDragTracking"), "A newly started drag must remain available after resize.");
+            Debug.Log("Greed Last rotation viewport checks passed: unchanged gestures retained, resize/notch changes clear drag and tilt candidates, neutral rearm and core state preserved.");
         }
 
         private static void ArmRotationDrag(GreedLastApp app)

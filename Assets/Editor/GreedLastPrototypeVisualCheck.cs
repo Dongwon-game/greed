@@ -55,6 +55,7 @@ namespace GreedLast.Editor
             public int checkedLaneLabels;
             public int checkedFeedbackAreas;
             public int checkedRunnerCueClearances;
+            public bool retainedScreen;
             public int brightSamples;
             public int detailSamples;
         }
@@ -69,6 +70,7 @@ namespace GreedLast.Editor
             public double SettleSeconds = 0.5;
             public Action Show;
             public Action BeforeUpdate;
+            public bool RetainedScreen;
         }
 
         [MenuItem(MenuPath)]
@@ -168,6 +170,9 @@ namespace GreedLast.Editor
                 Add("57-resume-notch-right", 2340, 1080, () => ShowRun(resume), safeInsets: new Vector4(24f, 36f, 120f, 18f));
                 Add("58-choice-safe-small", 960, 540, () => ShowRun(choice), safeInsets: new Vector4(32f, 16f, 12f, 8f));
                 Add("59-pause-safe-small", 960, 540, () => ShowRun(paused), safeInsets: new Vector4(12f, 16f, 32f, 8f));
+                AddRetainedViewportFrames("60-lobby", () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
+                AddRetainedViewportFrames("61-choice", () => ShowRun(choice));
+                AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -184,11 +189,31 @@ namespace GreedLast.Editor
         [MenuItem(MenuPath, true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
-        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null, Vector4? safeInsets = null)
+        private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null, Vector4? safeInsets = null, bool retainedScreen = false)
         {
             Frames.Enqueue(new Frame { Name = name, Width = width, Height = height, Show = show, SafeInset = safeInset,
                 SafeInsets = safeInsets ?? new Vector4(safeInset, 0f, safeInset, 0f),
-                SettleSeconds = settleSeconds, BeforeUpdate = beforeUpdate });
+                SettleSeconds = settleSeconds, BeforeUpdate = beforeUpdate, RetainedScreen = retainedScreen });
+        }
+
+        private static void AddRetainedViewportFrames(string name, Action show)
+        {
+            string title = null;
+            GreedLastRunSnapshot snapshot = default;
+            void SameScreen()
+            {
+                Require(Read<Text>("titleText").text == title && Read<GreedLastRunSnapshot>("latestRunSnapshot").Equals(snapshot),
+                    name + ": resize checks must keep the same screen and run snapshot, without another Render call.");
+            }
+            Add(name + "-initial", 2340, 1080, () =>
+            {
+                show();
+                title = Read<Text>("titleText").text;
+                snapshot = Read<GreedLastRunSnapshot>("latestRunSnapshot");
+            }, safeInsets: new Vector4(120, 36, 24, 18));
+            Add(name + "-flipped", 2340, 1080, SameScreen, safeInsets: new Vector4(24, 36, 120, 18), retainedScreen: true);
+            Add(name + "-resized", 960, 540, SameScreen, safeInsets: new Vector4(12, 16, 32, 8), retainedScreen: true);
+            Add(name + "-tablet", 1024, 768, SameScreen, retainedScreen: true);
         }
 
         private static void AddBeatPulseFrames(GreedLastRunSnapshot live, GreedLastRunSnapshot resume)
@@ -440,11 +465,14 @@ namespace GreedLast.Editor
             Require(run.EscapeSucceeded && record.IsValid, "The visual loop must finish a real normal run.");
             GreedLastRunSnapshot clear = run;
             Add("09-escape-result", 1280, 720, () => ShowRun(clear));
+            AddRetainedViewportFrames("63-clear", () => ShowRun(clear));
             backend.RegisterClear(record);
             stateMachine.SetSaveLoadoutDraft(backend.LoadLobby(),
                 backend.BuildRunClearSaveDraftNoticeMessage(record, false) + "\n\n" + backend.BuildSaveLoadoutClearSlotChoiceText(),
                 saveSlotChoiceRequired: true, saveLoadoutCandidateAvailable: true);
             AddScreen("10-clear-slot-choice", screen);
+            GreedLastStateSnapshot candidate = screen;
+            AddRetainedViewportFrames("64-candidate", () => ui.Render(candidate));
 
             backend.SelectSaveLoadoutSlot(2);
             stateMachine.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(),
@@ -501,6 +529,11 @@ namespace GreedLast.Editor
             {
                 stateMachine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(page), page);
                 AddScreen("17-record-page-" + page, screen);
+                if (page == 2)
+                {
+                    GreedLastStateSnapshot recordScreen = screen;
+                    AddRetainedViewportFrames("65-record", () => ui.Render(recordScreen));
+                }
             }
 
             // A new clear can replace an occupied slot only through the existing confirmation view.
@@ -515,6 +548,7 @@ namespace GreedLast.Editor
             AddScreen("19-overwrite-wide-safe", screen, 2340, 1080, 96f);
             AddScreen("19-overwrite-tablet", screen, 1024, 768);
             GreedLastStateSnapshot overwrite = screen;
+            AddRetainedViewportFrames("66-overwrite", () => ui.Render(overwrite));
             Add("20-overwrite-drag", 1280, 720, () =>
             {
                 ui.Render(overwrite);
@@ -640,14 +674,14 @@ namespace GreedLast.Editor
 
         private static void ApplyCaptureSafeArea()
         {
-            RectTransform root = Read<RectTransform>("rootPanelRect");
             Vector4 inset = currentFrame.SafeInsets; // Left, bottom, right, top in output pixels.
             Require(inset.x >= 0f && inset.y >= 0f && inset.z >= 0f && inset.w >= 0f
                 && inset.x + inset.z < currentFrame.Width && inset.y + inset.w < currentFrame.Height,
                 "Capture safe area must leave a positive visible region.");
-            root.anchorMin = new Vector2(inset.x / currentFrame.Width, inset.y / currentFrame.Height);
-            root.anchorMax = new Vector2(1f - inset.z / currentFrame.Width, 1f - inset.w / currentFrame.Height);
-            root.offsetMin = root.offsetMax = Vector2.zero;
+            // Exercise the production normalization/cache path, not a separate capture-only formula.
+            typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(ui, new object[] { new Rect(inset.x, inset.y, currentFrame.Width - inset.x - inset.z,
+                    currentFrame.Height - inset.y - inset.w), currentFrame.Width, currentFrame.Height, false });
         }
 
         private static void CaptureFrame()
@@ -686,7 +720,11 @@ namespace GreedLast.Editor
                     if (pixel.r + pixel.g + pixel.b > 150) brightSamples++;
                     if (Math.Abs(pixel.r - first.r) + Math.Abs(pixel.g - first.g) + Math.Abs(pixel.b - first.b) > 35) detailSamples++;
                 }
-                if (brightSamples < 30 || detailSamples < 100)
+                // The authored canvas is height-scaled; sparse record screens contain fewer pixels at 540p.
+                float sampleAreaScale = Mathf.Pow(target.height / 720f, 2f);
+                int minimumBrightSamples = Mathf.Max(10, Mathf.CeilToInt(30f * sampleAreaScale));
+                int minimumDetailSamples = Mathf.Max(30, Mathf.CeilToInt(100f * sampleAreaScale));
+                if (brightSamples < minimumBrightSamples || detailSamples < minimumDetailSamples)
                 {
                     File.WriteAllBytes("Logs/VisualChecks/" + currentFrame.Name + ".failed.png", image.EncodeToPNG());
                     throw new InvalidOperationException("Blank or incomplete visual capture: " + currentFrame.Name
@@ -716,6 +754,7 @@ namespace GreedLast.Editor
                     checkedLaneLabels = checkedLaneLabels,
                     checkedFeedbackAreas = checkedFeedbackAreas,
                     checkedRunnerCueClearances = checkedRunnerCueClearances,
+                    retainedScreen = currentFrame.RetainedScreen,
                     brightSamples = brightSamples,
                     detailSamples = detailSamples,
                 });
@@ -775,10 +814,8 @@ namespace GreedLast.Editor
                 if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 RectTransform rect = button.GetComponent<RectTransform>();
                 VerifyControlSafeBounds(rect);
-                Vector2[] samples = choice || (live && IsLaneControl(button))
-                    ? new[] { new Vector2(0.5f, 0.5f), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.06f),
-                        new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.94f) }
-                    : new[] { new Vector2(0.5f, 0.5f) };
+                Vector2[] samples = { new Vector2(0.5f, 0.5f), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.06f),
+                    new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.94f) };
                 foreach (Vector2 sample in samples)
                 {
                     Vector2 localPoint = rect.rect.min + Vector2.Scale(rect.rect.size, sample);
@@ -788,7 +825,8 @@ namespace GreedLast.Editor
                     raycaster.Raycast(pointer, hits);
                     Require(hits.Count > 0 && IsExpectedControlHit(button, hits[0].gameObject),
                         currentFrame.Name + ": visible button is blocked at " + sample + ": " + button.name
-                        + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
+                        + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name)
+                        + " / button " + (hits.Count == 0 ? "none" : hits[0].gameObject.GetComponentInParent<Button>()?.name));
                     checkedPoints++;
                 }
                 VerifyButtonTextBounds(button);
@@ -814,15 +852,17 @@ namespace GreedLast.Editor
         private static int VerifyActionModuleClick()
         {
             // Only callback-only commands are clicked; settings buttons persist preferences directly.
-            foreach (string field in new[] { "nextPatternButton", "returnLobbyButton", "normalRunButton", "practiceRunButton" })
+            int count = 0;
+            foreach (string field in new[] { "nextPatternButton", "returnLobbyButton", "normalRunButton", "practiceRunButton",
+                "saveLoadoutButton", "infiniteButton", "infiniteRecordButton" })
             {
                 Button button = Read<Button>(field);
                 if (!button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 Vector2 point = camera.WorldToScreenPoint(button.transform.position);
                 GreedLastPrototypeKeyboardCheck.VerifyActionClick(ui, eventSystem, button, point);
-                return 1;
+                count++;
             }
-            return 0;
+            return count;
         }
 
         private static int VerifyLaneModuleInputs()

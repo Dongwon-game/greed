@@ -10756,6 +10756,7 @@ namespace GreedLast
                 RequestRunDevShortcut,
                 HandleRunChannelInput);
             runtimeUi.RotationTiltPreferenceChanged += HandleRotationTiltPreferenceChanged;
+            runtimeUi.ViewportChanged += HandleViewportChanged;
 
             stateMachine.StateChanged += runtimeUi.Render;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
@@ -10798,6 +10799,7 @@ namespace GreedLast
             {
                 stateMachine.StateChanged -= runtimeUi.Render;
                 runtimeUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
+                runtimeUi.ViewportChanged -= HandleViewportChanged;
             }
 
             if (runCore != null)
@@ -10830,6 +10832,13 @@ namespace GreedLast
             {
                 runtimeUi.RenderRun(latestAppRunSnapshot);
             }
+        }
+
+        private void HandleViewportChanged()
+        {
+            ResetRotationDragTracking();
+            ResetRotationTiltSensorTracking(requireNeutralRelease: true);
+            PublishRotationTiltGateState();
         }
 
         private void PublishRotationTiltGateState()
@@ -15493,6 +15502,7 @@ namespace GreedLast
         public bool RotationTiltEnabled => rotationTiltEnabled;
 
         public event Action<bool> RotationTiltPreferenceChanged;
+        public event Action ViewportChanged;
 
         public void Initialize(
             Action onPracticeRunRequested,
@@ -17455,6 +17465,8 @@ namespace GreedLast
         private void ResetSaveSlotUtilityButtonLayout()
         {
             SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.475f, 250f, 66f);
+            // Preparation temporarily moves this shared command; restore it before composing the next screen.
+            SetAnchored(saveLoadoutButton.GetComponent<RectTransform>(), 0.5f, 0.29f, 690f, 92f);
         }
 
         private static void SetRunMenuButtonParent(Button button, Transform parent)
@@ -27743,40 +27755,60 @@ namespace GreedLast
             return obj;
         }
 
+        private void LateUpdate()
+        {
+            // Menus can remain idle while the OS moves a notch or resizes the window.
+            ApplySafeArea();
+        }
+
         private void ApplySafeArea(bool force = false)
         {
-            if (rootPanelRect == null || Screen.width <= 0 || Screen.height <= 0)
+            ApplySafeAreaSample(Screen.safeArea, Screen.width, Screen.height, force);
+        }
+
+        private bool ApplySafeAreaSample(Rect safeArea, int screenWidth, int screenHeight, bool force = false)
+        {
+            if (rootPanelRect == null || screenWidth <= 0 || screenHeight <= 0)
             {
-                return;
+                return false;
             }
 
-            Rect safeArea = Screen.safeArea;
+            if (!IsFiniteSafeAreaValue(safeArea.xMin) || !IsFiniteSafeAreaValue(safeArea.yMin)
+                || !IsFiniteSafeAreaValue(safeArea.xMax) || !IsFiniteSafeAreaValue(safeArea.yMax))
+                return false;
+            Vector2 minimum = new Vector2(Mathf.Clamp(safeArea.xMin, 0f, screenWidth), Mathf.Clamp(safeArea.yMin, 0f, screenHeight));
+            Vector2 maximum = new Vector2(Mathf.Clamp(safeArea.xMax, 0f, screenWidth), Mathf.Clamp(safeArea.yMax, 0f, screenHeight));
+            // Preserve the last valid layout during transient zero/invalid OS samples.
+            if (maximum.x - minimum.x < 1f || maximum.y - minimum.y < 1f) return false;
             bool sameSafeArea = Mathf.Approximately(safeArea.x, lastSafeArea.x)
                 && Mathf.Approximately(safeArea.y, lastSafeArea.y)
                 && Mathf.Approximately(safeArea.width, lastSafeArea.width)
                 && Mathf.Approximately(safeArea.height, lastSafeArea.height)
-                && lastSafeAreaScreenWidth == Screen.width
-                && lastSafeAreaScreenHeight == Screen.height;
+                && lastSafeAreaScreenWidth == screenWidth
+                && lastSafeAreaScreenHeight == screenHeight;
             if (!force && sameSafeArea)
             {
-                return;
+                return false;
             }
 
-            Vector2 anchorMin = safeArea.position;
-            Vector2 anchorMax = safeArea.position + safeArea.size;
-            anchorMin.x = Mathf.Clamp01(anchorMin.x / Screen.width);
-            anchorMin.y = Mathf.Clamp01(anchorMin.y / Screen.height);
-            anchorMax.x = Mathf.Clamp01(anchorMax.x / Screen.width);
-            anchorMax.y = Mathf.Clamp01(anchorMax.y / Screen.height);
-
+            Vector2 anchorMin = new Vector2(minimum.x / screenWidth, minimum.y / screenHeight);
+            Vector2 anchorMax = new Vector2(maximum.x / screenWidth, maximum.y / screenHeight);
+            bool changedViewport = lastSafeAreaScreenWidth > 0 && lastSafeAreaScreenHeight > 0
+                && (lastSafeAreaScreenWidth != screenWidth || lastSafeAreaScreenHeight != screenHeight
+                    || Vector2.Distance(rootPanelRect.anchorMin, anchorMin) > 0.00001f
+                    || Vector2.Distance(rootPanelRect.anchorMax, anchorMax) > 0.00001f);
             rootPanelRect.anchorMin = anchorMin;
             rootPanelRect.anchorMax = anchorMax;
             rootPanelRect.offsetMin = Vector2.zero;
             rootPanelRect.offsetMax = Vector2.zero;
             lastSafeArea = safeArea;
-            lastSafeAreaScreenWidth = Screen.width;
-            lastSafeAreaScreenHeight = Screen.height;
+            lastSafeAreaScreenWidth = screenWidth;
+            lastSafeAreaScreenHeight = screenHeight;
+            if (changedViewport) ViewportChanged?.Invoke();
+            return true;
         }
+
+        private static bool IsFiniteSafeAreaValue(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static void SetAnchored(RectTransform rect, float x, float y, float width, float height)
         {

@@ -9926,6 +9926,7 @@ namespace GreedLast.Editor
             VerifyCompactTimingGuide(ui);
             VerifyCompactActionCues(ui);
             GreedLastPrototypeHudCheck.Run();
+            GreedLastPrototypeHudCheck.VerifyIdleSafeAreaRefresh(ui);
             GreedLastPrototypeHudCheck.VerifyRunTransitions(ui);
             GreedLastPrototypeAudioCheck.Run(ui);
             GreedLastPrototypePointerCheck.Run(ui);

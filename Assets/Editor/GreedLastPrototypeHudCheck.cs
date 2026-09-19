@@ -7,6 +7,59 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeHudCheck
     {
+        internal static void VerifyIdleSafeAreaRefresh(GreedLastRuntimeUi ui)
+        {
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Viewport check", string.Empty, 0));
+            RectTransform root = Read<RectTransform>(ui, "rootPanelRect");
+            root.anchorMin = new Vector2(0.2f, 0.2f);
+            root.anchorMax = new Vector2(0.8f, 0.8f);
+            Set(ui, "lastSafeAreaScreenWidth", -1);
+            // No Render or state change: a settled menu still needs a viewport refresh.
+            ui.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+            Require(Read<int>(ui, "lastSafeAreaScreenWidth") == Screen.width,
+                "A stationary lobby must refresh the safe area without another Render/state transition.");
+            Rect safe = Screen.safeArea;
+            Require(Vector2.Distance(root.anchorMin, new Vector2(safe.xMin / Screen.width, safe.yMin / Screen.height)) < 0.001f
+                && Vector2.Distance(root.anchorMax, new Vector2(safe.xMax / Screen.width, safe.yMax / Screen.height)) < 0.001f,
+                "The idle frame must apply the current screen safe area, not stale menu anchors.");
+            MethodInfo apply = typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", BindingFlags.Instance | BindingFlags.NonPublic);
+            bool Sample(Rect area, int width, int height, bool force = false)
+                => (bool)apply.Invoke(ui, new object[] { area, width, height, force });
+            void Check(Rect area, int width, int height, Vector2 min, Vector2 max)
+            {
+                Require(Sample(area, width, height, true), "A valid viewport must be accepted.");
+                Require(Vector2.Distance(root.anchorMin, min) < 0.00001f && Vector2.Distance(root.anchorMax, max) < 0.00001f,
+                    "Safe-area anchors must follow the new viewport without changing screens.");
+                Require(root.offsetMin == Vector2.zero && root.offsetMax == Vector2.zero,
+                    "Safe-area changes must not accumulate pixel offsets.");
+                for (int repeat = 0; repeat < 10; repeat++)
+                    Require(!Sample(area, width, height), "Unchanged safe areas must not reapply layout each frame.");
+            }
+            Check(new Rect(120, 36, 2196, 1026), 2340, 1080, new Vector2(120f / 2340f, 36f / 1080f), new Vector2(2316f / 2340f, 1062f / 1080f));
+            Check(new Rect(24, 36, 2196, 1026), 2340, 1080, new Vector2(24f / 2340f, 36f / 1080f), new Vector2(2220f / 2340f, 1062f / 1080f));
+            Check(new Rect(12, 16, 916, 516), 960, 540, new Vector2(12f / 960f, 16f / 540f), new Vector2(928f / 960f, 532f / 540f));
+            Check(new Rect(-20, -30, 1000, 590), 960, 540, Vector2.zero, Vector2.one);
+            // Equal pixel rectangles can map differently after a window resize.
+            Check(new Rect(12, 16, 916, 516), 1920, 1080, new Vector2(12f / 1920f, 16f / 1080f), new Vector2(928f / 1920f, 532f / 1080f));
+            Vector2 lastMin = root.anchorMin;
+            Vector2 lastMax = root.anchorMax;
+            Rect lastArea = Read<Rect>(ui, "lastSafeArea");
+            foreach (Rect invalid in new[] { new Rect(), new Rect(0, 0, -100, 100), new Rect(0, 0, 100, -10),
+                new Rect(2000, 0, 10, 100), new Rect(0, 1200, 100, 10), new Rect(0, 0, 0.5f, 100),
+                new Rect(float.NaN, 0, 100, 100), new Rect(0, 0, float.PositiveInfinity, 100),
+                new Rect(0, float.NegativeInfinity, 100, 100), new Rect(float.MaxValue, 0, float.MaxValue, 100) })
+            {
+                Require(!Sample(invalid, 1920, 1080, true), "Invalid/empty OS samples must not replace a valid layout.");
+                Require(root.anchorMin == lastMin && root.anchorMax == lastMax && Read<Rect>(ui, "lastSafeArea") == lastArea,
+                    "Rejected OS samples must preserve both layout and cache for recovery.");
+            }
+            Require(!Sample(lastArea, 0, 1080) && !Sample(lastArea, 1920, 0)
+                && !Sample(lastArea, -1, 1080), "Unavailable/minimized viewports must leave the layout intact.");
+            Check(new Rect(0, 0, 1024, 768), 1024, 768, Vector2.zero, Vector2.one);
+            ui.SendMessage("LateUpdate", SendMessageOptions.RequireReceiver);
+            Debug.Log("Greed Last viewport checks passed: idle refresh, opposite notches, resized dimensions, clamped edges, unchanged-sample caching and invalid-sample recovery. Synthetic screen samples only.");
+        }
+
         internal static void VerifyRunTransitions(GreedLastRuntimeUi ui)
         {
             var core = new GreedLastRunCore();
