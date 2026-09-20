@@ -34,6 +34,13 @@ namespace GreedLast.Editor
             pointerClicks = 0;
             LastPointerCaseCount = 0;
             usePointerModule = true;
+            var errors = new List<string>();
+            Application.LogCallback collectErrors = (message, stack, type) =>
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+                    errors.Add(message);
+            };
+            Application.logMessageReceived += collectErrors;
             try
             {
                 RunPointerCase(false, 1280, 720, Vector4.zero);
@@ -41,15 +48,17 @@ namespace GreedLast.Editor
                 RunPointerCase(true, 2340, 1080, new Vector4(120f, 36f, 24f, 18f));
                 RunPointerCase(true, 2340, 1080, new Vector4(24f, 36f, 120f, 18f));
                 RunPointerCase(true, 1024, 768, Vector4.zero);
-                Debug.Log("Greed Last full pointer loop passed: " + pointerClicks
-                    + " actual-module mouse/touch clicks in " + LastPointerCaseCount
-                    + " clean-view layouts across practice, clear, save, preparation, two-use depletion, records and confirmations. Synthetic input and isolated backend only.");
             }
             finally
             {
+                Application.logMessageReceived -= collectErrors;
                 usePointerModule = false;
                 useTouch = false;
             }
+            Require(errors.Count == 0, "The rendered input loop emitted Unity errors: " + string.Join(" | ", errors));
+            Debug.Log("Greed Last full pointer loop passed: " + pointerClicks
+                + " actual-module mouse/touch clicks in " + LastPointerCaseCount
+                + " clean-view layouts across practice, clear, save, preparation, two-use depletion, records and confirmations. Synthetic input and isolated backend only.");
         }
 
         [MenuItem(PointerMenuPath, true)]
@@ -351,12 +360,57 @@ namespace GreedLast.Editor
                 }
                 finally { Write(backend, "auxiliaryWarning", false); }
                 AdvanceRoutine(app, "RetrySyncRoutine");
+                VerifyLobbyForegroundRecovery(app, ui, backend, state, gate);
                 for (int slot = 0; slot < original.SaveSlotLabels.Length; slot++)
                     Require(backend.LoadLobby().SaveSlotLabels[slot] == original.SaveSlotLabels[slot],
                         "Boot failures and retries must not consume or change a saved loadout.");
                 Debug.Log("Greed Last boot/reconnect checks passed: ordered boot, duplicate request lock, four simulated failure reasons, locked app commands, fresh warning snapshot and preserved saved slots. Coroutine waits are advanced without real network traffic.");
             }
             finally { state.StateChanged -= observe; }
+        }
+
+        private static void VerifyLobbyForegroundRecovery(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRequestGate gate)
+        {
+            GreedLastLobbySnapshot before = backend.LoadLobby();
+            GreedLastRunSnapshot runBefore = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+            for (int cycle = 0; cycle < 3; cycle++)
+            {
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                Require(state.CurrentState == GreedLastScreenState.ReSyncPending && !state.CoreActionsEnabled && !gate.Busy,
+                    "Returning to an idle lobby must wait for explicit sync without starting a run or leaving a busy token.");
+                AssertLobbyCommandsLocked(app, ui, state, gate);
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                Require(state.CurrentState == GreedLastScreenState.ReSyncPending && !gate.Busy,
+                    "A duplicate resume callback must not invent another lobby request.");
+                AdvanceRoutine(app, "RetrySyncRoutine", () =>
+                {
+                    int request = gate.ActiveRequestId;
+                    Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                    Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+                    Require(gate.ActiveRequestId == request && gate.Busy && !state.CoreActionsEnabled,
+                        "Foreground callbacks during sync must not replace its request or reopen actions early.");
+                    AssertLobbyCommandsLocked(app, ui, state, gate);
+                });
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && state.CoreActionsEnabled,
+                    "An explicit successful sync must restore the idle lobby after every resume.");
+                Method(app, "OnApplicationFocus").Invoke(app, new object[] { false });
+                Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !gate.Busy,
+                    "Desktop focus-only changes must not force the mobile suspension sync flow.");
+                GreedLastLobbySnapshot after = state.LobbySnapshot;
+                Require(after.SelectedSaveSlotIndex == before.SelectedSaveSlotIndex
+                    && after.SaveLoadoutCandidateAvailable == before.SaveLoadoutCandidateAvailable,
+                    "Resume sync must preserve the selected slot and candidate availability.");
+                for (int slot = 0; slot < before.SaveSlotLabels.Length; slot++)
+                    Require(after.SaveSlotLabels[slot] == before.SaveSlotLabels[slot]
+                        && after.SaveSlotOccupied[slot] == before.SaveSlotOccupied[slot],
+                        "Foreground checks must not spend or replace the player's saved slots.");
+                Require(Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").Equals(runBefore),
+                    "Lobby background/foreground callbacks must leave the previous run snapshot untouched.");
+            }
+            Debug.Log("Greed Last lobby foreground checks passed: three suspension/retry cycles, duplicate resume, focus-only return, busy action isolation and selected-slot/run preservation. Callbacks are simulated.");
         }
 
         private static void AssertLobbyCommandsLocked(GreedLastApp app, GreedLastRuntimeUi ui,
@@ -742,7 +796,7 @@ namespace GreedLast.Editor
             Require(Read<bool>(app, "rotationDragTracking"), "Rejected viewport samples must not interrupt the gesture repeatedly.");
             sample.Invoke(ui, new object[] { new Rect(0, 0, 960, 540), 960, 540, false });
             RequireRotationDragReleased(app, "A window resize must also discard the old drag start.");
-            ui.SendMessage("LateUpdate", SendMessageOptions.RequireReceiver);
+            Method(ui, "LateUpdate").Invoke(ui, null);
             ArmRotationDrag(app);
             core.Tick(Time.realtimeSinceStartup);
             Require(Read<bool>(app, "rotationDragTracking"), "A newly started drag must remain available after resize.");
