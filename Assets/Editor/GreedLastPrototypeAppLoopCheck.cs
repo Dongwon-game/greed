@@ -129,6 +129,7 @@ namespace GreedLast.Editor
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
                     "The actual lobby practice callback must open a practice run.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
                 RunToCompletion(core, () => run);
                 Require(run.Stopped && run.SuccessCount == 3 && !backend.HasSaveLoadoutCandidate,
                     "A perfect practice must complete three axes without creating a save candidate.");
@@ -137,11 +138,13 @@ namespace GreedLast.Editor
                 Click(ui, "nextPatternButton");
                 Require(!run.PracticeMode && run.ChoiceActive && PlayerPrefs.GetInt(PracticeKey) == 1,
                     "The practice result callback must mark onboarding and open normal starting choices.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
                 Require(!Read<Button>(ui, "nextPatternButton").IsInteractable(),
                     "The former result button must not remain actionable over the new starting choice.");
 
                 RunToCompletion(core, () => run);
                 Require(run.EscapeSucceeded && run.SaveEligible, "The app-connected normal run must reach a saveable escape.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
                 Click(ui, "nextPatternButton");
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
                     "The actual clear action must open explicit slot selection with one candidate.");
@@ -162,6 +165,7 @@ namespace GreedLast.Editor
                 {
                     Click(ui, "infiniteButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "The lobby infinite action must open preparation.");
+                    AssertSyncCannotLeaveScreen(app, backend, state, gate);
                     string before = backend.LoadLobby().SaveSlotLabels[2];
                     Click(Read<Button[]>(ui, "laneButtons")[1]);
                     Require(Read<int>(app, "infinitePreparationStep") == 0,
@@ -201,6 +205,7 @@ namespace GreedLast.Editor
                     Click(ui, "nextPatternButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode,
                         "Start confirmation must enter infinite mode through the app, not merely render its screen.");
+                    AssertSyncCannotLeaveScreen(app, backend, state, gate);
                     GreedLastLobbySnapshot afterStart = backend.LoadLobby();
                     Require(afterStart.SaveSlotOccupied[2] == (use == 0),
                         "S3 must remain occupied after the first start and auto-empty on the second start.");
@@ -220,6 +225,7 @@ namespace GreedLast.Editor
                 Click(ui, "infiniteRecordButton");
                 Require(state.CurrentState == GreedLastScreenState.InfiniteRecordBoard,
                     "The resulting records must remain reachable through the actual lobby button.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
                 Click(ui, "returnLobbyButton");
                 Click(ui, "normalRunButton");
                 Require(!run.InfiniteMode && !run.Stopped && run.ChoiceActive,
@@ -229,6 +235,7 @@ namespace GreedLast.Editor
                 Click(ui, "returnLobbyButton");
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
                     "The first skip-save action must request confirmation while preserving the candidate.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
                 Click(ui, "returnLobbyButton");
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
                     "A rapid second skip-save tap must preserve the candidate while confirmation appears.");
@@ -361,6 +368,7 @@ namespace GreedLast.Editor
                 finally { Write(backend, "auxiliaryWarning", false); }
                 AdvanceRoutine(app, "RetrySyncRoutine");
                 VerifyLobbyForegroundRecovery(app, ui, backend, state, gate);
+                VerifyConnectionLifecycleEdges(app, ui, backend, state, gate);
                 for (int slot = 0; slot < original.SaveSlotLabels.Length; slot++)
                     Require(backend.LoadLobby().SaveSlotLabels[slot] == original.SaveSlotLabels[slot],
                         "Boot failures and retries must not consume or change a saved loadout.");
@@ -411,6 +419,77 @@ namespace GreedLast.Editor
                     "Lobby background/foreground callbacks must leave the previous run snapshot untouched.");
             }
             Debug.Log("Greed Last lobby foreground checks passed: three suspension/retry cycles, duplicate resume, focus-only return, busy action isolation and selected-slot/run preservation. Callbacks are simulated.");
+        }
+
+        private static void VerifyConnectionLifecycleEdges(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRequestGate gate)
+        {
+            Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && state.CoreActionsEnabled,
+                "A duplicate foreground notification after successful sync must not lock the lobby again.");
+            Write(backend, "auxiliaryWarning", true);
+            try
+            {
+                AdvanceRoutine(app, "LoadLobby");
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                Require(state.CurrentState == GreedLastScreenState.ReSyncPending && !state.CoreActionsEnabled,
+                    "An actionable warning lobby must request fresh data after real app suspension, just like a ready lobby.");
+                AssertLobbyCommandsLocked(app, ui, state, gate);
+                AdvanceRoutine(app, "RetrySyncRoutine");
+                Require(state.CurrentState == GreedLastScreenState.ReSyncPending && state.CoreActionsEnabled,
+                    "A successful foreground retry must restore the usable warning lobby.");
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                Require(state.CoreActionsEnabled, "Duplicate foreground notification must not relock a restored warning lobby.");
+                Click(ui, "practiceRunButton");
+                Require(state.CurrentState == GreedLastScreenState.RunCoreTest
+                    && Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").PracticeMode,
+                    "An actionable warning lobby must still start practice through its real button.");
+                AssertSyncCannotLeaveScreen(app, backend, state, gate);
+                Click(ui, "returnLobbyButton");
+            }
+            finally { Write(backend, "auxiliaryWarning", false); }
+            AdvanceRoutine(app, "RetrySyncRoutine");
+            AdvanceRoutine(app, "BootThenConnect", () =>
+            {
+                GreedLastScreenState waitingState = state.CurrentState;
+                int request = gate.ActiveRequestId;
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
+                Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                Method(app, "RequestRetrySync").Invoke(app, null);
+                Method(app, "ToggleOfflineForEditorCheck").Invoke(app, null);
+                Require(gate.ActiveRequestId == request && gate.Busy && state.CurrentState == waitingState,
+                    "Suspension or a stale connection command during boot must not replace its active request.");
+                Require(backend.CheckConnect().Success, "A connection toggle during boot must not mutate the backend.");
+                AssertLobbyCommandsLocked(app, ui, state, gate);
+            });
+            Require(state.CurrentState == GreedLastScreenState.LobbyReady && !gate.Busy,
+                "Boot must finish once after suspension in each of its waiting stages.");
+            Debug.Log("Greed Last connection lifecycle edges passed: duplicate foreground after recovery, actionable warning suspension, and background/connection commands during all boot waits. Simulated callbacks only.");
+        }
+
+        private static void AssertSyncCannotLeaveScreen(GreedLastApp app, GreedLastMockBackend backend,
+            GreedLastStateMachine state, GreedLastRequestGate gate)
+        {
+            GreedLastScreenState before = state.CurrentState;
+            GreedLastRunSnapshot runBefore = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+            GreedLastLobbySnapshot lobbyBefore = backend.LoadLobby();
+            int request = gate.ActiveRequestId;
+            IEnumerator retry = (IEnumerator)Method(app, "RetrySyncRoutine").Invoke(app, null);
+            try { Require(!retry.MoveNext(), "A stale sync routine must not abandon the current screen: " + before); }
+            finally { (retry as IDisposable)?.Dispose(); }
+            Method(app, "RequestRetrySync").Invoke(app, null);
+            Method(app, "ToggleOfflineForEditorCheck").Invoke(app, null);
+            Require(state.CurrentState == before && gate.ActiveRequestId == request && !gate.Busy
+                && backend.CheckConnect().Success && Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").Equals(runBefore),
+                "Hidden connection callbacks must preserve the active screen, run and backend: " + before);
+            GreedLastLobbySnapshot after = backend.LoadLobby();
+            Require(after.SaveLoadoutCandidateAvailable == lobbyBefore.SaveLoadoutCandidateAvailable
+                && after.SelectedSaveSlotIndex == lobbyBefore.SelectedSaveSlotIndex,
+                "A stale retry must not alter the candidate or selected slot.");
+            for (int slot = 0; slot < after.SaveSlotLabels.Length; slot++)
+                Require(after.SaveSlotLabels[slot] == lobbyBefore.SaveSlotLabels[slot],
+                    "A stale retry must not spend a saved loadout.");
         }
 
         private static void AssertLobbyCommandsLocked(GreedLastApp app, GreedLastRuntimeUi ui,

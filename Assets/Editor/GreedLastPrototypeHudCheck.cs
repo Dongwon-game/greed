@@ -15,7 +15,7 @@ namespace GreedLast.Editor
             root.anchorMax = new Vector2(0.8f, 0.8f);
             Set(ui, "lastSafeAreaScreenWidth", -1);
             // No Render or state change: a settled menu still needs a viewport refresh.
-            ui.SendMessage("LateUpdate", SendMessageOptions.DontRequireReceiver);
+            Call(ui, "LateUpdate");
             Require(Read<int>(ui, "lastSafeAreaScreenWidth") == Screen.width,
                 "A stationary lobby must refresh the safe area without another Render/state transition.");
             Rect safe = Screen.safeArea;
@@ -56,7 +56,7 @@ namespace GreedLast.Editor
             Require(!Sample(lastArea, 0, 1080) && !Sample(lastArea, 1920, 0)
                 && !Sample(lastArea, -1, 1080), "Unavailable/minimized viewports must leave the layout intact.");
             Check(new Rect(0, 0, 1024, 768), 1024, 768, Vector2.zero, Vector2.one);
-            ui.SendMessage("LateUpdate", SendMessageOptions.RequireReceiver);
+            Call(ui, "LateUpdate");
             Debug.Log("Greed Last viewport checks passed: idle refresh, opposite notches, resized dimensions, clamped edges, unchanged-sample caching and invalid-sample recovery. Synthetic screen samples only.");
         }
 

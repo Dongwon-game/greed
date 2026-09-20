@@ -306,6 +306,20 @@ namespace GreedLast
         };
 
 #if UNITY_EDITOR
+        public const string PersistenceTestKeyPrefix = "GreedLast.EditorTests.MockBackend.";
+
+        public static GreedLastMockBackend CreatePersistenceTestBackendForEditor(
+            string key, bool loadPersistedData = true, bool persistData = true)
+        {
+            if (string.IsNullOrEmpty(key) || !key.StartsWith(PersistenceTestKeyPrefix, StringComparison.Ordinal)
+                || key.Length == PersistenceTestKeyPrefix.Length)
+            {
+                throw new ArgumentException("Persistence checks must use a dedicated editor-test key.", nameof(key));
+            }
+
+            return new GreedLastMockBackend(loadPersistedData, persistData, key);
+        }
+
         internal static void ClearPersistedProgressForEditor()
         {
             PlayerPrefs.DeleteKey(PlayerPrefsKey);
@@ -349,6 +363,7 @@ namespace GreedLast
         private readonly int[] saveLoadoutUsesRemaining = new int[SaveSlotCount];
         private readonly int[] saveLoadoutRenameSteps = new int[SaveSlotCount];
         private readonly bool persistData;
+        private readonly string persistenceKey;
         private GreedLastInfiniteRunRecord lastInfiniteRunRecord = GreedLastInfiniteRunRecord.Empty;
         private GreedLastInfiniteRunRecord bestInfiniteRunRecord = GreedLastInfiniteRunRecord.Empty;
         private GreedLastInfiniteRunRecord previousBestBeforeLastInfiniteRun = GreedLastInfiniteRunRecord.Empty;
@@ -372,8 +387,14 @@ namespace GreedLast
         private int sampleSaveLoadoutSequence;
 
         public GreedLastMockBackend(bool loadPersistedData = true, bool persistData = true)
+            : this(loadPersistedData, persistData, PlayerPrefsKey)
+        {
+        }
+
+        private GreedLastMockBackend(bool loadPersistedData, bool persistData, string persistenceKey)
         {
             this.persistData = persistData;
+            this.persistenceKey = persistenceKey;
             if (loadPersistedData)
             {
                 LoadPersistedData();
@@ -9764,12 +9785,12 @@ namespace GreedLast
 
         private void LoadPersistedData()
         {
-            if (!PlayerPrefs.HasKey(PlayerPrefsKey))
+            if (!PlayerPrefs.HasKey(persistenceKey))
             {
                 return;
             }
 
-            string json = PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
+            string json = PlayerPrefs.GetString(persistenceKey, string.Empty);
             if (string.IsNullOrWhiteSpace(json))
             {
                 return;
@@ -10047,7 +10068,7 @@ namespace GreedLast
                 data.infiniteRunRankings[i] = ToData(infiniteRunRankings[i]);
             }
 
-            PlayerPrefs.SetString(PlayerPrefsKey, JsonUtility.ToJson(data));
+            PlayerPrefs.SetString(persistenceKey, JsonUtility.ToJson(data));
             PlayerPrefs.Save();
         }
 
@@ -10673,6 +10694,7 @@ namespace GreedLast
         private GreedLastStateMachine stateMachine;
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
+        private bool applicationPaused;
         private int recordBoardPageIndex;
         private int profileBoardPageIndex;
         private int preferredRecordBoardPageIndex;
@@ -12349,6 +12371,8 @@ namespace GreedLast
 
         private void OnApplicationPause(bool pauseStatus)
         {
+            bool wasPaused = applicationPaused;
+            applicationPaused = pauseStatus;
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -12358,8 +12382,10 @@ namespace GreedLast
             }
 
             if (!pauseStatus
+                && wasPaused
                 && stateMachine != null
-                && stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
+                && (stateMachine.CurrentState == GreedLastScreenState.LobbyReady
+                    || (stateMachine.CurrentState == GreedLastScreenState.ReSyncPending && stateMachine.CoreActionsEnabled)))
             {
                 stateMachine.SetReSyncPending("앱 복귀 후 최신 로비 상태를 다시 확인해야 합니다.", coreActionsEnabled: false);
             }
@@ -12457,7 +12483,7 @@ namespace GreedLast
 
         private void RequestRetrySync()
         {
-            if (requestGate.Busy)
+            if (!CanSyncLobby())
             {
                 return;
             }
@@ -12467,7 +12493,7 @@ namespace GreedLast
 
         private IEnumerator RetrySyncRoutine()
         {
-            if (!requestGate.TryBegin(GreedLastRequestKind.ReSync, out GreedLastRequestToken token))
+            if (!CanSyncLobby() || !requestGate.TryBegin(GreedLastRequestKind.ReSync, out GreedLastRequestToken token))
             {
                 yield break;
             }
@@ -12975,6 +13001,11 @@ namespace GreedLast
 
         private void ToggleOfflineForEditorCheck()
         {
+            if (!CanSyncLobby())
+            {
+                return;
+            }
+
             bool online = backend.ToggleOfflineForEditorCheck();
             if (online)
             {
@@ -12985,6 +13016,14 @@ namespace GreedLast
                 stateMachine.SetReSyncPending("개발 확인용으로 네트워크 OFF 상태가 되었습니다.", coreActionsEnabled: false,
                     blockReason: GreedLastConnectBlockReason.NetworkUnavailable);
             }
+        }
+
+        private bool CanSyncLobby()
+        {
+            return stateMachine != null && requestGate != null && !requestGate.Busy
+                && (stateMachine.CurrentState == GreedLastScreenState.LobbyReady
+                    || stateMachine.CurrentState == GreedLastScreenState.ReSyncPending
+                    || stateMachine.CurrentState == GreedLastScreenState.ConnectBlocked);
         }
 
         private void RequestNextRunPattern()

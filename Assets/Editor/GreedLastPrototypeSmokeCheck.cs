@@ -12,6 +12,25 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check")]
         public static void Run()
         {
+            Require(CanRun(), "Smoke checks require Edit mode; stop the game before running them.");
+            var errors = new List<string>();
+            Application.LogCallback collectErrors = (message, stack, type) =>
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+                    errors.Add(message);
+            };
+            Application.logMessageReceived += collectErrors;
+            try { RunChecks(); }
+            finally { Application.logMessageReceived -= collectErrors; }
+            Require(errors.Count == 0, "The smoke check emitted Unity errors: " + string.Join(" | ", errors));
+            LogSuccessfulCheck();
+        }
+
+        [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
+        private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        private static void RunChecks()
+        {
             Require(
                 GreedLastDevToolPolicy.ShouldEnable(isEditor: true, isDebugBuild: false)
                     && GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: true)
@@ -1553,7 +1572,10 @@ namespace GreedLast.Editor
             VerifyRetryOpeningChoiceRecommendations();
             VerifyReviewTargetFeedback(now + 820f);
             VerifyTrapResponseContracts();
+        }
 
+        private static void LogSuccessfulCheck()
+        {
             Debug.Log("Greed Last prototype smoke check passed: focus performance, three timing axes, deterministic three-step practice onboarding, result-specific practice review and calibration, floor/overhead/side trap response contracts, trap-action symbol downbeat lift, exact/Good/Miss avoidance feedback, editor rotation drag input, rotation corridor settle, runner anticipation poses, runner downbeat anticipation, runner preparation cue and symbol, runner footfall pips, lobby entrance portal and runner staging, synchronized normal-run emphasis, start/resume runner crouch, GO launch step, launch footfall, launch beat and haptic, runtime lobby-to-run visual handoff, resolved avoidance trails, resolved judgement impact wakes, trap-ghost downbeat lift, scenery pillar downbeat lift, forward-line downbeat and beat-cue urgency lift, floor-tile, tunnel, tilt horizon lock, straight-run speed streak, straight-run center seam, forward pace marker, trap-pressure corridor squeeze, and runner beat-cue urgency lifts, feedback flash eased fade, judgement cue volume, countdown beat volume and haptics, countdown beat schedule reset, countdown-hidden downbeat visuals, segment-driven choices, stable/variation/pressure route payoff contracts, route payoff haptic contracts, route cadence rail, route cadence readiness pulse, and break coaching, chapter-role progress labels, chapter-three variation peak, conservative final-validation tempo, final escape cadence guidance, escape gate readiness pulse, escape gate pip downbeat lift, live and terminal infinite-section settlement, live coaching HUD, run HUD responsive font, run HUD downbeat pulse, run progress downbeat text pulse, responsive detail panels, runtime board-screen render suppression, runtime refill/candidate lobby button routing, prototype feel payoff guide, route-action choice hints, beat-count timing guide, beat cue threshold contract, timing guide word contract, timing guide downbeat lift, input-trace direction shapes, judgement-history action-symbol colors, recent timing nudge coaching, judgement-line pulse strength, judgement-line downbeat and beat-cue urgency lift, combo-weighted rhythm break line, health-danger edge inset, health-danger edge downbeat squeeze, health-danger pip downbeat lift, focus-ready core downbeat lift, threat-pip directional kick, target-lane pressure glow, target-lane beat, downbeat, and beat-cue urgency glow, target-lane label downbeat and beat-cue urgency lift, beat-cue audio lift, wrong-lane hold warning, trap-marker downbeat and beat-cue urgency lift, trap-danger downbeat lift, trap contact cue, trap corridor shadow, trap-readiness atmosphere, active action cue lane offset, active action cue responsive font, judgement feedback lane offset, active action cue readiness pulse, lane input ripple judgement follow-through, lane input ripple beat-cue lift, lane input ripple visibility gate, rapid lane input guard, lane touch emphasis hierarchy, result-specific lane judgement tag motion, precision reward pip downbeat lift, combo badge reward pulse, combo badge downbeat lift, timing-band readiness and downbeat breath, hazard-bound active score-preview guide, active action cue visibility, active action cue hidden states, non-action screen cue suppression, dev shortcut labels, section shortcut labels, section shortcut targets, review shortcut labels, route shortcut maps, profile record-board shortcut, clean record-board navigation labels, button label compact sizing, lane key hints, mobile touch lane hints, miss key feedback, sensory settings checklist, master sfx volume, mobile haptic duration clamp, judgement haptic profile, pause settings line, pause mode titles, mobile pause header, pause body responsive font, mobile pause body copy, pause soft-blur staging, and backdrop input block, live reward-distance coaching, recovery-pattern precision payoff and Good fallback, Perfect focus charge, focus timer downbeat urgency, Clutch counter, Offbeat chain payoffs, transition payoff preservation, timing-axis profile mastery, combo badge reward cue, three-action exact feedback amplification, stage-transition objective cue, transition progress labels, miss-recovery motion pressure, timing-pip readiness scaling, timing-pip beat, downbeat, and beat-cue urgency pulse, rotation neutral gate, lobby next-action targets, performance-based result next actions, persistent and latched retry targets, achievement/failure feedback, advanced target ladders, target test shortcuts, focus/threat/section/miss-cap/input-omission/timing-apply goals, pause resume coaching, resume countdown feedback staging, live-control motion/audio gate, result review lines and actions, retry opening recommendations, review practice drills, infinite review preparation, compact, comparison-delta-free, reward-point-free, and strongly sanitized record boards, profile checklist remaining-loop hints, completion-check priority and action-only completion routing over review noise, one-time save-draft primary/return labels, slot-control locks, and side-button labels, save-confirm/skip/reload verification order, isolated backend persistence fence, auto-clear refill labels, auto-clear reload persistence, fractional save-use labels, input boundaries, practice lifecycle, accumulated gifts, relic-only normal results, legacy migration, segment-weighted save recommendations, run-local infinite preparation, restored infinite passives, full normal clear, two-use auto-clear, and infinite handoff verified.");
         }
 
@@ -1567,14 +1589,90 @@ namespace GreedLast.Editor
             PlayerPrefs.DeleteKey(backendSaveKey);
             PlayerPrefs.Save();
 
-            var isolatedBackend = CreateIsolatedBackend();
+            var isolatedBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(
+                backendSaveKey, loadPersistedData: false, persistData: false);
             isolatedBackend.RegisterClear(record);
             isolatedBackend.SelectSaveLoadoutSlot(1);
             isolatedBackend.ConfirmSaveLoadout();
             isolatedBackend.ConsumeSelectedSaveLoadoutUseForTest(out _);
             Require(
                 !PlayerPrefs.HasKey(backendSaveKey),
-                "An isolated smoke-check backend must not create or mutate the live PlayerPrefs save key.");
+                "A non-persisting backend must not create its assigned editor-test save key.");
+            const string existingValue = "preserve-existing-test-data";
+            PlayerPrefs.SetString(backendSaveKey, existingValue);
+            isolatedBackend.RegisterClear(record);
+            isolatedBackend.ConfirmSaveLoadout();
+            Require(PlayerPrefs.GetString(backendSaveKey) == existingValue,
+                "A non-persisting backend must not overwrite an existing value either.");
+            PlayerPrefs.DeleteKey(backendSaveKey);
+            PlayerPrefs.Save();
+        }
+
+        private static void VerifyPersistenceNamespaces(GreedLastRunRecord record)
+        {
+            foreach (string invalid in new[] { null, string.Empty, "GreedLast.MockBackend.SaveData.v1",
+                GreedLastMockBackend.PersistenceTestKeyPrefix, "unrelated-profile" })
+            {
+                bool rejected = false;
+                try { GreedLastMockBackend.CreatePersistenceTestBackendForEditor(invalid); }
+                catch (ArgumentException) { rejected = true; }
+                Require(rejected, "The editor persistence factory must reject live, empty and unrelated save keys.");
+            }
+            string defaultKey = (string)typeof(GreedLastMockBackend).GetField("persistenceKey",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(CreateIsolatedBackend());
+            Require(defaultKey == "GreedLast.MockBackend.SaveData.v1",
+                "The normal backend constructor must retain the existing player save key without migrating progress.");
+            string prefix = GreedLastMockBackend.PersistenceTestKeyPrefix + Guid.NewGuid().ToString("N");
+            string firstKey = prefix + ".first";
+            string secondKey = prefix + ".second";
+            try
+            {
+                foreach (string invalidData in new[] { string.Empty, " ", "not-json", "null", "{}", "{\"version\":999}" })
+                {
+                    PlayerPrefs.SetString(firstKey, invalidData);
+                    var invalidProfile = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(firstKey);
+                    GreedLastLobbySnapshot empty = invalidProfile.LoadLobby();
+                    Require(!empty.FirstSaveCompleted && !invalidProfile.HasSaveLoadoutCandidate
+                        && !empty.SaveSlotOccupied[0] && !empty.SaveSlotOccupied[1] && !empty.SaveSlotOccupied[2],
+                        "Unreadable or unsupported test saves must open as empty, without fabricated slots or candidates.");
+                    Require(PlayerPrefs.GetString(firstKey) == invalidData,
+                        "Loading unreadable or unsupported data must not silently replace its original value.");
+                }
+                PlayerPrefs.DeleteKey(firstKey);
+                var first = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(firstKey);
+                first.RegisterClear(record);
+                Require(first.ConfirmSaveLoadout().SaveSlotOccupied[0], "The first test profile must save S1.");
+                string firstSaved = PlayerPrefs.GetString(firstKey);
+                var second = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(secondKey);
+                Require(!second.LoadLobby().FirstSaveCompleted && !second.HasSaveLoadoutCandidate,
+                    "A separate persistence key must not inherit another profile's clear or saved slot.");
+                second.RegisterClear(record);
+                second.SelectSaveLoadoutSlot(2);
+                Require(second.ConfirmSaveLoadout().SaveSlotOccupied[2], "The second test profile must save S3.");
+                Require(PlayerPrefs.GetString(firstKey) == firstSaved,
+                    "Writing another test profile must not replace the first profile's data.");
+                string secondSaved = PlayerPrefs.GetString(secondKey);
+                for (int use = 0; use < 2; use++)
+                {
+                    var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(firstKey);
+                    Require(reloaded.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                        "A namespaced persisted slot must remain consumable across reloads.");
+                    var after = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(firstKey).LoadLobby();
+                    Require(after.SaveSlotOccupied[0] == (use == 0),
+                        "Two uses must persist the auto-cleared slot across reloads.");
+                    Require(PlayerPrefs.GetString(secondKey) == secondSaved,
+                        "Consuming one profile must not touch the other profile's saved uses.");
+                }
+                Require(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(secondKey).LoadLobby().SaveSlotOccupied[2],
+                    "The other profile's S3 must survive a separate profile's depletion.");
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey(firstKey);
+                PlayerPrefs.DeleteKey(secondKey);
+                PlayerPrefs.Save();
+            }
+            Debug.Log("Greed Last persistence namespace checks passed: test-only keys, malformed/unsupported data preservation, independent profiles, reload/two-use depletion and unchanged default player key. Live save contents were not read or replaced.");
         }
 
         private static void VerifyTrapResponseContracts()
@@ -14274,15 +14372,14 @@ namespace GreedLast.Editor
             GreedLastRunAttemptRecord chapterMissAttempt,
             GreedLastRunAttemptRecord chapterGoodAttempt)
         {
-            const string backendSaveKey = "GreedLast.MockBackend.SaveData.v1";
-            bool hadSavedData = PlayerPrefs.HasKey(backendSaveKey);
-            string savedData = hadSavedData ? PlayerPrefs.GetString(backendSaveKey, string.Empty) : string.Empty;
+            string backendSaveKey = GreedLastMockBackend.PersistenceTestKeyPrefix + "lifetime-" + Guid.NewGuid().ToString("N");
             try
             {
                 PlayerPrefs.DeleteKey(backendSaveKey);
                 PlayerPrefs.Save();
                 VerifyIsolatedBackendDoesNotPersist(record, backendSaveKey);
-                var backend = new GreedLastMockBackend();
+                VerifyPersistenceNamespaces(record);
+                var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 RequirePrototypeLoopStatus(backend, "루프 0/4", "A fresh profile");
                 Require(
                     InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", InvokeMockBackendLabel(backend, "BuildLobbyStatusMessage", true)),
@@ -14620,7 +14717,7 @@ namespace GreedLast.Editor
                             Array.Exists(pendingClearNoticeSnapshot.SaveSlotUsable, usable => usable),
                             pendingClearNoticeSnapshot.Detail) == "저장",
                     "A normal clear notice must keep the one-time save candidate alive while still exposing clear review.");
-                var reloadedAfterNormalBestBackend = new GreedLastMockBackend();
+                var reloadedAfterNormalBestBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 string reloadedNormalComparison = InvokeMockBackendLabel(reloadedAfterNormalBestBackend, "BuildLatestNormalComparisonText");
                 Require(
                     reloadedNormalComparison.Contains("신기록 / 이전 최고 대비", StringComparison.Ordinal)
@@ -14704,7 +14801,7 @@ namespace GreedLast.Editor
                         && candidateGenerationGuardLobby.SaveLoadoutCandidateAvailable
                         && candidateGenerationGuardBackend.BuildSaveLoadoutDraftText() == candidateGenerationGuardDraftBefore,
                     "The PgDn candidate-generation shortcut must not replace an existing pending save candidate.");
-                var skipSaveBackend = new GreedLastMockBackend();
+                var skipSaveBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 skipSaveBackend.RegisterClear(record);
                 Require(skipSaveBackend.HasSaveLoadoutCandidate, "The skip-save test must begin from a pending save candidate.");
                 string skipSaveDraftText = skipSaveBackend.BuildSaveLoadoutDraftText(showSelectedSlot: false);
@@ -14750,7 +14847,7 @@ namespace GreedLast.Editor
                         && !Array.Exists(confirmAfterSkipLobby.SaveSlotOccupied, occupied => occupied)
                         && skipSaveBackend.BuildSaveConfirmMessage().Contains("새 저장은 다음 클리어 후 1회만 가능합니다.", StringComparison.Ordinal),
                     "Pressing save again after skipping must not revive or create a second candidate from the same clear.");
-                var reloadedAfterSkipSaveBackend = new GreedLastMockBackend();
+                var reloadedAfterSkipSaveBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 GreedLastLobbySnapshot reloadedAfterSkipSaveLobby = reloadedAfterSkipSaveBackend.LoadLobby();
                 Require(
                     !reloadedAfterSkipSaveBackend.HasSaveLoadoutCandidate
@@ -15107,7 +15204,7 @@ namespace GreedLast.Editor
                 Require(
                     !InvokeAppStaticBool("ShouldStartLobbyNormalAsRefillRun", candidateGuardLobby),
                     "The PgUp save-use shortcut must keep a guarded save candidate in the lobby instead of opening refill preparation.");
-                var reloadedAfterConfirmBackend = new GreedLastMockBackend();
+                var reloadedAfterConfirmBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 GreedLastLobbySnapshot reloadedAfterConfirmLobby = reloadedAfterConfirmBackend.LoadLobby();
                 Require(
                     !reloadedAfterConfirmBackend.HasSaveLoadoutCandidate
@@ -15325,7 +15422,7 @@ namespace GreedLast.Editor
                         && emptyLoadoutLobbyMessage.Contains("보충 런", StringComparison.Ordinal)
                         && !InvokeRuntimeUiStaticBool("ShouldHideLobbyDetail", emptyLoadoutLobbyMessage),
                     "An empty save-loadout lobby must keep the refill-run notice visible.");
-                var reloadedAfterAutoClearBackend = new GreedLastMockBackend();
+                var reloadedAfterAutoClearBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 GreedLastLobbySnapshot reloadedAfterAutoClearLobby = reloadedAfterAutoClearBackend.LoadLobby();
                 Require(
                     !Array.Exists(reloadedAfterAutoClearLobby.SaveSlotOccupied, occupied => occupied)
@@ -15396,7 +15493,7 @@ namespace GreedLast.Editor
                 Require(
                     InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "보충 재진입",
                     "The remaining-loop helper must resolve an empty auto-cleared inventory to refill re-entry.");
-                var autoClearNoInfiniteBackend = new GreedLastMockBackend();
+                var autoClearNoInfiniteBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 autoClearNoInfiniteBackend.AddSampleSaveLoadoutForTest(out _);
                 GreedLastLobbySnapshot autoClearNoInfiniteLobby =
                     autoClearNoInfiniteBackend.ConsumeSelectedSaveLoadoutUseForTest(out string firstDevConsumeNotice);
@@ -15429,7 +15526,7 @@ namespace GreedLast.Editor
                         && autoClearNoInfiniteBackend.HasSaveLoadoutCandidate
                         && refillCandidateShortcutLobby.SaveLoadoutCandidateAvailable,
                     "After auto-clear, the PgDn candidate helper must read as a refill-candidate shortcut instead of a generic save-candidate injection.");
-                var multiSlotAutoClearBackend = new GreedLastMockBackend();
+                var multiSlotAutoClearBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
                 multiSlotAutoClearBackend.AddSampleSaveLoadoutForTest(out _);
                 multiSlotAutoClearBackend.AddSampleSaveLoadoutForTest(out _);
                 multiSlotAutoClearBackend.SelectSaveLoadoutSlot(0);
@@ -15670,15 +15767,7 @@ namespace GreedLast.Editor
             }
             finally
             {
-                if (hadSavedData)
-                {
-                    PlayerPrefs.SetString(backendSaveKey, savedData);
-                }
-                else
-                {
-                    PlayerPrefs.DeleteKey(backendSaveKey);
-                }
-
+                PlayerPrefs.DeleteKey(backendSaveKey);
                 PlayerPrefs.Save();
             }
         }
@@ -18217,7 +18306,7 @@ namespace GreedLast.Editor
             PlayerPrefs.SetString(backendSaveKey, JsonUtility.ToJson(legacyData));
             PlayerPrefs.Save();
 
-            var migratedBackend = new GreedLastMockBackend();
+            var migratedBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
             GreedLastLobbySnapshot migratedLobby = migratedBackend.LoadLobby();
             Require(migratedLobby.SaveSlotOccupied[0] && migratedLobby.SaveSlotUsable[0], "A legacy relic-bearing save slot must remain usable after migration.");
             Require(migratedBackend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord migratedRecord, out _, out _), "A migrated legacy slot must still enter infinite mode.");
@@ -18229,7 +18318,7 @@ namespace GreedLast.Editor
             PlayerPrefs.SetString(backendSaveKey, JsonUtility.ToJson(legacyData));
             PlayerPrefs.Save();
 
-            var exhaustedLegacyBackend = new GreedLastMockBackend();
+            var exhaustedLegacyBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
             GreedLastLobbySnapshot exhaustedLegacyLobby = exhaustedLegacyBackend.LoadLobby();
             Require(
                 !exhaustedLegacyLobby.SaveSlotOccupied[0]
@@ -18250,7 +18339,7 @@ namespace GreedLast.Editor
             PlayerPrefs.SetString(backendSaveKey, JsonUtility.ToJson(legacyData));
             PlayerPrefs.Save();
 
-            var mixedLegacyBackend = new GreedLastMockBackend();
+            var mixedLegacyBackend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
             GreedLastLobbySnapshot mixedLegacyLobby = mixedLegacyBackend.LoadLobby();
             Require(
                 !mixedLegacyLobby.SaveSlotOccupied[0]
@@ -18271,6 +18360,27 @@ namespace GreedLast.Editor
                     && string.IsNullOrEmpty(mixedLegacyError)
                     && mixedLegacyDetail.Contains("슬롯 2 조합으로 진입", StringComparison.Ordinal),
                 "A mixed legacy reload must consume the remaining S2 loadout for the next infinite entry.");
+
+            foreach (int remaining in new[] { -10, 0, 1, 2, 99 })
+            {
+                legacyData.saveLoadoutSlots = new[] { BuildLegacyRunRecord(record) };
+                legacyData.saveLoadoutUsesRemaining = new[] { remaining };
+                legacyData.selectedSaveSlotIndex = remaining < 0 ? -100 : 999;
+                PlayerPrefs.SetString(backendSaveKey, JsonUtility.ToJson(legacyData));
+                PlayerPrefs.Save();
+                int allowed = Mathf.Clamp(remaining, 0, 2);
+                for (int use = 0; use < allowed; use++)
+                {
+                    var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
+                    Require(reloaded.LoadLobby().SelectedSaveSlotIndex == 0
+                        && reloaded.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                        "Out-of-range saved selection must resolve to the usable S1, with bounded uses.");
+                }
+                var depleted = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(backendSaveKey);
+                Require(!depleted.LoadLobby().SaveSlotOccupied[0]
+                    && !depleted.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                    "Negative/oversized persisted use counts must allow only zero to two starts, then auto-clear.");
+            }
         }
 
         private static LegacyRunRecordData BuildLegacyRunRecord(GreedLastRunRecord record)
