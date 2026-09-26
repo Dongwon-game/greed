@@ -61,7 +61,7 @@ namespace GreedLast.Editor
             }
         }
 
-        internal static void ClickOnce(EventSystem system, Button button, bool touch, Action beforePress = null)
+        internal static void ClickOnce(EventSystem system, Button button, bool touch, Action beforePress = null, Action whileHeld = null)
         {
             Canvas canvas = button.GetComponentInParent<Canvas>();
             Canvas.ForceUpdateCanvases();
@@ -73,6 +73,7 @@ namespace GreedLast.Editor
                 if (touch)
                 {
                     TouchFrame(input, module, TouchAt(71, point, TouchPhase.Began));
+                    whileHeld?.Invoke();
                     TouchFrame(input, module, TouchAt(71, point, TouchPhase.Ended));
                 }
                 else
@@ -81,6 +82,7 @@ namespace GreedLast.Editor
                     input.MousePosition = point;
                     input.MouseDown = input.MouseHeld = true;
                     module.Process();
+                    whileHeld?.Invoke();
                     input.MouseDown = input.MouseHeld = false;
                     input.MouseUp = true;
                     module.Process();
@@ -88,9 +90,32 @@ namespace GreedLast.Editor
             });
         }
 
+        internal static void VerifyInterruptedAppCommand(GreedLastRuntimeUi ui, EventSystem system, Button button, bool touch)
+        {
+            int clicks = 0;
+            UnityEngine.Events.UnityAction countClick = () => clicks++;
+            button.onClick.AddListener(countClick);
+            try
+            {
+                ClickOnce(system, button, touch, whileHeld: () =>
+                {
+                    MethodInfo focus = typeof(GreedLastRuntimeUi).GetMethod("OnApplicationFocus", BindingFlags.Instance | BindingFlags.NonPublic);
+                    focus.Invoke(ui, new object[] { false });
+                    focus.Invoke(ui, new object[] { true });
+                });
+                Require(clicks == 0, "An interrupted app-bound command must not invoke any callback: " + button.name);
+            }
+            finally
+            {
+                button.onClick.RemoveListener(countClick);
+            }
+        }
+
         internal static void VerifyActionClick(GreedLastRuntimeUi ui, EventSystem system, Button button, Vector2 screenPoint)
         {
             int clicks = 0;
+            bool wasInteractable = button.interactable;
+            CanvasGroup testGroup = button.gameObject.AddComponent<CanvasGroup>();
             UnityEngine.Events.UnityAction countClick = () => clicks++;
             button.onClick.AddListener(countClick);
             try
@@ -128,11 +153,106 @@ namespace GreedLast.Editor
                     TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Moved));
                     TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Ended));
                     Require(clicks == 2, "Releasing outside a command must cancel the click.");
+                    foreach (string interruption in new[] { "OnApplicationFocus", "OnApplicationPause", "OnDisable", "HiddenButton", "DisabledButton", "InteractionLock", "CanvasGroupLock" })
+                    {
+                        void Interrupt(bool returning)
+                        {
+                            if (interruption == "HiddenButton")
+                            {
+                                button.gameObject.SetActive(returning);
+                                return;
+                            }
+                            if (interruption == "DisabledButton")
+                            {
+                                button.enabled = returning;
+                                return;
+                            }
+                            if (interruption == "InteractionLock")
+                            {
+                                button.interactable = returning;
+                                return;
+                            }
+                            if (interruption == "CanvasGroupLock")
+                            {
+                                testGroup.interactable = returning;
+                                return;
+                            }
+                            string method = interruption == "OnDisable" && returning ? "OnEnable" : interruption;
+                            object[] args = interruption == "OnDisable" ? null
+                                : new object[] { interruption == "OnApplicationFocus" ? returning : !returning };
+                            typeof(GreedLastRuntimeUi).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, args);
+                        }
+                        int before = clicks;
+                        TouchFrame(input, module, TouchAt(84, screenPoint, TouchPhase.Began));
+                        Interrupt(false);
+                        Interrupt(true);
+                        TouchFrame(input, module, TouchAt(84, screenPoint, TouchPhase.Stationary));
+                        TouchFrame(input, module, TouchAt(84, screenPoint, TouchPhase.Ended));
+                        Require(clicks == before, "An interrupted touch must not execute on return: " + interruption + " / " + button.name);
+                        TouchFrame(input, module, TouchAt(84, screenPoint, TouchPhase.Began));
+                        TouchFrame(input, module, TouchAt(84, screenPoint, TouchPhase.Ended));
+                        Require(clicks == before + 1, "A fresh touch must work after an interrupted command.");
+
+                        input.Touches = Array.Empty<Touch>();
+                        input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                        input.MousePosition = screenPoint;
+                        module.Process();
+                        input.MouseDown = false;
+                        Interrupt(false);
+                        Interrupt(true);
+                        input.MouseHeld = false;
+                        input.MouseUp = true;
+                        module.Process();
+                        Require(clicks == before + 1, "An interrupted mouse press must not execute on return: " + interruption + " / " + button.name);
+                        input.MouseUp = false;
+                        input.MouseDown = input.MouseHeld = true;
+                        module.Process();
+                        input.MouseDown = input.MouseHeld = false;
+                        input.MouseUp = true;
+                        module.Process();
+                        Require(clicks == before + 2, "A fresh mouse click must work after an interrupted command.");
+                        input.MouseEnabled = input.MouseUp = false;
+                    }
+
+                    int unlockedClicks = clicks;
+                    button.interactable = false;
+                    TouchFrame(input, module, TouchAt(85, screenPoint, TouchPhase.Began));
+                    button.interactable = true;
+                    TouchFrame(input, module, TouchAt(85, screenPoint, TouchPhase.Ended));
+                    Require(clicks == unlockedClicks, "A touch begun while locked must not become a click when unlocked.");
+                    TouchFrame(input, module, TouchAt(85, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(85, screenPoint, TouchPhase.Ended));
+                    Require(clicks == unlockedClicks + 1, "Unlocking must still allow a fresh command touch.");
+
+                    input.Touches = Array.Empty<Touch>();
+                    input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                    input.MousePosition = screenPoint;
+                    button.interactable = false;
+                    module.Process();
+                    button.interactable = true;
+                    input.MouseDown = input.MouseHeld = false;
+                    input.MouseUp = true;
+                    module.Process();
+                    Require(clicks == unlockedClicks + 1, "A mouse press begun while locked must not execute after unlocking.");
+                    input.MouseEnabled = input.MouseUp = false;
+
+                    int beforeMultiTouch = clicks;
+                    TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Began), TouchAt(87, screenPoint, TouchPhase.Began));
+                    button.interactable = false;
+                    button.interactable = true;
+                    TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Ended), TouchAt(87, screenPoint, TouchPhase.Stationary));
+                    TouchFrame(input, module, TouchAt(87, screenPoint, TouchPhase.Ended));
+                    Require(clicks == beforeMultiTouch, "Locking a command must cancel every held finger, not just the most recent one.");
+                    TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Ended));
+                    Require(clicks == beforeMultiTouch + 1, "A reused finger ID must work after a multi-touch cancellation.");
                 });
             }
             finally
             {
                 button.onClick.RemoveListener(countClick);
+                button.interactable = wasInteractable;
+                UnityEngine.Object.DestroyImmediate(testGroup);
             }
         }
 

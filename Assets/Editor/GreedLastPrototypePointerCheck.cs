@@ -11,6 +11,10 @@ namespace GreedLast.Editor
         public static void Run(GreedLastRuntimeUi ui)
         {
             GreedLastPrototypeKeyboardCheck.Run(ui);
+            foreach (string field in new[] { "normalRunButton", "saveLoadoutButton", "nextPatternButton", "returnLobbyButton", "saveSlotDeleteButton", "pauseButton" })
+                Require(Read<Button>(ui, field) is GreedLastCommandButton,
+                    "Runtime action buttons must use the interruption-safe command component: " + field);
+            VerifyCommandPressLifetime();
             FieldInfo callback = Field("runChannelRequested");
             object previousCallback = callback.GetValue(ui);
             CanvasGroup group = null;
@@ -134,6 +138,71 @@ namespace GreedLast.Editor
                 if (group != null) UnityEngine.Object.DestroyImmediate(group);
                 callback.SetValue(ui, previousCallback);
                 ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            }
+        }
+
+        private static void VerifyCommandPressLifetime()
+        {
+            GameObject host = new GameObject("GreedLastCommandPressCheck", typeof(RectTransform), typeof(CanvasGroup));
+            try
+            {
+                var command = host.AddComponent<GreedLastCommandButton>();
+                command.navigation = new Navigation { mode = Navigation.Mode.None };
+                CanvasGroup group = host.GetComponent<CanvasGroup>();
+                int clicks = 0;
+                command.onClick.AddListener(() => clicks++);
+                PointerEventData first = Pointer(21);
+                PointerEventData second = Pointer(22);
+                void Press(PointerEventData pointer)
+                {
+                    pointer.eligibleForClick = true;
+                    Down(command, pointer);
+                }
+                void Release(PointerEventData pointer)
+                {
+                    Up(command, pointer);
+                    if (pointer.eligibleForClick)
+                        ExecuteEvents.Execute(command.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                }
+                foreach (string reason in new[] { "cancel", "component", "object", "interaction", "group" })
+                {
+                    int before = clicks;
+                    Press(first);
+                    Press(second);
+                    switch (reason)
+                    {
+                        case "cancel": command.CancelPendingPresses(); break;
+                        case "component": command.enabled = false; command.enabled = true; break;
+                        case "object": host.SetActive(false); host.SetActive(true); break;
+                        case "interaction": command.interactable = false; command.interactable = true; break;
+                        case "group": group.interactable = false; group.interactable = true; break;
+                    }
+                    Require(!first.eligibleForClick && !second.eligibleForClick,
+                        "Every held command pointer must be canceled by " + reason);
+                    Release(first);
+                    Release(second);
+                    Require(clicks == before, "Canceled commands must never call onClick: " + reason);
+                    Press(first);
+                    command.interactable = true;
+                    command.colors = command.colors;
+                    Release(first);
+                    Require(clicks == before + 1, "Fresh commands must survive unchanged presentation properties: " + reason);
+                }
+                int beforeLocked = clicks;
+                command.interactable = false;
+                Press(first);
+                command.interactable = true;
+                Release(first);
+                Require(clicks == beforeLocked, "A disabled command must not queue a future click.");
+                PointerEventData right = Pointer(-2, PointerEventData.InputButton.Right);
+                Press(right);
+                Release(right);
+                Require(clicks == beforeLocked, "Secondary mouse input must remain ignored.");
+                Debug.Log("Greed Last command lifetime checks passed: two held pointers, cancellation, hidden/disabled UI, transient locks, blocked-start input and fresh-click recovery. Direct event tests; rendered module checks are separate.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
             }
         }
 

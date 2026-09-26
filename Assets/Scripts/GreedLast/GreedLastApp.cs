@@ -27626,6 +27626,14 @@ namespace GreedLast
             for (int i = 0; i < laneHeldPointers.Length; i++) ClearLanePointerHold(i);
         }
 
+        private void CancelPendingUiInput()
+        {
+            ClearLanePointerHolds();
+            if (rootPanel == null) return;
+            foreach (GreedLastCommandButton button in rootPanel.GetComponentsInChildren<GreedLastCommandButton>(true))
+                button.CancelPendingPresses();
+        }
+
         public bool IsPointerOverInteractiveUi(Vector2 screenPoint)
         {
             EventSystem events = EventSystem.current;
@@ -27641,14 +27649,14 @@ namespace GreedLast
         {
             sensoryHasFocus = hasFocus;
             RefreshAudioPlaybackState();
-            if (!hasFocus) ClearLanePointerHolds();
+            if (!hasFocus) CancelPendingUiInput();
         }
 
         private void OnApplicationPause(bool paused)
         {
             sensoryAppPaused = paused;
             RefreshAudioPlaybackState();
-            if (paused) ClearLanePointerHolds();
+            if (paused) CancelPendingUiInput();
         }
 
         private void OnEnable()
@@ -27661,7 +27669,7 @@ namespace GreedLast
         {
             sensoryComponentEnabled = false;
             RefreshAudioPlaybackState();
-            ClearLanePointerHolds();
+            CancelPendingUiInput();
         }
 
         private void OnDestroy()
@@ -27772,7 +27780,7 @@ namespace GreedLast
             Image image = buttonObject.AddComponent<Image>();
             image.color = Color.white;
 
-            Button button = buttonObject.AddComponent<Button>();
+            Button button = buttonObject.AddComponent<GreedLastCommandButton>();
             button.navigation = new Navigation { mode = Navigation.Mode.None };
             ColorBlock colors = button.colors;
             colors.normalColor = ButtonNormalColor;

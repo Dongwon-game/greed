@@ -38,6 +38,7 @@ namespace GreedLast.Editor
             public bool pointerLoopPassed;
             public int pointerLoopCases;
             public int pointerLoopClicks;
+            public int pointerLoopCanceledCommands;
             public List<CaptureResult> frames = new List<CaptureResult>();
         }
 
@@ -102,6 +103,7 @@ namespace GreedLast.Editor
                 report.pointerLoopPassed = true;
                 report.pointerLoopCases = GreedLastPrototypeAppLoopCheck.LastPointerCaseCount;
                 report.pointerLoopClicks = GreedLastPrototypeAppLoopCheck.LastPointerClickCount;
+                report.pointerLoopCanceledCommands = GreedLastPrototypeAppLoopCheck.LastCanceledCommandCount;
                 captureScene = EditorSceneManager.NewPreviewScene();
                 camera = new GameObject("GreedVisualCheckCamera", typeof(Camera)).GetComponent<Camera>();
                 camera.orthographic = true;

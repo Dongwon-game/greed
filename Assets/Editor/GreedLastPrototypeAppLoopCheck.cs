@@ -16,12 +16,14 @@ namespace GreedLast.Editor
         private static bool usePointerModule;
         private static bool useTouch;
         private static int pointerClicks;
+        private static int canceledCommandPresses;
         private static Camera pointerCamera;
         private static RenderTexture pointerTarget;
         private static GreedLastRuntimeUi pointerUi;
         private static Vector2Int pointerSize;
         private static Vector4 pointerInsets;
         public static int LastPointerClickCount => pointerClicks;
+        public static int LastCanceledCommandCount => canceledCommandPresses;
         public static int LastPointerCaseCount { get; private set; }
 
         [MenuItem(PointerMenuPath)]
@@ -32,6 +34,7 @@ namespace GreedLast.Editor
             Require(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
                 "The rendered pointer loop requires a graphics device; do not use -nographics.");
             pointerClicks = 0;
+            canceledCommandPresses = 0;
             LastPointerCaseCount = 0;
             usePointerModule = true;
             var errors = new List<string>();
@@ -58,7 +61,8 @@ namespace GreedLast.Editor
             Require(errors.Count == 0, "The rendered input loop emitted Unity errors: " + string.Join(" | ", errors));
             Debug.Log("Greed Last full pointer loop passed: " + pointerClicks
                 + " actual-module mouse/touch clicks in " + LastPointerCaseCount
-                + " clean-view layouts across practice, clear, save, preparation, two-use depletion, records and confirmations. Synthetic input and isolated backend only.");
+                + " clean-view layouts; " + canceledCommandPresses
+                + " interrupted app-bound commands canceled across practice, clear, save, preparation, two-use depletion, records and confirmations. Synthetic input and isolated backend only.");
         }
 
         [MenuItem(PointerMenuPath, true)]
@@ -710,6 +714,7 @@ namespace GreedLast.Editor
                 && Mathf.Approximately(latest().Distance, beforePause.Distance)
                 && state.CurrentState == GreedLastScreenState.RunCoreTest,
                 "Background time and foreground callbacks must preserve the paused run without damage or lobby resync.");
+            VerifyHeldResumeInterruption(app, ui, latest);
             Click(ui, "nextPatternButton");
             float resumeEnd = Read<float>(core, "resumeCountdownEndsAt");
             Require(latest().ResumeCountdownActive && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
@@ -754,6 +759,59 @@ namespace GreedLast.Editor
                 Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
                     "Practice pause/resume/exit must not consume existing saved loadouts.");
             Debug.Log("Greed Last app pause lifecycle passed: background audio in both callback orders -> paused input isolation -> real-button first beat -> interrupted countdown reset -> single GO -> lead-in buffer -> lobby with saved slots intact.");
+        }
+
+        private static void VerifyHeldResumeInterruption(GreedLastApp app, GreedLastRuntimeUi ui,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            Button resume = Read<Button>(ui, "nextPatternButton");
+            foreach (string lifecycle in new[] { "OnApplicationFocus", "OnApplicationPause" })
+            foreach (bool appFirst in new[] { false, true })
+            {
+                GreedLastRunSnapshot before = latest();
+                int clicks = 0;
+                UnityEngine.Events.UnityAction countClick = () => clicks++;
+                resume.onClick.AddListener(countClick);
+                void InterruptAndReturn()
+                {
+                    foreach (bool returning in new[] { false, true })
+                    {
+                        object[] args = { lifecycle == "OnApplicationFocus" ? returning : !returning };
+                        Method(appFirst ? (object)app : ui, lifecycle).Invoke(appFirst ? (object)app : ui, args);
+                        Method(appFirst ? (object)ui : app, lifecycle).Invoke(appFirst ? (object)ui : app, args);
+                    }
+                    if (usePointerModule) RefreshPointerViewport(resume);
+                }
+                try
+                {
+                    if (usePointerModule)
+                    {
+                        RefreshPointerViewport(resume);
+                        GreedLastPrototypeKeyboardCheck.ClickOnce(UnityEngine.Object.FindAnyObjectByType<EventSystem>(),
+                            resume, useTouch, whileHeld: InterruptAndReturn);
+                        canceledCommandPresses++;
+                    }
+                    else
+                    {
+                        var pointer = new PointerEventData(EventSystem.current)
+                            { button = PointerEventData.InputButton.Left, eligibleForClick = true };
+                        ExecuteEvents.Execute(resume.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                        InterruptAndReturn();
+                        ExecuteEvents.Execute(resume.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                        if (pointer.eligibleForClick)
+                            ExecuteEvents.Execute(resume.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                    }
+                    Require(clicks == 0 && latest().Paused && !latest().ResumeCountdownActive
+                        && latest().Health == before.Health && latest().Score == before.Score
+                        && Mathf.Approximately(latest().Distance, before.Distance),
+                        "A held resume command must cancel without advancing the run: " + lifecycle + " / appFirst=" + appFirst);
+                }
+                finally
+                {
+                    resume.onClick.RemoveListener(countClick);
+                }
+            }
+            Debug.Log("Greed Last held-resume checks passed: focus/pause interruption in both app/UI callback orders; release does not resume or advance the run.");
         }
 
         private static void VerifyGameplayLaneOutcomes(GreedLastApp app, GreedLastRuntimeUi ui,
@@ -927,22 +985,22 @@ namespace GreedLast.Editor
             Require(button.gameObject.activeInHierarchy && button.IsInteractable(), "The callback target must be visible and enabled: " + button.name);
             if (usePointerModule)
             {
-                Method(pointerUi, "ApplySafeAreaSample").Invoke(pointerUi, new object[]
-                {
-                    new Rect(pointerInsets.x, pointerInsets.y,
-                        pointerSize.x - pointerInsets.x - pointerInsets.z,
-                        pointerSize.y - pointerInsets.y - pointerInsets.w),
-                    pointerSize.x, pointerSize.y, false,
-                });
-                Canvas.ForceUpdateCanvases();
-                foreach (Graphic graphic in button.GetComponentInParent<Canvas>().GetComponentsInChildren<Graphic>())
-                {
-                    graphic.SetAllDirty();
-                    graphic.Rebuild(CanvasUpdate.PreRender);
-                }
-                pointerCamera.Render();
+                RefreshPointerViewport(button);
                 EventSystem system = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
-                GreedLastPrototypeKeyboardCheck.ClickOnce(system, button, useTouch, beforePress);
+                if (button is GreedLastCommandButton)
+                {
+                    GreedLastPrototypeKeyboardCheck.VerifyInterruptedAppCommand(pointerUi, system, button, useTouch);
+                    canceledCommandPresses++;
+                }
+                GreedLastPrototypeKeyboardCheck.ClickOnce(system, button, useTouch, beforePress, () =>
+                {
+                    if (button is GreedLastCommandButton && Read<bool>(pointerUi, "runModeActive")
+                        && Read<bool>(pointerUi, "hasRunSnapshot"))
+                    {
+                        pointerUi.RenderRun(Read<GreedLastRunSnapshot>(pointerUi, "latestRunSnapshot"));
+                        RefreshPointerViewport(button);
+                    }
+                });
                 pointerClicks++;
                 return;
             }
@@ -951,6 +1009,25 @@ namespace GreedLast.Editor
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerUpHandler);
             ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+        }
+
+        private static void RefreshPointerViewport(Button button)
+        {
+            // RenderRun samples the host window; restore the isolated target's size before its next input frame.
+            Method(pointerUi, "ApplySafeAreaSample").Invoke(pointerUi, new object[]
+            {
+                new Rect(pointerInsets.x, pointerInsets.y,
+                    pointerSize.x - pointerInsets.x - pointerInsets.z,
+                    pointerSize.y - pointerInsets.y - pointerInsets.w),
+                pointerSize.x, pointerSize.y, false,
+            });
+            Canvas.ForceUpdateCanvases();
+            foreach (Graphic graphic in button.GetComponentInParent<Canvas>().GetComponentsInChildren<Graphic>())
+            {
+                graphic.SetAllDirty();
+                graphic.Rebuild(CanvasUpdate.PreRender);
+            }
+            pointerCamera.Render();
         }
 
         private static void Bind(GreedLastRuntimeUi ui, GreedLastApp app, string field, string method)
