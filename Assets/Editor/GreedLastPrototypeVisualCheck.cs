@@ -907,15 +907,39 @@ namespace GreedLast.Editor
 
         private static int VerifyActionModuleClick()
         {
-            // Only callback-only commands are clicked; settings buttons persist preferences directly.
             int count = 0;
-            foreach (string field in new[] { "nextPatternButton", "returnLobbyButton", "normalRunButton", "practiceRunButton",
-                "saveLoadoutButton", "infiniteButton", "infiniteRecordButton", "retryButton" })
+            foreach (GreedLastCommandButton button in Read<GameObject>("rootPanel").GetComponentsInChildren<GreedLastCommandButton>())
             {
-                Button button = Read<Button>(field);
                 if (!button.gameObject.activeInHierarchy || !button.IsInteractable()) continue;
                 Vector2 point = camera.WorldToScreenPoint(button.transform.position);
-                GreedLastPrototypeKeyboardCheck.VerifyActionClick(ui, eventSystem, button, point);
+                Button.ButtonClickedEvent originalClick = button.onClick;
+                try
+                {
+                    // Settings persist preferences directly. Probe their real input surface without changing user settings.
+                    button.onClick = new Button.ButtonClickedEvent();
+                    Action redraw = null;
+                    if (currentFrame.Width == Screen.width && currentFrame.Height == Screen.height
+                        && currentFrame.SafeInsets == Vector4.zero && Read<bool>("runModeActive") && Read<bool>("hasRunSnapshot"))
+                    {
+                        GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
+                        redraw = () =>
+                        {
+                            ui.RenderRun(run);
+                            Canvas.ForceUpdateCanvases();
+                            foreach (Graphic graphic in canvas.GetComponentsInChildren<Graphic>())
+                            {
+                                graphic.SetAllDirty();
+                                graphic.Rebuild(CanvasUpdate.PreRender);
+                            }
+                            camera.Render();
+                        };
+                    }
+                    GreedLastPrototypeKeyboardCheck.VerifyActionClick(ui, eventSystem, button, point, redraw);
+                }
+                finally
+                {
+                    button.onClick = originalClick;
+                }
                 count++;
             }
             return count;

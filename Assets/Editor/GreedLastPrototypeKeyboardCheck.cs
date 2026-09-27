@@ -111,11 +111,15 @@ namespace GreedLast.Editor
             }
         }
 
-        internal static void VerifyActionClick(GreedLastRuntimeUi ui, EventSystem system, Button button, Vector2 screenPoint)
+        internal static void VerifyActionClick(GreedLastRuntimeUi ui, EventSystem system, Button button, Vector2 screenPoint,
+            Action redrawWhileHeld = null)
         {
             int clicks = 0;
             bool wasInteractable = button.interactable;
-            CanvasGroup testGroup = button.gameObject.AddComponent<CanvasGroup>();
+            CanvasGroup testGroup = button.GetComponent<CanvasGroup>();
+            bool addedGroup = testGroup == null;
+            if (addedGroup) testGroup = button.gameObject.AddComponent<CanvasGroup>();
+            bool groupWasInteractable = testGroup.interactable;
             UnityEngine.Events.UnityAction countClick = () => clicks++;
             button.onClick.AddListener(countClick);
             try
@@ -153,10 +157,21 @@ namespace GreedLast.Editor
                     TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Moved));
                     TouchFrame(input, module, TouchAt(80, new Vector2(-1000f, -1000f), TouchPhase.Ended));
                     Require(clicks == 2, "Releasing outside a command must cancel the click.");
-                    foreach (string interruption in new[] { "OnApplicationFocus", "OnApplicationPause", "OnDisable", "HiddenButton", "DisabledButton", "InteractionLock", "CanvasGroupLock" })
+                    Rect originalSafeArea = (Rect)typeof(GreedLastRuntimeUi).GetField("lastSafeArea", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                    int viewportWidth = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenWidth", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                    int viewportHeight = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenHeight", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                    foreach (string interruption in new[] { "OnApplicationFocus", "OnApplicationPause", "OnDisable", "HiddenButton", "DisabledButton", "InteractionLock", "CanvasGroupLock", "ViewportChange" })
                     {
                         void Interrupt(bool returning)
                         {
+                            if (interruption == "ViewportChange")
+                            {
+                                Rect area = returning ? originalSafeArea
+                                    : new Rect(originalSafeArea.x + 1f, originalSafeArea.y, originalSafeArea.width - 1f, originalSafeArea.height);
+                                typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", BindingFlags.Instance | BindingFlags.NonPublic)
+                                    .Invoke(ui, new object[] { area, viewportWidth, viewportHeight, false });
+                                return;
+                            }
                             if (interruption == "HiddenButton")
                             {
                                 button.gameObject.SetActive(returning);
@@ -246,13 +261,32 @@ namespace GreedLast.Editor
                     TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Began));
                     TouchFrame(input, module, TouchAt(86, screenPoint, TouchPhase.Ended));
                     Require(clicks == beforeMultiTouch + 1, "A reused finger ID must work after a multi-touch cancellation.");
+                    if (redrawWhileHeld != null)
+                    {
+                        int beforeRedraw = clicks;
+                        TouchFrame(input, module, TouchAt(88, screenPoint, TouchPhase.Began));
+                        for (int frame = 0; frame < 3; frame++) redrawWhileHeld();
+                        TouchFrame(input, module, TouchAt(88, screenPoint, TouchPhase.Ended));
+                        Require(clicks == beforeRedraw + 1, "A held touch must survive an unchanged run redraw: " + button.name);
+                        input.Touches = Array.Empty<Touch>();
+                        input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                        input.MousePosition = screenPoint;
+                        module.Process();
+                        for (int frame = 0; frame < 3; frame++) redrawWhileHeld();
+                        input.MouseDown = input.MouseHeld = false;
+                        input.MouseUp = true;
+                        module.Process();
+                        Require(clicks == beforeRedraw + 2, "A held mouse click must survive an unchanged run redraw: " + button.name);
+                        input.MouseEnabled = input.MouseUp = false;
+                    }
                 });
             }
             finally
             {
                 button.onClick.RemoveListener(countClick);
                 button.interactable = wasInteractable;
-                UnityEngine.Object.DestroyImmediate(testGroup);
+                if (addedGroup) UnityEngine.Object.DestroyImmediate(testGroup);
+                else testGroup.interactable = groupWasInteractable;
             }
         }
 

@@ -15657,14 +15657,10 @@ namespace GreedLast
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
             if (pauseSettings) UpdatePauseMenuOverlay(latestRunSnapshot);
             SetCleanViewGroupsVisible(devCleanViewGroups, !cleanView);
-            SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings);
-            if (runModeActive && hasRunSnapshot && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode)
-            {
-                CanvasGroup recommendation = timingOffsetButtons[1].GetComponent<CanvasGroup>();
-                recommendation.alpha = 1f;
-                recommendation.interactable = true;
-                recommendation.blocksRaycasts = true;
-            }
+            CanvasGroup resultCalibration = runModeActive && hasRunSnapshot
+                && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode
+                ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
+            SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 runHudText.text = cleanView ? BuildCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
@@ -15686,13 +15682,14 @@ namespace GreedLast
                 + "\n정확 " + snapshot.SuccessCount + " · Good " + snapshot.GoodCount + " · Miss " + snapshot.MissCount;
         }
 
-        private static void SetCleanViewGroupsVisible(List<CanvasGroup> groups, bool visible)
+        private static void SetCleanViewGroupsVisible(List<CanvasGroup> groups, bool visible, CanvasGroup visibleException = null)
         {
             foreach (CanvasGroup group in groups)
             {
-                group.alpha = visible ? 1f : 0f;
-                group.interactable = visible;
-                group.blocksRaycasts = visible;
+                bool groupVisible = visible || group == visibleException;
+                group.alpha = groupVisible ? 1f : 0f;
+                group.interactable = groupVisible;
+                group.blocksRaycasts = groupVisible;
             }
         }
 
@@ -16535,10 +16532,9 @@ namespace GreedLast
             motionComfortButton.interactable = snapshot.Paused;
             for (int i = 0; i < timingOffsetButtons.Length; i += 1)
             {
-                timingOffsetButtons[i].interactable = !snapshot.Stopped;
+                timingOffsetButtons[i].interactable = i == 1
+                    ? CanUseTimingRecommendationButton(snapshot) : !snapshot.Stopped;
             }
-
-            timingOffsetButtons[1].interactable = CanUseTimingRecommendationButton(snapshot);
 
             for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
             {
@@ -27879,7 +27875,11 @@ namespace GreedLast
             lastSafeArea = safeArea;
             lastSafeAreaScreenWidth = screenWidth;
             lastSafeAreaScreenHeight = screenHeight;
-            if (changedViewport) ViewportChanged?.Invoke();
+            if (changedViewport)
+            {
+                CancelPendingUiInput();
+                ViewportChanged?.Invoke();
+            }
             return true;
         }
 

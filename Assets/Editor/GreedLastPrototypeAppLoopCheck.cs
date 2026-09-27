@@ -121,6 +121,7 @@ namespace GreedLast.Editor
                 Bind(ui, app, "saveSlotRenameRequested", "RequestRenameSaveLoadoutSlot");
                 Bind(ui, app, "saveSlotDeleteRequested", "RequestDeleteSaveLoadoutSlot");
                 Write(ui, "runChannelRequested", Method(app, "HandleRunChannelInput").CreateDelegate(typeof(Action<GreedLastRunChannel>), app));
+                Write(ui, "timingOffsetRequested", Method(app, "RequestTimingOffsetAdjust").CreateDelegate(typeof(Action<int>), app));
                 ui.ViewportChanged += (Action)Method(app, "HandleViewportChanged").CreateDelegate(typeof(Action), app);
                 state.StateChanged += ui.Render;
                 core.SnapshotChanged += (Action<GreedLastRunSnapshot>)Method(app, "HandleRunSnapshotChanged")
@@ -248,6 +249,7 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
+                VerifyPracticeCalibrationLoop(ui, backend, state, core, () => run);
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
                 VerifyGameplayLaneOutcomes(app, ui, backend, state, core, () => run);
                 VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
@@ -674,6 +676,76 @@ namespace GreedLast.Editor
             FinishPreparationTransition(app);
         }
 
+        private static void VerifyPracticeCalibrationLoop(GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            string key = GreedLastRunCore.InputTimingOffsetPrefsKey;
+            bool hadOffset = PlayerPrefs.HasKey(key);
+            float storedOffset = PlayerPrefs.GetFloat(key);
+            float originalCoreOffset = core.InputTimingOffsetSeconds;
+            string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
+            try
+            {
+                core.ResetInputTimingOffset();
+                Click(ui, "practiceRunButton");
+                float clock = Time.realtimeSinceStartup;
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                for (int trap = 0; trap < 3; trap++)
+                {
+                    if (trap > 0) core.RequestNextPattern(clock += 2f);
+                    GreedLastRunSnapshot sample = latest();
+                    Require(sample.ActivePattern, "Calibration needs three active practice traps.");
+                    clock += sample.Pattern.CoreSeconds - core.InputTimingOffsetSeconds
+                        + (sample.Pattern.SuccessWindowSeconds + sample.Pattern.GoodWindowSeconds) * 0.5f;
+                    core.HandleInput(sample.Pattern.Channel, clock);
+                    Require(latest().LastResult == GreedLastJudgementResult.Good,
+                        "Calibration must use measured late Good inputs, not an injected recommendation.");
+                }
+                GreedLastRunSnapshot result = latest();
+                Button calibration = Read<Button[]>(ui, "timingOffsetButtons")[1];
+                Require(result.Stopped && result.PracticeMode && result.HasTimingRecommendation
+                    && result.TimingRecommendationMilliseconds < 0 && calibration.IsInteractable(),
+                    "Late practice responses must expose an actionable negative recommendation at the result.");
+                Click(calibration);
+                Require(latest().TimingRecommendationApplied
+                    && Mathf.RoundToInt(core.InputTimingOffsetSeconds * 1000f) == result.TimingRecommendationMilliseconds
+                    && Mathf.Approximately(PlayerPrefs.GetFloat(key), core.InputTimingOffsetSeconds)
+                    && !calibration.IsInteractable()
+                    && calibration.GetComponentInChildren<Text>().text.Contains("적용 완료"),
+                    "The real result action must persist its recommendation once and show the completed state.");
+                float appliedOffset = core.InputTimingOffsetSeconds;
+                Click(ui, "returnLobbyButton");
+                Click(ui, "practiceRunButton");
+                Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, appliedOffset)
+                    && !latest().HasTimingRecommendation && !latest().TimingRecommendationApplied,
+                    "A fresh practice must keep the saved offset but clear the preceding run's samples and result.");
+                Click(ui, "pauseButton");
+                Require(latest().Paused && calibration.IsInteractable()
+                    && calibration.GetComponentInChildren<Text>().text.Contains("0ms"),
+                    "Pause settings must offer a real reset before fresh timing samples are collected.");
+                Click(calibration);
+                Require(latest().Paused && Mathf.Approximately(core.InputTimingOffsetSeconds, 0f)
+                    && Mathf.Approximately(PlayerPrefs.GetFloat(key), 0f) && !calibration.IsInteractable(),
+                    "The actual reset button must persist zero and remain paused without a second actionable reset.");
+                Click(ui, "returnLobbyButton");
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                    "Practice calibration must return to the lobby without creating a normal-run save opportunity.");
+                for (int slot = 0; slot < savedLabels.Length; slot++)
+                    Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
+                        "Practice calibration must not mutate or consume saved loadouts.");
+                Debug.Log("Greed Last app calibration loop passed: three measured Good responses -> actual recommendation click -> persisted offset -> new practice -> paused reset -> preserved save slots. Original preference restored.");
+            }
+            finally
+            {
+                Write(core, "inputTimingOffsetSeconds", originalCoreOffset);
+                if (hadOffset) PlayerPrefs.SetFloat(key, storedOffset);
+                else PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.Save();
+            }
+        }
+
         private static void VerifyAppPauseLifecycle(GreedLastApp app, GreedLastRuntimeUi ui,
             GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
             Func<GreedLastRunSnapshot> latest)
@@ -994,10 +1066,12 @@ namespace GreedLast.Editor
                 }
                 GreedLastPrototypeKeyboardCheck.ClickOnce(system, button, useTouch, beforePress, () =>
                 {
-                    if (button is GreedLastCommandButton && Read<bool>(pointerUi, "runModeActive")
-                        && Read<bool>(pointerUi, "hasRunSnapshot"))
+                    if (button is GreedLastCommandButton)
                     {
-                        pointerUi.RenderRun(Read<GreedLastRunSnapshot>(pointerUi, "latestRunSnapshot"));
+                        // Only the native-size fixture can redraw through Screen.safeArea without a real viewport change.
+                        if (pointerSize.x == Screen.width && pointerSize.y == Screen.height && pointerInsets == Vector4.zero
+                            && Read<bool>(pointerUi, "runModeActive") && Read<bool>(pointerUi, "hasRunSnapshot"))
+                            pointerUi.RenderRun(Read<GreedLastRunSnapshot>(pointerUi, "latestRunSnapshot"));
                         RefreshPointerViewport(button);
                     }
                 });

@@ -10153,9 +10153,20 @@ namespace GreedLast.Editor
                 "The practice calibration action must sit below the result summary, not over it.");
             int calibrationClicks = 0;
             SetRuntimeUiField<Action<int>>(ui, "timingOffsetRequested", amount => calibrationClicks++);
-            recommendation.onClick.Invoke();
-            SetRuntimeUiField<Action<int>>(ui, "timingOffsetRequested", null);
-            Require(calibrationClicks == 1, "The result calibration action must retain its callback.");
+            try
+            {
+                var press = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left, eligibleForClick = true };
+                recommendation.OnPointerDown(press);
+                for (int frame = 0; frame < 3; frame++) ui.RenderRun(practiceResult);
+                recommendation.OnPointerUp(press);
+                if (press.eligibleForClick) recommendation.OnPointerClick(press);
+                Require(calibrationClicks == 1, "The result calibration action must survive repeated run redraws while held.");
+            }
+            finally
+            {
+                SetRuntimeUiField<Action<int>>(ui, "timingOffsetRequested", null);
+            }
             ui.RenderRun(beforePause);
             Require(recommendationGroup.alpha == 0f && !recommendationGroup.blocksRaycasts
                 && recommendation.GetComponent<RectTransform>().anchorMin.x > 0.9f,

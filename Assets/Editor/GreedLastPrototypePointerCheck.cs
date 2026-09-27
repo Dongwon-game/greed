@@ -14,7 +14,7 @@ namespace GreedLast.Editor
             foreach (string field in new[] { "normalRunButton", "saveLoadoutButton", "nextPatternButton", "returnLobbyButton", "saveSlotDeleteButton", "pauseButton" })
                 Require(Read<Button>(ui, field) is GreedLastCommandButton,
                     "Runtime action buttons must use the interruption-safe command component: " + field);
-            VerifyCommandPressLifetime();
+            VerifyCommandPressLifetime(ui);
             FieldInfo callback = Field("runChannelRequested");
             object previousCallback = callback.GetValue(ui);
             CanvasGroup group = null;
@@ -141,9 +141,16 @@ namespace GreedLast.Editor
             }
         }
 
-        private static void VerifyCommandPressLifetime()
+        private static void VerifyCommandPressLifetime(GreedLastRuntimeUi ui)
         {
             GameObject host = new GameObject("GreedLastCommandPressCheck", typeof(RectTransform), typeof(CanvasGroup));
+            host.transform.SetParent(Read<GameObject>(ui, "rootPanel").transform, false);
+            Rect safeArea = Read<Rect>(ui, "lastSafeArea");
+            int width = Read<int>(ui, "lastSafeAreaScreenWidth");
+            int height = Read<int>(ui, "lastSafeAreaScreenHeight");
+            void ApplyArea(Rect area, bool force = false)
+                => typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(ui, new object[] { area, width, height, force });
             try
             {
                 var command = host.AddComponent<GreedLastCommandButton>();
@@ -164,7 +171,7 @@ namespace GreedLast.Editor
                     if (pointer.eligibleForClick)
                         ExecuteEvents.Execute(command.gameObject, pointer, ExecuteEvents.pointerClickHandler);
                 }
-                foreach (string reason in new[] { "cancel", "component", "object", "interaction", "group" })
+                foreach (string reason in new[] { "cancel", "component", "object", "interaction", "group", "viewport" })
                 {
                     int before = clicks;
                     Press(first);
@@ -176,6 +183,10 @@ namespace GreedLast.Editor
                         case "object": host.SetActive(false); host.SetActive(true); break;
                         case "interaction": command.interactable = false; command.interactable = true; break;
                         case "group": group.interactable = false; group.interactable = true; break;
+                        case "viewport":
+                            ApplyArea(new Rect(safeArea.x + 1f, safeArea.y, safeArea.width - 1f, safeArea.height));
+                            ApplyArea(safeArea);
+                            break;
                     }
                     Require(!first.eligibleForClick && !second.eligibleForClick,
                         "Every held command pointer must be canceled by " + reason);
@@ -185,8 +196,11 @@ namespace GreedLast.Editor
                     Press(first);
                     command.interactable = true;
                     command.colors = command.colors;
+                    ApplyArea(safeArea, true);
+                    ApplyArea(Rect.zero);
+                    ApplyArea(new Rect(float.NaN, 0f, 100f, 100f));
                     Release(first);
-                    Require(clicks == before + 1, "Fresh commands must survive unchanged presentation properties: " + reason);
+                    Require(clicks == before + 1, "Fresh commands must survive unchanged presentation and invalid viewport samples: " + reason);
                 }
                 int beforeLocked = clicks;
                 command.interactable = false;
@@ -198,11 +212,12 @@ namespace GreedLast.Editor
                 Press(right);
                 Release(right);
                 Require(clicks == beforeLocked, "Secondary mouse input must remain ignored.");
-                Debug.Log("Greed Last command lifetime checks passed: two held pointers, cancellation, hidden/disabled UI, transient locks, blocked-start input and fresh-click recovery. Direct event tests; rendered module checks are separate.");
+                Debug.Log("Greed Last command lifetime checks passed: two held pointers, cancellation, hidden/disabled UI, transient locks, blocked-start input, viewport change and fresh-click recovery; unchanged/invalid viewport samples preserve input. Direct event tests; rendered module checks are separate.");
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(host);
+                ApplyArea(safeArea, true);
             }
         }
 
