@@ -1560,6 +1560,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();
             VerifyRuntimeBoardScreenRenderVisibility();
             GreedLastPrototypeAppLoopCheck.Run();
+            GreedLastPrototypeIdleCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);

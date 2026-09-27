@@ -123,6 +123,7 @@ namespace GreedLast.Editor
                 Write(ui, "runChannelRequested", Method(app, "HandleRunChannelInput").CreateDelegate(typeof(Action<GreedLastRunChannel>), app));
                 Write(ui, "timingOffsetRequested", Method(app, "RequestTimingOffsetAdjust").CreateDelegate(typeof(Action<int>), app));
                 ui.ViewportChanged += (Action)Method(app, "HandleViewportChanged").CreateDelegate(typeof(Action), app);
+                ui.RotationTiltPreferenceChanged += (Action<bool>)Method(app, "HandleRotationTiltPreferenceChanged").CreateDelegate(typeof(Action<bool>), app);
                 state.StateChanged += ui.Render;
                 core.SnapshotChanged += (Action<GreedLastRunSnapshot>)Method(app, "HandleRunSnapshotChanged")
                     .CreateDelegate(typeof(Action<GreedLastRunSnapshot>), app);
@@ -786,6 +787,7 @@ namespace GreedLast.Editor
                 && Mathf.Approximately(latest().Distance, beforePause.Distance)
                 && state.CurrentState == GreedLastScreenState.RunCoreTest,
                 "Background time and foreground callbacks must preserve the paused run without damage or lobby resync.");
+            VerifyIdlePauseSettings(ui, core, latest);
             VerifyHeldResumeInterruption(app, ui, latest);
             Click(ui, "nextPatternButton");
             float resumeEnd = Read<float>(core, "resumeCountdownEndsAt");
@@ -831,6 +833,91 @@ namespace GreedLast.Editor
                 Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
                     "Practice pause/resume/exit must not consume existing saved loadouts.");
             Debug.Log("Greed Last app pause lifecycle passed: background audio in both callback orders -> paused input isolation -> real-button first beat -> interrupted countdown reset -> single GO -> lead-in buffer -> lobby with saved slots intact.");
+        }
+
+        private static void VerifyIdlePauseSettings(GreedLastRuntimeUi ui, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            var toggles = new[]
+            {
+                (Field: "hapticsEnabled", Button: "hapticsButton", Key: "GreedLast.RuntimeUi.HapticsEnabled"),
+                (Field: "rotationTiltEnabled", Button: "rotationTiltButton", Key: "GreedLast.RuntimeUi.RotationTiltEnabled"),
+                (Field: "motionComfortEnabled", Button: "motionComfortButton", Key: "GreedLast.RuntimeUi.MotionComfortEnabled"),
+            };
+            string volumeKey = "GreedLast.RuntimeUi.SfxVolume";
+            string offsetKey = GreedLastRunCore.InputTimingOffsetPrefsKey;
+            bool hadVolume = PlayerPrefs.HasKey(volumeKey), hadOffset = PlayerPrefs.HasKey(offsetKey);
+            float storedVolume = PlayerPrefs.GetFloat(volumeKey), storedOffset = PlayerPrefs.GetFloat(offsetKey);
+            float originalVolume = Read<float>(ui, "sfxVolume"), originalOffset = core.InputTimingOffsetSeconds;
+            var originalToggles = new Dictionary<string, (bool HadKey, int Stored, bool Enabled)>();
+            foreach (var toggle in toggles)
+                originalToggles[toggle.Key] = (PlayerPrefs.HasKey(toggle.Key), PlayerPrefs.GetInt(toggle.Key), Read<bool>(ui, toggle.Field));
+            GreedLastRunSnapshot before = latest();
+            try
+            {
+                // Inspect immediately after the real click; no core Tick is allowed to repair a stale setting label.
+                foreach (var toggle in toggles)
+                {
+                    bool original = Read<bool>(ui, toggle.Field);
+                    Button button = Read<Button>(ui, toggle.Button);
+                    for (int click = 0; click < 2; click++)
+                    {
+                        Click(button);
+                        bool expected = click == 1 ? original : !original;
+                        Require(Read<bool>(ui, toggle.Field) == expected
+                            && PlayerPrefs.GetInt(toggle.Key) == (expected ? 1 : 0)
+                            && button.GetComponentInChildren<Text>().text.EndsWith(expected ? "ON" : "OFF", StringComparison.Ordinal),
+                            "A paused toggle must persist and relabel synchronously: " + toggle.Field);
+                    }
+                }
+                Method(ui, "SetSfxVolume").Invoke(ui, new object[] { 0.5f });
+                Button[] volume = Read<Button[]>(ui, "sfxVolumeButtons");
+                void CheckVolume(int button, float expected)
+                {
+                    Click(volume[button]);
+                    Require(Mathf.Approximately(PlayerPrefs.GetFloat(volumeKey), expected)
+                        && Mathf.Approximately(Read<AudioSource>(ui, "rhythmAudio").volume, expected)
+                        && volume[1].GetComponentInChildren<Text>().text.Contains(Mathf.RoundToInt(expected * 100f) + "%"),
+                        "Paused volume changes must reach the playing source, saved preference and label immediately.");
+                }
+                CheckVolume(0, 0.4f);
+                CheckVolume(2, 0.5f);
+                CheckVolume(1, 1f);
+                core.ResetInputTimingOffset();
+                Button[] timing = Read<Button[]>(ui, "timingOffsetButtons");
+                Click(timing[0]);
+                Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, 0.02f)
+                    && Mathf.Approximately(PlayerPrefs.GetFloat(offsetKey), 0.02f)
+                    && timing[1].IsInteractable(),
+                    "The paused +20ms command must publish immediately without waiting for Tick.");
+                Click(timing[2]);
+                Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, 0f)
+                    && Mathf.Approximately(PlayerPrefs.GetFloat(offsetKey), 0f) && !timing[1].IsInteractable(),
+                    "Returning to zero must immediately disable an unnecessary calibration reset.");
+                Require(latest().Paused && !latest().ResumeCountdownActive
+                    && latest().Health == before.Health && latest().Score == before.Score
+                    && Mathf.Approximately(latest().Distance, before.Distance),
+                    "Pause settings must not resume the run or change gameplay totals.");
+                Debug.Log("Greed Last idle pause settings passed: real haptics/tilt/comfort toggles, three volume controls and +/-20ms calibration update immediately without a core tick. Preferences restored.");
+            }
+            finally
+            {
+                foreach (var toggle in toggles)
+                {
+                    var original = originalToggles[toggle.Key];
+                    Write(ui, toggle.Field, original.Enabled);
+                    if (original.HadKey) PlayerPrefs.SetInt(toggle.Key, original.Stored);
+                    else PlayerPrefs.DeleteKey(toggle.Key);
+                }
+                Write(ui, "sfxVolume", originalVolume);
+                Method(ui, "RefreshAudioPlaybackState").Invoke(ui, null);
+                core.AdjustInputTimingOffset(originalOffset - core.InputTimingOffsetSeconds);
+                if (hadVolume) PlayerPrefs.SetFloat(volumeKey, storedVolume);
+                else PlayerPrefs.DeleteKey(volumeKey);
+                if (hadOffset) PlayerPrefs.SetFloat(offsetKey, storedOffset);
+                else PlayerPrefs.DeleteKey(offsetKey);
+                PlayerPrefs.Save();
+            }
         }
 
         private static void VerifyHeldResumeInterruption(GreedLastApp app, GreedLastRuntimeUi ui,

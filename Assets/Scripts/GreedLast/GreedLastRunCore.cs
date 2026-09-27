@@ -1543,7 +1543,18 @@ namespace GreedLast
                     return;
                 }
 
-                Publish(now);
+                if (resumeCountdownActive) Publish(now);
+                return;
+            }
+
+            if (stopped || phase == GreedLastRunPhase.ChoiceSelecting || phase == GreedLastRunPhase.None)
+            {
+                // Commands publish immediately; idle menus only need the last hit's transient expiry.
+                if (staggerUntil > 0f)
+                {
+                    if (now >= staggerUntil) staggerUntil = 0f;
+                    Publish(now);
+                }
                 return;
             }
 
