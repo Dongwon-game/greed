@@ -17347,7 +17347,7 @@ namespace GreedLast
             bool rotationTiltOn,
             bool showRotationTiltSetting)
         {
-            int volumePercent = Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f);
+            int volumePercent = Mathf.RoundToInt(NormalizeSfxVolume(volume) * 100f);
             string hapticsText = hapticsOn ? "ON" : "OFF";
             string recommendationText = " / " + FormatTimingRecommendationStatus(snapshot);
             string countdownText = string.Empty;
@@ -27688,10 +27688,7 @@ namespace GreedLast
 
         private void CreateAudio()
         {
-            sfxVolume = Mathf.Clamp(
-                PlayerPrefs.GetFloat(SfxVolumePrefsKey, DefaultSfxVolume),
-                MinSfxVolume,
-                MaxSfxVolume);
+            sfxVolume = NormalizeSfxVolume(PlayerPrefs.GetFloat(SfxVolumePrefsKey, DefaultSfxVolume));
             hapticsEnabled = PlayerPrefs.GetInt(HapticsEnabledPrefsKey, 1) == 1;
             rotationTiltEnabled = IsRotationTiltEnabledFromPrefs();
             motionComfortEnabled = PlayerPrefs.GetInt(MotionComfortEnabledPrefsKey, 1) == 1;
@@ -45907,7 +45904,8 @@ namespace GreedLast
 
         private void SetSfxVolume(float value)
         {
-            sfxVolume = Mathf.Clamp(value, MinSfxVolume, MaxSfxVolume);
+            if (float.IsNaN(value) || float.IsInfinity(value)) return;
+            sfxVolume = NormalizeSfxVolume(value);
             RefreshAudioPlaybackState();
 
             PlayerPrefs.SetFloat(SfxVolumePrefsKey, sfxVolume);
@@ -45934,9 +45932,15 @@ namespace GreedLast
             SetButtonLabel(sfxVolumeButtons[1], BuildSfxVolumeButtonLabel(sfxVolume));
         }
 
+        private static float NormalizeSfxVolume(float volume)
+        {
+            return float.IsNaN(volume) || float.IsInfinity(volume)
+                ? DefaultSfxVolume : Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume);
+        }
+
         private static string BuildSfxVolumeButtonLabel(float volume)
         {
-            return "소리 " + Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f) + "%";
+            return "소리 " + Mathf.RoundToInt(NormalizeSfxVolume(volume) * 100f) + "%";
         }
 
         public static string BuildSensorySettingsChecklistTextFromPrefs()
@@ -45969,7 +45973,7 @@ namespace GreedLast
             bool rotationTiltOn,
             bool showRotationTiltSetting)
         {
-            int volumePercent = Mathf.RoundToInt(Mathf.Clamp(volume, MinSfxVolume, MaxSfxVolume) * 100f);
+            int volumePercent = Mathf.RoundToInt(NormalizeSfxVolume(volume) * 100f);
             string rotationTiltText = showRotationTiltSetting
                 ? "·기울임 " + (rotationTiltOn ? "ON" : "OFF")
                 : string.Empty;

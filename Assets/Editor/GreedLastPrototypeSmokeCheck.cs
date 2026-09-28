@@ -1561,6 +1561,7 @@ namespace GreedLast.Editor
             VerifyRuntimeBoardScreenRenderVisibility();
             GreedLastPrototypeAppLoopCheck.Run();
             GreedLastPrototypeIdleCheck.Run();
+            GreedLastPrototypeSettingsCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);

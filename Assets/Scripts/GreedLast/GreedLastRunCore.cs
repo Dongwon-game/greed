@@ -947,10 +947,9 @@ namespace GreedLast
 
         public static float LoadStoredInputTimingOffsetSeconds()
         {
-            return Mathf.Clamp(
-                PlayerPrefs.GetFloat(InputTimingOffsetPrefsKey, 0f),
-                MinInputTimingOffsetSeconds,
-                MaxInputTimingOffsetSeconds);
+            float value = PlayerPrefs.GetFloat(InputTimingOffsetPrefsKey, 0f);
+            return float.IsNaN(value) || float.IsInfinity(value)
+                ? 0f : Mathf.Clamp(value, MinInputTimingOffsetSeconds, MaxInputTimingOffsetSeconds);
         }
 
         public static string BuildStoredInputTimingOffsetChecklistText()
@@ -1856,6 +1855,7 @@ namespace GreedLast
 
         public void AdjustInputTimingOffset(float deltaSeconds)
         {
+            if (float.IsNaN(deltaSeconds) || float.IsInfinity(deltaSeconds)) return;
             inputTimingOffsetSeconds = Mathf.Clamp(
                 inputTimingOffsetSeconds + deltaSeconds,
                 MinInputTimingOffsetSeconds,
