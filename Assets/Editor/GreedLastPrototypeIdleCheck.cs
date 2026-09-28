@@ -63,18 +63,42 @@ namespace GreedLast.Editor
                     core.Tick(clock += 1f);
                     Require(run.ActivePattern, "The idle fixture needs a live practice trap.");
                 }
+                void WaitAnHour(string name)
+                {
+                    GreedLastRunSnapshot before = run;
+                    int startCount = publications;
+                    core.Tick(clock += 3600f);
+                    Require(run.Equals(before) && publications == startCount,
+                        name + " must preserve its state through a simulated hour without redundant publication.");
+                }
+                void CheckFirstLiveStep(float distanceBefore, int healthBefore)
+                {
+                    core.Tick(clock += 1f / 60f);
+                    Require(run.Health == healthBefore && run.Distance >= distanceBefore
+                        && run.Distance - distanceBefore < 1f,
+                        "The first live tick must not charge idle time as distance or damage.");
+                }
 
                 core.Enter();
                 Require(run.ChoiceActive, "The initial choice must be published before any Tick.");
                 Idle("starting-choice");
+                if (enforce) WaitAnHour("starting-choice");
                 int beforeChoice = publications;
                 core.HandleInput(GreedLastRunChannel.Center, clock);
                 Require(publications > beforeChoice && run.StartCountdownActive,
                     "Choosing after an idle menu must immediately publish the opening countdown.");
+                float initialDistance = run.Distance;
+                int initialHealth = run.Health;
+                core.Tick(clock += 2f);
+                CheckFirstLiveStep(initialDistance, initialHealth);
                 StartPractice();
                 core.TogglePause(clock += 0.1f);
                 Require(run.Paused, "Pause must publish before an idle tick.");
                 Idle("paused-practice");
+                if (enforce) WaitAnHour("paused-practice");
+                float pausedDistance = run.Distance;
+                int pausedHealth = run.Health;
+                float pausedElapsed = run.ElapsedSeconds;
                 int beforeCommand = publications;
                 core.ToggleDevInvincible();
                 Require(publications > beforeCommand && run.DevInvincible && run.Paused,
@@ -89,6 +113,9 @@ namespace GreedLast.Editor
                     "Resume countdown progress must continue publishing, unlike an idle pause.");
                 core.Tick(clock += 2f);
                 Require(!run.Paused && run.ActivePattern, "Resume must restore the same live trap.");
+                Require(run.ElapsedSeconds < pausedElapsed,
+                    "A long pause must still restore the pre-trap lead-in, not only skip elapsed distance.");
+                CheckFirstLiveStep(pausedDistance, pausedHealth);
 
                 StartPractice();
                 for (int trap = 0; trap < 3; trap++)
@@ -100,6 +127,7 @@ namespace GreedLast.Editor
                 }
                 Require(run.Stopped && run.PracticeMode, "Practice completion must publish its result immediately.");
                 Idle("practice-result");
+                if (enforce) WaitAnHour("practice-result");
 
                 core.EnterInfiniteRun();
                 clock = Time.realtimeSinceStartup;
@@ -108,6 +136,7 @@ namespace GreedLast.Editor
                 core.ForceStopInfiniteRunForTest();
                 Require(run.Stopped && run.InfiniteMode, "Infinite termination must publish before idle.");
                 Idle("infinite-result");
+                if (enforce) WaitAnHour("infinite-result");
 
                 StartPractice();
                 typeof(GreedLastRunCore).GetField("health", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(core, 1);
@@ -119,9 +148,14 @@ namespace GreedLast.Editor
                 if (enforce) Require(!run.Staggered && run.StaggerRemainingSeconds == 0f,
                     "The final hit's transient state must expire before terminal ticks become quiet.");
                 Idle("failed-result");
+                if (enforce) WaitAnHour("failed-result");
+                StartPractice();
+                Require(!run.Stopped && !run.Staggered && run.Score == 0
+                    && run.MissCount == 0 && run.GoodCount == 0 && run.SuccessCount == 0,
+                    "Restarting after a long-held failure result must clear damage and previous judgement totals.");
                 core.Exit();
                 Idle("exited-core");
-                if (enforce) Debug.Log("Greed Last idle presentation checks passed: choices, pause, practice/infinite/failure results and exit stay quiet; explicit commands, resume countdown and terminal-hit expiry still publish. No player settings or saved slots changed.");
+                if (enforce) Debug.Log("Greed Last idle presentation checks passed: six quiet states, simulated one-hour choice/pause/result waits, immediate commands, resume countdown/lead-in, terminal-hit expiry, bounded first live distance and fresh restart. No player settings or saved slots changed.");
             }
             finally
             {

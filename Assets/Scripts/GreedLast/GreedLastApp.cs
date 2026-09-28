@@ -15663,6 +15663,7 @@ namespace GreedLast
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
+                if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);
                 runHudText.text = cleanView ? BuildCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
                 runHudText.fontSize = cleanView ? 38 : BuildRunHudFontSize(latestRunSnapshot, detailedRunHud);
                 if (cleanView)
@@ -15673,6 +15674,30 @@ namespace GreedLast
                     latestRunSnapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest);
                 UpdateLaneLabels(latestRunSnapshot);
             }
+        }
+
+        private string BuildDetailedRunHud(GreedLastRunSnapshot snapshot)
+        {
+            string runState = snapshot.Stopped
+                ? snapshot.PracticeMode
+                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "상태: 연습 완료" : "상태: 연습 중단"
+                    : snapshot.InfiniteMode ? "상태: 무한 종료" : snapshot.SaveEligible ? "상태: 탈출 성공" : "상태: 탈출 실패"
+                : snapshot.ResumeCountdownActive
+                    ? "상태: 재개 준비"
+                    : snapshot.Paused
+                        ? "상태: 일시정지"
+                        : snapshot.StartCountdownActive
+                            ? "상태: 시작 준비"
+                            : snapshot.ChoiceActive
+                                ? "상태: 선택 중"
+                                : snapshot.AutoFlow
+                                    ? "상태: 자동 진행"
+                                    : "상태: 대기";
+            string chapterText = BuildRunChapterHudText(snapshot);
+            string choiceText = snapshot.ChoiceActive ? "\n선택: " + snapshot.ChoicePrompt : string.Empty;
+            return snapshot.InfiniteMode
+                ? BuildInfiniteRunHud(snapshot, runState)
+                : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
         }
 
         private static string BuildCompactLiveRunHud(GreedLastRunSnapshot snapshot)
@@ -16408,34 +16433,14 @@ namespace GreedLast
             detailText.enabled = snapshot.Stopped;
             bool showDevTools = DevToolsEnabled && !snapshot.PracticeMode;
 
-            string runState = snapshot.Stopped
-                ? snapshot.PracticeMode
-                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "상태: 연습 완료" : "상태: 연습 중단"
-                    : snapshot.InfiniteMode ? "상태: 무한 종료" : snapshot.SaveEligible ? "상태: 탈출 성공" : "상태: 탈출 실패"
-                : snapshot.ResumeCountdownActive
-                    ? "상태: 재개 준비"
-                    : snapshot.Paused
-                        ? "상태: 일시정지"
-                        : snapshot.StartCountdownActive
-                            ? "상태: 시작 준비"
-                            : snapshot.ChoiceActive
-                                ? "상태: 선택 중"
-                                : snapshot.AutoFlow
-                                    ? "상태: 자동 진행"
-                                    : "상태: 대기";
-
-            string chapterText = BuildRunChapterHudText(snapshot);
-
-            string choiceText = snapshot.ChoiceActive
-                ? "\n선택: " + snapshot.ChoicePrompt
-                : string.Empty;
-
-            runHudText.text = snapshot.InfiniteMode
-                ? BuildInfiniteRunHud(snapshot, runState)
-                : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
-            detailedRunHud = runHudText.text;
-            runHudText.fontSize = BuildRunHudFontSize(snapshot, runHudText.text);
-            UpdateRunHudLayout(runHudText.text);
+            // ApplyDevCleanView applies the live HUD once, without a hidden detailed/compact round trip.
+            if (snapshot.Stopped)
+            {
+                detailedRunHud = BuildDetailedRunHud(snapshot);
+                runHudText.text = detailedRunHud;
+                runHudText.fontSize = BuildRunHudFontSize(snapshot, detailedRunHud);
+                UpdateRunHudLayout(detailedRunHud);
+            }
             UpdateRunGauges(snapshot);
             UpdateRunProgress(snapshot);
             UpdateComboBadge(snapshot);

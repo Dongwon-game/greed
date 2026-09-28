@@ -168,6 +168,7 @@ namespace GreedLast.Editor
                     new[] { GreedLastJudgementResult.Good, GreedLastJudgementResult.Good, GreedLastJudgementResult.Good });
                 Add("25-practice-calibration", 1280, 720, () => ShowRun(practiceResult));
                 Add("26-practice-calibration-tablet", 1024, 768, () => ShowRun(practiceResult));
+                AddRetainedViewportFrames("73-practice-result", () => ShowRun(practiceResult));
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
                 AddGameplayChoiceFrames();
@@ -570,6 +571,7 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot infiniteResult = run;
             Require(backend.RegisterInfiniteRun(core.CreateInfiniteRunRecord()), "The visual loop must register a real infinite record.");
             Add("14-infinite-result", 1280, 720, () => ShowRun(infiniteResult));
+            AddRetainedViewportFrames("74-infinite-result", () => ShowRun(infiniteResult));
             stateMachine.SetInfiniteStartReady(backend.LoadLobby(),
                 GreedLastApp.BuildInfinitePreparationDetailForStep(2, "집중 축", "황금 박동").TrimStart()
                 + "\n\n" + backend.BuildInfiniteStartReadyText());

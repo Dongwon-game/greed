@@ -10123,10 +10123,16 @@ namespace GreedLast.Editor
             Require(hud.fontSize == 38 && compactHud.Split('\n').Length == 2
                 && compactHud.Contains("콤보", StringComparison.Ordinal) && compactHud.Contains("Miss", StringComparison.Ordinal),
                 "Clean view must present readable score and judgement totals without the diagnostic paragraph.");
+            const string hiddenHudSentinel = "Hidden diagnostics are built only when requested.";
+            SetRuntimeUiField(ui, "detailedRunHud", hiddenHudSentinel);
+            VerifyUnchangedRunHud(ui, beforePause, hud);
+            Require(GetRuntimeUiField<string>(ui, "detailedRunHud") == hiddenHudSentinel,
+                "Clean play must not rebuild a hidden diagnostic paragraph for every run snapshot.");
             ui.RenderRun(paused);
             Text pauseBody = GetRuntimeUiField<Text>(ui, "pauseMenuBodyText");
             Require(pauseBody.fontSize == 36 && pauseBody.text.Split('\n').Length == 2,
                 "Clean pause must show concise live totals instead of a diagnostic paragraph.");
+            VerifyUnchangedRunHud(ui, paused, hud);
             Require(GetRuntimeUiField<Button>(ui, "motionComfortButton").GetComponentInChildren<Text>().fontSize == 36
                 && GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons")[1].GetComponentInChildren<Text>().fontSize == 36,
                 "Pause setting buttons must use the readable menu font, including the shared calibration action.");
@@ -10138,6 +10144,10 @@ namespace GreedLast.Editor
             ui.ToggleDevCleanView();
             Require(hud.text != compactHud && hud.text == GetRuntimeUiField<string>(ui, "detailedRunHud"),
                 "Toggling clean view off must immediately restore developer detail without restarting play.");
+            Require(hud.text != hiddenHudSentinel && hud.text.Contains("점수 " + beforePause.Score, StringComparison.Ordinal),
+                "Opening developer detail must rebuild it from the latest snapshot, not a stale hidden cache.");
+            VerifyUnchangedRunHud(ui, beforePause, hud);
+            VerifyHudModeTransitions(ui, beforePause, hud);
 
             GreedLastRunSnapshot practiceResult = RunPracticeReviewSample(Time.realtimeSinceStartup,
                 new[] { GreedLastJudgementResult.Good, GreedLastJudgementResult.Good, GreedLastJudgementResult.Good });
@@ -10180,6 +10190,89 @@ namespace GreedLast.Editor
             tone.Invoke(null, new object[] { action, new Color32(205, 166, 70, 255), new Color32(238, 204, 114, 255), new Color32(165, 124, 48, 255) });
             Require(action.targetGraphic.color == Color.white && action.GetComponentInChildren<Text>().color.grayscale > 0.7f,
                 "A disabled action must retain a readable label and must not be tinted twice.");
+        }
+
+        private static void VerifyHudModeTransitions(GreedLastRuntimeUi ui, GreedLastRunSnapshot original, Text hud)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            SetRuntimeUiField(ui, "devCleanViewEnabled", true);
+            ui.RenderRun(run);
+            string hiddenDetail = GetRuntimeUiField<string>(ui, "detailedRunHud");
+            try
+            {
+                for (int trap = 0; trap < 3; trap++)
+                {
+                    if (trap > 0) core.RequestNextPattern(clock += 2f);
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    ui.RenderRun(run);
+                    Require(run.SuccessCount == trap + 1 && run.Score > 0,
+                        "HUD transitions must use real judgement-driven changes, not identical canned text.");
+                    if (run.Stopped) break;
+                    Require(hud.text.Contains(run.Score.ToString("N0") + "점", StringComparison.Ordinal)
+                        && hud.text.Contains("정확 " + run.SuccessCount, StringComparison.Ordinal)
+                        && hud.fontSize == 38,
+                        "Clean HUD must immediately reflect changed score and judgement totals.");
+                    Require(GetRuntimeUiField<string>(ui, "detailedRunHud") == hiddenDetail,
+                        "Changing visible totals in clean view must not construct hidden diagnostics.");
+                    ui.ToggleDevCleanView();
+                    Require(hud.text.Contains("점수 " + run.Score, StringComparison.Ordinal)
+                        && hud.text == GetRuntimeUiField<string>(ui, "detailedRunHud"),
+                        "F11 must display the latest changed score without another core Tick.");
+                    ui.ToggleDevCleanView();
+                    hiddenDetail = GetRuntimeUiField<string>(ui, "detailedRunHud");
+                    VerifyUnchangedRunHud(ui, run, hud);
+                }
+                Text result = GetRuntimeUiField<Text>(ui, "detailText");
+                Require(run.Stopped && !hud.gameObject.activeSelf && result.text.Contains("정확 3", StringComparison.Ordinal),
+                    "Completing practice must replace the HUD with the current result summary.");
+                string summary = result.text;
+                ui.ToggleDevCleanView();
+                ui.ToggleDevCleanView();
+                Require(result.text == summary && !hud.gameObject.activeSelf,
+                    "Toggling diagnostic visibility on a result must not restore the old live HUD.");
+                core.RestartPractice(clock);
+                ui.RenderRun(run);
+                Require(hud.gameObject.activeSelf && hud.text.StartsWith("0점", StringComparison.Ordinal)
+                    && hud.text.Contains("정확 0", StringComparison.Ordinal),
+                    "A fresh practice must restore clean HUD totals without the last result's score.");
+            }
+            finally
+            {
+                SetRuntimeUiField(ui, "devCleanViewEnabled", false);
+                ui.RenderRun(original);
+            }
+        }
+
+        private static void VerifyUnchangedRunHud(GreedLastRuntimeUi ui, GreedLastRunSnapshot run, Text hud)
+        {
+            ui.RenderRun(run);
+            string text = hud.text;
+            int fontSize = hud.fontSize;
+            int vertices = 0;
+            int layout = 0;
+            UnityEngine.Events.UnityAction dirtyVertices = () => vertices++;
+            UnityEngine.Events.UnityAction dirtyLayout = () => layout++;
+            hud.RegisterDirtyVerticesCallback(dirtyVertices);
+            hud.RegisterDirtyLayoutCallback(dirtyLayout);
+            try
+            {
+                for (int frame = 0; frame < 120; frame++) ui.RenderRun(run);
+                Debug.Log($"Greed unchanged HUD check: 120 renders, vertex dirties={vertices}, layout dirties={layout}.");
+                Require(hud.text == text && hud.fontSize == fontSize && vertices == 0 && layout == 0,
+                    "An unchanged live HUD must not alternate detailed/compact text, fonts or layouts inside each RenderRun.");
+            }
+            finally
+            {
+                hud.UnregisterDirtyVerticesCallback(dirtyVertices);
+                hud.UnregisterDirtyLayoutCallback(dirtyLayout);
+            }
         }
 
         private static void VerifyPlayfieldReadability(GreedLastRuntimeUi ui)
