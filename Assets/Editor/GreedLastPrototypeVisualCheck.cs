@@ -1037,6 +1037,16 @@ namespace GreedLast.Editor
             if (run.ChoiceActive)
                 Require(!Read<GameObject>("runnerAvatarRoot").activeInHierarchy,
                     currentFrame.Name + ": the runner covers the choice surface.");
+            bool liveHeader = !run.ChoiceActive && !run.CountdownActive;
+            Text title = Read<Text>("titleText");
+            RectTransform root = Read<RectTransform>("rootPanelRect");
+            if (liveHeader)
+            {
+                VerifyTextBounds(title);
+                VerifyControlSafeBounds(title.rectTransform);
+                Require(title.preferredHeight <= title.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": live title needs enough height for all lines.");
+            }
             int count = 0;
             foreach (Text label in Read<Text[]>("laneLabelTexts"))
             {
@@ -1053,6 +1063,14 @@ namespace GreedLast.Editor
                 }
                 Require(run.ChoiceActive || label.rectTransform.anchorMin.y > 1f,
                     currentFrame.Name + ": clean input labels must stay above the live artwork.");
+                if (liveHeader)
+                {
+                    Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, title.rectTransform);
+                    Bounds labelBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, label.rectTransform);
+                    bool sharesWidth = titleBounds.max.x > labelBounds.min.x && titleBounds.min.x < labelBounds.max.x;
+                    Require(!sharesWidth || titleBounds.min.y >= labelBounds.max.y + 8f,
+                        currentFrame.Name + ": live title overlaps the lane input header: " + label.text);
+                }
                 count++;
             }
             return count;

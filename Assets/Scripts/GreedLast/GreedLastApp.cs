@@ -15655,6 +15655,11 @@ namespace GreedLast
         {
             bool cleanView = !DevToolsEnabled || devCleanViewEnabled;
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
+            bool liveHeader = cleanView && runModeActive && hasRunSnapshot
+                && !latestRunSnapshot.Stopped && !latestRunSnapshot.Paused
+                && !latestRunSnapshot.ChoiceActive && !latestRunSnapshot.CountdownActive;
+            SetAnchored(titleText.rectTransform, 0.5f, liveHeader ? 0.88f : 0.82f,
+                liveHeader ? 1200f : 900f, liveHeader ? 200f : 110f);
             if (pauseSettings) UpdatePauseMenuOverlay(latestRunSnapshot);
             SetCleanViewGroupsVisible(devCleanViewGroups, !cleanView);
             CanvasGroup resultCalibration = runModeActive && hasRunSnapshot
