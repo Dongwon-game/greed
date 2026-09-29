@@ -1153,7 +1153,7 @@ namespace GreedLast
             ignoreReason = string.Empty;
             missReason = string.Empty;
             lastResult = GreedLastJudgementResult.None;
-            Publish();
+            Publish(now);
         }
 
         private static int ResolvePracticeOpeningStep(string openingContext)
@@ -1530,7 +1530,7 @@ namespace GreedLast
                     return;
                 }
 
-                Publish();
+                Publish(now);
                 return;
             }
 
@@ -1576,11 +1576,12 @@ namespace GreedLast
                 && now >= nextPatternAt)
             {
                 StartPattern(now);
+                return;
             }
 
             if (!activePattern || stopped)
             {
-                Publish();
+                Publish(now);
                 return;
             }
 
@@ -1593,11 +1594,11 @@ namespace GreedLast
                     currentPattern.TimingType,
                     "실수 - 입력 없음\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    "no_input"));
+                    "no_input"), now);
                 return;
             }
 
-            Publish();
+            Publish(now);
         }
 
         public void ToggleAutoFlow(float now)
@@ -1760,19 +1761,19 @@ namespace GreedLast
         {
             if (stopped)
             {
-                Ignore("stopped", BuildStoppedInputMessage());
+                Ignore("stopped", BuildStoppedInputMessage(), now);
                 return;
             }
 
             if (paused)
             {
-                Ignore("paused", "일시정지 중입니다. 재개 후 입력하세요.");
+                Ignore("paused", "일시정지 중입니다. 재개 후 입력하세요.", now);
                 return;
             }
 
             if (startCountdownActive)
             {
-                Ignore("start_countdown", "시작 카운트 중입니다.");
+                Ignore("start_countdown", "시작 카운트 중입니다.", now);
                 return;
             }
 
@@ -1784,19 +1785,19 @@ namespace GreedLast
 
             if (now < staggerUntil)
             {
-                Ignore("locked_by_stagger", BuildStaggerInputMessage(now));
+                Ignore("locked_by_stagger", BuildStaggerInputMessage(now), now);
                 return;
             }
 
             if (!activePattern)
             {
-                Ignore("no_active_pattern", "활성 함정이 없습니다.");
+                Ignore("no_active_pattern", "활성 함정이 없습니다.", now);
                 return;
             }
 
             if (inputConsumed)
             {
-                Ignore("duplicate_input", "같은 함정에는 최초 입력만 반영됩니다.");
+                Ignore("duplicate_input", "같은 함정에는 최초 입력만 반영됩니다.", now);
                 return;
             }
 
@@ -1813,7 +1814,7 @@ namespace GreedLast
                     "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel)
                         + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    "wrong_channel"));
+                    "wrong_channel"), now);
                 return;
             }
 
@@ -1828,7 +1829,7 @@ namespace GreedLast
                     "정확 / " + FormatTimingType(currentPattern.TimingType) + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     string.Empty,
-                    centerHit));
+                    centerHit), now);
                 return;
             }
 
@@ -1839,7 +1840,7 @@ namespace GreedLast
                     currentPattern.TimingType,
                     "보정 - 생존 완충\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    string.Empty));
+                    string.Empty), now);
                 return;
             }
 
@@ -1850,7 +1851,7 @@ namespace GreedLast
                 (judgedElapsed < currentPattern.CoreSeconds ? "실수 - 너무 빠름" : "실수 - 너무 늦음")
                     + "\n" + FormatTimingDelta(signedDelta),
                 string.Empty,
-                reason));
+                reason), now);
         }
 
         public void AdjustInputTimingOffset(float deltaSeconds)
@@ -2056,7 +2057,7 @@ namespace GreedLast
             nextPatternAt = now + StartBufferSeconds;
             lastTickAt = now;
             judgementText = "시작 - 함정이 내려옵니다.";
-            Publish();
+            Publish(now);
         }
 
         private void BeginResumeCountdown(float now)
@@ -2141,7 +2142,7 @@ namespace GreedLast
             }
         }
 
-        private void Resolve(GreedLastJudgementOutcome outcome)
+        private void Resolve(GreedLastJudgementOutcome outcome, float now)
         {
             lastJudgedPattern = currentPattern;
             activePattern = false;
@@ -2534,7 +2535,7 @@ namespace GreedLast
                     }
                     if (devInvincible)
                     {
-                        staggerUntil = Time.realtimeSinceStartup + StaggerSeconds;
+                        staggerUntil = now + StaggerSeconds;
                         health = Mathf.Max(1, health);
                         recoveryBreatherPatternPending = true;
                         judgementText += "\n테스트 무적 - 피해를 무시했습니다.";
@@ -2542,7 +2543,7 @@ namespace GreedLast
                         break;
                     }
 
-                    staggerUntil = Time.realtimeSinceStartup + StaggerSeconds;
+                    staggerUntil = now + StaggerSeconds;
                     health = Mathf.Max(0, health - 1);
                     if (health == 0)
                     {
@@ -2577,10 +2578,10 @@ namespace GreedLast
 
             if (!stopped)
             {
-                AdvanceRunAfterPattern(Time.realtimeSinceStartup);
+                AdvanceRunAfterPattern(now);
             }
 
-            Publish();
+            Publish(now);
         }
 
         private string BuildRouteBundleBreakText()
@@ -3965,7 +3966,7 @@ namespace GreedLast
                 : nextText + "\n효과: " + rewardText;
             readyText += BuildChoiceProfileResultLine();
             PrepareStartCountdown(now, readyText + "\n카운트 뒤 첫 함정이 내려옵니다.");
-            Publish();
+            Publish(now);
         }
 
         private string BuildChoiceProfileResultLine()
@@ -5118,7 +5119,7 @@ namespace GreedLast
             }
 
             lastResult = GreedLastJudgementResult.None;
-            Publish();
+            Publish(now);
         }
 
         private GreedLastPatternModel SelectPatternFromDeck()
@@ -6104,13 +6105,13 @@ namespace GreedLast
             return Mathf.Clamp(baseThreat + infiniteThreatTestOffset, 1, InfiniteThreatMaxLevel);
         }
 
-        private void Ignore(string reason, string message)
+        private void Ignore(string reason, string message, float now)
         {
             ignoreReason = reason;
             judgementText = message;
             lastResult = GreedLastJudgementResult.None;
             lastCenterHit = false;
-            Publish();
+            Publish(now);
         }
 
         private string BuildStoppedInputMessage()
