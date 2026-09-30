@@ -1046,6 +1046,15 @@ namespace GreedLast.Editor
                 VerifyControlSafeBounds(title.rectTransform);
                 Require(title.preferredHeight <= title.rectTransform.rect.height + 1f,
                     currentFrame.Name + ": live title needs enough height for all lines.");
+                Text progress = Read<Text>("runProgressText");
+                VerifyTextBounds(progress);
+                Require(progress.fontSize >= 32 && progress.preferredHeight <= progress.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": compact stage/count/threat must fit at a readable size.");
+                Bounds progressBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, progress.rectTransform);
+                Bounds progressBar = RectTransformUtility.CalculateRelativeRectTransformBounds(root,
+                    Read<Image>("runProgressFill").transform.parent);
+                Require(progressBounds.min.y >= progressBar.max.y + 4f,
+                    currentFrame.Name + ": progress text overlaps its fill bar.");
             }
             int count = 0;
             foreach (Text label in Read<Text[]>("laneLabelTexts"))
@@ -1070,6 +1079,12 @@ namespace GreedLast.Editor
                     bool sharesWidth = titleBounds.max.x > labelBounds.min.x && titleBounds.min.x < labelBounds.max.x;
                     Require(!sharesWidth || titleBounds.min.y >= labelBounds.max.y + 8f,
                         currentFrame.Name + ": live title overlaps the lane input header: " + label.text);
+                    Bounds progressBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root,
+                        Read<Text>("runProgressText").rectTransform);
+                    bool sharesProgressWidth = progressBounds.max.x > labelBounds.min.x
+                        && progressBounds.min.x < labelBounds.max.x;
+                    Require(!sharesProgressWidth || labelBounds.min.y >= progressBounds.max.y + 4f,
+                        currentFrame.Name + ": input header overlaps compact progress: " + label.text);
                 }
                 count++;
             }

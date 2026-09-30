@@ -135,6 +135,96 @@ namespace GreedLast.Editor
             Debug.Log("Greed Last HUD transitions passed: repeated pause/countdown/GO, choice, fresh run, infinite result, lobby, save and record screens hide/restore their own runner cues.");
         }
 
+        internal static void VerifyCompactProgress(GreedLastRuntimeUi ui)
+        {
+            bool previousCleanView = Read<bool>(ui, "devCleanViewEnabled");
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            Text progress = Read<Text>(ui, "runProgressText");
+            RectTransform progressRoot = Read<GameObject>(ui, "runProgressRoot").GetComponent<RectTransform>();
+            try
+            {
+                if (!previousCleanView) ui.ToggleDevCleanView();
+                void Draw(string expected)
+                {
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                        run.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest,
+                        "Progress check", string.Empty, 0));
+                    ui.RenderRun(run);
+                    Require(progress.text == expected && progress.fontSize == 34
+                        && progress.rectTransform.rect.height == 40f && !progress.raycastTarget,
+                        "Clean progress must show a readable single-line stage/count/threat without taking input: " + expected);
+                }
+                void BeginLive()
+                {
+                    core.Tick(clock += 4f);
+                    core.Tick(clock += 1f);
+                    Require(run.ActivePattern && !run.CountdownActive, "Progress checks need a live trap.");
+                }
+
+                core.RestartPractice(clock);
+                BeginLive();
+                Draw("연습 1/3");
+                Set(ui, "stageTransitionStartedAt", Time.unscaledTime - 0.25f);
+                Set(ui, "stageTransitionUntil", Time.unscaledTime + 1f);
+                Set(ui, "stageTransitionCuePending", true);
+                Call(ui, "UpdateStageTransitionBanner");
+                Require(Read<Text>(ui, "stageTransitionText").color.a == 0f
+                    && Read<Image>(ui, "stageTransitionLine").color.a == 0f
+                    && !Read<bool>(ui, "stageTransitionCuePending"),
+                    "Clean practice must hide its duplicate banner while still consuming the scheduled start cue.");
+                RectTransform laneHit = Read<Button[]>(ui, "laneHitButtons")[1].GetComponent<RectTransform>();
+                Vector2 laneHitSize = laneHit.sizeDelta;
+                for (int toggle = 0; toggle < 3; toggle++)
+                {
+                    ui.ToggleDevCleanView();
+                    Require(progress.text.Contains("기초연습 단계 1/3", StringComparison.Ordinal)
+                        && progress.fontSize <= 24 && progressRoot.anchorMin.y == 0.715f
+                        && Read<Text>(ui, "stageTransitionText").color.a > 0f,
+                        "F11 must restore detailed progress and the practice banner immediately.");
+                    ui.ToggleDevCleanView();
+                    Require(progress.text == "연습 1/3" && progressRoot.anchorMin.y == 0.705f
+                        && Read<Text>(ui, "stageTransitionText").color.a == 0f
+                        && !Read<bool>(ui, "stageTransitionCuePending")
+                        && laneHit.sizeDelta == laneHitSize,
+                        "Repeated clean-view switches must restore compact progress without resizing input targets.");
+                }
+
+                core.Enter();
+                Draw("시작 기프트 선택");
+                for (int choice = 0; run.ChoiceActive && choice < 3; choice++)
+                    core.HandleInput(GreedLastRunChannel.Center, clock += 0.3f);
+                BeginLive();
+                Draw("1장 · 0/3");
+                core.JumpToDevShortcut(GreedLastDevShortcut.AfterCore, clock += 1f);
+                BeginLive();
+                Draw("탈출 · 0/3");
+                core.EnterInfiniteRun();
+                clock = Time.realtimeSinceStartup;
+                BeginLive();
+                Draw("1구간 · 0/3 · 위협 1");
+                ui.ToggleDevCleanView();
+                Require(progress.text.StartsWith("무한 생존", StringComparison.Ordinal)
+                    && progress.text.Contains("위협 1/5", StringComparison.Ordinal),
+                    "Detailed infinite progress must retain its original pressure/reward description.");
+                ui.ToggleDevCleanView();
+                Require(progress.text == "1구간 · 0/3 · 위협 1", "Clean infinite progress must restore immediately.");
+                core.ForceStopInfiniteRunForTest();
+                ui.RenderRun(run);
+                Require(!Read<GameObject>(ui, "runProgressRoot").activeSelf,
+                    "Terminal results must still hide live progress.");
+                Debug.Log("Greed compact progress passed: practice, choice, normal, escape, infinite, repeated clean/detail switches and terminal hiding. Isolated UI/core; no player settings or slots changed.");
+            }
+            finally
+            {
+                if (Read<bool>(ui, "devCleanViewEnabled") != previousCleanView) ui.ToggleDevCleanView();
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady,
+                    "Lobby", string.Empty, 0));
+            }
+        }
+
         internal static void Run()
         {
             var host = new GameObject("GreedHudClearanceCheck", typeof(RectTransform));

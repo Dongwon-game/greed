@@ -15649,6 +15649,11 @@ namespace GreedLast
 
             devCleanViewEnabled = !devCleanViewEnabled;
             ApplyDevCleanView();
+            if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
+            {
+                UpdateRunProgress(latestRunSnapshot);
+                UpdateStageTransitionBanner();
+            }
         }
 
         private void ApplyDevCleanView()
@@ -18204,6 +18209,7 @@ namespace GreedLast
             runProgressRoot.SetActive(true);
             int target = Mathf.Max(1, snapshot.ChapterTarget);
             float ratio = Mathf.Clamp01(snapshot.ChapterProgress / (float)target);
+            bool compact = (!DevToolsEnabled || devCleanViewEnabled) && !snapshot.Stopped;
             string label;
             TrackRunProgressStageState(snapshot);
             TrackThreatProgressState(snapshot);
@@ -18216,7 +18222,11 @@ namespace GreedLast
             float progressDownbeatLift = BuildRunProgressDownbeatLift(snapshot, progressDownbeatPulse, stagePulse);
             bool threatAlert = threatPulse > 0f;
 
-            if (snapshot.PracticeMode)
+            if (compact)
+            {
+                label = BuildCompactRunProgressLabel(snapshot, target);
+            }
+            else if (snapshot.PracticeMode)
             {
                 if (snapshot.Stopped)
                 {
@@ -18297,7 +18307,9 @@ namespace GreedLast
             if (runProgressText != null)
             {
                 runProgressText.text = label;
-                runProgressText.fontSize = BuildRunProgressFontSize(label);
+                runProgressText.fontSize = compact ? 34 : BuildRunProgressFontSize(label);
+                SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, compact ? 0.705f : 0.715f, 760f, 64f);
+                SetAnchored(runProgressText.rectTransform, 0.5f, compact ? 1.1f : 0.72f, 720f, compact ? 40f : 36f);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);
                 float downbeatTextBlend = BuildRunProgressDownbeatColorBlend(progressDownbeatLift);
                 int textAlpha = BuildRunProgressTextAlpha(230, progressDownbeatLift);
@@ -18947,6 +18959,38 @@ namespace GreedLast
             return rolePrefix + "공명핵 준비 "
                 + snapshot.ChapterProgress + "/" + target
                 + "  남은 함정 " + remaining;
+        }
+
+        private static string BuildCompactRunProgressLabel(GreedLastRunSnapshot snapshot, int target)
+        {
+            int progress = Mathf.Clamp(snapshot.ChapterProgress, 0, target);
+            if (snapshot.ChoiceActive)
+            {
+                return BuildChoiceScreenTitle(snapshot);
+            }
+
+            if (snapshot.PracticeMode)
+            {
+                return "연습 " + (Mathf.Min(progress, target - 1) + 1) + "/" + target;
+            }
+
+            if (snapshot.InfiniteMode)
+            {
+                int threat = Mathf.Clamp(snapshot.InfiniteThreatLevel, InfiniteThreatUiMinLevel, InfiniteThreatUiMaxLevel);
+                return (snapshot.InfiniteSectionsCleared + 1) + "구간 · " + progress + "/" + target + " · 위협 " + threat;
+            }
+
+            if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
+            {
+                return "탈출 · " + progress + "/" + target;
+            }
+
+            if (snapshot.CoreRetrieved)
+            {
+                return "공명핵 회수";
+            }
+
+            return Mathf.Clamp(snapshot.ChapterIndex, 1, 4) + "장 · " + progress + "/" + target;
         }
 
         private static string BuildChapterProgressRolePrefix(int chapterIndex)
@@ -29857,6 +29901,10 @@ namespace GreedLast
             float age = Mathf.Max(0f, now - stageTransitionStartedAt);
             float fadeIn = BuildStageTransitionFadeIn(age);
             float visibility = BuildStageTransitionVisibility(age, remaining);
+            if ((!DevToolsEnabled || devCleanViewEnabled) && latestRunSnapshot.PracticeMode)
+            {
+                visibility = 0f;
+            }
             if (detailText != null)
             {
                 detailText.color = WithAlpha(detailText.color, BuildStageTransitionDetailAlpha(visibility));
