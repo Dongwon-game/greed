@@ -846,12 +846,46 @@ namespace GreedLast.Editor
                 Click(primary);
                 Require(!latest().Paused && !latest().AutoFlow && Label() == "자동 시작",
                     "Detailed auto-stop must retain its development behavior without masquerading as pause.");
+                GreedLastRunSnapshot beforeFlowRestart = latest();
+                VerifyHeldModeChange();
+                Require(ui.UsePlayerRunControls && Label() == "함정 재개"
+                    && !latest().Paused && !latest().AutoFlow,
+                    "Clean view must expose a way to resume development-stopped traps without silently changing run state.");
+                Click(primary);
+                Require(latest().AutoFlow && !latest().Paused && Label() == "일시정지"
+                    && latest().ActivePattern == beforeFlowRestart.ActivePattern
+                    && latest().Pattern.PatternId == beforeFlowRestart.Pattern.PatternId
+                    && latest().Health == beforeFlowRestart.Health && latest().Score == beforeFlowRestart.Score
+                    && Mathf.Approximately(latest().Distance, beforeFlowRestart.Distance),
+                    "The clean trap-resume press must restore automatic flow without replacing the trap or altering totals.");
+                VerifyHeldModeChange();
+                Click(primary);
                 Click(primary);
                 Require(!latest().Paused && latest().AutoFlow && Label() == "자동 정지",
                     "The development command must still re-enable automatic trap generation.");
                 VerifyHeldModeChange();
                 Require(ui.UsePlayerRunControls && Label() == "일시정지",
                     "Returning to clean play must immediately restore the matching primary label.");
+                GreedLastRunSnapshot active = latest();
+                core.HandleInput(active.Pattern.Channel, Read<float>(core, "patternStartedAt")
+                    + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
+                Require(!latest().ActivePattern && !latest().Stopped,
+                    "The recovery fixture must also reach the real gap between practice traps.");
+                ui.ToggleDevCleanView();
+                Click(primary);
+                ui.ToggleDevCleanView();
+                GreedLastRunSnapshot gap = latest();
+                Require(!gap.AutoFlow && !gap.ActivePattern && Label() == "함정 재개",
+                    "Clean controls must recover auto-stop in a gap, not only while a trap remains active.");
+                Click(primary);
+                Require(latest().AutoFlow && !latest().Paused && !latest().ActivePattern
+                    && latest().Health == gap.Health && latest().Score == gap.Score
+                    && Mathf.Approximately(latest().Distance, gap.Distance),
+                    "Resuming a gap must preserve totals and schedule the next trap instead of starting a pause countdown.");
+                core.Tick(Read<float>(core, "nextPatternAt") + 0.01f);
+                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지"
+                    && latest().Pattern.PatternId != active.Pattern.PatternId,
+                    "After the real automatic delay, gap recovery must generate the next practice trap and restore pause.");
                 Method(app, "RequestNextRunPattern").Invoke(app, null);
                 Require(latest().Paused && Read<bool>(core, "autoFlowBeforePause"),
                     "The Enter callback must use the same clean pause route as the pointer action.");
@@ -861,7 +895,7 @@ namespace GreedLast.Editor
                 for (int slot = 0; slot < savedLabels.Length; slot++)
                     Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
                         "Primary control checks must not mutate or consume saved loadouts.");
-                Debug.Log("Greed Last player primary controls passed: locked opening -> real clean pause -> frozen totals -> F11 while paused -> guarded resume -> preserved auto-flow -> detailed auto-stop/start -> clean Enter pause -> safe practice exit.");
+                Debug.Log("Greed Last player primary controls passed: locked opening -> real clean pause -> frozen totals -> F11 held-press cancellation -> guarded resume -> preserved auto-flow -> clean trap recovery while active and between traps -> clean Enter pause -> safe practice exit.");
             }
             finally
             {

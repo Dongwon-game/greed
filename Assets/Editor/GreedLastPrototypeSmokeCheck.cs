@@ -9216,6 +9216,8 @@ namespace GreedLast.Editor
                     + autoRunningNextLabel);
             runCore.ToggleAutoFlow(now + 2.1f);
             string manualNextLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", runSnapshot, false);
+            Require(InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", runSnapshot, false, true) == "함정 재개",
+                "Returning to player controls after development auto-stop must not leave automatic traps inaccessible.");
             Require(
                 !runSnapshot.AutoFlow && manualNextLabel == "자동 시작",
                 "A live normal run with auto-flow disabled must expose auto-start as its next action. Actual: "

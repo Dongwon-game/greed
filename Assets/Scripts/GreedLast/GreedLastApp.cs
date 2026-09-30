@@ -13189,6 +13189,11 @@ namespace GreedLast
                 {
                     if (!hasLatestAppRunSnapshot || latestAppRunSnapshot.CountdownActive
                         || latestAppRunSnapshot.ChoiceActive) return;
+                    if (!latestAppRunSnapshot.AutoFlow)
+                    {
+                        runCore.ToggleAutoFlow(Time.realtimeSinceStartup);
+                        return;
+                    }
                     RequestToggleRunPause();
                     return;
                 }
@@ -17208,7 +17213,7 @@ namespace GreedLast
             bool normalClearReady, bool playerControls)
         {
             if (playerControls && !snapshot.Stopped && !snapshot.Paused && !snapshot.ChoiceActive)
-                return snapshot.CountdownActive ? "시작 준비" : "일시정지";
+                return snapshot.CountdownActive ? "시작 준비" : snapshot.AutoFlow ? "일시정지" : "함정 재개";
             return BuildRunNextActionButtonLabel(snapshot, normalClearReady);
         }
 

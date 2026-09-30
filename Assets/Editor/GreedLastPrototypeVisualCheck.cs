@@ -146,6 +146,9 @@ namespace GreedLast.Editor
                 core.Tick(now);
                 if (!latest.ActivePattern) throw new InvalidOperationException("Live visual fixture needs an active trap.");
                 GreedLastRunSnapshot live = latest;
+                core.ToggleAutoFlow(now + 0.05f);
+                GreedLastRunSnapshot flowStopped = latest;
+                core.ToggleAutoFlow(now + 0.075f);
                 core.TogglePause(now + 0.1f);
                 GreedLastRunSnapshot paused = latest;
                 core.TogglePause(now + 0.2f);
@@ -183,6 +186,7 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("60-lobby", () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
                 AddRetainedViewportFrames("61-choice", () => ShowRun(choice));
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
+                AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
@@ -954,7 +958,8 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
             if (run.Stopped) return 0;
             if (!run.Paused && !run.ChoiceActive && !run.CountdownActive)
-                Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "일시정지"
+                Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text
+                    == (run.AutoFlow ? "일시정지" : "함정 재개")
                     && !Read<Button>("returnLobbyButton").gameObject.activeInHierarchy,
                     currentFrame.Name + ": clean gameplay must offer pause, not the development auto-flow control.");
             Button[] lanes = Read<Button[]>("laneButtons");
