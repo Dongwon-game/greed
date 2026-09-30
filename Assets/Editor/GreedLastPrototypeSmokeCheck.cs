@@ -1563,6 +1563,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeIdleCheck.Run();
             GreedLastPrototypeSettingsCheck.Run();
             GreedLastPrototypeClockCheck.Run();
+            GreedLastPrototypeTimelineCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);
