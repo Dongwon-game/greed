@@ -251,6 +251,7 @@ namespace GreedLast.Editor
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
                 VerifyPracticeCalibrationLoop(ui, backend, state, core, () => run);
+                VerifyPlayerPrimaryControls(app, ui, backend, state, core, () => run);
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
                 VerifyGameplayLaneOutcomes(app, ui, backend, state, core, () => run);
                 VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
@@ -453,6 +454,8 @@ namespace GreedLast.Editor
                     && Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").PracticeMode,
                     "An actionable warning lobby must still start practice through its real button.");
                 AssertSyncCannotLeaveScreen(app, backend, state, gate);
+                if (!Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy)
+                    Click(ui, "pauseButton");
                 Click(ui, "returnLobbyButton");
             }
             finally { Write(backend, "auxiliaryWarning", false); }
@@ -744,6 +747,125 @@ namespace GreedLast.Editor
                 if (hadOffset) PlayerPrefs.SetFloat(key, storedOffset);
                 else PlayerPrefs.DeleteKey(key);
                 PlayerPrefs.Save();
+            }
+        }
+
+        private static void VerifyPlayerPrimaryControls(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool previousCleanView = ui.UsePlayerRunControls;
+            string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
+            Button primary = Read<Button>(ui, "nextPatternButton");
+            string Label() => primary.GetComponentInChildren<Text>().text;
+            void VerifyHeldModeChange()
+            {
+                GreedLastRunSnapshot before = latest();
+                bool wasPlayerMode = ui.UsePlayerRunControls;
+                int calls = 0;
+                UnityEngine.Events.UnityAction countClick = () => calls++;
+                primary.onClick.AddListener(countClick);
+                void SwitchMode()
+                {
+                    ui.ToggleDevCleanView();
+                    if (usePointerModule) RefreshPointerViewport(primary);
+                }
+                try
+                {
+                    if (usePointerModule)
+                    {
+                        RefreshPointerViewport(primary);
+                        GreedLastPrototypeKeyboardCheck.ClickOnce(UnityEngine.Object.FindAnyObjectByType<EventSystem>(),
+                            primary, useTouch, whileHeld: SwitchMode);
+                        canceledCommandPresses++;
+                    }
+                    else
+                    {
+                        var pointer = new PointerEventData(EventSystem.current)
+                            { button = PointerEventData.InputButton.Left, eligibleForClick = true };
+                        ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                        SwitchMode();
+                        ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                        if (pointer.eligibleForClick)
+                            ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                    }
+                    Require(calls == 0 && latest().Equals(before) && ui.UsePlayerRunControls != wasPlayerMode,
+                        "A held primary press must be canceled when F11 changes its meaning, without pausing or toggling flow.");
+                }
+                finally { primary.onClick.RemoveListener(countClick); }
+            }
+            try
+            {
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                Click(ui, "practiceRunButton");
+                Require(latest().StartCountdownActive && Label() == "시작 준비" && !primary.IsInteractable(),
+                    "The clean primary action must describe the locked opening countdown, not auto-start.");
+                GreedLastRunSnapshot opening = latest();
+                Method(app, "RequestNextRunPattern").Invoke(app, null);
+                Require(latest().Equals(opening),
+                    "Enter must not bypass or pause the opening countdown through a disabled clean action.");
+                core.Tick(Time.realtimeSinceStartup + 2f);
+                core.RequestNextPattern(Time.realtimeSinceStartup);
+                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지",
+                    "Live clean play must offer a real pause while automatic traps remain enabled.");
+                GreedLastRunSnapshot before = latest();
+                Require(!Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
+                    "Clean gameplay must keep abandonment inside the pause menu, not next to the live action.");
+                Click(primary);
+                Require(latest().Paused && !latest().AutoFlow && Read<bool>(core, "autoFlowBeforePause")
+                    && Label() == "재개"
+                    && Read<GameObject>(ui, "pauseMenuOverlay").activeInHierarchy,
+                    "The app-bound clean primary press must open the separate pause menu, not disable trap spawning.");
+                Require(Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
+                    "The clean pause menu must still offer an explicit exit.");
+                core.Tick(Time.realtimeSinceStartup + 60f);
+                Require(latest().Health == before.Health && latest().Score == before.Score
+                    && Mathf.Approximately(latest().Distance, before.Distance),
+                    "The primary pause must freeze distance, health and score during idle time.");
+                for (int toggle = 0; toggle < 2; toggle++)
+                {
+                    ui.ToggleDevCleanView();
+                    Require(Label() == "재개" && latest().Paused,
+                        "F11 must not change or dismiss the paused primary action.");
+                }
+                Click(primary);
+                float resumeEnd = Read<float>(core, "resumeCountdownEndsAt");
+                Require(latest().ResumeCountdownActive && Label() == "재개 준비" && !primary.IsInteractable(),
+                    "The same primary action must resume through the locked lead-in countdown.");
+                Method(app, "RequestNextRunPattern").Invoke(app, null);
+                Require(Read<float>(core, "resumeCountdownEndsAt") == resumeEnd,
+                    "Repeated Enter during resume preparation must not alter its deadline.");
+                core.Tick(resumeEnd + 0.01f);
+                Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow && Label() == "일시정지"
+                    && !Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
+                    "Resuming must restore the same trap and automatic flow, with pause as the clean action.");
+                VerifyHeldModeChange();
+                Require(!ui.UsePlayerRunControls && Label() == "자동 정지"
+                    && Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
+                    "F11 detailed mode must immediately restore the development auto-flow command.");
+                Click(primary);
+                Require(!latest().Paused && !latest().AutoFlow && Label() == "자동 시작",
+                    "Detailed auto-stop must retain its development behavior without masquerading as pause.");
+                Click(primary);
+                Require(!latest().Paused && latest().AutoFlow && Label() == "자동 정지",
+                    "The development command must still re-enable automatic trap generation.");
+                VerifyHeldModeChange();
+                Require(ui.UsePlayerRunControls && Label() == "일시정지",
+                    "Returning to clean play must immediately restore the matching primary label.");
+                Method(app, "RequestNextRunPattern").Invoke(app, null);
+                Require(latest().Paused && Read<bool>(core, "autoFlowBeforePause"),
+                    "The Enter callback must use the same clean pause route as the pointer action.");
+                Click(ui, "returnLobbyButton");
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                    "Exiting the clean pause menu must keep practice isolated from normal save opportunities.");
+                for (int slot = 0; slot < savedLabels.Length; slot++)
+                    Require(backend.LoadLobby().SaveSlotLabels[slot] == savedLabels[slot],
+                        "Primary control checks must not mutate or consume saved loadouts.");
+                Debug.Log("Greed Last player primary controls passed: locked opening -> real clean pause -> frozen totals -> F11 while paused -> guarded resume -> preserved auto-flow -> detailed auto-stop/start -> clean Enter pause -> safe practice exit.");
+            }
+            finally
+            {
+                if (ui.UsePlayerRunControls != previousCleanView) ui.ToggleDevCleanView();
             }
         }
 

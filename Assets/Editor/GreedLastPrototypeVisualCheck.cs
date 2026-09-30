@@ -953,6 +953,10 @@ namespace GreedLast.Editor
                 || Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
             GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
             if (run.Stopped) return 0;
+            if (!run.Paused && !run.ChoiceActive && !run.CountdownActive)
+                Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "일시정지"
+                    && !Read<Button>("returnLobbyButton").gameObject.activeInHierarchy,
+                    currentFrame.Name + ": clean gameplay must offer pause, not the development auto-flow control.");
             Button[] lanes = Read<Button[]>("laneButtons");
             Button[] margins = Read<Button[]>("laneHitButtons");
             int count = 0;

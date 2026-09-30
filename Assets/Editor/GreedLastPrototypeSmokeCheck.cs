@@ -9207,6 +9207,9 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildRunThreatDownTestButtonLabel", runSnapshot) == "피해 -1",
                 "A normal run must reuse PgDn as a health-danger test instead of an infinite threat control.");
             string autoRunningNextLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", runSnapshot, false);
+            Require(InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", runSnapshot, false, true) == "일시정지"
+                && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", runSnapshot, false, false) == autoRunningNextLabel,
+                "Player controls must use real pause while detailed controls retain the development auto-flow action.");
             Require(
                 runSnapshot.AutoFlow && autoRunningNextLabel == "자동 정지",
                 "A normal run released from the opening countdown must default to auto-flow and expose auto-stop. Actual: "
@@ -9318,6 +9321,9 @@ namespace GreedLast.Editor
             autoFailCore.Tick(autoFailClock);
 
             string autoFailStoppedLabel = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", autoFailSnapshot, false);
+            Require(InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", autoFailSnapshot, false, true)
+                == autoFailStoppedLabel,
+                "Player controls must preserve retry at health zero instead of showing an unusable pause.");
             Require(
                 autoFailSnapshot.Stopped
                     && autoFailSnapshot.Health == 0

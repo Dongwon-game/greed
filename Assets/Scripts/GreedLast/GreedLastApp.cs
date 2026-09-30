@@ -13185,6 +13185,14 @@ namespace GreedLast
                     return;
                 }
 
+                if (runtimeUi == null || runtimeUi.UsePlayerRunControls)
+                {
+                    if (!hasLatestAppRunSnapshot || latestAppRunSnapshot.CountdownActive
+                        || latestAppRunSnapshot.ChoiceActive) return;
+                    RequestToggleRunPause();
+                    return;
+                }
+
                 runCore.ToggleAutoFlow(Time.realtimeSinceStartup);
             }
         }
@@ -15563,6 +15571,7 @@ namespace GreedLast
         private readonly List<CanvasGroup> liveSettingCleanViewGroups = new List<CanvasGroup>();
 
         public bool RotationTiltEnabled => rotationTiltEnabled;
+        public bool UsePlayerRunControls => !DevToolsEnabled || devCleanViewEnabled;
 
         public event Action<bool> RotationTiltPreferenceChanged;
         public event Action ViewportChanged;
@@ -15647,10 +15656,13 @@ namespace GreedLast
                 return;
             }
 
+            CancelPendingUiInput();
             devCleanViewEnabled = !devCleanViewEnabled;
             ApplyDevCleanView();
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
+                SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForMode(latestRunSnapshot,
+                    normalClearReady: false, playerControls: UsePlayerRunControls));
                 UpdateRunProgress(latestRunSnapshot);
                 UpdateStageTransitionBanner();
             }
@@ -15658,7 +15670,7 @@ namespace GreedLast
 
         private void ApplyDevCleanView()
         {
-            bool cleanView = !DevToolsEnabled || devCleanViewEnabled;
+            bool cleanView = UsePlayerRunControls;
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
             bool liveHeader = cleanView && runModeActive && hasRunSnapshot
                 && !latestRunSnapshot.Stopped && !latestRunSnapshot.Paused
@@ -15671,6 +15683,9 @@ namespace GreedLast
                 && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode
                 ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
+            if (runModeActive && hasRunSnapshot)
+                returnLobbyButton.gameObject.SetActive(!cleanView || latestRunSnapshot.Stopped
+                    || latestRunSnapshot.Paused || latestRunSnapshot.ChoiceActive);
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);
@@ -16466,7 +16481,8 @@ namespace GreedLast
             SetRunMenuButtonLayout(snapshot.Paused);
 
             bool normalClearReady = snapshot.Stopped && snapshot.SaveEligible && !snapshot.InfiniteMode;
-            SetButtonLabel(nextPatternButton, BuildRunNextActionButtonLabel(snapshot, normalClearReady));
+            SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForMode(snapshot,
+                normalClearReady, UsePlayerRunControls));
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForMode(snapshot, showDevTools));
             SetButtonLabel(devInvincibleButton, PrefixDevShortcut("F1", snapshot.DevInvincible ? "무적 ON" : "무적 OFF"));
@@ -17186,6 +17202,14 @@ namespace GreedLast
             }
 
             return snapshot.InfiniteMode ? "정산 후 로비" : snapshot.RefillRun ? "보충 포기" : "탈출 포기";
+        }
+
+        private static string BuildRunPrimaryButtonLabelForMode(GreedLastRunSnapshot snapshot,
+            bool normalClearReady, bool playerControls)
+        {
+            if (playerControls && !snapshot.Stopped && !snapshot.Paused && !snapshot.ChoiceActive)
+                return snapshot.CountdownActive ? "시작 준비" : "일시정지";
+            return BuildRunNextActionButtonLabel(snapshot, normalClearReady);
         }
 
         private static string BuildRunNextActionButtonLabel(GreedLastRunSnapshot snapshot, bool normalClearReady)
