@@ -176,6 +176,7 @@ namespace GreedLast.Editor
                 AddAvoidanceFrames();
                 AddJudgementRewardFrames();
                 AddRouteStepFeedbackFrames();
+                AddReviewRecommendationFrames();
                 AddActualInputChannelFrames();
                 AddStructuredTimingFrames();
                 AddPracticeMissFrames();
@@ -661,6 +662,85 @@ namespace GreedLast.Editor
                     Add(name + "-detail-tablet", 1024, 768, ShowBrokenDetailed, settleSeconds: 0.16);
                     Add(name + "-detail-wide", 2340, 1080, ShowBrokenDetailed, 96f, 0.16);
                 }
+            }
+        }
+
+        private static void AddReviewRecommendationFrames()
+        {
+            foreach (bool infinite in new[] { false, true })
+            foreach (bool good in new[] { false, true })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup + 100f;
+                if (infinite) core.EnterInfiniteRun(GreedLastRunRecord.Empty, "재도전 목표: 보정 0회 / 현재 1");
+                else
+                {
+                    core.ConfigureGrowth(3, 0, 0);
+                    core.Enter("복기 재도전\n재도전 목표: 1장 보정 0회 / 현재 1");
+                }
+                int consumed = 0;
+                for (int guard = 0; guard < 40; guard++)
+                {
+                    if (run.ActivePattern && !run.CountdownActive
+                        && (infinite ? consumed == 2 : run.ChapterIndex == 2 && run.ChapterProgress == 1)) break;
+                    if (run.ChoiceActive) core.HandleInput(GreedLastRunChannel.Left, clock += 0.1f);
+                    else if (run.CountdownActive || !run.ActivePattern) core.Tick(clock += 2f);
+                    else
+                    {
+                        if (!infinite && consumed < 2)
+                        {
+                            clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.02f;
+                            core.Tick(clock);
+                        }
+                        else
+                        {
+                            clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
+                            core.HandleInput(run.Pattern.Channel, clock);
+                        }
+                        consumed++;
+                    }
+                }
+                Require(run.ActivePattern && !run.CountdownActive && !run.Stopped
+                    && run.TimingRecommendationSampleCount == 2 && !run.HasTimingRecommendation
+                    && !string.IsNullOrEmpty(run.ReviewTargetText),
+                    "Review captures need two real samples immediately before a third live judgement.");
+                GreedLastRunSnapshot before = run;
+                float delta = good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
+                core.HandleInput(run.Pattern.Channel, clock);
+                GreedLastRunSnapshot after = run;
+                Require(after.HasTimingRecommendation && !after.Stopped && !after.ChoiceActive
+                    && after.LastResult == (good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success),
+                    "The third real sample must expose its live recommendation with the review outcome.");
+                string review = GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(after);
+                Require(!string.IsNullOrEmpty(review), "A live review capture needs its actual current target result.");
+                void ShowDetailed()
+                {
+                    if (ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowRun(before);
+                    ui.RenderRun(after);
+                    string text = Read<Text>("judgementFeedbackText").text;
+                    Require(text.Contains(review, StringComparison.Ordinal)
+                        && text.Contains("보정 추천 준비", StringComparison.Ordinal),
+                        "Detail must preserve both the real review outcome and newly available recommendation. Actual: "
+                            + text.Replace('\n', '|'));
+                    float until = Read<float>("judgementFeedbackUntil");
+                    float popUntil = Read<float>("judgementFeedbackPopUntil");
+                    int history = Read<int>("judgementHistoryCount");
+                    ui.ToggleDevCleanView();
+                    ui.ToggleDevCleanView();
+                    Require(Read<Text>("judgementFeedbackText").text == text
+                        && Read<float>("judgementFeedbackUntil") == until
+                        && Read<float>("judgementFeedbackPopUntil") == popUntil
+                        && Read<int>("judgementHistoryCount") == history,
+                        "F11 must retain the existing review/recommendation without replaying its judgement.");
+                }
+                string name = "87-review-recommendation-" + (infinite ? "infinite" : "normal") + (good ? "-good" : "-exact");
+                Add(name + "-detail-small", 960, 540, ShowDetailed, settleSeconds: 0.16);
+                Add(name + "-detail-tablet", 1024, 768, ShowDetailed, settleSeconds: 0.16);
+                Add(name + "-detail-wide", 2340, 1080, ShowDetailed, 96f, 0.16);
             }
         }
 

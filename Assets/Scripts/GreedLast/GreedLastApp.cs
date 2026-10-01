@@ -44200,7 +44200,8 @@ namespace GreedLast
                 ? BuildCompactJudgementFeedbackText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
                 : BuildJudgementFeedbackText(snapshot);
             if (!compact && lastPresentedJudgementRecommendationReady)
-                text += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
+                text += (CountTextLines(text) >= 3 ? " · " : "\n")
+                    + "보정 추천 준비 " + FormatTimingRecommendation(snapshot);
             SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
             if (compact)
             {
@@ -44210,8 +44211,25 @@ namespace GreedLast
             judgementFeedbackText.text = text;
             // Fit diagnostic copy without letting its pop animation enter the gauges below.
             if (!compact)
-                while (judgementFeedbackText.fontSize > 18 && judgementFeedbackText.preferredHeight > 98f)
+                while (judgementFeedbackText.fontSize > 18 && !JudgementFeedbackFitsBounds())
                     judgementFeedbackText.fontSize -= 2;
+        }
+
+        private bool JudgementFeedbackFitsBounds()
+        {
+            if (judgementFeedbackText.preferredHeight > 98f) return false;
+            Rect rect = judgementFeedbackText.rectTransform.rect;
+            TextGenerator generator = judgementFeedbackText.cachedTextGenerator;
+            generator.Populate(judgementFeedbackText.text, judgementFeedbackText.GetGenerationSettings(rect.size));
+            IList<UIVertex> vertices = generator.verts;
+            float pixelsPerUnit = judgementFeedbackText.pixelsPerUnit;
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                Vector3 point = vertices[i].position / pixelsPerUnit;
+                if (point.x < rect.xMin + 2f || point.x > rect.xMax - 2f
+                    || point.y < rect.yMin + 2f || point.y > rect.yMax - 2f) return false;
+            }
+            return true;
         }
 
         private void ShowDevTrapVisualPreviewFeedback()
@@ -44468,6 +44486,7 @@ namespace GreedLast
 
                     string payoffPrefix = string.IsNullOrEmpty(payoffGoal) ? string.Empty : "정확→" + payoffGoal + " / ";
                     string bundleFeedback = BuildJudgementBundleHeader(snapshot)
+                        + (string.IsNullOrEmpty(transitionPayoff) ? string.Empty : " · " + transitionPayoff)
                         + "\n"
                         + payoffPrefix
                         + lines[i].Substring(bundlePrefix.Length);
@@ -44490,9 +44509,7 @@ namespace GreedLast
                         bundleFeedback += "\n" + bundleEffect;
                     }
 
-                    return string.IsNullOrEmpty(transitionPayoff)
-                        ? bundleFeedback
-                        : bundleFeedback + "\n" + transitionPayoff;
+                    return bundleFeedback;
                 }
             }
 
