@@ -134,6 +134,8 @@ namespace GreedLast.Editor
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
 
+                VerifySlowRunPresentation(app, backend, state, core);
+
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
                     "The actual lobby practice callback must open a practice run.");
@@ -170,6 +172,9 @@ namespace GreedLast.Editor
                     "The actual S3 button and confirmation must consume the candidate only into S3.");
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+
+                VerifySlowPreparationPresentation(app, backend, state);
+                VerifySlowConfirmationPresentation(app, backend, state);
 
                 for (int use = 0; use < 2; use++)
                 {
@@ -624,6 +629,193 @@ namespace GreedLast.Editor
         {
             // Advance only the input guard, not wall time or the user's saved profile.
             Write(app, "infinitePreparationInputBlockUntil", 0f);
+        }
+
+        private static void VerifySlowPreparationPresentation(GreedLastApp app,
+            GreedLastMockBackend backend, GreedLastStateMachine state)
+        {
+            string[] slots = backend.LoadLobby().SaveSlotLabels;
+            int slowPresentations = 0;
+            void SlowPresentation(GreedLastStateSnapshot value)
+            {
+                if (value.State != GreedLastScreenState.InfiniteStartReady) return;
+                // Deliberately exceed the input guard to simulate a slow first layout on a phone.
+                System.Threading.Thread.Sleep(240);
+                slowPresentations++;
+            }
+            state.StateChanged += SlowPresentation;
+            try
+            {
+                Method(app, "RequestInfiniteRun").Invoke(app, null);
+                for (int expectedStep = 0; expectedStep < 3; expectedStep++)
+                {
+                    float deadline = Read<float>(app, "infinitePreparationInputBlockUntil");
+                    Require(deadline > Time.realtimeSinceStartup,
+                        "Preparation protection must begin after the slow presentation, not expire inside it."
+                            + $" step={expectedStep}, deadline={deadline:F4}, now={Time.realtimeSinceStartup:F4}.");
+                    if (expectedStep < 2)
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                    else Method(app, "RequestNextRunPattern").Invoke(app, null);
+                    Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                        && Read<int>(app, "infinitePreparationStep") == expectedStep,
+                        "An immediate input after slow presentation must not select or start the next preparation step.");
+                    FinishPreparationTransition(app);
+                    if (expectedStep < 2)
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                }
+                Require(slowPresentations == 3, "Slow preparation must exercise entry, gift and relic presentation.");
+                Method(app, "RequestReturnToLobby").Invoke(app, null);
+                for (int slot = 0; slot < slots.Length; slot++)
+                    Require(backend.LoadLobby().SaveSlotLabels[slot] == slots[slot],
+                        "Slow preparation and cancellation must not consume or change a loadout.");
+                Debug.Log("Greed slow preparation passed: three delayed presentations retain fresh input guards, immediate selection/start rejected and cancellation preserves slots. Isolated callbacks, not device latency measurement.");
+            }
+            finally { state.StateChanged -= SlowPresentation; }
+        }
+
+        private static void VerifySlowRunPresentation(GreedLastApp app, GreedLastMockBackend backend,
+            GreedLastStateMachine state, GreedLastRunCore core)
+        {
+            string[] slots = backend.LoadLobby().SaveSlotLabels;
+            var failures = new List<string>();
+            int delayMilliseconds = 0;
+            void SlowPresentation(GreedLastRunSnapshot value)
+            {
+                if (delayMilliseconds > 0) System.Threading.Thread.Sleep(delayMilliseconds);
+            }
+            core.SnapshotChanged += SlowPresentation;
+            try
+            {
+                foreach (var entry in new[] {
+                    (Method: "RequestNormalRun", Arguments: (object[])null),
+                    (Method: "StartNormalRunCore", Arguments: new object[] { "Slow normal entry check", false }),
+                    (Method: "StartNormalRunCore", Arguments: new object[] { "Slow refill entry check", true }),
+                    (Method: "RequestPracticeRun", Arguments: (object[])null) })
+                {
+                    state.SetLobbyReady(backend.LoadLobby());
+                    Write(app, "runEntryLaneInputBlockUntil", 0f);
+                    delayMilliseconds = 360;
+                    Method(app, entry.Method).Invoke(app, entry.Arguments);
+                    delayMilliseconds = 0;
+                    GreedLastRunSnapshot before = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                    if (Read<float>(app, "runEntryLaneInputBlockUntil") <= Time.realtimeSinceStartup)
+                        failures.Add("entry protection expired: " + entry.Method + "/" + before.RefillRun);
+                    Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                    GreedLastRunSnapshot after = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                    if (before.ChoiceKind != after.ChoiceKind || before.ActiveChoiceProfile != after.ActiveChoiceProfile)
+                        failures.Add("entry tap advanced the opening choice: " + entry.Method);
+                }
+
+                Method(app, "StartNormalRunCore").Invoke(app, new object[] { "Slow choice check", false });
+                float clock = Time.realtimeSinceStartup;
+                for (int step = 0; step < 32; step++)
+                {
+                    GreedLastRunSnapshot current = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                    if (current.ChoiceActive && current.ChoiceKind == GreedLastChoiceKind.Node) break;
+                    if (current.ChoiceActive) core.HandleInput(GreedLastRunChannel.Left, clock);
+                    else if (current.CountdownActive || !current.ActivePattern) core.Tick(clock += 2f);
+                    else
+                    {
+                        clock += current.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - current.ElapsedSeconds;
+                        core.HandleInput(current.Pattern.Channel, clock);
+                    }
+                }
+                Write(app, "runEntryLaneInputBlockUntil", 0f);
+                Write(app, "runChoiceInputBlockUntil", 0f);
+                Method(app, "ResetRunLaneInputGuard").Invoke(app, null);
+                delayMilliseconds = 240;
+                Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Left });
+                delayMilliseconds = 0;
+                GreedLastRunSnapshot choice = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                Require(choice.ChoiceActive && choice.ChoiceKind == GreedLastChoiceKind.Gift,
+                    "Slow normal choice protection needs a real route to chapter-gift transition.");
+                if (Read<float>(app, "runChoiceInputBlockUntil") <= Time.realtimeSinceStartup)
+                    failures.Add("gift protection expired during its first presentation");
+                Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Right });
+                GreedLastRunSnapshot remaining = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                if (remaining.ChoiceKind != choice.ChoiceKind || remaining.ActiveChoiceProfile != choice.ActiveChoiceProfile)
+                    failures.Add("a post-layout tap selected the unread gift");
+                Require(failures.Count == 0, "Slow run presentation: " + string.Join(" | ", failures));
+                Write(app, "runChoiceInputBlockUntil", 0f);
+                Method(app, "ResetRunLaneInputGuard").Invoke(app, null);
+                Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Right });
+                Require(!Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").ChoiceActive,
+                    "A deliberate gift choice must work after the guard is advanced.");
+                for (int slot = 0; slot < slots.Length; slot++)
+                    Require(backend.LoadLobby().SaveSlotLabels[slot] == slots[slot],
+                        "Slow normal/practice entry and choice checks must not touch saved loadouts.");
+                Debug.Log("Greed slow run presentation passed: four entry paths and a real route/gift transition retain post-layout guards; immediate unread choices rejected and deliberate selection accepted. Isolated delayed callbacks, not device latency measurement.");
+            }
+            finally
+            {
+                core.SnapshotChanged -= SlowPresentation;
+                Write(app, "runEntryLaneInputBlockUntil", 0f);
+                Write(app, "runChoiceInputBlockUntil", 0f);
+                Method(app, "ResetRunLaneInputGuard").Invoke(app, null);
+                state.SetLobbyReady(backend.LoadLobby());
+            }
+        }
+
+        private static void VerifySlowConfirmationPresentation(GreedLastApp app,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state)
+        {
+            string[] pendingFields = { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                "saveSlotDetailViewActive", "saveDraftFromRefillRun" };
+            bool delayNext = false;
+            void SlowPresentation(GreedLastStateSnapshot value)
+            {
+                if (!delayNext) return;
+                delayNext = false;
+                System.Threading.Thread.Sleep(420);
+            }
+            state.StateChanged += SlowPresentation;
+            try
+            {
+                foreach (var scenario in new[] {
+                    (Open: "OpenSaveLoadoutOverwriteConfirmation", Confirm: "ConfirmSaveLoadoutAndReturn", Flag: "saveDraftOverwriteConfirmPending"),
+                    (Open: "OpenSaveLoadoutDeleteConfirmation", Confirm: "RequestDeleteSaveLoadoutSlot", Flag: "saveSlotDeleteConfirmPending"),
+                    (Open: "OpenInfiniteLoadoutDeleteConfirmation", Confirm: "RequestDeleteSaveLoadoutSlot", Flag: "saveSlotDeleteConfirmPending"),
+                    (Open: "OpenSaveLoadoutRenameConfirmation", Confirm: "RequestRenameSaveLoadoutSlot", Flag: "saveSlotRenameConfirmPending"),
+                    (Open: "OpenInfiniteLoadoutRenameConfirmation", Confirm: "RequestRenameSaveLoadoutSlot", Flag: "saveSlotRenameConfirmPending"),
+                    (Open: "RequestReturnToLobby", Confirm: "RequestReturnToLobby", Flag: "saveDraftSkipConfirmPending") })
+                {
+                    var isolated = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    isolated.AddSampleSaveLoadoutForTest(out _);
+                    isolated.AddSampleClearCandidateForTest(out _);
+                    isolated.SelectSaveLoadoutSlot(0);
+                    Write(app, "backend", isolated);
+                    foreach (string field in pendingFields) Write(app, field, false);
+                    state.SetLobbyReady(isolated.LoadLobby());
+                    if (scenario.Open == "RequestReturnToLobby") Method(app, "RequestSaveLoadout").Invoke(app, null);
+                    GreedLastLobbySnapshot before = isolated.LoadSelectedSaveSlotView();
+                    var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(isolated, "saveLoadoutSlots").Clone();
+                    var uses = (int[])Read<int[]>(isolated, "saveLoadoutUsesRemaining").Clone();
+                    delayNext = true;
+                    MethodInfo open = Method(app, scenario.Open);
+                    open.Invoke(app, open.GetParameters().Length == 0 ? null : new object[] { null });
+                    Require(!delayNext && Read<bool>(app, scenario.Flag)
+                        && Read<float>(app, "saveConfirmationInputBlockUntil") > Time.realtimeSinceStartup,
+                        "Confirmation protection must remain fresh after a slow presentation: " + scenario.Open);
+                    Method(app, scenario.Confirm).Invoke(app, null);
+                    Require(Read<bool>(app, scenario.Flag) && isolated.HasSaveLoadoutCandidate,
+                        "An immediate post-layout confirmation must not consume its pending operation: " + scenario.Open);
+                    GreedLastLobbySnapshot after = isolated.LoadSelectedSaveSlotView();
+                    for (int slot = 0; slot < records.Length; slot++)
+                        Require(after.SaveSlotLabels[slot] == before.SaveSlotLabels[slot]
+                            && Read<GreedLastRunRecord[]>(isolated, "saveLoadoutSlots")[slot].Equals(records[slot])
+                            && Read<int[]>(isolated, "saveLoadoutUsesRemaining")[slot] == uses[slot],
+                            "A slow confirmation must preserve all slot records, names and uses: " + scenario.Open);
+                }
+                Debug.Log("Greed slow confirmations passed: overwrite, two delete views, two rename views and skip preserve fresh guards, pending candidate and all slot data after delayed presentation. Non-persisting fixtures only.");
+            }
+            finally
+            {
+                state.StateChanged -= SlowPresentation;
+                Write(app, "backend", originalBackend);
+                foreach (string field in pendingFields) Write(app, field, false);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
         }
 
         private static void CreatePointerViewport(Canvas canvas)

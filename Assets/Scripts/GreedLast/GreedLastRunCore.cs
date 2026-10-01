@@ -1616,11 +1616,10 @@ namespace GreedLast
             float elapsed = now - patternStartedAt;
             if (!inputConsumed && elapsed > currentPattern.HitSeconds)
             {
-                float signedDelta = elapsed - currentPattern.CoreSeconds;
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "실수 - 입력 없음\n" + FormatTimingDelta(signedDelta),
+                    "실수 - 입력 없음",
                     string.Empty,
                     "no_input"), now);
                 return;
@@ -6173,7 +6172,7 @@ namespace GreedLast
                 + "s";
         }
 
-        private static string FormatTimingDelta(float signedDeltaSeconds)
+        internal static string FormatTimingDelta(float signedDeltaSeconds)
         {
             int milliseconds = Mathf.RoundToInt(Mathf.Abs(signedDeltaSeconds) * 1000f);
             if (milliseconds <= 20)

@@ -12555,7 +12555,6 @@ namespace GreedLast
             string openingContext = refillRun
                 ? BuildRefillRunOpeningContext()
                 : BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail);
-            runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
             StartNormalRunCore(openingContext, refillRun);
         }
 
@@ -12574,16 +12573,19 @@ namespace GreedLast
             ResetRunLaneInputGuard();
             runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
             runCore.EnterPractice(BuildPracticeOpeningContextFromLobbyDetail(stateMachine.CurrentDetail));
+            runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
         }
 
         private void StartNormalRunCore(string openingContext, bool refillRun)
         {
+            runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
             activeNormalRunWasRefill = refillRun;
             ClearInfinitePreparationContext();
             stateMachine.SetRunCoreTest();
             ApplyGrowthToRunCore();
             ResetRunLaneInputGuard();
             runCore.Enter(openingContext, refillRun);
+            runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
         }
 
         private void RequestSaveLoadout()
@@ -12690,6 +12692,8 @@ namespace GreedLast
 
             infinitePreparationInputBlockUntil = Time.realtimeSinceStartup + RunChoiceTransitionInputBlockSeconds;
             stateMachine.SetInfiniteStartReady(lobby, detail);
+            // Preserve the full guard after synchronous layout work, including a slow first presentation.
+            infinitePreparationInputBlockUntil = Time.realtimeSinceStartup + RunChoiceTransitionInputBlockSeconds;
         }
 
         private string BuildInfinitePreparationDetail()
@@ -13269,7 +13273,7 @@ namespace GreedLast
                 runChoiceInputBlockUntil = BuildRunChoiceInputBlockUntil(
                     choiceWasActive,
                     hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive,
-                    now,
+                    Time.realtimeSinceStartup,
                     runChoiceInputBlockUntil);
             }
         }
@@ -13449,6 +13453,7 @@ namespace GreedLast
                 saveSlotChoiceRequired: false,
                 saveSlotOverwriteConfirmationPending: true,
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
         }
 
         private void OpenSaveLoadoutDeleteConfirmation()
@@ -13468,6 +13473,7 @@ namespace GreedLast
                 saveSlotChoiceRequired: false,
                 saveSlotDeleteConfirmationPending: true,
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
         }
 
         private void OpenInfiniteLoadoutDeleteConfirmation()
@@ -13482,6 +13488,7 @@ namespace GreedLast
                 backend.LoadSelectedSaveSlotView(),
                 detail,
                 saveSlotDeleteConfirmationPending: true);
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
         }
 
         private void OpenSaveLoadoutRenameConfirmation(string notice)
@@ -13505,6 +13512,7 @@ namespace GreedLast
                 saveSlotChoiceRequired: false,
                 saveSlotRenameConfirmationPending: true,
                 saveLoadoutCandidateAvailable: backend.HasSaveLoadoutCandidate);
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
         }
 
         private void OpenInfiniteLoadoutRenameConfirmation(string notice)
@@ -13523,6 +13531,7 @@ namespace GreedLast
                 backend.LoadSelectedSaveSlotView(),
                 detail,
                 saveSlotRenameConfirmationPending: true);
+            saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
         }
 
         private void SelectRecordBoardPage(GreedLastRunChannel channel)
@@ -14103,6 +14112,7 @@ namespace GreedLast
                         saveDraftRequiresExplicitSlotChoice,
                         BuildSaveDraftSkipConfirmationNotice(saveDraftFromRefillRun, saveDraftRequiresExplicitSlotChoice),
                         preserveSkipConfirmation: true);
+                    saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
                     return;
                 }
 
@@ -15689,7 +15699,7 @@ namespace GreedLast
         {
             bool cleanView = UsePlayerRunControls;
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
-            bool liveHeader = cleanView && runModeActive && hasRunSnapshot
+            bool liveHeader = runModeActive && hasRunSnapshot
                 && !latestRunSnapshot.Stopped && !latestRunSnapshot.Paused
                 && !latestRunSnapshot.ChoiceActive && !latestRunSnapshot.CountdownActive;
             SetAnchored(titleText.rectTransform, 0.5f, liveHeader ? 0.88f : 0.82f,
@@ -18362,7 +18372,7 @@ namespace GreedLast
                 runProgressText.text = label;
                 runProgressText.fontSize = compact ? 34 : BuildRunProgressFontSize(label);
                 SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, compact ? 0.705f : 0.715f, 760f, 64f);
-                SetAnchored(runProgressText.rectTransform, 0.5f, compact ? 1.1f : 0.72f, 720f, compact ? 40f : 36f);
+                SetAnchored(runProgressText.rectTransform, 0.5f, 1.1f, 720f, compact ? 40f : 36f);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);
                 float downbeatTextBlend = BuildRunProgressDownbeatColorBlend(progressDownbeatLift);
                 int textAlpha = BuildRunProgressTextAlpha(230, progressDownbeatLift);
@@ -21145,7 +21155,7 @@ namespace GreedLast
             switch (snapshot.LastResult)
             {
                 case GreedLastJudgementResult.Good:
-                    string goodHint = BuildTimingGoodFeedbackHint(ExtractJudgementTimingLine(snapshot.JudgementText));
+                    string goodHint = BuildTimingGoodFeedbackHint(snapshot);
                     return string.IsNullOrEmpty(goodHint) ? string.Empty : " / " + goodHint;
                 case GreedLastJudgementResult.Miss:
                     if (snapshot.MissReason == "wrong_channel")
@@ -21165,15 +21175,10 @@ namespace GreedLast
             }
         }
 
-        private static string ExtractJudgementTimingLine(string judgementText)
+        private static string BuildJudgedInputTimingLine(GreedLastRunSnapshot snapshot)
         {
-            if (string.IsNullOrEmpty(judgementText))
-            {
-                return string.Empty;
-            }
-
-            string[] lines = judgementText.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            return lines.Length > 1 ? lines[1].Trim() : string.Empty;
+            return snapshot.HasJudgedInputTiming
+                ? GreedLastRunCore.FormatTimingDelta(snapshot.LastInputTimingDeltaSeconds) : string.Empty;
         }
 
         private static string BuildStageTransitionObjectiveSuffix(GreedLastRunSnapshot snapshot)
@@ -44196,13 +44201,17 @@ namespace GreedLast
                 : BuildJudgementFeedbackText(snapshot);
             if (!compact && lastPresentedJudgementRecommendationReady)
                 text += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
-            ApplyJudgementFeedbackLayout(text);
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
             if (compact)
             {
                 judgementFeedbackText.fontSize = snapshot.LastResult == GreedLastJudgementResult.Miss ? 36 : 40;
-                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
             }
+            else judgementFeedbackText.fontSize = CountTextLines(text) >= 3 ? 26 : 32;
             judgementFeedbackText.text = text;
+            // Fit diagnostic copy without letting its pop animation enter the gauges below.
+            if (!compact)
+                while (judgementFeedbackText.fontSize > 18 && judgementFeedbackText.preferredHeight > 98f)
+                    judgementFeedbackText.fontSize -= 2;
         }
 
         private void ShowDevTrapVisualPreviewFeedback()
@@ -44395,10 +44404,8 @@ namespace GreedLast
                     return "정확 · " + action + " · +" + snapshot.LastJudgementScoreGain + "점"
                         + "\n" + bonus + " · " + exactPayoff;
                 case GreedLastJudgementResult.Good:
-                    float delta = snapshot.LastInputTimingDeltaSeconds;
-                    string timing = snapshot.HasJudgedInputTiming
-                        ? (delta < 0f ? "빠름 " : "늦음 ") + Mathf.RoundToInt(Mathf.Abs(delta) * 1000f) + "ms"
-                        : "타이밍 보정";
+                    string timing = BuildJudgedInputTimingLine(snapshot);
+                    if (string.IsNullOrEmpty(timing)) timing = "타이밍 보정";
                     string goodPayoff = snapshot.LastJudgementHealthChange > 0
                         ? "체력 +" + snapshot.LastJudgementHealthChange : "콤보 " + snapshot.Combo;
                     return "Good · " + action + " · +" + snapshot.LastJudgementScoreGain + "점"
@@ -44434,7 +44441,7 @@ namespace GreedLast
             bool rotationTiltAvailable)
         {
             string[] lines = (snapshot.JudgementText ?? string.Empty).Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            string timingLine = lines.Length > 1 ? lines[1] : string.Empty;
+            string timingLine = BuildJudgedInputTimingLine(snapshot);
             string transitionPayoff = string.Empty;
             for (int i = 0; i < lines.Length; i += 1)
             {
@@ -44511,7 +44518,7 @@ namespace GreedLast
                 case GreedLastJudgementResult.Good:
                     if (snapshot.PracticeMode)
                     {
-                        string practiceGoodTimingHint = BuildTimingGoodFeedbackHint(timingLine);
+                        string practiceGoodTimingHint = BuildTimingGoodFeedbackHint(snapshot);
                         string practiceGoodTimingText = string.IsNullOrEmpty(practiceGoodTimingHint)
                             ? timingLine
                             : string.IsNullOrEmpty(timingLine) ? practiceGoodTimingHint : timingLine + "  " + practiceGoodTimingHint;
@@ -44527,21 +44534,25 @@ namespace GreedLast
                     string goodBaseText = string.IsNullOrEmpty(missedExactPayoffText)
                         ? "보정" + goodActionText
                         : "보정" + goodActionText + "  " + missedExactPayoffText;
-                    string goodTimingHint = BuildTimingGoodFeedbackHint(timingLine);
+                    string goodTimingHint = BuildTimingGoodFeedbackHint(snapshot);
                     string goodTimingText = string.IsNullOrEmpty(goodTimingHint)
                         ? timingLine
                         : string.IsNullOrEmpty(timingLine) ? goodTimingHint : timingLine + "  " + goodTimingHint;
                     return AppendJudgementFeedbackEffect(
-                        string.IsNullOrEmpty(goodTimingText) ? goodBaseText : goodBaseText + "  " + goodTimingText,
+                        string.IsNullOrEmpty(goodTimingText) ? goodBaseText : goodBaseText + "\n" + goodTimingText,
                         BuildJudgementEffectLine(snapshot));
                 case GreedLastJudgementResult.Miss:
                     if (snapshot.PracticeMode)
                     {
-                        string practiceMissText = snapshot.MissReason == "wrong_channel"
-                            ? "Miss · " + BuildRunnerOutcomeLabel(feedbackPattern, snapshot.LastResult)
-                                + "\n신호와 같은 좌·중·우 채널을 입력"
-                            : "Miss · " + BuildRunnerOutcomeLabel(feedbackPattern, snapshot.LastResult)
-                                + "\n보정권 밖 입력은 피해 처리";
+                        string practiceMissDetail = snapshot.MissReason == "wrong_channel"
+                            ? BuildWrongChannelFeedbackLine(snapshot, feedbackPattern)
+                            : snapshot.MissReason == "no_input" ? "입력 없음"
+                            : string.IsNullOrEmpty(timingLine) ? "보정권 밖 입력은 피해 처리"
+                            : timingLine;
+                        string practiceMissHint = BuildTimingMissFeedbackHint(snapshot.MissReason);
+                        if (!string.IsNullOrEmpty(practiceMissHint)) practiceMissDetail += " / " + practiceMissHint;
+                        string practiceMissText = "Miss · " + BuildRunnerOutcomeLabel(feedbackPattern, snapshot.LastResult)
+                            + "\n" + practiceMissDetail;
                         return AppendPracticeReviewTargetFeedback(practiceMissText, snapshot);
                     }
 
@@ -44551,8 +44562,8 @@ namespace GreedLast
 
                     if (snapshot.MissReason == "wrong_channel")
                     {
-                        string deltaLine = lines.Length > 2 ? lines[2] : string.Empty;
-                        string wrongChannelText = string.IsNullOrEmpty(timingLine) ? "채널 오류" : timingLine;
+                        string deltaLine = timingLine;
+                        string wrongChannelText = BuildWrongChannelFeedbackLine(snapshot, feedbackPattern);
                         string keyHint = BuildTargetChannelKeyFeedbackForCapabilities(
                             snapshot,
                             devToolsEnabled,
@@ -44568,7 +44579,7 @@ namespace GreedLast
                         }
 
                         return AppendJudgementFeedbackEffect(
-                            "실수" + missActionText + "  " + wrongChannelText,
+                            "실수" + missActionText + "\n" + wrongChannelText,
                             BuildJudgementEffectLine(snapshot));
                     }
 
@@ -44579,21 +44590,26 @@ namespace GreedLast
                             devToolsEnabled,
                             rotationTiltAvailable);
                         return AppendJudgementFeedbackEffect(
-                            string.IsNullOrEmpty(timingLine)
-                                ? "실수" + missActionText + "  입력 없음" + (string.IsNullOrEmpty(keyHint) ? string.Empty : "  " + keyHint)
-                                : "실수" + missActionText + "  입력 없음  " + timingLine + (string.IsNullOrEmpty(keyHint) ? string.Empty : "  " + keyHint),
+                            "실수" + missActionText + "\n입력 없음" + (string.IsNullOrEmpty(keyHint) ? string.Empty : "  " + keyHint),
                             BuildJudgementEffectLine(snapshot));
                     }
 
                     string missText = string.IsNullOrEmpty(timingLine)
                         ? "실수" + missActionText
-                        : "실수" + missActionText + "  " + timingLine;
+                        : "실수" + missActionText + "\n" + timingLine;
                     string timingHint = BuildTimingMissFeedbackHint(snapshot.MissReason);
                     string baseMissText = string.IsNullOrEmpty(timingHint) ? missText : missText + "  " + timingHint;
                     return AppendJudgementFeedbackEffect(baseMissText, BuildJudgementEffectLine(snapshot));
                 default:
                     return string.Empty;
             }
+        }
+
+        private static string BuildWrongChannelFeedbackLine(GreedLastRunSnapshot snapshot, GreedLastPatternModel pattern)
+        {
+            return snapshot.LastJudgedInputChannel == GreedLastRunChannel.None
+                ? "채널 오류" : FormatChannel(snapshot.LastJudgedInputChannel)
+                    + " 입력 / 정답 " + FormatChannel(pattern.Channel);
         }
 
         private static string BuildJudgementBundleHeader(GreedLastRunSnapshot snapshot)
@@ -44758,6 +44774,13 @@ namespace GreedLast
             if (string.IsNullOrEmpty(effectText))
             {
                 return baseText;
+            }
+
+            int effectBreak = effectText.IndexOf('\n');
+            if (baseText.Contains('\n') && effectBreak >= 0)
+            {
+                // Preserve the timing row while sharing one row for payoff and next-route cues.
+                effectText = effectText.Substring(0, effectBreak) + " / " + effectText.Substring(effectBreak + 1);
             }
 
             return baseText + "\n" + effectText;
@@ -45295,24 +45318,15 @@ namespace GreedLast
             return new Color32(230, 218, 185, 230);
         }
 
-        private static string BuildTimingGoodFeedbackHint(string timingLine)
+        private static string BuildTimingGoodFeedbackHint(GreedLastRunSnapshot snapshot)
         {
-            if (string.IsNullOrWhiteSpace(timingLine) || timingLine == "정확")
+            if (!snapshot.HasJudgedInputTiming
+                || Mathf.RoundToInt(Mathf.Abs(snapshot.LastInputTimingDeltaSeconds) * 1000f) <= 20)
             {
                 return string.Empty;
             }
 
-            if (timingLine.StartsWith("빠름", StringComparison.Ordinal))
-            {
-                return "다음은 살짝 늦게";
-            }
-
-            if (timingLine.StartsWith("늦음", StringComparison.Ordinal))
-            {
-                return "다음은 살짝 빠르게";
-            }
-
-            return string.Empty;
+            return snapshot.LastInputTimingDeltaSeconds < 0f ? "다음은 살짝 늦게" : "다음은 살짝 빠르게";
         }
 
         private static Color32 GetJudgementFeedbackColor(GreedLastJudgementResult result)

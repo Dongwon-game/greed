@@ -175,7 +175,10 @@ namespace GreedLast.Editor
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
                 AddJudgementRewardFrames();
+                AddRouteStepFeedbackFrames();
                 AddActualInputChannelFrames();
+                AddStructuredTimingFrames();
+                AddPracticeMissFrames();
                 AddLongRunCounterFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
@@ -560,6 +563,104 @@ namespace GreedLast.Editor
                 Add("81-reward-" + name + "-small", 960, 540, Show, settleSeconds: 0.16);
                 Add("81-reward-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
                 Add("81-reward-" + name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                void ShowDetailed()
+                {
+                    Show();
+                    ui.ToggleDevCleanView();
+                }
+                Add("81-reward-" + name + "-detail-small", 960, 540, ShowDetailed, settleSeconds: 0.16);
+                Add("81-reward-" + name + "-detail-tablet", 1024, 768, ShowDetailed, settleSeconds: 0.16);
+                Add("81-reward-" + name + "-detail-wide", 2340, 1080, ShowDetailed, 96f, 0.16);
+            }
+        }
+
+        private static void AddRouteStepFeedbackFrames()
+        {
+            string[] routes = { "안정", "변주", "압박" };
+            for (int route = 0; route < routes.Length; route++)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.Enter();
+                for (int cycle = 0; cycle <= route; cycle++)
+                    core.JumpToDevShortcut(GreedLastDevShortcut.RouteCycle, clock += 0.1f);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                for (int step = 0; step < 2; step++)
+                {
+                    Require(run.ActivePattern && run.ActiveRouteProfile == routes[route] + " 루트",
+                        "Route feedback captures need the actual authored route trap.");
+                    GreedLastRunSnapshot before = run;
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    GreedLastRunSnapshot after = run;
+                    Require(after.LastResult == GreedLastJudgementResult.Success && !after.ChoiceActive,
+                        "Route-step captures must stop before the final bundle choice.");
+                    string name = "86-route-" + route + "-step-" + step;
+                    // Frame callbacks run after this loop, so capture the authored values too.
+                    string routeName = routes[route];
+                    int stepNumber = step + 1;
+                    void ShowCapturedDetailed()
+                    {
+                        if (ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                        string text = Read<Text>("judgementFeedbackText").text;
+                        Require(text.Contains("경로 " + routeName + " " + stepNumber + "/3", StringComparison.Ordinal)
+                            && text.Split('\n').Length <= 3,
+                            "Detailed route feedback must retain its next action within three lines.");
+                    }
+                    Add(name + "-detail-small", 960, 540, ShowCapturedDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-tablet", 1024, 768, ShowCapturedDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-wide", 2340, 1080, ShowCapturedDetailed, 96f, 0.16);
+                    core.RequestNextPattern(clock += 2f);
+                }
+
+                foreach (string outcome in new[] { "good", "wrong", "no-input" })
+                {
+                    var breakCore = new GreedLastRunCore();
+                    GreedLastRunSnapshot broken = default;
+                    breakCore.SnapshotChanged += value => broken = value;
+                    float breakClock = Time.realtimeSinceStartup;
+                    breakCore.Enter();
+                    for (int cycle = 0; cycle <= route; cycle++)
+                        breakCore.JumpToDevShortcut(GreedLastDevShortcut.RouteCycle, breakClock += 0.1f);
+                    breakCore.Tick(breakClock += 2f);
+                    breakCore.Tick(breakClock += 1f);
+                    GreedLastRunSnapshot before = broken;
+                    if (outcome == "no-input") breakCore.Tick(breakClock + broken.Pattern.HitSeconds + 0.02f);
+                    else
+                    {
+                        float delta = outcome == "good"
+                            ? (broken.Pattern.SuccessWindowSeconds + broken.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                        GreedLastRunChannel channel = outcome == "wrong"
+                            ? (broken.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                            : broken.Pattern.Channel;
+                        breakCore.HandleInput(channel,
+                            breakClock + broken.Pattern.CoreSeconds - breakCore.InputTimingOffsetSeconds + delta);
+                    }
+                    GreedLastRunSnapshot after = broken;
+                    Require(after.LastResult == (outcome == "good" ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss)
+                        && !after.PerfectBundleIntact && !after.Stopped,
+                        "Route-break captures must retain a live Good or Miss without a clean finisher.");
+                    string routeName = routes[route];
+                    void ShowBrokenDetailed()
+                    {
+                        if (ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                        string text = Read<Text>("judgementFeedbackText").text;
+                        Require(text.Contains("경로 " + routeName + " 중단", StringComparison.Ordinal)
+                            && text.Split('\n').Length <= 3,
+                            "Broken-route detail must retain its next practice action within three rows.");
+                    }
+                    string name = "86-route-" + route + "-break-" + outcome;
+                    Add(name + "-detail-small", 960, 540, ShowBrokenDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-tablet", 1024, 768, ShowBrokenDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-wide", 2340, 1080, ShowBrokenDetailed, 96f, 0.16);
+                }
             }
         }
 
@@ -613,6 +714,78 @@ namespace GreedLast.Editor
                     Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
                     Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
                     Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                    void ShowDetailed()
+                    {
+                        Show();
+                        ui.ToggleDevCleanView();
+                        string actualInput = pressed == GreedLastRunChannel.Left ? "좌 입력"
+                            : pressed == GreedLastRunChannel.Center ? "중 입력" : "우 입력";
+                        Require(Read<Text>("judgementFeedbackText").text.Contains(actualInput, StringComparison.Ordinal),
+                            "Detailed wrong-lane capture must name the actual input independently of display wording.");
+                    }
+                    Add(name + "-detail-small", 960, 540, ShowDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-tablet", 1024, 768, ShowDetailed, settleSeconds: 0.16);
+                    Add(name + "-detail-wide", 2340, 1080, ShowDetailed, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddStructuredTimingFrames()
+        {
+            foreach (string mode in new[] { "practice", "normal", "infinite" })
+            foreach (float direction in new[] { -1f, 1f })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                if (mode == "practice") core.RestartPractice(clock);
+                else if (mode == "infinite") core.EnterInfiniteRun();
+                else core.Enter();
+                for (int step = 0; step < 32 && !run.ActivePattern; step++)
+                {
+                    if (run.ChoiceActive) core.HandleInput(GreedLastRunChannel.Left, clock);
+                    else core.Tick(clock += 2f);
+                }
+                Require(run.ActivePattern, "Structured timing capture needs an authored live trap: " + mode);
+                GreedLastRunSnapshot before = run;
+                float delta = direction * (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
+                core.HandleInput(run.Pattern.Channel, clock);
+                typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(core, "Changed Good wording\n" + (direction < 0f ? "늦음 999ms" : "빠름 999ms"));
+                PublishAt(core, clock);
+                GreedLastRunSnapshot after = run;
+                Require(after.LastResult == GreedLastJudgementResult.Good && after.HasJudgedInputTiming,
+                    "Structured timing capture must use a real signed Good input: " + mode);
+                string expectedDirection = direction < 0f ? "빠름 " : "늦음 ";
+                string expectedHint = direction < 0f ? "다음은 살짝 늦게" : "다음은 살짝 빠르게";
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                        int count = Read<int>("judgementHistoryCount");
+                        float until = Read<float>("judgementFeedbackUntil");
+                        float popUntil = Read<float>("judgementFeedbackPopUntil");
+                        if (detailed) ui.ToggleDevCleanView();
+                        string text = Read<Text>("judgementFeedbackText").text;
+                        Require(text.Contains(expectedDirection, StringComparison.Ordinal)
+                            && !text.Contains("999ms", StringComparison.Ordinal)
+                            && (!detailed || text.Contains(expectedHint, StringComparison.Ordinal)),
+                            "Basic/detail timing must follow the actual input, not contradictory copy: " + mode);
+                        Require(Read<int>("judgementHistoryCount") == count
+                            && Read<float>("judgementFeedbackUntil") == until
+                            && Read<float>("judgementFeedbackPopUntil") == popUntil,
+                            "Detailed timing capture must not replay or extend its judgement.");
+                    }
+                    string name = "84-timing-" + mode + (direction < 0f ? "-early" : "-late")
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
                 }
             }
         }
@@ -629,6 +802,57 @@ namespace GreedLast.Editor
             Add("83-long-infinite-small", 960, 540, Show, settleSeconds: 0.16);
             Add("83-long-infinite-tablet", 1024, 768, Show, settleSeconds: 0.16);
             Add("83-long-infinite-wide", 2340, 1080, Show, 96f, 0.16);
+        }
+
+        private static void AddPracticeMissFrames()
+        {
+            foreach (int kind in new[] { -1, 0, 1 })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.RestartPractice(clock);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Practice Miss captures need an authored live trap.");
+                GreedLastRunSnapshot before = run;
+                if (kind == 0) core.Tick(clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.1f);
+                else
+                {
+                    float delta = kind * (run.Pattern.GoodWindowSeconds + 0.04f);
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                }
+                typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(core, "Changed Miss wording\n늦음 999ms");
+                PublishAt(core, clock);
+                GreedLastRunSnapshot after = run;
+                Require(after.LastResult == GreedLastJudgementResult.Miss && after.HasJudgedInputTiming == (kind != 0),
+                    "Practice Miss captures must distinguish real taps from timeouts.");
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                        if (detailed) ui.ToggleDevCleanView();
+                        string text = Read<Text>("judgementFeedbackText").text;
+                        Require(!text.Contains("999ms", StringComparison.Ordinal)
+                            && (kind != 0 || text.Contains("입력 없음", StringComparison.Ordinal)),
+                            "Practice timeout must be explicit and must not invent a tap's timing.");
+                        if (detailed && kind != 0)
+                            Require(text.Contains(kind < 0 ? "빠름 " : "늦음 ", StringComparison.Ordinal),
+                                "Detailed practice Miss must preserve the actual timing direction.");
+                    }
+                    string name = "85-practice-miss-" + (kind < 0 ? "early" : kind > 0 ? "late" : "no-input")
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
         }
 
         private static void AddCalibratedPauseFrames()
@@ -1141,10 +1365,13 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
             if (run.Stopped) return 0;
             if (!run.Paused && !run.ChoiceActive && !run.CountdownActive)
+            {
+                bool clean = ui.UsePlayerRunControls;
                 Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text
-                    == (run.AutoFlow ? "일시정지" : "함정 재개")
-                    && !Read<Button>("returnLobbyButton").gameObject.activeInHierarchy,
-                    currentFrame.Name + ": clean gameplay must offer pause, not the development auto-flow control.");
+                    == (clean ? (run.AutoFlow ? "일시정지" : "함정 재개") : (run.AutoFlow ? "자동 정지" : "자동 시작"))
+                    && Read<Button>("returnLobbyButton").gameObject.activeInHierarchy == !clean,
+                    currentFrame.Name + ": gameplay controls must match the active player or development view.");
+            }
             Button[] lanes = Read<Button[]>("laneButtons");
             Button[] margins = Read<Button[]>("laneHitButtons");
             int count = 0;
@@ -1230,6 +1457,7 @@ namespace GreedLast.Editor
                 Require(!Read<GameObject>("runnerAvatarRoot").activeInHierarchy,
                     currentFrame.Name + ": the runner covers the choice surface.");
             bool liveHeader = !run.ChoiceActive && !run.CountdownActive;
+            bool cleanHeader = ui.UsePlayerRunControls;
             Text title = Read<Text>("titleText");
             RectTransform root = Read<RectTransform>("rootPanelRect");
             if (liveHeader)
@@ -1240,8 +1468,9 @@ namespace GreedLast.Editor
                     currentFrame.Name + ": live title needs enough height for all lines.");
                 Text progress = Read<Text>("runProgressText");
                 VerifyTextBounds(progress);
-                Require(progress.fontSize >= 32 && progress.preferredHeight <= progress.rectTransform.rect.height + 1f,
-                    currentFrame.Name + ": compact stage/count/threat must fit at a readable size.");
+                Require(progress.fontSize >= (cleanHeader ? 32 : 20)
+                    && progress.preferredHeight <= progress.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": stage/count/threat must fit its player or diagnostic surface.");
                 Bounds progressBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, progress.rectTransform);
                 Bounds progressBar = RectTransformUtility.CalculateRelativeRectTransformBounds(root,
                     Read<Image>("runProgressFill").transform.parent);
@@ -1262,9 +1491,10 @@ namespace GreedLast.Editor
                     Require(screen.x >= 0 && screen.x <= target.width && screen.y >= 0 && screen.y <= target.height,
                         currentFrame.Name + ": lane label lies outside the viewport.");
                 }
-                Require(run.ChoiceActive || label.rectTransform.anchorMin.y > 1f,
-                    currentFrame.Name + ": clean input labels must stay above the live artwork.");
-                if (liveHeader)
+                Require(run.ChoiceActive || (cleanHeader ? label.rectTransform.anchorMin.y > 1f
+                        : label.rectTransform.anchorMin == Vector2.zero && label.rectTransform.anchorMax == Vector2.one),
+                    currentFrame.Name + ": input labels must use the correct player header or diagnostic lane placement.");
+                if (liveHeader && cleanHeader)
                 {
                     Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, title.rectTransform);
                     Bounds labelBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, label.rectTransform);

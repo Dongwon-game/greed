@@ -30,6 +30,13 @@ namespace GreedLast.Editor
                 core.SnapshotChanged += value => { run = value; if (presentSnapshot) ui.RenderRun(value); };
                 float clock = Time.realtimeSinceStartup;
 
+                void PublishAtClock()
+                {
+                    // Settings APIs publish wall time; restore the fixture's synthetic clock before judging.
+                    typeof(GreedLastRunCore).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic,
+                        null, new[] { typeof(float) }, null).Invoke(core, new object[] { clock });
+                }
+
                 void FreshPractice()
                 {
                     ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
@@ -42,6 +49,20 @@ namespace GreedLast.Editor
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
                     Require(run.ActivePattern, "The fixture needs a real authored practice trap.");
+                }
+
+                void FreshNormal()
+                {
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                        GreedLastScreenState.RunCoreTest, "Judgement check", string.Empty, 0));
+                    core.Enter();
+                    for (int step = 0; step < 32 && !run.ActivePattern; step++)
+                    {
+                        if (run.ChoiceActive) core.HandleInput(GreedLastRunChannel.Left, clock);
+                        else core.Tick(clock += 2f);
+                    }
+                    Require(run.ActivePattern && !run.PracticeMode && !run.ChoiceActive,
+                        "The fixture needs a real normal-run trap after its opening choices.");
                 }
 
                 foreach (float delta in new[] { -0.012f, 0f, 0.012f, 0.075f })
@@ -124,6 +145,14 @@ namespace GreedLast.Editor
                         && run.Health == health,
                         "Timeouts must not fabricate tap timing, score or damage while protected.");
                     Require(string.IsNullOrEmpty(Nudge(run)), "A timeout has no input timing to correct.");
+                    Require(!run.JudgementText.Contains("빠름 ", StringComparison.Ordinal)
+                        && !run.JudgementText.Contains("늦음 ", StringComparison.Ordinal),
+                        "The core's no-input copy must not fabricate a tap's timing in the diagnostic HUD.");
+                    string timeoutDetail = Label("BuildJudgementFeedbackText", run);
+                    Require(timeoutDetail.Contains("입력 없음", StringComparison.Ordinal)
+                        && !timeoutDetail.Contains("빠름 ", StringComparison.Ordinal)
+                        && !timeoutDetail.Contains("늦음 ", StringComparison.Ordinal),
+                        "Detailed timeout feedback must name the missing input without fabricating a tap's timing.");
                     Require(Read<int>(ui, "judgementHistoryCount") == before + 1,
                         "Each real protected miss must be shown even when score, health and copy are unchanged.");
                 }
@@ -163,8 +192,7 @@ namespace GreedLast.Editor
                         core.HandleInput(wrong, clock);
                         typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
                             .SetValue(core, "Presentation wording replaced");
-                        typeof(GreedLastRunCore).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic,
-                            null, new[] { typeof(float) }, null).Invoke(core, new object[] { clock });
+                        PublishAtClock();
                         presentSnapshot = true;
                         ui.RenderRun(run);
                         float expectedX = (float)typeof(GreedLastRuntimeUi).GetMethod("GetChannelAnchorX",
@@ -179,6 +207,10 @@ namespace GreedLast.Editor
                                 == GreedLastJudgementResult.None
                             && Read<int>(ui, "judgementHistoryCount") == history + 1,
                             "Wrong-channel runner, trace and distinct correct-lane hint must use the actual input, independent of wording.");
+                        string actualInputLabel = wrong == GreedLastRunChannel.Left ? "좌 입력"
+                            : wrong == GreedLastRunChannel.Center ? "중 입력" : "우 입력";
+                        Require(Label("BuildJudgementFeedbackText", run).Contains(actualInputLabel, StringComparison.Ordinal),
+                            "Detailed wrong-channel feedback must retain the actual pressed channel when wording changes.");
                         Text wrongFeedback = Read<Text>(ui, "judgementFeedbackText");
                         if (!run.Stopped)
                             Require(wrongFeedback.fontSize == 36 && wrongFeedback.text.Split('\n').Length == 2
@@ -186,6 +218,104 @@ namespace GreedLast.Editor
                                 "Visible compact wrong-lane copy must fit its fixed two-line surface without enlarging over gauges.");
                     }
                 }
+
+                foreach (bool practice in new[] { true, false })
+                foreach (float offset in new[] { -0.2f, -0.02f, 0f, 0.02f, 0.2f })
+                foreach (float direction in new[] { -1f, 1f })
+                {
+                    if (practice) FreshPractice();
+                    else FreshNormal();
+                    core.AdjustInputTimingOffset(offset - core.InputTimingOffsetSeconds);
+                    PublishAtClock();
+                    float delta = direction * (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                    presentSnapshot = false;
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, "Changed Good wording\n" + (direction < 0f ? "늦음 999ms" : "빠름 999ms"));
+                    PublishAtClock();
+                    presentSnapshot = true;
+                    ui.RenderRun(run);
+                    string expectedDirection = direction < 0f ? "빠름 " : "늦음 ";
+                    string expectedHint = direction < 0f ? "다음은 살짝 늦게" : "다음은 살짝 빠르게";
+                    Require(run.LastResult == GreedLastJudgementResult.Good && run.HasJudgedInputTiming
+                        && Label("BuildJudgementFeedbackText", run).Contains(expectedDirection, StringComparison.Ordinal)
+                        && Label("BuildJudgementFeedbackText", run).Contains(expectedHint, StringComparison.Ordinal)
+                        && !Label("BuildJudgementFeedbackText", run).Contains("999ms", StringComparison.Ordinal)
+                        && Label("BuildJudgementCorrectionObjectiveSuffix", run).Contains(expectedHint, StringComparison.Ordinal)
+                        && (practice || Label("BuildRunObjectiveLine", run).Contains(expectedHint, StringComparison.Ordinal)),
+                        "Good timing and the next-input objective must use actual signed input, not contradictory wording."
+                            + $" practice={practice}, offset={offset:F3}, delta={delta:F4}, actual={run.LastInputTimingDeltaSeconds:F4},"
+                            + $" result={run.LastResult}, reason={run.MissReason}, detail={Label("BuildJudgementFeedbackText", run)},"
+                            + $" objective={Label("BuildRunObjectiveLine", run)}.");
+                    Text feedback = Read<Text>(ui, "judgementFeedbackText");
+                    string compact = feedback.text;
+                    float until = Read<float>(ui, "judgementFeedbackUntil");
+                    float popUntil = Read<float>(ui, "judgementFeedbackPopUntil");
+                    ui.ToggleDevCleanView();
+                    Require(feedback.text.Contains(expectedDirection, StringComparison.Ordinal)
+                        && feedback.text.Contains(expectedHint, StringComparison.Ordinal)
+                        && !feedback.text.Contains("999ms", StringComparison.Ordinal),
+                        "F11 detail must agree with compact Good feedback's actual timing direction.");
+                    ui.ToggleDevCleanView();
+                    Require(feedback.text == compact && Read<int>(ui, "judgementHistoryCount") == 1
+                        && Read<float>(ui, "judgementFeedbackUntil") == until
+                        && Read<float>(ui, "judgementFeedbackPopUntil") == popUntil,
+                        "Timing-consistent mode changes must retain one judgement and its original lifetime.");
+                }
+
+                foreach (bool practice in new[] { true, false })
+                foreach (float offset in new[] { -0.2f, -0.02f, 0f, 0.02f, 0.2f })
+                foreach (float direction in new[] { -1f, 1f })
+                {
+                    if (practice) FreshPractice();
+                    else FreshNormal();
+                    core.AdjustInputTimingOffset(offset - core.InputTimingOffsetSeconds);
+                    PublishAtClock();
+                    float delta = direction * (run.Pattern.GoodWindowSeconds + 0.04f);
+                    presentSnapshot = false;
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, "Changed Miss wording\n" + (direction < 0f ? "늦음 999ms" : "빠름 999ms"));
+                    PublishAtClock();
+                    presentSnapshot = true;
+                    ui.RenderRun(run);
+                    string expectedDirection = direction < 0f ? "빠름 " : "늦음 ";
+                    string expectedHint = direction < 0f ? "다음은 조금 늦게" : "다음은 조금 빠르게";
+                    string detail = Label("BuildJudgementFeedbackText", run);
+                    Require(run.LastResult == GreedLastJudgementResult.Miss && run.HasJudgedInputTiming
+                        && run.MissReason == (direction < 0f ? "too_early" : "too_late")
+                        && Mathf.Abs(run.LastInputTimingDeltaSeconds - delta) < 0.001f
+                        && detail.Contains(expectedDirection, StringComparison.Ordinal)
+                        && detail.Contains(expectedHint, StringComparison.Ordinal)
+                        && !detail.Contains("999ms", StringComparison.Ordinal),
+                        "Timed practice/normal misses must retain actual direction and coaching at every calibration offset.");
+                    Text feedback = Read<Text>(ui, "judgementFeedbackText");
+                    string compact = feedback.text;
+                    float until = Read<float>(ui, "judgementFeedbackUntil");
+                    ui.ToggleDevCleanView();
+                    Require(feedback.text.Contains(expectedDirection, StringComparison.Ordinal)
+                        && feedback.text.Contains(expectedHint, StringComparison.Ordinal)
+                        && feedback.preferredHeight <= feedback.rectTransform.rect.height + 1f,
+                        "Detailed timed Miss feedback must fit its fixed surface and agree with the actual input.");
+                    ui.ToggleDevCleanView();
+                    Require(feedback.text == compact && Read<int>(ui, "judgementHistoryCount") == 1
+                        && Read<float>(ui, "judgementFeedbackUntil") == until,
+                        "A timed Miss view switch must not replay or extend its feedback.");
+                }
+
+                FreshNormal();
+                core.ToggleDevInvincible();
+                core.Tick(clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.1f);
+                Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "no_input"
+                    && !run.HasJudgedInputTiming
+                    && !run.JudgementText.Contains("빠름 ", StringComparison.Ordinal)
+                    && !run.JudgementText.Contains("늦음 ", StringComparison.Ordinal)
+                    && !Label("BuildJudgementFeedbackText", run).Contains("빠름 ", StringComparison.Ordinal)
+                    && !Label("BuildJudgementFeedbackText", run).Contains("늦음 ", StringComparison.Ordinal),
+                    "Normal-run timeout detail must not fabricate a tap's direction from the expiry clock.");
+                core.ToggleDevInvincible();
 
                 VerifyStableRecovery(core, ui, ref run, ref clock);
                 VerifyExactBundleRecovery(core, ui, ref run, ref clock);
@@ -200,7 +330,7 @@ namespace GreedLast.Editor
                 Require(Read<Text>(ui, "judgementFeedbackText").text == countdownText
                     && Read<GreedLastRunSnapshot>(ui, "lastPresentedJudgementSnapshot").LastResult == GreedLastJudgementResult.None,
                     "Resume countdowns must clear the previous live judgement's presentation identity.");
-                Debug.Log("Greed judgement presentation passed: actual reward/timing/channel payload, tiny exact traces, early Good, six wording-independent wrong-channel pairs, no-input coaching suppression, protected timeout repetition, settings/focus/flow replay isolation, F11 feedback/preview/countdown separation, real Good/exact-bundle recovery and fresh-run reset. Personal slots are not accessed.");
+                Debug.Log("Greed judgement presentation passed: actual reward/timing/channel payload, tiny exact traces, 40 early/late Good/Miss cases in practice and normal at five calibration offsets with contradictory wording, six wording-independent wrong-channel pairs, explicit no-input detail, coaching suppression, protected timeout repetition, settings/focus/flow replay isolation, F11 feedback/preview/countdown separation, real Good/exact-bundle recovery and fresh-run reset. Personal slots are not accessed.");
             }
             finally
             {
@@ -304,6 +434,9 @@ namespace GreedLast.Editor
         private static string Nudge(GreedLastRunSnapshot snapshot) => (string)typeof(GreedLastRuntimeUi)
             .GetMethod("BuildRecentTimingNudgeCoach", BindingFlags.Static | BindingFlags.NonPublic)
             .Invoke(null, new object[] { snapshot });
+
+        private static string Label(string method, GreedLastRunSnapshot snapshot) => (string)typeof(GreedLastRuntimeUi)
+            .GetMethod(method, BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { snapshot });
 
         private static T Read<T>(GreedLastRuntimeUi ui, string name) => (T)typeof(GreedLastRuntimeUi)
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
