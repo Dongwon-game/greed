@@ -15571,7 +15571,7 @@ namespace GreedLast
         private int recommendedGrowthLaneIndex = -1;
         private GreedLastRunSnapshot latestRunSnapshot;
         private bool hasRunSnapshot;
-        private bool devCleanViewEnabled;
+        private bool devCleanViewEnabled = true;
         private readonly List<CanvasGroup> devCleanViewGroups = new List<CanvasGroup>();
         private readonly List<CanvasGroup> liveSettingCleanViewGroups = new List<CanvasGroup>();
 
@@ -17045,7 +17045,8 @@ namespace GreedLast
                 {
                     pauseMenuBodyText.text = "체력 " + snapshot.Health + "/" + snapshot.MaxHealth
                         + " · 집중 " + snapshot.Focus + "/" + snapshot.MaxFocus
-                        + "\n" + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m";
+                        + "\n" + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m"
+                        + "\n보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds);
                     pauseMenuBodyText.fontSize = 36;
                     return;
                 }

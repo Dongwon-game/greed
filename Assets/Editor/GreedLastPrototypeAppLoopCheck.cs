@@ -92,13 +92,14 @@ namespace GreedLast.Editor
                 GreedLastApp app = host.AddComponent<GreedLastApp>();
                 Require(Read<GreedLastMockBackend>(app, "backend") == null, "The isolated app must not boot its persistent backend.");
                 GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
-                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui);
+                Require(ui.UsePlayerRunControls, "A new runtime UI must default to player controls without F11 or a saved preference.");
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
+                Require(ui.UsePlayerRunControls, "UI initialization must retain the clean player default.");
                 canvasRoot = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
                 if (usePointerModule)
                 {
                     pointerUi = ui;
                     CreatePointerViewport(canvasRoot.GetComponent<Canvas>());
-                    ui.ToggleDevCleanView();
                 }
                 var gate = new GreedLastRequestGate();
                 var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
@@ -131,6 +132,7 @@ namespace GreedLast.Editor
                 core.SnapshotChanged += value => run = value;
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
+                VerifyDefaultPlayerEntry(ui);
 
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
@@ -160,12 +162,14 @@ namespace GreedLast.Editor
                 Require(Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
                     "An invalid channel must not implicitly select S3 and unlock saving.");
                 Click(Read<Button[]>(ui, "laneButtons")[2]);
+                VerifyHeldManagementViewSwitch(app, ui, backend, state, "nextPatternButton");
                 Click(ui, "nextPatternButton");
                 GreedLastLobbySnapshot saved = backend.LoadLobby();
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
                     && saved.SaveSlotOccupied[2] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[1],
                     "The actual S3 button and confirmation must consume the candidate only into S3.");
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
+                VerifyDefaultPlayerEntry(ui);
 
                 for (int use = 0; use < 2; use++)
                 {
@@ -208,6 +212,7 @@ namespace GreedLast.Editor
                         "The relic selection must not spill into start confirmation or consume a use.");
                     FinishPreparationTransition(app);
                     if (use == 0) VerifyPreparationReselection(app, ui, backend, before);
+                    VerifyHeldManagementViewSwitch(app, ui, backend, state, "nextPatternButton");
                     Click(ui, "nextPatternButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode,
                         "Start confirmation must enter infinite mode through the app, not merely render its screen.");
@@ -246,6 +251,7 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
                     "A rapid second skip-save tap must preserve the candidate while confirmation appears.");
                 FinishSaveConfirmation(app);
+                VerifyHeldManagementViewSwitch(app, ui, backend, state, "returnLobbyButton");
                 Click(ui, "returnLobbyButton");
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                     "Confirming skip-save must discard the candidate and return to the lobby.");
@@ -255,7 +261,7 @@ namespace GreedLast.Editor
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
                 VerifyGameplayLaneOutcomes(app, ui, backend, state, core, () => run);
                 VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
-                Debug.Log("Greed Last app callback loop passed: practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations.");
+                Debug.Log("Greed Last app callback loop passed: clean default entry -> practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations. Held F11 transitions cancel management commands without changing candidates, slots or uses.");
             }
             finally
             {
@@ -277,6 +283,79 @@ namespace GreedLast.Editor
                 if (canvasRoot != null) UnityEngine.Object.DestroyImmediate(canvasRoot);
                 DestroyCreated("GreedLastCamera", existingCamera);
                 DestroyCreated("GreedLastEventSystem", existingEvents);
+            }
+        }
+
+        private static void VerifyDefaultPlayerEntry(GreedLastRuntimeUi ui)
+        {
+            Require(ui.UsePlayerRunControls, "Boot and saved-slot reload must retain the default player view without F11.");
+            foreach (CanvasGroup group in Read<List<CanvasGroup>>(ui, "devCleanViewGroups"))
+                Require(group.alpha == 0f && !group.interactable && !group.blocksRaycasts,
+                    "Default entry must hide and disable development controls: " + group.name);
+            Require(Read<Button>(ui, "practiceRunButton").IsInteractable()
+                && Read<Button>(ui, "normalRunButton").IsInteractable(),
+                "Clean entry must keep the actual practice and normal commands usable.");
+        }
+
+        private static void VerifyHeldManagementViewSwitch(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, string field)
+        {
+            Button button = Read<Button>(ui, field);
+            Require(button.gameObject.activeInHierarchy && button.IsInteractable(),
+                "Mode-switch checks need an enabled management command: " + field);
+            bool originalView = ui.UsePlayerRunControls;
+            GreedLastScreenState screen = state.CurrentState;
+            GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+            GreedLastLobbySnapshot lobby = backend.LoadSelectedSaveSlotView();
+            bool candidate = backend.HasSaveLoadoutCandidate;
+            var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+            var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+            EventSystem system = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+            Require(system != null, "Held management commands require the isolated event system.");
+            int calls = 0;
+            UnityEngine.Events.UnityAction countClick = () => calls++;
+            button.onClick.AddListener(countClick);
+            try
+            {
+                for (int direction = 0; direction < 2; direction++)
+                {
+                    bool beforeView = ui.UsePlayerRunControls;
+                    void SwitchView()
+                    {
+                        ui.ToggleDevCleanView();
+                        if (usePointerModule) RefreshPointerViewport(button);
+                    }
+                    if (usePointerModule)
+                    {
+                        RefreshPointerViewport(button);
+                        GreedLastPrototypeKeyboardCheck.ClickOnce(system, button, useTouch, whileHeld: SwitchView);
+                        canceledCommandPresses++;
+                    }
+                    else
+                    {
+                        var press = new PointerEventData(system)
+                            { button = PointerEventData.InputButton.Left, eligibleForClick = true };
+                        ExecuteEvents.Execute(button.gameObject, press, ExecuteEvents.pointerDownHandler);
+                        SwitchView();
+                        ExecuteEvents.Execute(button.gameObject, press, ExecuteEvents.pointerUpHandler);
+                        if (press.eligibleForClick)
+                            ExecuteEvents.Execute(button.gameObject, press, ExecuteEvents.pointerClickHandler);
+                    }
+                    Require(calls == 0 && ui.UsePlayerRunControls != beforeView
+                        && state.CurrentState == screen && backend.HasSaveLoadoutCandidate == candidate
+                        && Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").Equals(run)
+                        && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == lobby.SelectedSaveSlotIndex,
+                        "A held F11 transition must not execute or leave its management screen: " + field);
+                    for (int slot = 0; slot < slots.Length; slot++)
+                        Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(slots[slot])
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot],
+                            "A held mode switch must preserve every saved record and remaining use: " + field);
+                }
+            }
+            finally
+            {
+                button.onClick.RemoveListener(countClick);
+                if (ui.UsePlayerRunControls != originalView) ui.ToggleDevCleanView();
             }
         }
 
@@ -592,6 +671,7 @@ namespace GreedLast.Editor
                     && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(original),
                     "A rename double tap must leave the original slot unchanged in both management screens.");
                 FinishSaveConfirmation(app);
+                VerifyHeldManagementViewSwitch(app, ui, backend, state, "saveSlotRenameButton");
                 Click(ui, "saveSlotRenameButton");
                 Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].LoadoutName != original.LoadoutName
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == remaining,
@@ -612,6 +692,7 @@ namespace GreedLast.Editor
                     "Cancel must remain available even while the delete confirmation guard is active.");
                 Click(ui, "saveSlotDeleteButton");
                 FinishSaveConfirmation(app);
+                VerifyHeldManagementViewSwitch(app, ui, backend, state, "saveSlotDeleteButton");
                 Click(ui, "saveSlotDeleteButton");
                 Require(!backend.LoadLobby().SaveSlotOccupied[1]
                     && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(renamed),
@@ -641,6 +722,7 @@ namespace GreedLast.Editor
             Require(backend.HasSaveLoadoutCandidate && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Equals(second),
                 "The replacement target must receive its own guarded confirmation.");
             FinishSaveConfirmation(app);
+            VerifyHeldManagementViewSwitch(app, ui, backend, state, "nextPatternButton");
             Click(ui, "nextPatternButton");
             Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
                 && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(first)
@@ -1044,12 +1126,22 @@ namespace GreedLast.Editor
                 Click(timing[0]);
                 Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, 0.02f)
                     && Mathf.Approximately(PlayerPrefs.GetFloat(offsetKey), 0.02f)
-                    && timing[1].IsInteractable(),
+                    && timing[1].IsInteractable()
+                    && Read<Text>(ui, "pauseMenuBodyText").text.Contains("보정 +20ms", StringComparison.Ordinal),
                     "The paused +20ms command must publish immediately without waiting for Tick.");
                 Click(timing[2]);
                 Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, 0f)
-                    && Mathf.Approximately(PlayerPrefs.GetFloat(offsetKey), 0f) && !timing[1].IsInteractable(),
+                    && Mathf.Approximately(PlayerPrefs.GetFloat(offsetKey), 0f) && !timing[1].IsInteractable()
+                    && Read<Text>(ui, "pauseMenuBodyText").text.Contains("보정 0ms", StringComparison.Ordinal),
                     "Returning to zero must immediately disable an unnecessary calibration reset.");
+                Click(timing[2]);
+                Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, -0.02f)
+                    && Read<Text>(ui, "pauseMenuBodyText").text.Contains("보정 -20ms", StringComparison.Ordinal),
+                    "Negative calibration must also appear immediately in the clean pause summary.");
+                Click(timing[1]);
+                Require(Mathf.Approximately(latest().InputTimingOffsetSeconds, 0f)
+                    && Read<Text>(ui, "pauseMenuBodyText").text.Contains("보정 0ms", StringComparison.Ordinal),
+                    "The actual reset command must restore the displayed value without a Tick.");
                 Require(latest().Paused && !latest().ResumeCountdownActive
                     && latest().Health == before.Health && latest().Score == before.Score
                     && Mathf.Approximately(latest().Distance, before.Distance),

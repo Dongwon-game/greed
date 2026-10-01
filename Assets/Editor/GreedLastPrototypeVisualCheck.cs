@@ -116,7 +116,7 @@ namespace GreedLast.Editor
                 camera.enabled = false;
                 ui = new GameObject("GreedVisualCheckUi").AddComponent<GreedLastRuntimeUi>();
                 GameObject existingEventSystem = GameObject.Find("GreedLastEventSystem");
-                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui);
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
                 canvas = Read<GameObject>("rootPanel").GetComponentInParent<Canvas>();
                 SceneManager.MoveGameObjectToScene(camera.gameObject, captureScene);
                 SceneManager.MoveGameObjectToScene(ui.gameObject, captureScene);
@@ -132,7 +132,6 @@ namespace GreedLast.Editor
                 canvas.renderMode = RenderMode.WorldSpace;
                 canvas.worldCamera = camera;
                 canvas.planeDistance = 1f;
-                ui.ToggleDevCleanView();
 
                 // The fixture owns only a transient core, never the user's saved profile.
                 var core = new GreedLastRunCore();
@@ -165,6 +164,7 @@ namespace GreedLast.Editor
                 Add("08-live-small", 960, 540, () => ShowRun(live));
                 Add("08-pause-small", 960, 540, () => ShowRun(paused));
                 Add("08-resume-tablet", 1024, 768, () => ShowRun(resume));
+                AddCalibratedPauseFrames();
                 AddSavedRunLoopFrames();
                 GreedLastRunSnapshot practiceResult = GreedLastPrototypeSmokeCheck.RunPracticeReviewSample(
                     Time.realtimeSinceStartup,
@@ -477,6 +477,38 @@ namespace GreedLast.Editor
                         ui.RenderRun(after);
                     }, settleSeconds: 0.16);
                 }
+            }
+        }
+
+        private static void AddCalibratedPauseFrames()
+        {
+            string key = GreedLastRunCore.InputTimingOffsetPrefsKey;
+            bool hadOffset = PlayerPrefs.HasKey(key);
+            float storedOffset = PlayerPrefs.GetFloat(key);
+            try
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.RestartPractice(clock);
+                core.Tick(clock += 3f);
+                core.TogglePause(clock += 0.1f);
+                foreach (int milliseconds in new[] { 20, -20, 200, -200 })
+                {
+                    core.AdjustInputTimingOffset(milliseconds / 1000f - core.InputTimingOffsetSeconds);
+                    Require(run.Paused && Mathf.RoundToInt(run.InputTimingOffsetSeconds * 1000f) == milliseconds,
+                        "Calibration captures need the actual paused core's positive and negative offset limits.");
+                    GreedLastRunSnapshot paused = run;
+                    string suffix = milliseconds < 0 ? "minus" + -milliseconds : "plus" + milliseconds;
+                    Add("80-pause-calibration-" + suffix, 960, 540, () => ShowRun(paused));
+                }
+            }
+            finally
+            {
+                if (hadOffset) PlayerPrefs.SetFloat(key, storedOffset);
+                else PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.Save();
             }
         }
 
@@ -1102,7 +1134,26 @@ namespace GreedLast.Editor
 
         private static int VerifyVisibleFeedbackAreas()
         {
-            if (Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
+            if (Read<GameObject>("pauseMenuOverlay").activeInHierarchy)
+            {
+                Text title = Read<Text>("pauseMenuTitleText");
+                Text body = Read<Text>("pauseMenuBodyText");
+                foreach (Text label in new[] { title, body })
+                {
+                    VerifyTextBounds(label);
+                    VerifyControlSafeBounds(label.rectTransform);
+                    Require(label.preferredHeight <= label.rectTransform.rect.height + 1f,
+                        currentFrame.Name + ": pause text must not clip its calibration or countdown value.");
+                }
+                Transform panel = Read<Image>("pauseMenuPanel").transform;
+                Bounds bodyArea = RectTransformUtility.CalculateRelativeRectTransformBounds(panel, body.rectTransform);
+                Bounds titleArea = RectTransformUtility.CalculateRelativeRectTransformBounds(panel, title.rectTransform);
+                Bounds resumeArea = RectTransformUtility.CalculateRelativeRectTransformBounds(panel,
+                    Read<Button>("nextPatternButton").transform);
+                Require(!bodyArea.Intersects(titleArea) && !bodyArea.Intersects(resumeArea),
+                    currentFrame.Name + ": pause summary must stay between its heading and resume command.");
+                return 2;
+            }
             RectTransform root = Read<RectTransform>("rootPanelRect");
             GameObject gauges = Read<GameObject>("runGaugeRoot");
             int count = 0;

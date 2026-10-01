@@ -27,9 +27,8 @@ namespace GreedLast.Editor
             try
             {
                 GreedLastRuntimeUi ui = host.AddComponent<GreedLastRuntimeUi>();
-                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui);
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
                 canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
-                ui.ToggleDevCleanView();
                 ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
                     GreedLastScreenState.RunCoreTest, "Idle check", string.Empty, 0));
                 var core = new GreedLastRunCore();

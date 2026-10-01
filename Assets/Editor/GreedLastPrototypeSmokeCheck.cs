@@ -10142,8 +10142,9 @@ namespace GreedLast.Editor
                 "Clean play must not rebuild a hidden diagnostic paragraph for every run snapshot.");
             ui.RenderRun(paused);
             Text pauseBody = GetRuntimeUiField<Text>(ui, "pauseMenuBodyText");
-            Require(pauseBody.fontSize == 36 && pauseBody.text.Split('\n').Length == 2,
-                "Clean pause must show concise live totals instead of a diagnostic paragraph.");
+            Require(pauseBody.fontSize == 36 && pauseBody.text.Split('\n').Length == 3
+                && pauseBody.text.Contains("보정 ", StringComparison.Ordinal),
+                "Clean pause must show concise live totals and the current timing offset instead of diagnostics.");
             VerifyUnchangedRunHud(ui, paused, hud);
             Require(GetRuntimeUiField<Button>(ui, "motionComfortButton").GetComponentInChildren<Text>().fontSize == 36
                 && GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons")[1].GetComponentInChildren<Text>().fontSize == 36,
@@ -10498,7 +10499,7 @@ namespace GreedLast.Editor
             return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         }
 
-        internal static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui)
+        internal static void InitializeRuntimeUiSmoke(GreedLastRuntimeUi ui, bool playerControls = false)
         {
             Action action = null;
             Action<int> timingAction = null;
@@ -10528,6 +10529,11 @@ namespace GreedLast.Editor
                 timingAction,
                 shortcutAction,
                 channelAction);
+            // Legacy geometry checks exercise detailed tools; app and visual checks use player controls.
+            if (playerControls)
+                Require(ui.UsePlayerRunControls, "UI initialization must preserve the production player-control default.");
+            else if (ui.UsePlayerRunControls)
+                ui.ToggleDevCleanView();
         }
 
         private static void VerifyRuntimeLobbyToRunVisualHandoff()
