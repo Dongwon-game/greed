@@ -175,6 +175,8 @@ namespace GreedLast.Editor
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
                 AddJudgementRewardFrames();
+                AddActualInputChannelFrames();
+                AddLongRunCounterFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -559,6 +561,74 @@ namespace GreedLast.Editor
                 Add("81-reward-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
                 Add("81-reward-" + name + "-wide", 2340, 1080, Show, 96f, 0.16);
             }
+        }
+
+        private static void AddActualInputChannelFrames()
+        {
+            foreach (GreedLastRunChannel required in new[] {
+                GreedLastRunChannel.Left, GreedLastRunChannel.Center, GreedLastRunChannel.Right })
+            {
+                foreach (GreedLastRunChannel pressed in new[] {
+                    GreedLastRunChannel.Left, GreedLastRunChannel.Center, GreedLastRunChannel.Right })
+                {
+                    if (pressed == required) continue;
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    float clock = Time.realtimeSinceStartup;
+                    core.EnterInfiniteRun();
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    for (int search = 0; search < 24 && run.Pattern.Channel != required; search++)
+                    {
+                        clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.RequestNextPattern(clock += 2f);
+                    }
+                    Require(run.ActivePattern && run.Pattern.Channel == required,
+                        "Channel capture must reach the required lane through actual authored traps.");
+                    GreedLastRunSnapshot before = run;
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + 0.012f;
+                    core.HandleInput(pressed, clock);
+                    typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, "Presentation wording replaced");
+                    PublishAt(core, clock);
+                    GreedLastRunSnapshot after = run;
+                    Require(after.MissReason == "wrong_channel" && after.LastJudgedInputChannel == pressed
+                        && after.HasJudgedInputTiming, "Channel capture must retain the actual input payload.");
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(before);
+                        ui.RenderRun(after);
+                        Require(Read<GreedLastRunChannel>("runnerResponseChannel") == pressed
+                            && Read<GreedLastJudgementResult[]>("laneJudgementTagResults")[(int)pressed - 1]
+                                == GreedLastJudgementResult.Miss
+                            && Read<GreedLastJudgementResult[]>("laneJudgementTagResults")[(int)required - 1]
+                                == GreedLastJudgementResult.None,
+                            "Rendered wrong-lane response must separate pressed and required lanes without parsing copy.");
+                    }
+                    string name = "82-input-" + required.ToString().ToLowerInvariant()
+                        + "-pressed-" + pressed.ToString().ToLowerInvariant();
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddLongRunCounterFrames()
+        {
+            var frames = GreedLastPrototypeTimelineCheck.VerifyLongInfiniteRun();
+            void Show()
+            {
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                ShowRun(frames.before);
+                ui.RenderRun(frames.after);
+            }
+            Add("83-long-infinite-small", 960, 540, Show, settleSeconds: 0.16);
+            Add("83-long-infinite-tablet", 1024, 768, Show, settleSeconds: 0.16);
+            Add("83-long-infinite-wide", 2340, 1080, Show, 96f, 0.16);
         }
 
         private static void AddCalibratedPauseFrames()
@@ -1299,7 +1369,8 @@ namespace GreedLast.Editor
                 Vector3 point = vertex.position / label.pixelsPerUnit;
                 Require(point.x >= rect.xMin - tolerance && point.x <= rect.xMax + tolerance
                     && point.y >= rect.yMin - tolerance && point.y <= rect.yMax + tolerance,
-                    currentFrame.Name + ": text exceeds its area: " + label.name);
+                    currentFrame.Name + ": text exceeds its area: " + label.name
+                        + " / bounds " + rect + " / glyph " + point + " / text " + label.text.Replace('\n', '|'));
             }
         }
 

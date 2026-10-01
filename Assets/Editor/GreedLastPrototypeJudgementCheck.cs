@@ -26,7 +26,8 @@ namespace GreedLast.Editor
                 canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
                 var core = new GreedLastRunCore();
                 GreedLastRunSnapshot run = default;
-                core.SnapshotChanged += value => { run = value; ui.RenderRun(value); };
+                bool presentSnapshot = true;
+                core.SnapshotChanged += value => { run = value; if (presentSnapshot) ui.RenderRun(value); };
                 float clock = Time.realtimeSinceStartup;
 
                 void FreshPractice()
@@ -35,7 +36,8 @@ namespace GreedLast.Editor
                         GreedLastScreenState.RunCoreTest, "Judgement check", string.Empty, 0));
                     core.RestartPractice(clock);
                     Require(run.LastJudgementScoreGain == 0 && run.LastJudgementHealthChange == 0
-                        && !run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds == 0f,
+                        && !run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds == 0f
+                        && run.LastJudgedInputChannel == GreedLastRunChannel.None,
                         "A new run must clear its previous reward and timing payload.");
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
@@ -54,6 +56,10 @@ namespace GreedLast.Editor
                         "Exact feedback must carry the actual reward, including bonuses.");
                     Require(run.HasJudgedInputTiming && Mathf.Abs(run.LastInputTimingDeltaSeconds - delta) < 0.001f,
                         "Small exact offsets must remain available even when the human-readable message says exact.");
+                    Require(run.LastJudgedInputChannel == before.Pattern.Channel,
+                        "Every exact judgement must retain the actual input channel.");
+                    if (Mathf.Abs(delta) <= 0.02f) Require(string.IsNullOrEmpty(Nudge(run)),
+                        "Tiny exact timing must not produce unnecessary correction coaching.");
                     Text feedback = Read<Text>(ui, "judgementFeedbackText");
                     Require(feedback.text.Contains("+" + run.LastJudgementScoreGain + "점", StringComparison.Ordinal)
                         && feedback.text.Split('\n').Length == 2,
@@ -113,9 +119,11 @@ namespace GreedLast.Editor
                     core.Tick(clock);
                     Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "no_input"
                         && !run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds == 0f
+                        && run.LastJudgedInputChannel == GreedLastRunChannel.None
                         && run.LastJudgementScoreGain == 0 && run.LastJudgementHealthChange == 0
                         && run.Health == health,
                         "Timeouts must not fabricate tap timing, score or damage while protected.");
+                    Require(string.IsNullOrEmpty(Nudge(run)), "A timeout has no input timing to correct.");
                     Require(Read<int>(ui, "judgementHistoryCount") == before + 1,
                         "Each real protected miss must be shown even when score, health and copy are unchanged.");
                 }
@@ -132,6 +140,52 @@ namespace GreedLast.Editor
                     "Early Good feedback must retain signed timing and its actual score.");
                 Require(Read<Text>(ui, "judgementFeedbackText").text.Contains("빠름", StringComparison.Ordinal),
                     "Early Good feedback must not be presented as late.");
+                Require(Nudge(run).Contains("빠름", StringComparison.Ordinal),
+                    "Timing coaching must use the actual signed input payload.");
+
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    foreach (GreedLastRunChannel wrong in new[] {
+                        GreedLastRunChannel.Left, GreedLastRunChannel.Center, GreedLastRunChannel.Right })
+                    {
+                        FreshPractice();
+                        for (int preceding = 0; preceding < stage; preceding++)
+                        {
+                            clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                            core.HandleInput(run.Pattern.Channel, clock);
+                            core.RequestNextPattern(clock += 2f);
+                        }
+                        GreedLastRunChannel targetChannel = run.Pattern.Channel;
+                        if (wrong == targetChannel) continue;
+                        int history = Read<int>(ui, "judgementHistoryCount");
+                        presentSnapshot = false;
+                        clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + 0.012f;
+                        core.HandleInput(wrong, clock);
+                        typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .SetValue(core, "Presentation wording replaced");
+                        typeof(GreedLastRunCore).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic,
+                            null, new[] { typeof(float) }, null).Invoke(core, new object[] { clock });
+                        presentSnapshot = true;
+                        ui.RenderRun(run);
+                        float expectedX = (float)typeof(GreedLastRuntimeUi).GetMethod("GetChannelAnchorX",
+                            BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { wrong });
+                        Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "wrong_channel"
+                            && run.LastJudgedInputChannel == wrong
+                            && Read<GreedLastRunChannel>(ui, "runnerResponseChannel") == wrong
+                            && Mathf.Abs(Read<float>(ui, "inputTimingTraceX") - expectedX) < 0.001f
+                            && Read<GreedLastJudgementResult[]>(ui, "laneJudgementTagResults")[(int)wrong - 1]
+                                == GreedLastJudgementResult.Miss
+                            && Read<GreedLastJudgementResult[]>(ui, "laneJudgementTagResults")[(int)targetChannel - 1]
+                                == GreedLastJudgementResult.None
+                            && Read<int>(ui, "judgementHistoryCount") == history + 1,
+                            "Wrong-channel runner, trace and distinct correct-lane hint must use the actual input, independent of wording.");
+                        Text wrongFeedback = Read<Text>(ui, "judgementFeedbackText");
+                        if (!run.Stopped)
+                            Require(wrongFeedback.fontSize == 36 && wrongFeedback.text.Split('\n').Length == 2
+                                && wrongFeedback.rectTransform.rect.height == 100f,
+                                "Visible compact wrong-lane copy must fit its fixed two-line surface without enlarging over gauges.");
+                    }
+                }
 
                 VerifyStableRecovery(core, ui, ref run, ref clock);
                 VerifyExactBundleRecovery(core, ui, ref run, ref clock);
@@ -146,7 +200,7 @@ namespace GreedLast.Editor
                 Require(Read<Text>(ui, "judgementFeedbackText").text == countdownText
                     && Read<GreedLastRunSnapshot>(ui, "lastPresentedJudgementSnapshot").LastResult == GreedLastJudgementResult.None,
                     "Resume countdowns must clear the previous live judgement's presentation identity.");
-                Debug.Log("Greed judgement presentation passed: actual reward/timing payload, tiny exact traces, early Good, protected timeout repetition, settings/focus/flow replay isolation, real Good recovery and fresh-run reset. Personal slots are not accessed.");
+                Debug.Log("Greed judgement presentation passed: actual reward/timing/channel payload, tiny exact traces, early Good, six wording-independent wrong-channel pairs, no-input coaching suppression, protected timeout repetition, settings/focus/flow replay isolation, F11 feedback/preview/countdown separation, real Good/exact-bundle recovery and fresh-run reset. Personal slots are not accessed.");
             }
             finally
             {
@@ -246,6 +300,10 @@ namespace GreedLast.Editor
             GameObject created = GameObject.Find(name);
             if (previous == null && created != null) UnityEngine.Object.DestroyImmediate(created);
         }
+
+        private static string Nudge(GreedLastRunSnapshot snapshot) => (string)typeof(GreedLastRuntimeUi)
+            .GetMethod("BuildRecentTimingNudgeCoach", BindingFlags.Static | BindingFlags.NonPublic)
+            .Invoke(null, new object[] { snapshot });
 
         private static T Read<T>(GreedLastRuntimeUi ui, string name) => (T)typeof(GreedLastRuntimeUi)
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);

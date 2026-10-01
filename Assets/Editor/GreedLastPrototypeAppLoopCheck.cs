@@ -177,9 +177,13 @@ namespace GreedLast.Editor
                     Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "The lobby infinite action must open preparation.");
                     AssertSyncCannotLeaveScreen(app, backend, state, gate);
                     string before = backend.LoadLobby().SaveSlotLabels[2];
+                    float entryGuardDeadline = Read<float>(app, "infinitePreparationInputBlockUntil");
+                    float beforeEntryPress = Time.realtimeSinceStartup;
                     Click(Read<Button[]>(ui, "laneButtons")[1]);
                     Require(Read<int>(app, "infinitePreparationStep") == 0,
-                        "The entry tap must not carry through into a preparation choice.");
+                        "The entry tap must not carry through into a preparation choice."
+                            + $" touch={useTouch}, viewport={pointerSize}, until={entryGuardDeadline:F4},"
+                            + $" beforeLayout={beforeEntryPress:F4}, afterPress={Time.realtimeSinceStartup:F4}.");
                     FinishPreparationTransition(app);
                     Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.None });
                     Require(Read<int>(app, "infinitePreparationStep") == 0,

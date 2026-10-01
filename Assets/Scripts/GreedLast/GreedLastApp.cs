@@ -15664,6 +15664,11 @@ namespace GreedLast
             CancelPendingUiInput();
             devCleanViewEnabled = !devCleanViewEnabled;
             ApplyDevCleanView();
+            if (!UsePlayerRunControls && runModeActive && hasRunSnapshot)
+            {
+                UpdateRunDebugButtonLabels(latestRunSnapshot);
+                UpdateRunSettingsButtonLabels(latestRunSnapshot);
+            }
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForMode(latestRunSnapshot,
@@ -16497,6 +16502,58 @@ namespace GreedLast
                 normalClearReady, UsePlayerRunControls));
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForMode(snapshot, showDevTools));
+            if (!UsePlayerRunControls) UpdateRunDebugButtonLabels(snapshot);
+            if (!UsePlayerRunControls || snapshot.Paused || snapshot.Stopped)
+                UpdateRunSettingsButtonLabels(snapshot);
+            nextPatternButton.interactable = !snapshot.ResumeCountdownActive
+                && (snapshot.Paused || (!snapshot.CountdownActive && (!snapshot.ChoiceActive || snapshot.Stopped)));
+            pauseButton.interactable = !snapshot.Stopped && !snapshot.ChoiceActive && !snapshot.ResumeCountdownActive;
+            infiniteTestStopButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
+            focusMaxButton.interactable = showDevTools && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
+            threatUpButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
+            threatDownButton.interactable = showDevTools
+                && !snapshot.Stopped
+                && !snapshot.Paused
+                && !snapshot.CountdownActive
+                && (snapshot.InfiniteMode || !snapshot.ChoiceActive);
+            hapticsButton.interactable = showDevTools || snapshot.Paused;
+            rotationTiltButton.interactable = snapshot.Paused
+                && ShouldShowRotationTiltSetting(
+                    DevToolsEnabled,
+                    Application.isMobilePlatform,
+                    SystemInfo.supportsAccelerometer);
+            motionComfortButton.interactable = snapshot.Paused;
+            for (int i = 0; i < timingOffsetButtons.Length; i += 1)
+            {
+                timingOffsetButtons[i].interactable = i == 1
+                    ? CanUseTimingRecommendationButton(snapshot) : !snapshot.Stopped;
+            }
+
+            for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
+            {
+                sfxVolumeButtons[i].interactable = showDevTools || snapshot.Paused;
+            }
+
+            for (int i = 0; i < laneButtons.Length; i += 1)
+            {
+                SetLaneInputInteractable(i, snapshot.ChoiceActive || (!snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive));
+            }
+
+            ApplyRunButtonTones(snapshot, normalClearReady);
+            if (snapshot.Paused)
+            {
+                BringPauseControlsToFront();
+            }
+
+            UpdateLaneLabels(snapshot);
+
+            PlayJudgementFeedback(snapshot);
+            ApplyStoppedRunPresentation(snapshot);
+            ApplyDevCleanView();
+        }
+
+        private void UpdateRunDebugButtonLabels(GreedLastRunSnapshot snapshot)
+        {
             SetButtonLabel(devInvincibleButton, PrefixDevShortcut("F1", snapshot.DevInvincible ? "무적 ON" : "무적 OFF"));
             SetButtonLabel(infiniteTestStopButton, PrefixDevShortcut("End", "정산 종료"));
             SetButtonLabel(focusMaxButton, PrefixDevShortcut("F6", BuildRunFocusTestButtonLabel(snapshot)));
@@ -16546,6 +16603,10 @@ namespace GreedLast
                     devShortcutButtons[(int)GreedLastDevShortcut.VisualDropPreview],
                     PrefixDevShortcut("F10", BuildDevTrapVisualPreviewButtonLabel(devTrapVisualPreviewMode)));
             }
+        }
+
+        private void UpdateRunSettingsButtonLabels(GreedLastRunSnapshot snapshot)
+        {
             UpdateHapticsButtonLabel();
             UpdateRotationTiltButtonLabel();
             UpdateMotionComfortButtonLabel();
@@ -16555,51 +16616,6 @@ namespace GreedLast
             SetButtonLabel(sfxVolumeButtons[0], "소리 -");
             UpdateSfxVolumeButtonLabel();
             SetButtonLabel(sfxVolumeButtons[2], "소리 +");
-            nextPatternButton.interactable = !snapshot.ResumeCountdownActive
-                && (snapshot.Paused || (!snapshot.CountdownActive && (!snapshot.ChoiceActive || snapshot.Stopped)));
-            pauseButton.interactable = !snapshot.Stopped && !snapshot.ChoiceActive && !snapshot.ResumeCountdownActive;
-            infiniteTestStopButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
-            focusMaxButton.interactable = showDevTools && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
-            threatUpButton.interactable = showDevTools && snapshot.InfiniteMode && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
-            threatDownButton.interactable = showDevTools
-                && !snapshot.Stopped
-                && !snapshot.Paused
-                && !snapshot.CountdownActive
-                && (snapshot.InfiniteMode || !snapshot.ChoiceActive);
-            hapticsButton.interactable = showDevTools || snapshot.Paused;
-            rotationTiltButton.interactable = snapshot.Paused
-                && ShouldShowRotationTiltSetting(
-                    DevToolsEnabled,
-                    Application.isMobilePlatform,
-                    SystemInfo.supportsAccelerometer);
-            motionComfortButton.interactable = snapshot.Paused;
-            for (int i = 0; i < timingOffsetButtons.Length; i += 1)
-            {
-                timingOffsetButtons[i].interactable = i == 1
-                    ? CanUseTimingRecommendationButton(snapshot) : !snapshot.Stopped;
-            }
-
-            for (int i = 0; i < sfxVolumeButtons.Length; i += 1)
-            {
-                sfxVolumeButtons[i].interactable = showDevTools || snapshot.Paused;
-            }
-
-            for (int i = 0; i < laneButtons.Length; i += 1)
-            {
-                SetLaneInputInteractable(i, snapshot.ChoiceActive || (!snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive));
-            }
-
-            ApplyRunButtonTones(snapshot, normalClearReady);
-            if (snapshot.Paused)
-            {
-                BringPauseControlsToFront();
-            }
-
-            UpdateLaneLabels(snapshot);
-
-            PlayJudgementFeedback(snapshot);
-            ApplyStoppedRunPresentation(snapshot);
-            ApplyDevCleanView();
         }
 
         private static bool IsNewRunPresentation(GreedLastRunSnapshot previous, GreedLastRunSnapshot current)
@@ -21374,13 +21390,14 @@ namespace GreedLast
 
         private static string BuildRecentTimingNudgeCoach(GreedLastRunSnapshot snapshot)
         {
-            if (!TryExtractSignedTimingDelta(snapshot.JudgementText, out float signedDeltaSeconds))
+            if (!snapshot.HasJudgedInputTiming)
             {
                 return string.Empty;
             }
 
+            float signedDeltaSeconds = snapshot.LastInputTimingDeltaSeconds;
             int milliseconds = Mathf.RoundToInt(Mathf.Abs(signedDeltaSeconds) * 1000f);
-            if (milliseconds <= 0)
+            if (milliseconds <= 20)
             {
                 return string.Empty;
             }
@@ -43821,9 +43838,9 @@ namespace GreedLast
             runnerResponseChannel = feedbackPattern.Channel;
             runnerResponseWasRotationPattern = GreedLastRunCore.IsRotationPattern(feedbackPattern);
             if (snapshot.MissReason == "wrong_channel"
-                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel))
+                && snapshot.LastJudgedInputChannel != GreedLastRunChannel.None)
             {
-                runnerResponseChannel = inputChannel;
+                runnerResponseChannel = snapshot.LastJudgedInputChannel;
             }
 
             runnerResponseResult = snapshot.LastResult;
@@ -43850,10 +43867,10 @@ namespace GreedLast
             }
 
             if (snapshot.MissReason == "wrong_channel"
-                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel))
+                && snapshot.LastJudgedInputChannel != GreedLastRunChannel.None)
             {
                 ArmLaneJudgementPulse(
-                    inputChannel,
+                    snapshot.LastJudgedInputChannel,
                     GreedLastJudgementResult.Miss,
                     new Color32(231, 91, 77, 245),
                     true,
@@ -43983,10 +44000,8 @@ namespace GreedLast
             float hitSeconds = Mathf.Max(0.01f, feedbackPattern.HitSeconds);
             float coreProgress = Mathf.Clamp01(feedbackPattern.CoreSeconds / hitSeconds);
             float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
-            GreedLastRunChannel traceChannel = snapshot.MissReason == "wrong_channel"
-                && TryExtractInputChannel(snapshot.JudgementText, out GreedLastRunChannel inputChannel)
-                    ? inputChannel
-                    : feedbackPattern.Channel;
+            GreedLastRunChannel traceChannel = snapshot.LastJudgedInputChannel != GreedLastRunChannel.None
+                ? snapshot.LastJudgedInputChannel : feedbackPattern.Channel;
             inputTimingTraceX = GetChannelAnchorX(traceChannel);
             inputTimingTraceY = Mathf.Clamp(coreY - signedDeltaSeconds / hitSeconds * 0.70f, 0.18f, 0.88f);
             inputTimingTraceSignedDeltaSeconds = signedDeltaSeconds;
@@ -44144,96 +44159,6 @@ namespace GreedLast
             return new Vector4(width * ageScale, height * ageScale, offsetY, angle);
         }
 
-        private static bool TryExtractInputChannel(string judgementText, out GreedLastRunChannel channel)
-        {
-            channel = GreedLastRunChannel.None;
-            if (string.IsNullOrEmpty(judgementText))
-            {
-                return false;
-            }
-
-            string[] lines = judgementText.Replace("\r", string.Empty).Split('\n');
-            for (int i = 0; i < lines.Length; i += 1)
-            {
-                string line = lines[i].Trim();
-                if (!line.Contains(" 입력", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (line.StartsWith("좌", StringComparison.Ordinal))
-                {
-                    channel = GreedLastRunChannel.Left;
-                    return true;
-                }
-
-                if (line.StartsWith("중", StringComparison.Ordinal))
-                {
-                    channel = GreedLastRunChannel.Center;
-                    return true;
-                }
-
-                if (line.StartsWith("우", StringComparison.Ordinal))
-                {
-                    channel = GreedLastRunChannel.Right;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool TryExtractSignedTimingDelta(string judgementText, out float signedDeltaSeconds)
-        {
-            signedDeltaSeconds = 0f;
-            if (string.IsNullOrEmpty(judgementText))
-            {
-                return false;
-            }
-
-            string[] lines = judgementText.Replace("\r", string.Empty).Split('\n');
-            for (int i = 0; i < lines.Length; i += 1)
-            {
-                string line = lines[i].Trim();
-                if (line.Equals("정확", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-
-                if (TryParseTimingDeltaLine(line, "빠름 ", -1f, out signedDeltaSeconds)
-                    || TryParseTimingDeltaLine(line, "늦음 ", 1f, out signedDeltaSeconds))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool TryParseTimingDeltaLine(string line, string prefix, float sign, out float signedDeltaSeconds)
-        {
-            signedDeltaSeconds = 0f;
-            if (!line.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            int end = line.IndexOf("ms", prefix.Length, StringComparison.Ordinal);
-            if (end <= prefix.Length)
-            {
-                return false;
-            }
-
-            string numberText = line.Substring(prefix.Length, end - prefix.Length).Trim();
-            if (!int.TryParse(numberText, out int milliseconds))
-            {
-                return false;
-            }
-
-            signedDeltaSeconds = sign * Mathf.Abs(milliseconds) / 1000f;
-            return true;
-        }
-
         private void ShowJudgementFeedback(
             GreedLastRunSnapshot snapshot,
             bool timingRecommendationJustReady,
@@ -44274,7 +44199,7 @@ namespace GreedLast
             ApplyJudgementFeedbackLayout(text);
             if (compact)
             {
-                judgementFeedbackText.fontSize = 40;
+                judgementFeedbackText.fontSize = snapshot.LastResult == GreedLastJudgementResult.Miss ? 36 : 40;
                 SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
             }
             judgementFeedbackText.text = text;

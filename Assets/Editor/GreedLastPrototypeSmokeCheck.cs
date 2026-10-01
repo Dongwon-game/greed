@@ -10481,7 +10481,7 @@ namespace GreedLast.Editor
                 Text judgement = GetRuntimeUiField<Text>(ui, "judgementFeedbackText");
                 if (!run.ChoiceActive)
                 {
-                    Require(judgement.fontSize == 40 && judgement.preferredHeight <= judgement.rectTransform.rect.height + 1f,
+                    Require(judgement.fontSize == 36 && judgement.preferredHeight <= judgement.rectTransform.rect.height + 1f,
                         "Compact judgement feedback must fit its two-line area.");
                     RectTransform root = GetRuntimeUiField<RectTransform>(ui, "rootPanelRect");
                     Require(!BoundsInRoot(judgement.rectTransform, root).Overlaps(BoundsInRoot(

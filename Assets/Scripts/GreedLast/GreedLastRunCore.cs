@@ -492,7 +492,8 @@ namespace GreedLast
             int lastJudgementScoreGain,
             int lastJudgementHealthChange,
             bool hasJudgedInputTiming,
-            float lastInputTimingDeltaSeconds)
+            float lastInputTimingDeltaSeconds,
+            GreedLastRunChannel lastJudgedInputChannel)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -597,6 +598,7 @@ namespace GreedLast
             LastJudgementHealthChange = lastJudgementHealthChange;
             HasJudgedInputTiming = hasJudgedInputTiming;
             LastInputTimingDeltaSeconds = lastInputTimingDeltaSeconds;
+            LastJudgedInputChannel = lastJudgedInputChannel;
         }
 
         public GreedLastPatternModel Pattern { get; }
@@ -633,6 +635,7 @@ namespace GreedLast
         public int LastJudgementHealthChange { get; }
         public bool HasJudgedInputTiming { get; }
         public float LastInputTimingDeltaSeconds { get; }
+        public GreedLastRunChannel LastJudgedInputChannel { get; }
         public int SuccessCount { get; }
         public int PerfectSuccessCount { get; }
         public int ClutchSuccessCount { get; }
@@ -927,6 +930,7 @@ namespace GreedLast
         private int lastJudgementHealthChange;
         private bool hasJudgedInputTiming;
         private float lastInputTimingDeltaSeconds;
+        private GreedLastRunChannel lastJudgedInputChannel;
         private string cachedTimingProfileText;
         private string cachedTimingProfileFocusDuration;
         private string cachedRecentPatternFlowText;
@@ -997,6 +1001,7 @@ namespace GreedLast
             lastJudgementHealthChange = 0;
             hasJudgedInputTiming = false;
             lastInputTimingDeltaSeconds = 0f;
+            lastJudgedInputChannel = GreedLastRunChannel.None;
             successCount = 0;
             perfectSuccessCount = 0;
             clutchSuccessCount = 0;
@@ -1837,7 +1842,7 @@ namespace GreedLast
                     "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel)
                         + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    "wrong_channel"), now, signedDelta);
+                    "wrong_channel"), now, signedDelta, channel);
                 return;
             }
 
@@ -1852,7 +1857,7 @@ namespace GreedLast
                     "정확 / " + FormatTimingType(currentPattern.TimingType) + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     string.Empty,
-                    centerHit), now, signedDelta);
+                    centerHit), now, signedDelta, channel);
                 return;
             }
 
@@ -1863,7 +1868,7 @@ namespace GreedLast
                     currentPattern.TimingType,
                     "보정 - 생존 완충\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    string.Empty), now, signedDelta);
+                    string.Empty), now, signedDelta, channel);
                 return;
             }
 
@@ -1874,7 +1879,7 @@ namespace GreedLast
                 (judgedElapsed < currentPattern.CoreSeconds ? "실수 - 너무 빠름" : "실수 - 너무 늦음")
                     + "\n" + FormatTimingDelta(signedDelta),
                 string.Empty,
-                reason), now, signedDelta);
+                reason), now, signedDelta, channel);
         }
 
         public void AdjustInputTimingOffset(float deltaSeconds)
@@ -2165,12 +2170,14 @@ namespace GreedLast
             }
         }
 
-        private void Resolve(GreedLastJudgementOutcome outcome, float now, float? inputTimingDeltaSeconds = null)
+        private void Resolve(GreedLastJudgementOutcome outcome, float now, float? inputTimingDeltaSeconds = null,
+            GreedLastRunChannel inputChannel = GreedLastRunChannel.None)
         {
             int scoreBeforeResolve = score;
             int healthBeforeResolve = health;
             hasJudgedInputTiming = inputTimingDeltaSeconds.HasValue;
             lastInputTimingDeltaSeconds = inputTimingDeltaSeconds.GetValueOrDefault();
+            lastJudgedInputChannel = inputTimingDeltaSeconds.HasValue ? inputChannel : GreedLastRunChannel.None;
             lastJudgedPattern = currentPattern;
             activePattern = false;
             ignoreReason = outcome.IgnoreReason;
@@ -6654,7 +6661,8 @@ namespace GreedLast
                 lastJudgementScoreGain,
                 lastJudgementHealthChange,
                 hasJudgedInputTiming,
-                lastInputTimingDeltaSeconds));
+                lastInputTimingDeltaSeconds,
+                lastJudgedInputChannel));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)
