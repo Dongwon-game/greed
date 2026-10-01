@@ -180,6 +180,9 @@ namespace GreedLast.Editor
                 AddActualInputChannelFrames();
                 AddStructuredTimingFrames();
                 AddPracticeMissFrames();
+                AddFocusedPracticeFrames();
+                AddCountdownPulseFrames();
+                AddFocusedPracticeOutcomeFrames();
                 AddLongRunCounterFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
@@ -931,6 +934,157 @@ namespace GreedLast.Editor
                     Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
                     Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
                     Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddFocusedPracticeFrames()
+        {
+            foreach (var lesson in new[] {
+                (Step: 1, Context: "탈출 실패 기록 저장\n복기: 숙이기 실수 1회 / 기초연습 숙이기 단계"),
+                (Step: 2, Context: "탈출 실패 기록 저장\n복기: 비틀기 실수 2회 / 기초연습 비틀기 단계\n재도전 목표: 2장 무실수 / 현재 1"),
+                (Step: 1, Context: "무한모드 종료 / 기록 저장\n복기: 무한 1구간 / 숙이기 실수 1회\n힌트: 다음 구간 정확권 전환 / 기초연습 숙이기 단계\n목표: 다음 구간 무실수 / 직전 2") })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                string context = GreedLastApp.BuildPracticeOpeningContextFromLobbyDetail(lesson.Context);
+                core.EnterPractice(context);
+                GreedLastRunSnapshot countdown = run;
+                float clock = Time.realtimeSinceStartup;
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern && run.ChapterProgress == lesson.Step,
+                    "Focused practice captures must start at the actual requested lesson.");
+                GreedLastRunSnapshot live = run;
+                for (int attempt = 0; attempt < 3 - lesson.Step; attempt++)
+                {
+                    if (attempt > 0) core.RequestNextPattern(clock += 2f);
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                }
+                GreedLastRunSnapshot result = run;
+                Require(result.Stopped && result.SuccessCount == 3 - lesson.Step
+                    && !result.JudgementText.Contains("3축 정확", StringComparison.Ordinal),
+                    "Focused results must show only the attempted remaining axes.");
+                string name = lesson.Context.StartsWith("무한", StringComparison.Ordinal)
+                    ? "infinite-slide" : lesson.Step == 1 ? "normal-slide" : "normal-twist";
+                foreach (var phase in new[] { (Name: "countdown", Run: countdown), (Name: "live", Run: live), (Name: "result", Run: result) })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(phase.Run);
+                        if (phase.Name == "result")
+                        {
+                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인",
+                                "Focused completion must expose the matching focused restart action.");
+                            Require(Read<Text>("titleText").text == "복기 연습 완료",
+                                "Focused exact completion must display its actual partial-course title.");
+                        }
+                    }
+                    string key = "88-focused-practice-" + name + "-" + phase.Name;
+                    Add(key + "-small", 960, 540, Show);
+                    Add(key + "-tablet", 1024, 768, Show);
+                    Add(key + "-wide", 2340, 1080, Show, 96f);
+                }
+            }
+        }
+
+        private static void AddCountdownPulseFrames()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            Capture("start-2", run, "2");
+            core.Tick(clock += 0.65f);
+            Capture("start-1", run, "1");
+            core.Tick(clock += 0.65f);
+            Capture("start-go", run, "GO");
+            core.Tick(clock += 0.7f);
+            core.Tick(clock += 1f);
+            Require(run.ActivePattern && !run.CountdownActive,
+                "Countdown captures need a real released practice before pausing.");
+            core.TogglePause(clock += 0.1f);
+            core.TogglePause(clock += 0.1f);
+            Capture("resume-2", run, "2");
+            core.Tick(clock += 0.65f);
+            Capture("resume-1", run, "1");
+            core.Tick(clock += 0.65f);
+            Capture("resume-go", run, "GO");
+
+            void Capture(string name, GreedLastRunSnapshot snapshot, string expectedText)
+            {
+                Require(snapshot.CountdownActive, "Each countdown pulse must come from an active core countdown.");
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        ShowRun(snapshot);
+                        Require(Read<Text>("judgementFeedbackText").text == expectedText,
+                            "The visible countdown pulse must match its actual remaining time.");
+                    }
+                    string key = "89-countdown-" + name + (detailed ? "-detail" : "-basic");
+                    Add(key + "-small", 960, 540, Show);
+                    Add(key + "-tablet", 1024, 768, Show);
+                    Add(key + "-wide", 2340, 1080, Show, 96f);
+                }
+            }
+        }
+
+        private static void AddFocusedPracticeOutcomeFrames()
+        {
+            foreach (int step in new[] { 1, 2 })
+            {
+                foreach (string outcome in new[] { "good", "wrong", "no-input" })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.EnterPractice("복기 연습\n복기: 기초연습 " + (step == 1 ? "숙이기 단계" : "비틀기 단계"));
+                    float clock = Time.realtimeSinceStartup;
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    for (int attempt = 0; attempt < 3 - step; attempt++)
+                    {
+                        if (attempt > 0) core.RequestNextPattern(clock += 2f);
+                        Require(run.ActivePattern, "Focused result captures need their actual authored remaining trap.");
+                        if (outcome == "no-input")
+                            core.Tick(clock += run.Pattern.HitSeconds + 0.02f - run.ElapsedSeconds);
+                        else
+                        {
+                            clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
+                            if (outcome == "good")
+                                clock += (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                            GreedLastRunChannel channel = outcome == "good" ? run.Pattern.Channel
+                                : run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
+                            core.HandleInput(channel, clock);
+                        }
+                    }
+                    GreedLastRunSnapshot result = run;
+                    Require(core.IsPracticeComplete && result.SuccessCount == 0
+                        && result.GoodCount + result.MissCount == 3 - step && !result.SaveEligible,
+                        "Focused captures must keep Good and Miss outcomes without full-course or save claims.");
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        void Show()
+                        {
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            ShowRun(result);
+                            string expected = outcome == "good" ? "정확권 다시" : "실수 구간 다시";
+                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == expected,
+                                "Focused result action must match its real Good or Miss result.");
+                            Require(Read<Text>("titleText").text == "복기 연습 완료",
+                                "Focused Good and Miss outcomes must not claim full-course completion.");
+                        }
+                        string key = "90-focused-outcome-" + step + "-" + outcome + (detailed ? "-detail" : "-basic");
+                        Add(key + "-small", 960, 540, Show);
+                        Add(key + "-tablet", 1024, 768, Show);
+                        Add(key + "-wide", 2340, 1080, Show, 96f);
+                    }
                 }
             }
         }

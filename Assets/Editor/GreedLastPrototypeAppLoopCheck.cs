@@ -143,6 +143,8 @@ namespace GreedLast.Editor
                 RunToCompletion(core, () => run);
                 Require(run.Stopped && run.SuccessCount == 3 && !backend.HasSaveLoadoutCandidate,
                     "A perfect practice must complete three axes without creating a save candidate.");
+                Require(Read<Text>(ui, "titleText").text == "기초연습 완료",
+                    "The complete basic course must retain its original completion title.");
                 Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "일반 런으로",
                     "The first perfect practice result must offer direct normal-run entry.");
                 Click(ui, "nextPatternButton");
@@ -265,6 +267,8 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
                     "Confirming skip-save must discard the candidate and return to the lobby.");
                 VerifySavedSlotConfirmations(app, ui, backend, state);
+                VerifyPracticeReviewEntry(app, ui, backend, state, core, () => run);
+                VerifyFocusedPracticeCompletion(ui, backend, state, core, () => run);
                 VerifyPracticeCalibrationLoop(ui, backend, state, core, () => run);
                 VerifyPlayerPrimaryControls(app, ui, backend, state, core, () => run);
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
@@ -956,6 +960,203 @@ namespace GreedLast.Editor
             Require(backend.LoadLobby().SaveSlotLabels[2] == originalSlot,
                 "Reselection must not mutate or consume the stored loadout.");
             FinishPreparationTransition(app);
+        }
+
+        private static void VerifyPracticeReviewEntry(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            GreedLastLobbySnapshot lobby = backend.LoadLobby();
+            string[] savedLabels = lobby.SaveSlotLabels;
+            var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+            var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+            foreach (var scenario in new[] {
+                (Detail: "탈출 실패 기록 저장\n복기: 채널 확인 / 숙이기 실수 1회 / 기초연습 숙이기 단계", Step: 1),
+                (Detail: "탈출 실패 기록 저장\n복기: 2장 실수 1회 / 비틀기 실수 2회 / 기초연습 비틀기 단계\n재도전 목표: 2장 무실수 / 현재 1", Step: 2),
+                (Detail: "탈출 중단 기록 저장\n복기: 1장 보정 1회 / 점프 보정 1회 / 기초연습 점프 단계\n재도전 목표: 1장 보정 0회 / 현재 1", Step: 0),
+                (Detail: "탈출 중단 기록 저장\n복기: 정박 흐름\n복기 목표: 1장 무실수 / 현재 1 / 달성 무실수\n재도전 목표: 1장 보정 0회", Step: 0),
+                (Detail: "보충 런 실패\n탈출 실패 기록 저장\n복기: 기초연습 비틀기 단계\n재도전 목표: 저장 조합 보충", Step: 2),
+                (Detail: "무한모드 종료 / 기록 저장\n복기: 무한 1구간 / 숙이기 실수 1회\n힌트: 다음 구간 정확권 전환 / 기초연습 숙이기 단계\n목표: 다음 구간 무실수 / 직전 2", Step: 1),
+                (Detail: "피라미드 입구", Step: 0) })
+            {
+                state.SetLobbyReady(backend.LoadLobby());
+                state.ShowLocalNotice(scenario.Detail);
+                string context = GreedLastApp.BuildPracticeOpeningContextFromLobbyDetail(scenario.Detail);
+                Click(ui, "practiceRunButton");
+                Require(state.CurrentState == GreedLastScreenState.RunCoreTest && latest().PracticeMode
+                    && latest().ChapterProgress == scenario.Step
+                    && Read<string>(core, "lastPracticeOpeningContext") == context,
+                    "The actual lobby practice button must preserve its displayed review context and starting axis.");
+                Require(string.IsNullOrEmpty(context) || latest().JudgementText.Contains(context, StringComparison.Ordinal),
+                    "The actual review countdown must retain the weakness, retry goal and previous result.");
+                if (context.Contains("재도전 목표:", StringComparison.Ordinal))
+                    Require(!string.IsNullOrWhiteSpace(latest().ReviewTargetText),
+                        "The preserved context must initialize the core's live review target, not just countdown copy.");
+                float clock = Time.realtimeSinceStartup;
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(latest().ActivePattern && latest().ChapterProgress == scenario.Step
+                    && (int)latest().Pattern.AvoidanceType == scenario.Step + 1,
+                    "The first real practice trap must match the requested avoidance step after countdown.");
+                for (int attempt = 0; attempt < 3 - scenario.Step; attempt++)
+                {
+                    if (attempt > 0) core.RequestNextPattern(clock += 2f);
+                    GreedLastRunSnapshot before = latest();
+                    clock += before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds;
+                    core.HandleInput(before.Pattern.Channel, clock);
+                }
+                Require(latest().Stopped && latest().SuccessCount == 3 - scenario.Step
+                    && !latest().SaveEligible,
+                    "Focused practice must resolve only its remaining authored axes without a save candidate.");
+                if (scenario.Step > 0)
+                    Require(!latest().JudgementText.Contains("3축 정확", StringComparison.Ordinal)
+                        && !latest().JudgementText.Contains("3축 대응 확인", StringComparison.Ordinal)
+                        && !latest().JudgementText.Contains("바닥→↑점프", StringComparison.Ordinal)
+                        && (scenario.Step < 2 || !latest().JudgementText.Contains("상단→↓숙이기", StringComparison.Ordinal))
+                        && latest().JudgementText.Contains("측면→↔비틀기 정확", StringComparison.Ordinal)
+                        && Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인",
+                        "Partial review must not claim full three-axis mastery or offer a misleading full-course restart.");
+                Click(ui, "nextPatternButton");
+                Require(latest().ChapterProgress == scenario.Step && latest().StartCountdownActive
+                    && Read<string>(core, "lastPracticeOpeningContext") == context,
+                    "Restarting focused practice must preserve its original axis and review context.");
+                Click(ui, "pauseButton");
+                Click(ui, "returnLobbyButton");
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                    "Focused practice must return without a save opportunity or normal-run result.");
+                GreedLastLobbySnapshot after = backend.LoadLobby();
+                for (int slot = 0; slot < savedLabels.Length; slot++)
+                    Require(after.SaveSlotLabels[slot] == savedLabels[slot]
+                        && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot],
+                        "Review practice must preserve every saved record and remaining use.");
+            }
+            Debug.Log("Greed Last practice review entry passed: seven actual lobby button paths preserve slide/twist/jump, failed/advanced targets, refill/infinite review and a clean untargeted entry; all slots and uses unchanged.");
+        }
+
+        private static void VerifyFocusedPracticeCompletion(GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            int originalPracticeCompleted = PlayerPrefs.GetInt(PracticeKey, 0);
+            string[] slots = backend.LoadLobby().SaveSlotLabels;
+            try
+            {
+                foreach (int step in new[] { 1, 2 })
+                {
+                    string detail = "탈출 실패 기록 저장\n복기: 기초연습 "
+                        + (step == 1 ? "숙이기 단계" : "비틀기 단계");
+                    foreach (string outcome in new[] { "exact", "good", "wrong", "no-input" })
+                    {
+                        PlayerPrefs.SetInt(PracticeKey, 0);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        state.ShowLocalNotice(detail);
+                        string context = GreedLastApp.BuildPracticeOpeningContextFromLobbyDetail(detail);
+                        Click(ui, "practiceRunButton");
+                        CompleteLesson(outcome, step);
+                        string expected = outcome == "exact" ? "복기 다시 확인"
+                            : outcome == "good" ? "정확권 다시" : "실수 구간 다시";
+                        Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == expected,
+                            "Focused practice must offer the action matching its actual outcome: " + outcome);
+                        Require(Read<Text>(ui, "titleText").text == "복기 연습 완료",
+                            "Partial outcomes must not claim the complete basic course in their visible title.");
+                        Click(ui, "nextPatternButton");
+                        Require(latest().StartCountdownActive && latest().ChapterProgress == step
+                            && Read<string>(core, "lastPracticeOpeningContext") == context
+                            && PlayerPrefs.GetInt(PracticeKey, 0) == 0,
+                            "A partial review restart must preserve its lesson without completing full onboarding.");
+                        CompleteLesson(outcome, step);
+                        Click(ui, "returnLobbyButton");
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && PlayerPrefs.GetInt(PracticeKey, 0) == 0
+                            && state.CurrentDetail.Contains("복기 연습 완료", StringComparison.Ordinal)
+                            && !backend.HasSaveLoadoutCandidate,
+                            "Returning from a partial review must not record full three-axis onboarding: " + outcome);
+                        string[] after = backend.LoadLobby().SaveSlotLabels;
+                        for (int slot = 0; slot < slots.Length; slot++)
+                            Require(slots[slot] == after[slot], "Focused completion must preserve every save slot and use.");
+                    }
+                }
+                foreach (string outcome in new[] { "exact", "good", "wrong", "no-input" })
+                {
+                    PlayerPrefs.SetInt(PracticeKey, 0);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    state.ShowLocalNotice("피라미드 입구 동기화 완료");
+                    Click(ui, "practiceRunButton");
+                    Require(latest().ChapterProgress == 0, "The full-course control must begin at its original first axis.");
+                    CompleteLesson(outcome, 0);
+                    bool completed = outcome == "exact" || outcome == "good";
+                    Require(Read<Text>(ui, "titleText").text == (completed ? "기초연습 완료" : "기초연습 중단"),
+                        "The complete course must retain its original success or health-zero failure title: " + outcome);
+                    Click(ui, "returnLobbyButton");
+                    Require(PlayerPrefs.GetInt(PracticeKey, 0) == (completed ? 1 : 0)
+                        && state.CurrentState == GreedLastScreenState.LobbyReady
+                        && state.CurrentDetail.Contains(completed ? "기초연습 완료" : "종료했습니다", StringComparison.Ordinal),
+                        "Explicit return must mark onboarding only for the successfully completed course: " + outcome);
+                }
+                foreach (int attempts in new[] { 0, 1 })
+                {
+                    PlayerPrefs.SetInt(PracticeKey, 0);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    state.ShowLocalNotice("피라미드 입구 동기화 완료");
+                    Click(ui, "practiceRunButton");
+                    if (attempts > 0)
+                    {
+                        float clock = Time.realtimeSinceStartup;
+                        core.Tick(clock += 2f);
+                        core.Tick(clock += 1f);
+                        GreedLastRunSnapshot before = latest();
+                        core.HandleInput(before.Pattern.Channel,
+                            clock + before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds);
+                    }
+                    Click(ui, "pauseButton");
+                    Require(latest().Paused && !core.IsPracticeComplete,
+                        "An early exit must originate from an unfinished, actually paused practice.");
+                    Click(ui, "returnLobbyButton");
+                    Require(PlayerPrefs.GetInt(PracticeKey, 0) == 0
+                        && state.CurrentDetail.Contains("종료했습니다", StringComparison.Ordinal),
+                        "Exiting before the full course is complete must not mark onboarding.");
+                }
+                Require(!backend.HasSaveLoadoutCandidate, "Practice completion controls must not create a save candidate.");
+                string[] finalSlots = backend.LoadLobby().SaveSlotLabels;
+                for (int slot = 0; slot < slots.Length; slot++)
+                    Require(slots[slot] == finalSlots[slot], "Full and aborted practice must preserve every slot and use.");
+            }
+            finally
+            {
+                PlayerPrefs.SetInt(PracticeKey, originalPracticeCompleted);
+            }
+            Debug.Log("Greed Last focused practice completion passed: eight partial outcomes with matching restarts, four full-course outcomes and two early exits; actual lobby return, correct onboarding and preserved save use.");
+
+            void CompleteLesson(string outcome, int step)
+            {
+                float clock = Time.realtimeSinceStartup;
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                for (int attempt = 0; attempt < 3 - step; attempt++)
+                {
+                    if (attempt > 0) core.RequestNextPattern(clock += 2f);
+                    GreedLastRunSnapshot before = latest();
+                    Require(before.ActivePattern && (int)before.Pattern.AvoidanceType == step + attempt + 1,
+                        "Focused outcomes must use only their real remaining authored traps.");
+                    if (outcome == "no-input")
+                        core.Tick(clock += before.Pattern.HitSeconds + 0.02f - before.ElapsedSeconds);
+                    else
+                    {
+                        clock += before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds;
+                        if (outcome == "good")
+                            clock += (before.Pattern.SuccessWindowSeconds + before.Pattern.GoodWindowSeconds) * 0.5f;
+                        GreedLastRunChannel channel = outcome != "wrong" ? before.Pattern.Channel
+                            : before.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
+                        core.HandleInput(channel, clock);
+                    }
+                }
+                bool expectedComplete = step > 0 || outcome == "exact" || outcome == "good";
+                Require(latest().Stopped && core.IsPracticeComplete == expectedComplete
+                    && latest().SuccessCount + latest().GoodCount + latest().MissCount == 3 - step
+                    && !latest().SaveEligible && PlayerPrefs.GetInt(PracticeKey, 0) == 0,
+                    "Attempted axes must preserve partial completion or full health-zero failure before explicit return.");
+            }
         }
 
         private static void VerifyPracticeCalibrationLoop(GreedLastRuntimeUi ui,

@@ -4757,8 +4757,10 @@ namespace GreedLast
                 inputConsumed = true;
                 saveEligible = false;
                 phase = GreedLastRunPhase.ClearResolving;
-                judgementText = "기초연습 완료 - 3축 대응 확인"
-                    + "\n정확 " + successCount + " / 보정 " + goodCount + " / 실수 " + missCount
+                judgementText = ResolvePracticeOpeningStep(lastPracticeOpeningContext) > 0
+                    ? "복기 연습 완료 - 남은 대응 확인"
+                    : "기초연습 완료 - 3축 대응 확인";
+                judgementText += "\n정확 " + successCount + " / 보정 " + goodCount + " / 실수 " + missCount
                     + (string.IsNullOrEmpty(precisionPayoffText) ? string.Empty : "\n" + precisionPayoffText)
                     + (string.IsNullOrEmpty(patternBundleRewardText) ? string.Empty : "\n" + patternBundleRewardText)
                     + "\n" + BuildPracticeCompletionReviewText()
@@ -4863,7 +4865,9 @@ namespace GreedLast
             }
             else
             {
-                review = "준비 완료: 3축 정확 / 일반 런 진입 가능";
+                review = ResolvePracticeOpeningStep(lastPracticeOpeningContext) > 0
+                    ? "복기 확인: " + successCount + "회 정확 / 일반 런 진입 가능"
+                    : "준비 완료: 3축 정확 / 일반 런 진입 가능";
             }
 
             return review
@@ -4890,7 +4894,16 @@ namespace GreedLast
                 }
             }
 
-            return "회피 동작: 바닥→↑점프 · 상단→↓숙이기 · 측면→↔비틀기 정확";
+            string exactAxes = string.Empty;
+            for (int i = 1; i < labels.Length; i += 1)
+            {
+                if (avoidanceExactCounts[i] <= 0) continue;
+                if (exactAxes.Length > 0) exactAxes += " · ";
+                exactAxes += labels[i];
+            }
+            return exactAxes.Length > 0
+                ? "회피 동작: " + exactAxes + " 정확"
+                : "회피 동작: 확인한 정확 대응 없음";
         }
 
         private string BuildPracticeTimingCalibrationText()

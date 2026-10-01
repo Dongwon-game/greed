@@ -1566,6 +1566,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeTimelineCheck.Run();
             GreedLastPrototypeJudgementCheck.Run();
             GreedLastPrototypeLiveCheck.Run();
+            GreedLastPrototypeRotationCheck.Run();
             VerifyRuntimeLobbyToRunVisualHandoff();
             VerifyRuntimeCleanViewFlow();
             VerifyRecoveryPrecisionPayoff(now + 780f);

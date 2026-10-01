@@ -10684,6 +10684,7 @@ namespace GreedLast
         private const float RotationTiltRepeatBlockSeconds = 0.22f;
         private const float RotationTiltFilterSpeed = 14f;
         private const float RotationTiltConfirmationSeconds = 0.08f;
+        private const float RotationTiltMaxSampleGapSeconds = 0.15f;
         private const float RotationDragInputThresholdNormalized = 0.08f;
         private const int GrowthUiMaxLevel = 3;
         private static readonly string[] InfinitePreparationGifts = { "생존 축", "집중 축", "연쇄 축" };
@@ -10721,6 +10722,7 @@ namespace GreedLast
         private float rotationDragVisualAxis;
         private float rotationTiltFilteredAxis;
         private float rotationTiltCandidateSince = -1f;
+        private float lastRotationTiltSampleAt = -1f;
         private int rotationTiltHeldDirection;
         private int rotationTiltCandidateDirection;
         private int rotationTiltOrientationMode = -1;
@@ -10847,8 +10849,15 @@ namespace GreedLast
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
+            bool leavingRotation = hasLatestAppRunSnapshot
+                && IsLiveRotationInputWindow(latestAppRunSnapshot)
+                && GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern)
+                && (!IsLiveRotationInputWindow(snapshot)
+                    || !GreedLastRunCore.IsRotationPattern(snapshot.Pattern));
             latestAppRunSnapshot = snapshot;
             hasLatestAppRunSnapshot = true;
+            if (leavingRotation)
+                ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             if (!snapshot.ActivePattern || snapshot.Paused || snapshot.CountdownActive
                 || !GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
             {
@@ -11789,12 +11798,25 @@ namespace GreedLast
             }
 
             float rawTiltAxis = ResolveCompensatedRotationTiltAxis(Input.acceleration);
+            return TryHandleRotationTiltSample(rawTiltAxis, orientationMode,
+                Time.realtimeSinceStartup, Time.unscaledDeltaTime);
+        }
+
+        private bool TryHandleRotationTiltSample(float rawTiltAxis, int orientationMode, float now, float deltaTime)
+        {
             if (!IsRotationTiltAxisSampleValid(rawTiltAxis))
             {
                 ResetRotationTiltSensorTracking(requireNeutralRelease: true);
                 PublishRotationTiltGateState();
                 return false;
             }
+
+            if (lastRotationTiltSampleAt >= 0f
+                && (now < lastRotationTiltSampleAt || now - lastRotationTiltSampleAt > RotationTiltMaxSampleGapSeconds))
+            {
+                ResetRotationTiltSensorTracking(requireNeutralRelease: true);
+            }
+            lastRotationTiltSampleAt = now;
 
             bool orientationChanged = orientationMode != rotationTiltOrientationMode;
             if (orientationChanged)
@@ -11809,23 +11831,23 @@ namespace GreedLast
             rotationTiltFilteredAxis = BuildRotationTiltFilteredAxis(
                 rotationTiltFilteredAxis,
                 rawTiltAxis,
-                Time.unscaledDeltaTime,
+                deltaTime,
                 RotationTiltFilterSpeed,
                 rotationTiltAxisInitialized);
             rotationTiltAxisInitialized = true;
 
             bool activeRotationPattern = IsRunState()
                 && hasLatestAppRunSnapshot
-                && latestAppRunSnapshot.ActivePattern
+                && IsLiveRotationInputWindow(latestAppRunSnapshot)
                 && GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern);
             if (!activeRotationPattern || runCore.IsPaused)
             {
-                UpdateRotationTiltGateForInactiveWindow(rotationTiltFilteredAxis);
+                UpdateRotationTiltGateForInactiveWindow(rawTiltAxis, rotationTiltFilteredAxis);
                 PublishRotationTiltGateState();
                 return false;
             }
 
-            if (ShouldArmRotationTiltFromAcceleration(rotationTiltFilteredAxis, RotationTiltReleaseThreshold))
+            if (IsRotationTiltNeutralSample(rawTiltAxis, rotationTiltFilteredAxis))
             {
                 rotationTiltReady = true;
                 rotationTiltHeldDirection = 0;
@@ -11835,8 +11857,8 @@ namespace GreedLast
             }
 
             int tiltDirection = ResolveRotationTiltDirection(rotationTiltFilteredAxis, RotationTiltInputThreshold);
-            float now = Time.realtimeSinceStartup;
-            if (tiltDirection == 0)
+            if (!rotationTiltReady || tiltDirection == 0
+                || tiltDirection != ResolveRotationTiltDirection(rawTiltAxis, RotationTiltInputThreshold))
             {
                 ResetRotationTiltCandidate();
                 PublishRotationTiltGateState();
@@ -11885,17 +11907,19 @@ namespace GreedLast
             return true;
         }
 
-        private void UpdateRotationTiltGateForInactiveWindow(float tiltAxis)
+        private void UpdateRotationTiltGateForInactiveWindow(float rawTiltAxis, float filteredTiltAxis)
         {
             ResetRotationTiltCandidate();
-            if (ShouldArmRotationTiltFromAcceleration(tiltAxis, RotationTiltReleaseThreshold))
+            if (IsRotationTiltNeutralSample(rawTiltAxis, filteredTiltAxis))
             {
                 rotationTiltReady = true;
                 rotationTiltHeldDirection = 0;
                 return;
             }
 
-            int heldDirection = ResolveRotationTiltDirection(tiltAxis, RotationTiltInputThreshold);
+            int heldDirection = ResolveRotationTiltDirection(rawTiltAxis, RotationTiltInputThreshold);
+            if (heldDirection == 0)
+                heldDirection = ResolveRotationTiltDirection(filteredTiltAxis, RotationTiltInputThreshold);
             if (heldDirection != 0)
             {
                 rotationTiltReady = false;
@@ -11914,9 +11938,22 @@ namespace GreedLast
             rotationTiltFilteredAxis = 0f;
             rotationTiltAxisInitialized = false;
             rotationTiltOrientationMode = -1;
+            lastRotationTiltSampleAt = -1f;
             rotationTiltReady = !requireNeutralRelease;
             rotationTiltHeldDirection = 0;
             ResetRotationTiltCandidate();
+        }
+
+        private static bool IsLiveRotationInputWindow(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.ActivePattern && !snapshot.Paused && !snapshot.CountdownActive
+                && !snapshot.Stopped && !snapshot.ChoiceActive;
+        }
+
+        private static bool IsRotationTiltNeutralSample(float rawTiltAxis, float filteredTiltAxis)
+        {
+            return ShouldArmRotationTiltFromAcceleration(rawTiltAxis, RotationTiltReleaseThreshold)
+                && ShouldArmRotationTiltFromAcceleration(filteredTiltAxis, RotationTiltReleaseThreshold);
         }
 
         private static int ResolveRotationTiltOrientationMode(
@@ -12565,14 +12602,16 @@ namespace GreedLast
                 return;
             }
 
+            string openingContext = BuildPracticeOpeningContextFromLobbyDetail(stateMachine.CurrentDetail);
             requestGate.Complete(token);
             activeNormalRunWasRefill = false;
             ClearInfinitePreparationContext();
+            runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
             stateMachine.SetRunCoreTest();
             runCore.ConfigureGrowth(0, 0, 0);
             ResetRunLaneInputGuard();
             runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
-            runCore.EnterPractice(BuildPracticeOpeningContextFromLobbyDetail(stateMachine.CurrentDetail));
+            runCore.EnterPractice(openingContext);
             runEntryLaneInputBlockUntil = Time.realtimeSinceStartup + RunEntryLaneInputBlockSeconds;
         }
 
@@ -14198,11 +14237,15 @@ namespace GreedLast
             if (runCore.IsPracticeRun)
             {
                 bool completed = runCore.IsPracticeComplete;
+                bool fullCourseCompleted = completed && hasLatestAppRunSnapshot
+                    && IsFullPracticeCompletion(latestAppRunSnapshot);
                 MarkPracticeCompletedIfNeeded();
                 runCore.Exit();
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 stateMachine.ShowLocalNotice(completed
-                    ? "기초연습 완료\n일반 런에서 같은 좌·중·우 대응과 3축 타이밍을 사용합니다."
+                    ? fullCourseCompleted
+                        ? "기초연습 완료\n일반 런에서 같은 좌·중·우 대응과 3축 타이밍을 사용합니다."
+                        : "복기 연습 완료\n이번에 확인한 대응을 다음 런에서 이어가세요."
                     : "기초연습을 종료했습니다.\n기록과 저장 기회에는 영향을 주지 않습니다.");
                 return;
             }
@@ -14250,6 +14293,7 @@ namespace GreedLast
         private void MarkPracticeCompletedIfNeeded()
         {
             if (!runCore.IsPracticeComplete
+                || !hasLatestAppRunSnapshot || !IsFullPracticeCompletion(latestAppRunSnapshot)
                 || PlayerPrefs.GetInt(PracticeCompletedPrefsKey, 0) == 1)
             {
                 return;
@@ -14387,12 +14431,17 @@ namespace GreedLast
             bool practicePreviouslyCompleted)
         {
             return !practicePreviouslyCompleted
-                && snapshot.PracticeMode
-                && snapshot.Stopped
-                && snapshot.Phase == GreedLastRunPhase.ClearResolving
+                && IsFullPracticeCompletion(snapshot)
                 && snapshot.SuccessCount >= 3
                 && snapshot.GoodCount == 0
                 && snapshot.MissCount == 0;
+        }
+
+        private static bool IsFullPracticeCompletion(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.PracticeMode && snapshot.Stopped
+                && snapshot.Phase == GreedLastRunPhase.ClearResolving
+                && snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount >= 3;
         }
 
         internal static string BuildFirstNormalRunOpeningContext()
@@ -17107,6 +17156,8 @@ namespace GreedLast
                 }
 
                 pauseMenuBodyText.fontSize = BuildPauseMenuBodyFontSize(pauseMenuBodyText.text);
+                while (pauseMenuBodyText.fontSize > 21 && !FeedbackTextFitsBounds(pauseMenuBodyText))
+                    pauseMenuBodyText.fontSize -= 1;
             }
         }
 
@@ -23500,7 +23551,8 @@ namespace GreedLast
             if (snapshot.PracticeMode)
             {
                 titleText.text = snapshot.Stopped
-                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving ? "기초연습 완료" : "기초연습 중단"
+                    ? snapshot.Phase == GreedLastRunPhase.ClearResolving
+                        ? BuildPracticeCompletionTitle(snapshot) : "기초연습 중단"
                     : BuildPracticeStepTitle(snapshot);
                 detailText.text = snapshot.Stopped
                     ? snapshot.JudgementText
@@ -24021,16 +24073,24 @@ namespace GreedLast
             return "기초연습 단계 " + (step + 1) + "/" + target + " · " + lesson;
         }
 
+        private static string BuildPracticeCompletionTitle(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount < 3
+                ? "복기 연습 완료" : "기초연습 완료";
+        }
+
         private static string BuildPracticeCompletionProgressLabel(GreedLastRunSnapshot snapshot)
         {
+            string prefix = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount < 3
+                ? "복기 완료" : "연습 완료";
             if (snapshot.MissCount > 0)
             {
-                return "연습 완료 · 실수 복기";
+                return prefix + " · 실수 복기";
             }
 
             return snapshot.GoodCount > 0
-                ? "연습 완료 · 정확권 복기"
-                : "연습 완료 · 일반 런 준비";
+                ? prefix + " · 정확권 복기"
+                : prefix + " · 일반 런 준비";
         }
 
         private static string BuildPracticeRestartButtonLabel(GreedLastRunSnapshot snapshot)
@@ -24040,7 +24100,9 @@ namespace GreedLast
                 return "실수 구간 다시";
             }
 
-            return snapshot.GoodCount > 0 ? "정확권 다시" : "3축 다시 확인";
+            if (snapshot.GoodCount > 0) return "정확권 다시";
+            return snapshot.SuccessCount < 3
+                ? "복기 다시 확인" : "3축 다시 확인";
         }
 
         private static string BuildRunPauseHeaderDetail(GreedLastRunSnapshot snapshot)
@@ -44211,18 +44273,18 @@ namespace GreedLast
             judgementFeedbackText.text = text;
             // Fit diagnostic copy without letting its pop animation enter the gauges below.
             if (!compact)
-                while (judgementFeedbackText.fontSize > 18 && !JudgementFeedbackFitsBounds())
+                while (judgementFeedbackText.fontSize > 18 && !FeedbackTextFitsBounds(judgementFeedbackText))
                     judgementFeedbackText.fontSize -= 2;
         }
 
-        private bool JudgementFeedbackFitsBounds()
+        private static bool FeedbackTextFitsBounds(Text label)
         {
-            if (judgementFeedbackText.preferredHeight > 98f) return false;
-            Rect rect = judgementFeedbackText.rectTransform.rect;
-            TextGenerator generator = judgementFeedbackText.cachedTextGenerator;
-            generator.Populate(judgementFeedbackText.text, judgementFeedbackText.GetGenerationSettings(rect.size));
+            Rect rect = label.rectTransform.rect;
+            if (label.preferredHeight > rect.height - 2f) return false;
+            TextGenerator generator = label.cachedTextGenerator;
+            generator.Populate(label.text, label.GetGenerationSettings(rect.size));
             IList<UIVertex> vertices = generator.verts;
-            float pixelsPerUnit = judgementFeedbackText.pixelsPerUnit;
+            float pixelsPerUnit = label.pixelsPerUnit;
             for (int i = 0; i < vertices.Count; i++)
             {
                 Vector3 point = vertices[i].position / pixelsPerUnit;
@@ -44263,8 +44325,10 @@ namespace GreedLast
             judgementFeedbackText.fontSize = 104;
             lastPresentedJudgementSnapshot = default;
             lastPresentedJudgementRecommendationReady = false;
-            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 126f);
+            // Leave room for the largest GO pulse above the health/focus gauges.
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.425f, 850f, 126f);
             judgementFeedbackOffsetX = 0f;
+            judgementFeedbackPopUntil = 0f;
             judgementFeedbackText.text = BuildResumeCountdownFeedbackText(snapshot);
             judgementFeedbackText.color = BuildResumeCountdownFeedbackColor(snapshot);
             judgementFeedbackText.rectTransform.localScale = Vector3.one * BuildResumeCountdownFeedbackScale(snapshot);
