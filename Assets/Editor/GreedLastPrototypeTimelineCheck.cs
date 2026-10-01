@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -29,7 +30,15 @@ namespace GreedLast.Editor
             var core = new GreedLastRunCore();
             GreedLastRunSnapshot run = default;
             int publications = 0;
-            core.SnapshotChanged += value => { run = value; publications++; };
+            var freshProfile = (Func<string>)Delegate.CreateDelegate(typeof(Func<string>), core,
+                typeof(GreedLastRunCore).GetMethod("BuildTimingProfileText", BindingFlags.Instance | BindingFlags.NonPublic));
+            core.SnapshotChanged += value =>
+            {
+                Require(value.TimingProfile == freshProfile(),
+                    "Every cached publication must match a freshly calculated timing profile.");
+                run = value;
+                publications++;
+            };
             float clock = Time.realtimeSinceStartup;
             if (mode == 0) core.RestartPractice(clock);
             else if (mode == 1) core.Enter();
@@ -55,6 +64,11 @@ namespace GreedLast.Editor
                 Require(publications - beforePublications <= 1, "A timeline tick may publish at most once.");
                 Require(!float.IsNaN(run.Distance) && !float.IsInfinity(run.Distance)
                     && run.Distance >= before.Distance, "Run distance must remain finite and monotonic.");
+                if (Judgements() > before.SuccessCount + before.GoodCount + before.MissCount)
+                    Require(run.LastJudgementScoreGain == run.Score - before.Score
+                        && run.LastJudgementHealthChange == run.Health - before.Health
+                        && !run.HasJudgedInputTiming,
+                        "Natural timeout payload must match actual state changes without fabricated input timing.");
                 if (before.Paused || before.StartCountdownActive || before.ChoiceActive || before.Stopped)
                     Require(run.Distance == before.Distance && run.Health == before.Health,
                         "Paused/countdown/choice/result time must not charge movement or damage.");
@@ -153,9 +167,19 @@ namespace GreedLast.Editor
                 Advance(untilInput);
                 Require(run.ActivePattern, "The trap must remain live until its authored correct timing.");
                 int beforeCount = Judgements();
+                int beforeScore = run.Score;
+                int beforeHealth = run.Health;
+                float expectedInputDelta = run.CoreDeltaSeconds + run.InputTimingOffsetSeconds;
                 core.HandleInput(run.Pattern.Channel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Success && Judgements() == beforeCount + 1,
                     "A scheduled exact input must resolve once without a hidden wall-clock dependency.");
+                Require(run.LastJudgementScoreGain == run.Score - beforeScore
+                    && run.LastJudgementHealthChange == run.Health - beforeHealth
+                    && run.HasJudgedInputTiming
+                    && Mathf.Abs(run.LastInputTimingDeltaSeconds - expectedInputDelta) < 0.002f,
+                    "Every judgement must retain actual timing and include chain, section and final-bundle rewards exactly once."
+                        + $" mode={mode}, count={beforeCount}, score={run.LastJudgementScoreGain}/{run.Score - beforeScore},"
+                        + $" health={run.LastJudgementHealthChange}/{run.Health - beforeHealth}, timing={run.LastInputTimingDeltaSeconds}/{expectedInputDelta}.");
                 correct++;
                 sawCore |= run.CoreRetrieved;
             }

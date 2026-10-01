@@ -488,7 +488,11 @@ namespace GreedLast
             string activeInfiniteLoadoutProfile,
             string reviewTargetText,
             string recentPatternFlow,
-            string timingProfile)
+            string timingProfile,
+            int lastJudgementScoreGain,
+            int lastJudgementHealthChange,
+            bool hasJudgedInputTiming,
+            float lastInputTimingDeltaSeconds)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -589,6 +593,10 @@ namespace GreedLast
             ReviewTargetText = reviewTargetText ?? string.Empty;
             RecentPatternFlow = recentPatternFlow ?? string.Empty;
             TimingProfile = timingProfile ?? string.Empty;
+            LastJudgementScoreGain = Mathf.Max(0, lastJudgementScoreGain);
+            LastJudgementHealthChange = lastJudgementHealthChange;
+            HasJudgedInputTiming = hasJudgedInputTiming;
+            LastInputTimingDeltaSeconds = lastInputTimingDeltaSeconds;
         }
 
         public GreedLastPatternModel Pattern { get; }
@@ -621,6 +629,10 @@ namespace GreedLast
         public int VariationRouteBundleCount { get; }
         public int PressureRouteBundleCount { get; }
         public bool LastCenterHit { get; }
+        public int LastJudgementScoreGain { get; }
+        public int LastJudgementHealthChange { get; }
+        public bool HasJudgedInputTiming { get; }
+        public float LastInputTimingDeltaSeconds { get; }
         public int SuccessCount { get; }
         public int PerfectSuccessCount { get; }
         public int ClutchSuccessCount { get; }
@@ -911,6 +923,13 @@ namespace GreedLast
         private string missReason = string.Empty;
         private GreedLastJudgementResult lastResult = GreedLastJudgementResult.None;
         private bool lastCenterHit;
+        private int lastJudgementScoreGain;
+        private int lastJudgementHealthChange;
+        private bool hasJudgedInputTiming;
+        private float lastInputTimingDeltaSeconds;
+        private string cachedTimingProfileText;
+        private string cachedTimingProfileFocusDuration;
+        private string cachedRecentPatternFlowText;
 
         public event Action<GreedLastRunSnapshot> SnapshotChanged;
 
@@ -974,6 +993,10 @@ namespace GreedLast
             pressureRouteBundleCount = 0;
             threeActionExactBundleCount = 0;
             lastCenterHit = false;
+            lastJudgementScoreGain = 0;
+            lastJudgementHealthChange = 0;
+            hasJudgedInputTiming = false;
+            lastInputTimingDeltaSeconds = 0f;
             successCount = 0;
             perfectSuccessCount = 0;
             clutchSuccessCount = 0;
@@ -1530,7 +1553,7 @@ namespace GreedLast
                     return;
                 }
 
-                Publish(now);
+                Publish(now, reuseTimingProfile: true);
                 return;
             }
 
@@ -1542,7 +1565,7 @@ namespace GreedLast
                     return;
                 }
 
-                if (resumeCountdownActive) Publish(now);
+                if (resumeCountdownActive) Publish(now, reuseTimingProfile: true);
                 return;
             }
 
@@ -1552,7 +1575,7 @@ namespace GreedLast
                 if (staggerUntil > 0f)
                 {
                     if (now >= staggerUntil) staggerUntil = 0f;
-                    Publish(now);
+                    Publish(now, reuseTimingProfile: true);
                 }
                 return;
             }
@@ -1581,7 +1604,7 @@ namespace GreedLast
 
             if (!activePattern || stopped)
             {
-                Publish(now);
+                Publish(now, reuseTimingProfile: true);
                 return;
             }
 
@@ -1598,7 +1621,7 @@ namespace GreedLast
                 return;
             }
 
-            Publish(now);
+            Publish(now, reuseTimingProfile: true);
         }
 
         public void ToggleAutoFlow(float now)
@@ -1814,7 +1837,7 @@ namespace GreedLast
                     "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel)
                         + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    "wrong_channel"), now);
+                    "wrong_channel"), now, signedDelta);
                 return;
             }
 
@@ -1829,7 +1852,7 @@ namespace GreedLast
                     "정확 / " + FormatTimingType(currentPattern.TimingType) + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     string.Empty,
-                    centerHit), now);
+                    centerHit), now, signedDelta);
                 return;
             }
 
@@ -1840,7 +1863,7 @@ namespace GreedLast
                     currentPattern.TimingType,
                     "보정 - 생존 완충\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
-                    string.Empty), now);
+                    string.Empty), now, signedDelta);
                 return;
             }
 
@@ -1851,7 +1874,7 @@ namespace GreedLast
                 (judgedElapsed < currentPattern.CoreSeconds ? "실수 - 너무 빠름" : "실수 - 너무 늦음")
                     + "\n" + FormatTimingDelta(signedDelta),
                 string.Empty,
-                reason), now);
+                reason), now, signedDelta);
         }
 
         public void AdjustInputTimingOffset(float deltaSeconds)
@@ -2142,8 +2165,12 @@ namespace GreedLast
             }
         }
 
-        private void Resolve(GreedLastJudgementOutcome outcome, float now)
+        private void Resolve(GreedLastJudgementOutcome outcome, float now, float? inputTimingDeltaSeconds = null)
         {
+            int scoreBeforeResolve = score;
+            int healthBeforeResolve = health;
+            hasJudgedInputTiming = inputTimingDeltaSeconds.HasValue;
+            lastInputTimingDeltaSeconds = inputTimingDeltaSeconds.GetValueOrDefault();
             lastJudgedPattern = currentPattern;
             activePattern = false;
             ignoreReason = outcome.IgnoreReason;
@@ -2581,6 +2608,9 @@ namespace GreedLast
                 AdvanceRunAfterPattern(now);
             }
 
+            // Include chain and completed-bundle rewards in this judgement's actual gain.
+            lastJudgementScoreGain = Mathf.Max(0, score - scoreBeforeResolve);
+            lastJudgementHealthChange = health - healthBeforeResolve;
             Publish(now);
         }
 
@@ -5723,6 +5753,7 @@ namespace GreedLast
 
         private void RememberRecentPattern(GreedLastPatternModel selectedPattern)
         {
+            cachedRecentPatternFlowText = null;
             for (int i = RecentPatternMemory - 1; i > 0; i -= 1)
             {
                 recentPatternFamilyKeys[i] = recentPatternFamilyKeys[i - 1];
@@ -5740,6 +5771,7 @@ namespace GreedLast
 
         private void ClearRecentPatternHistory()
         {
+            cachedRecentPatternFlowText = null;
             for (int i = 0; i < RecentPatternMemory; i += 1)
             {
                 recentPatternFamilyKeys[i] = string.Empty;
@@ -5753,10 +5785,11 @@ namespace GreedLast
 
         private string BuildRecentPatternFlowText()
         {
+            if (cachedRecentPatternFlowText != null) return cachedRecentPatternFlowText;
             int count = Mathf.Min(recentPatternCount, RecentPatternMemory);
             if (count <= 0)
             {
-                return string.Empty;
+                return cachedRecentPatternFlowText = string.Empty;
             }
 
             string text = string.Empty;
@@ -5781,7 +5814,7 @@ namespace GreedLast
                     : text + " > " + item;
             }
 
-            return text;
+            return cachedRecentPatternFlowText = text;
         }
 
         private static string FormatTimingTypeShort(GreedLastTimingType timingType)
@@ -6497,6 +6530,12 @@ namespace GreedLast
 
         private void Publish(float realtimeNow)
         {
+            Publish(realtimeNow, reuseTimingProfile: false);
+        }
+
+        private void Publish(float realtimeNow, bool reuseTimingProfile)
+        {
+            if (!reuseTimingProfile) cachedTimingProfileText = null;
             float now = paused ? pausedAt : realtimeNow;
             float elapsedSeconds = activePattern ? now - patternStartedAt : 0f;
             float hitSeconds = Mathf.Max(0.01f, currentPattern.HitSeconds);
@@ -6611,7 +6650,23 @@ namespace GreedLast
                 BuildCurrentInfiniteLoadoutProfile(),
                 reviewTargetText,
                 BuildRecentPatternFlowText(),
-                BuildTimingProfileText()));
+                GetPublishedTimingProfileText(reuseTimingProfile),
+                lastJudgementScoreGain,
+                lastJudgementHealthChange,
+                hasJudgedInputTiming,
+                lastInputTimingDeltaSeconds));
+        }
+
+        private string GetPublishedTimingProfileText(bool reuse)
+        {
+            // Passive Tick only changes the displayed focus duration; commands rebuild all counters.
+            string focusDuration = focusStateActiveSeconds.ToString("0.0");
+            if (!reuse || cachedTimingProfileText == null || cachedTimingProfileFocusDuration != focusDuration)
+            {
+                cachedTimingProfileText = BuildTimingProfileText();
+                cachedTimingProfileFocusDuration = focusDuration;
+            }
+            return cachedTimingProfileText;
         }
     }
 }

@@ -15531,9 +15531,9 @@ namespace GreedLast
         private int lastComboForBadge = int.MinValue;
         private int comboBreakBadgeCombo;
         private int comboTierBadgeLevel;
-        private int lastFeedbackScore;
-        private int lastFeedbackHealth = -1;
-        private string lastJudgementText = string.Empty;
+        private int lastFeedbackJudgementCount;
+        private GreedLastRunSnapshot lastPresentedJudgementSnapshot;
+        private bool lastPresentedJudgementRecommendationReady;
         private bool lastTimingRecommendationReady;
         private bool reviewTargetAchievementAnnounced;
         private string lastPresentedReviewTargetText = string.Empty;
@@ -15670,6 +15670,13 @@ namespace GreedLast
                     normalClearReady: false, playerControls: UsePlayerRunControls));
                 UpdateRunProgress(latestRunSnapshot);
                 UpdateStageTransitionBanner();
+                if (Time.unscaledTime < judgementFeedbackUntil && CanShowRunTransientFeedback()
+                    && !latestRunSnapshot.CountdownActive
+                    && lastPresentedJudgementSnapshot.LastResult != GreedLastJudgementResult.None)
+                {
+                    SetJudgementFeedbackText(lastPresentedJudgementSnapshot);
+                    ApplyJudgementFeedbackPop();
+                }
             }
         }
 
@@ -16612,9 +16619,9 @@ namespace GreedLast
             lastGaugeHealth = snapshot.Health;
             lastGaugeFocus = snapshot.Focus;
             lastFocusStateActive = snapshot.FocusStateActive;
-            lastFeedbackScore = snapshot.Score;
-            lastFeedbackHealth = snapshot.Health;
-            lastJudgementText = snapshot.JudgementText;
+            lastFeedbackJudgementCount = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;
+            lastPresentedJudgementSnapshot = default;
+            lastPresentedJudgementRecommendationReady = false;
             lastTimingRecommendationReady = snapshot.HasTimingRecommendation;
             comboTierFeedbackPending = false;
             comboBreakBadgeCombo = 0;
@@ -43348,14 +43355,10 @@ namespace GreedLast
                 lastTimingRecommendationReady = false;
             }
 
+            int judgementCount = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;
             bool newResult = snapshot.LastResult != GreedLastJudgementResult.None
-                && (snapshot.Score != lastFeedbackScore
-                    || snapshot.Health != lastFeedbackHealth
-                    || snapshot.JudgementText != lastJudgementText);
-
-            lastFeedbackScore = snapshot.Score;
-            lastFeedbackHealth = snapshot.Health;
-            lastJudgementText = snapshot.JudgementText;
+                && judgementCount > lastFeedbackJudgementCount;
+            lastFeedbackJudgementCount = judgementCount;
 
             if (!newResult)
             {
@@ -43971,11 +43974,12 @@ namespace GreedLast
             GreedLastPatternModel feedbackPattern = BuildJudgementFeedbackPattern(snapshot);
             if (inputTimingTraceMarker == null
                 || feedbackPattern.Channel == GreedLastRunChannel.None
-                || !TryExtractSignedTimingDelta(snapshot.JudgementText, out float signedDeltaSeconds))
+                || !snapshot.HasJudgedInputTiming)
             {
                 return;
             }
 
+            float signedDeltaSeconds = snapshot.LastInputTimingDeltaSeconds;
             float hitSeconds = Mathf.Max(0.01f, feedbackPattern.HitSeconds);
             float coreProgress = Mathf.Clamp01(feedbackPattern.CoreSeconds / hitSeconds);
             float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
@@ -44240,27 +44244,14 @@ namespace GreedLast
                 return;
             }
 
-            bool compact = !DevToolsEnabled || devCleanViewEnabled;
-            string feedbackText = compact
-                ? BuildCompactJudgementFeedbackText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
-                : BuildJudgementFeedbackText(snapshot);
-            if (timingRecommendationJustReady && !compact)
-            {
-                feedbackText += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
-            }
-
-            ApplyJudgementFeedbackLayout(feedbackText);
+            lastPresentedJudgementSnapshot = snapshot;
+            lastPresentedJudgementRecommendationReady = timingRecommendationJustReady;
+            SetJudgementFeedbackText(snapshot);
             judgementFeedbackOffsetX = BuildJudgementFeedbackLaneOffsetX(
                 snapshot.Pattern.Channel,
                 snapshot.LastResult,
                 reviewTargetAchievementJustReached);
-            if (compact)
-            {
-                judgementFeedbackText.fontSize = 40;
-                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
-            }
             ApplyJudgementFeedbackOffset(1f);
-            judgementFeedbackText.text = feedbackText;
             judgementFeedbackText.color = GetJudgementFeedbackColor(snapshot);
             judgementFeedbackUntil = Time.unscaledTime + 0.82f;
             judgementFeedbackPopScale = BuildJudgementFeedbackPopScale(
@@ -44272,6 +44263,23 @@ namespace GreedLast
             judgementFeedbackPopUntil = Time.unscaledTime + judgementFeedbackPopDuration;
         }
 
+        private void SetJudgementFeedbackText(GreedLastRunSnapshot snapshot)
+        {
+            bool compact = UsePlayerRunControls;
+            string text = compact
+                ? BuildCompactJudgementFeedbackText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                : BuildJudgementFeedbackText(snapshot);
+            if (!compact && lastPresentedJudgementRecommendationReady)
+                text += "\n보정 추천 준비 " + FormatTimingRecommendation(snapshot);
+            ApplyJudgementFeedbackLayout(text);
+            if (compact)
+            {
+                judgementFeedbackText.fontSize = 40;
+                SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
+            }
+            judgementFeedbackText.text = text;
+        }
+
         private void ShowDevTrapVisualPreviewFeedback()
         {
             if (judgementFeedbackText == null || !CanShowRunTransientFeedback())
@@ -44280,6 +44288,8 @@ namespace GreedLast
             }
 
             string feedbackText = BuildDevTrapVisualPreviewFeedbackText(devTrapVisualPreviewMode);
+            lastPresentedJudgementSnapshot = default;
+            lastPresentedJudgementRecommendationReady = false;
             ApplyJudgementFeedbackLayout(feedbackText);
             judgementFeedbackOffsetX = 0f;
             ApplyJudgementFeedbackOffset(1f);
@@ -44299,6 +44309,8 @@ namespace GreedLast
             }
 
             judgementFeedbackText.fontSize = 104;
+            lastPresentedJudgementSnapshot = default;
+            lastPresentedJudgementRecommendationReady = false;
             SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.385f, 850f, 126f);
             judgementFeedbackOffsetX = 0f;
             judgementFeedbackText.text = BuildResumeCountdownFeedbackText(snapshot);
@@ -44453,12 +44465,19 @@ namespace GreedLast
             {
                 case GreedLastJudgementResult.Success:
                     string bonus = snapshot.LastCenterHit ? BuildTimingActionPayoffTag(pattern) : "회피 성공";
-                    return "정확 · " + action + "\n" + bonus + " · 콤보 " + snapshot.Combo;
+                    string exactPayoff = snapshot.LastJudgementHealthChange > 0
+                        ? "체력 +" + snapshot.LastJudgementHealthChange : "콤보 " + snapshot.Combo;
+                    return "정확 · " + action + " · +" + snapshot.LastJudgementScoreGain + "점"
+                        + "\n" + bonus + " · " + exactPayoff;
                 case GreedLastJudgementResult.Good:
-                    string timing = TryExtractSignedTimingDelta(snapshot.JudgementText, out float delta)
+                    float delta = snapshot.LastInputTimingDeltaSeconds;
+                    string timing = snapshot.HasJudgedInputTiming
                         ? (delta < 0f ? "빠름 " : "늦음 ") + Mathf.RoundToInt(Mathf.Abs(delta) * 1000f) + "ms"
                         : "타이밍 보정";
-                    return "Good · " + action + "\n" + timing + " · 콤보 " + snapshot.Combo;
+                    string goodPayoff = snapshot.LastJudgementHealthChange > 0
+                        ? "체력 +" + snapshot.LastJudgementHealthChange : "콤보 " + snapshot.Combo;
+                    return "Good · " + action + " · +" + snapshot.LastJudgementScoreGain + "점"
+                        + "\n" + timing + " · " + goodPayoff;
                 case GreedLastJudgementResult.Miss:
                     string reason = snapshot.MissReason == "wrong_channel"
                         ? "정답 " + BuildActiveActionCueInputHintForCapabilities(pattern, devToolsEnabled, rotationTiltAvailable)

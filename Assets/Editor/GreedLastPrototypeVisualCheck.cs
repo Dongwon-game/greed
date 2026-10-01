@@ -174,6 +174,7 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("73-practice-result", () => ShowRun(practiceResult));
                 Add("27-live-after-practice-result", 1280, 720, () => ShowRun(live));
                 AddAvoidanceFrames();
+                AddJudgementRewardFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -477,6 +478,86 @@ namespace GreedLast.Editor
                         ui.RenderRun(after);
                     }, settleSeconds: 0.16);
                 }
+            }
+        }
+
+        private static void AddJudgementRewardFrames()
+        {
+            var source = new GreedLastRunCore();
+            GreedLastRunSnapshot sourceRun = default;
+            source.SnapshotChanged += value => sourceRun = value;
+            float clock = Time.realtimeSinceStartup;
+            source.Enter();
+            for (int step = 0; step < 256 && !sourceRun.Stopped; step++)
+            {
+                if (sourceRun.ChoiceActive) source.HandleInput(GreedLastRunChannel.Left, clock);
+                else if (sourceRun.CountdownActive) source.Tick(clock += 2f);
+                else if (!sourceRun.ActivePattern) source.Tick(clock += 0.1f);
+                else
+                {
+                    clock += sourceRun.Pattern.CoreSeconds - source.InputTimingOffsetSeconds - sourceRun.ElapsedSeconds;
+                    source.HandleInput(sourceRun.Pattern.Channel, clock);
+                }
+            }
+            GreedLastRunRecord record = source.CreateRunRecord();
+            Require(record.IsValid && sourceRun.SaveEligible, "Reward captures need a real completed normal run.");
+            string[] names = { "early-exact", "late-exact", "early-good", "late-good", "timeout", "good-recovery", "exact-recovery" };
+            for (int kind = 0; kind < names.Length; kind++)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.EnterInfiniteRun(record);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Reward captures need an active infinite trap.");
+                if (kind >= 5)
+                {
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+                        ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
+                    core.RequestNextPattern(clock += 2f);
+                    Require(run.ActivePattern, "Healing capture needs a recovery trap after actual damage.");
+                    if (kind == 6)
+                    {
+                        for (int warmup = 0; warmup < 4; warmup++)
+                        {
+                            clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+                            core.HandleInput(run.Pattern.Channel, clock);
+                            core.RequestNextPattern(clock += 2f);
+                        }
+                    }
+                }
+                GreedLastRunSnapshot before = run;
+                if (kind == 4) core.Tick(clock += run.Pattern.HitSeconds + 0.1f);
+                else
+                {
+                    float goodDelta = (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                    float delta = kind == 6 ? 0f : kind == 0 ? -0.012f : kind == 1 ? 0.012f
+                        : kind == 2 ? -goodDelta : goodDelta;
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                }
+                GreedLastRunSnapshot after = run;
+                Require(after.LastJudgementScoreGain == after.Score - before.Score
+                    && after.LastJudgementHealthChange == after.Health - before.Health,
+                    "Visual reward payload must match the core's actual changes.");
+                if (kind >= 5) Require(after.LastJudgementHealthChange > 0, "Healing capture must show real recovery.");
+                string name = names[kind];
+                void Show()
+                {
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowRun(before);
+                    ui.RenderRun(after);
+                    string text = Read<Text>("judgementFeedbackText").text;
+                    ui.ToggleDevCleanView();
+                    ui.ToggleDevCleanView();
+                    Require(text == Read<Text>("judgementFeedbackText").text,
+                        "A live F11 round trip must restore the exact original reward copy.");
+                }
+                Add("81-reward-" + name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                Add("81-reward-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                Add("81-reward-" + name + "-wide", 2340, 1080, Show, 96f, 0.16);
             }
         }
 
