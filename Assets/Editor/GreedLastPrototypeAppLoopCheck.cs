@@ -252,6 +252,40 @@ namespace GreedLast.Editor
                 Click(ui, "normalRunButton");
                 Require(!run.InfiniteMode && !run.Stopped && run.ChoiceActive,
                     "After depletion and record review the real lobby action must start the refill normal run.");
+                Require(string.IsNullOrEmpty(run.ReviewTargetText),
+                    "A fresh refill after unrelated record review must not inherit a stale goal.");
+                RunToFailure(core, () => run);
+                Require(run.RefillRun && !run.EscapeSucceeded && !run.SaveEligible,
+                    "A failed refill must remain a real unsaveable normal attempt.");
+                Click(ui, "returnLobbyButton");
+                string refillReview = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(state.CurrentDetail);
+                Require(refillReview.StartsWith("보충 복기 재도전", StringComparison.Ordinal)
+                    && refillReview.Contains("재도전 목표:", StringComparison.Ordinal),
+                    "The actual failed refill result must supply a review goal for its next entry.");
+                Click(ui, "normalRunButton");
+                Require(run.RefillRun && run.ChoiceActive && !run.Stopped
+                    && run.JudgementText.Contains(refillReview, StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(run.ReviewTargetText),
+                    "The real refill re-entry must retain the failed attempt's review and active goal.");
+                RunToFailure(core, () => run);
+                Click(ui, "returnLobbyButton");
+                refillReview = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(state.CurrentDetail);
+                Require(!string.IsNullOrEmpty(refillReview), "A repeated real refill failure must retain review context.");
+                Click(ui, "infiniteButton");
+                Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                    && state.CurrentDetail.Contains(refillReview, StringComparison.Ordinal)
+                    && !backend.HasSaveLoadoutCandidate,
+                    "The recommended infinite-preparation path must present the pending refill review without consuming anything.");
+                FinishPreparationTransition(app);
+                Click(ui, "nextPatternButton");
+                Require(run.RefillRun && run.ChoiceActive && !run.Stopped
+                    && run.JudgementText.Contains(refillReview, StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(run.ReviewTargetText)
+                    && string.IsNullOrEmpty(Read<string>(app, "pendingRefillRunReviewContext")),
+                    "Starting the refill from empty infinite preparation must transfer and clear its pending review.");
+                Require(Array.TrueForAll(backend.LoadLobby().SaveSlotOccupied, occupied => !occupied),
+                    "Failure and both refill re-entry paths must not recreate or consume any saved slot.");
+                VerifyRefillAbandonReentry(app, ui, backend, state, core, () => run);
                 RunToCompletion(core, () => run);
                 Click(ui, "nextPatternButton");
                 Click(ui, "returnLobbyButton");
@@ -274,7 +308,7 @@ namespace GreedLast.Editor
                 VerifyAppPauseLifecycle(app, ui, backend, state, core, () => run);
                 VerifyGameplayLaneOutcomes(app, ui, backend, state, core, () => run);
                 VerifyRotationDragLifecycle(app, ui, backend, state, core, () => run);
-                Debug.Log("Greed Last app callback loop passed: clean default entry -> practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill -> guarded skip, rename, delete and overwrite confirmations. Held F11 transitions cancel management commands without changing candidates, slots or uses.");
+                Debug.Log("Greed Last app callback loop passed: clean default entry -> practice -> normal escape -> S3 -> guarded preparation and reselection -> preparation cancel -> two infinite uses -> records -> refill failure/abandon review through both lobby actions -> guarded skip, rename, delete and overwrite confirmations. Held F11 transitions cancel management commands without changing candidates, slots or uses.");
             }
             finally
             {
@@ -1781,6 +1815,80 @@ namespace GreedLast.Editor
                 }
             }
             Require(latest().Stopped, "The bounded callback fixture must reach a terminal result.");
+        }
+
+        private static void RunToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
+        {
+            float clock = Time.realtimeSinceStartup;
+            for (int step = 0; step < 100 && !latest().Stopped; step++)
+            {
+                GreedLastRunSnapshot run = latest();
+                if (run.ChoiceActive)
+                    core.HandleInput(run.ChoiceKind == GreedLastChoiceKind.Node ? GreedLastRunChannel.Left : GreedLastRunChannel.Center, clock += 0.2f);
+                else if (run.StartCountdownActive)
+                {
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                }
+                else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                else core.Tick(clock += Mathf.Max(0.02f, run.Pattern.HitSeconds + 0.2f - run.ElapsedSeconds));
+            }
+            Require(latest().Stopped && latest().Health == 0
+                && latest().Phase == GreedLastRunPhase.FailResolving,
+                "The bounded missed-input fixture must reach a natural health-zero failure.");
+        }
+
+        private static void VerifyRefillAbandonReentry(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            foreach (int entryPath in new[] { 0, 1, 2 })
+            {
+                bool viaPreparation = entryPath > 0;
+                float clock = Time.realtimeSinceStartup;
+                core.HandleInput(GreedLastRunChannel.Center, clock += 0.2f);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(latest().ActivePattern && latest().RefillRun,
+                    "The abandoned refill fixture must enter an actual authored trap.");
+                core.Tick(clock += latest().Pattern.HitSeconds + 0.2f - latest().ElapsedSeconds);
+                Require(!latest().Stopped && latest().MissCount == 1,
+                    "An abandoned refill must have a real attempt while retaining health.");
+                Click(ui, "nextPatternButton");
+                Require(latest().Paused, "Abandonment must first open the real clean pause menu.");
+                Click(ui, "returnLobbyButton");
+                Require(state.CurrentDetail.StartsWith("보충 런 중단", StringComparison.Ordinal),
+                    "A live refill exit must retain its abandoned outcome, not become a failed clear.");
+                string review = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(state.CurrentDetail);
+                Require(review.Contains("재도전 목표:", StringComparison.Ordinal),
+                    "The recorded refill abandonment must supply its actual retry goal.");
+                Click(ui, viaPreparation ? "infiniteButton" : "normalRunButton");
+                if (viaPreparation)
+                {
+                    Require(state.CurrentDetail.Contains(review, StringComparison.Ordinal),
+                        "Empty preparation must retain the abandoned refill review before the start action.");
+                    FinishPreparationTransition(app);
+                    if (entryPath == 2)
+                    {
+                        Click(ui, "saveLoadoutButton");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
+                            && Read<string>(app, "pendingRefillRunReviewContext") == review,
+                            "Opening empty-slot management must preserve the pending refill review.");
+                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        Require(Read<string>(app, "pendingRefillRunReviewContext") == review,
+                            "Selecting another empty slot must not erase the refill retry goal.");
+                    }
+                    Click(ui, "nextPatternButton");
+                }
+                Require(latest().RefillRun && latest().ChoiceActive && !latest().Stopped
+                    && latest().JudgementText.Contains(review, StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(latest().ReviewTargetText)
+                    && latest().Score == 0 && latest().MissCount == 0
+                    && !backend.HasSaveLoadoutCandidate
+                    && Array.TrueForAll(backend.LoadLobby().SaveSlotOccupied, occupied => !occupied),
+                    "Abandoned refill review must enter a fresh run through either lobby action without duplicating slots or progress.");
+            }
+            Debug.Log("Greed Last refill review re-entry passed: real health-zero failures and paused live abandonments retain goals through normal, empty-infinite preparation and empty-slot management, fresh stats and no slot/candidate changes.");
         }
 
         private static void Click(GreedLastRuntimeUi ui, string field) => Click(Read<Button>(ui, field));

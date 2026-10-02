@@ -183,6 +183,7 @@ namespace GreedLast.Editor
                 AddFocusedPracticeFrames();
                 AddCountdownPulseFrames();
                 AddFocusedPracticeOutcomeFrames();
+                AddRefillReviewFrames();
                 AddLongRunCounterFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
@@ -408,19 +409,58 @@ namespace GreedLast.Editor
             core.Enter();
             GreedLastRunSnapshot start = run;
             Add("33-start-choice-tablet", 1024, 768, () => ShowRun(start));
+            AddDetailedChoice("start", start);
             core.JumpToDevShortcut(GreedLastDevShortcut.GiftChoice, clock);
             GreedLastRunSnapshot gift = run;
             Add("34-gift-choice", 1280, 720, () => ShowRun(gift));
             Add("35-gift-choice-tablet", 1024, 768, () => ShowRun(gift));
+            AddDetailedChoice("gift", gift);
             core.JumpToDevShortcut(GreedLastDevShortcut.RelicChoice, clock);
             GreedLastRunSnapshot relic = run;
             Add("36-relic-choice", 1280, 720, () => ShowRun(relic));
             Add("37-relic-choice-tablet", 1024, 768, () => ShowRun(relic));
+            AddDetailedChoice("relic", relic);
             core.HandleInput(GreedLastRunChannel.Center, clock);
             core.Tick(clock += 2f);
             core.Tick(clock += 1f);
             GreedLastRunSnapshot live = run;
             Add("38-live-after-choice", 1280, 720, () => ShowRun(live));
+
+            core.Enter();
+            clock = Time.realtimeSinceStartup;
+            for (int step = 0; step < 16 && run.ChoiceKind != GreedLastChoiceKind.Node; step++)
+            {
+                if (run.ChoiceActive) core.HandleInput(GreedLastRunChannel.Center, clock += 0.2f);
+                else if (run.StartCountdownActive)
+                {
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                }
+                else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                else core.HandleInput(run.Pattern.Channel,
+                    clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds);
+            }
+            Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Node,
+                "Detailed route captures must follow a real completed chapter.");
+            AddDetailedChoice("route", run);
+
+            void AddDetailedChoice(string name, GreedLastRunSnapshot choice)
+            {
+                Require(choice.ChoiceActive, "Detailed choice captures need an actual core choice.");
+                void Show()
+                {
+                    if (ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowRun(choice);
+                    Button[] shortcuts = Read<Button[]>("devShortcutButtons");
+                    for (int i = 0; i < shortcuts.Length; i++)
+                        Require(shortcuts[i].gameObject.activeInHierarchy == (i < (int)GreedLastDevShortcut.ReviewTargetCheck)
+                            && shortcuts[i].IsInteractable() == (i < (int)GreedLastDevShortcut.ReviewTargetCheck),
+                            "Choice lanes must hide only the overlapping inner tools and retain outer section shortcuts.");
+                }
+                Add("92-choice-tools-" + name + "-detail-small", 960, 540, Show);
+                Add("92-choice-tools-" + name + "-detail-tablet", 1024, 768, Show);
+                Add("92-choice-tools-" + name + "-detail-wide", 2340, 1080, Show, 96f);
+            }
         }
 
         private static void AddAvoidanceFrames()
@@ -1085,6 +1125,116 @@ namespace GreedLast.Editor
                         Add(key + "-tablet", 1024, 768, Show);
                         Add(key + "-wide", 2340, 1080, Show, 96f);
                     }
+                }
+            }
+        }
+
+        private static void AddRefillReviewFrames()
+        {
+            foreach (GreedLastRunAttemptOutcome outcome in new[] {
+                GreedLastRunAttemptOutcome.Failed, GreedLastRunAttemptOutcome.Abandoned })
+            {
+                var backend = new GreedLastMockBackend(false, false);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _)
+                    && backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                    "Refill captures need legitimately depleted transient slots.");
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.Enter(string.Empty, refillRun: true);
+                for (int step = 0; step < 100 && !run.Stopped; step++)
+                {
+                    if (run.ChoiceActive)
+                        core.HandleInput(run.ChoiceKind == GreedLastChoiceKind.Node ? GreedLastRunChannel.Left : GreedLastRunChannel.Center, clock += 0.2f);
+                    else if (run.StartCountdownActive)
+                    {
+                        core.Tick(clock += 2f);
+                        core.Tick(clock += 1f);
+                    }
+                    else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                    else
+                    {
+                        core.Tick(clock += run.Pattern.HitSeconds + 0.2f - run.ElapsedSeconds);
+                        if (outcome == GreedLastRunAttemptOutcome.Abandoned) break;
+                    }
+                }
+                Require(outcome == GreedLastRunAttemptOutcome.Failed ? run.Stopped && run.Health == 0 : !run.Stopped && run.Health > 0,
+                    "Refill failure and live abandonment captures must retain their distinct outcomes.");
+                GreedLastRunAttemptRecord record = core.CreateNormalAttemptRecord(outcome);
+                Require(backend.RegisterNormalAttempt(record), "Refill captures must use the actual recorded attempt.");
+                string notice = (string)typeof(GreedLastApp).GetMethod("BuildRefillAttemptResultMessage",
+                    BindingFlags.Static | BindingFlags.NonPublic).Invoke(null,
+                    new object[] { backend.BuildRunAttemptResultMessage(record), outcome });
+                string review = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(notice);
+                var state = new GreedLastStateMachine(new GreedLastRequestGate());
+                GreedLastStateSnapshot screen = default;
+                state.StateChanged += value => screen = value;
+                state.SetLobbyReady(backend.LoadLobby());
+                state.ShowLocalNotice(notice);
+                GreedLastStateSnapshot lobby = screen;
+                state.SetInfiniteStartReady(backend.LoadLobby(), review + "\n\n" + backend.BuildInfiniteStartReadyText());
+                GreedLastStateSnapshot preparation = screen;
+                string opening = (string)typeof(GreedLastApp).GetMethod("BuildRefillRunOpeningContext",
+                    BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { notice });
+                core.Enter(opening, refillRun: true);
+                Require(run.ChoiceActive && !string.IsNullOrEmpty(run.ReviewTargetText),
+                    "Refill captures must carry the real result goal into the fresh starting choice.");
+                GreedLastRunSnapshot choice = run;
+                clock = Time.realtimeSinceStartup;
+                core.HandleInput(GreedLastRunChannel.Center, clock += 0.2f);
+                GreedLastRunSnapshot countdown = run;
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern && run.ReviewTargetText == choice.ReviewTargetText,
+                    "Refill review must remain active after its actual opening countdown.");
+                GreedLastRunSnapshot live = run;
+                core.TogglePause(clock += 0.1f);
+                GreedLastRunSnapshot paused = run;
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Mode() { if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView(); }
+                    void AddViews(string phase, Action show)
+                    {
+                        string name = "91-refill-review-" + outcome.ToString().ToLowerInvariant() + "-" + phase
+                            + (detailed ? "-detail" : "-basic");
+                        void Show() { Mode(); show(); }
+                        Add(name + "-small", 960, 540, Show);
+                        Add(name + "-tablet", 1024, 768, Show);
+                        Add(name + "-wide", 2340, 1080, Show, 96f);
+                    }
+                    AddViews("lobby", () => ui.Render(lobby));
+                    AddViews("preparation", () => ui.Render(preparation));
+                    AddViews("choice", () =>
+                    {
+                        ShowRun(choice);
+                        if (detailed)
+                        {
+                            Button[] shortcuts = Read<Button[]>("devShortcutButtons");
+                            for (int i = (int)GreedLastDevShortcut.ReviewTargetCheck; i < shortcuts.Length; i++)
+                                Require(!shortcuts[i].gameObject.activeInHierarchy && !shortcuts[i].IsInteractable(),
+                                    "Inner-column development commands must not block the wide choice lanes.");
+                        }
+                    });
+                    AddViews("countdown", () => ShowRun(countdown));
+                    AddViews("live", () =>
+                    {
+                        ShowRun(live);
+                        if (detailed)
+                            Require(Read<Button[]>("devShortcutButtons")[(int)GreedLastDevShortcut.VisualDropPreview].gameObject.activeInHierarchy,
+                                "The live development preview command must return after the choice ends.");
+                    });
+                    AddViews("pause", () =>
+                    {
+                        ShowRun(paused);
+                        if (detailed)
+                        {
+                            Text body = Read<Text>("pauseMenuBodyText");
+                            Require(body.fontSize >= 18 && body.text.Contains("재개 목표", StringComparison.Ordinal),
+                                "The detailed refill pause must fit its real review goal without dropping the target or shrinking below its readable limit.");
+                        }
+                    });
                 }
             }
         }
@@ -1834,7 +1984,8 @@ namespace GreedLast.Editor
                 Require(point.x >= rect.xMin - tolerance && point.x <= rect.xMax + tolerance
                     && point.y >= rect.yMin - tolerance && point.y <= rect.yMax + tolerance,
                     currentFrame.Name + ": text exceeds its area: " + label.name
-                        + " / bounds " + rect + " / glyph " + point + " / text " + label.text.Replace('\n', '|'));
+                        + " / bounds " + rect + " / glyph " + point + " / font " + label.fontSize
+                        + " / text " + label.text.Replace('\n', '|'));
             }
         }
 

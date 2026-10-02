@@ -10735,6 +10735,7 @@ namespace GreedLast
         private string infinitePreparationRelic = string.Empty;
         private string pendingInfinitePreparationReviewContext = string.Empty;
         private string pendingInfinitePreparationEntryNotice = string.Empty;
+        private string pendingRefillRunReviewContext = string.Empty;
         private GreedLastRunSnapshot latestAppRunSnapshot;
         private bool hasLatestAppRunSnapshot;
 
@@ -12590,7 +12591,7 @@ namespace GreedLast
             GreedLastLobbySnapshot snapshot = backend.LoadLobby();
             bool refillRun = ShouldStartLobbyNormalAsRefillRun(snapshot);
             string openingContext = refillRun
-                ? BuildRefillRunOpeningContext()
+                ? BuildRefillRunOpeningContext(stateMachine.CurrentDetail)
                 : BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail);
             StartNormalRunCore(openingContext, refillRun);
         }
@@ -12704,6 +12705,9 @@ namespace GreedLast
                 ResetInfinitePreparation();
                 pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(stateMachine.CurrentDetail);
                 pendingInfinitePreparationEntryNotice = BuildInfinitePreparationEntryNoticeFromLobbyDetail(stateMachine.CurrentDetail);
+                pendingRefillRunReviewContext = !HasAnyUsableSaveSlot(lobby)
+                    ? BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail)
+                    : string.Empty;
             }
 
             string detail = backend.BuildInfiniteStartReadyText();
@@ -12717,6 +12721,11 @@ namespace GreedLast
             if (!string.IsNullOrEmpty(reviewContext))
             {
                 detail = reviewContext + "\n\n" + detail;
+            }
+
+            if (!HasAnyUsableSaveSlot(lobby) && !string.IsNullOrEmpty(pendingRefillRunReviewContext))
+            {
+                detail = pendingRefillRunReviewContext + "\n\n" + detail;
             }
 
             if (IsSelectedSaveSlotUsable(lobby))
@@ -12821,6 +12830,7 @@ namespace GreedLast
         {
             pendingInfinitePreparationReviewContext = string.Empty;
             pendingInfinitePreparationEntryNotice = string.Empty;
+            pendingRefillRunReviewContext = string.Empty;
         }
 
         private void StartInfiniteRunFromSelectedLoadout(string failedNotice = null)
@@ -13103,7 +13113,7 @@ namespace GreedLast
                 if (!IsSelectedSaveSlotUsable(visibleLobbySnapshot))
                 {
                     StartNormalRunCore(
-                        BuildRefillRunOpeningContext(),
+                        BuildRefillRunOpeningContext(pendingRefillRunReviewContext),
                         refillRun: true);
                     return;
                 }
@@ -13139,7 +13149,7 @@ namespace GreedLast
                     if (!HasAnyUsableSaveSlot(stateMachine.LobbySnapshot))
                     {
                         StartNormalRunCore(
-                            GreedLastApp.BuildRefillRunOpeningContext(),
+                            GreedLastApp.BuildRefillRunOpeningContext(pendingRefillRunReviewContext),
                             refillRun: true);
                         return;
                     }
@@ -14421,9 +14431,11 @@ namespace GreedLast
             return prefix + "\n" + BuildRestartPrefixFromResultMessage(normalized);
         }
 
-        internal static string BuildRefillRunOpeningContext()
+        internal static string BuildRefillRunOpeningContext(string resultDetail = null)
         {
-            return "보충 런 - 저장 조합을 다시 만들기 위한 일반 런입니다.";
+            string context = "보충 런 - 저장 조합을 다시 만들기 위한 일반 런입니다.";
+            string review = BuildNormalRunOpeningContextFromLobbyDetail(resultDetail);
+            return string.IsNullOrEmpty(review) ? context : context + "\n" + review;
         }
 
         internal static bool ShouldContinuePracticeToFirstNormal(
@@ -17156,7 +17168,7 @@ namespace GreedLast
                 }
 
                 pauseMenuBodyText.fontSize = BuildPauseMenuBodyFontSize(pauseMenuBodyText.text);
-                while (pauseMenuBodyText.fontSize > 21 && !FeedbackTextFitsBounds(pauseMenuBodyText))
+                while (pauseMenuBodyText.fontSize > 18 && !FeedbackTextFitsBounds(pauseMenuBodyText))
                     pauseMenuBodyText.fontSize -= 1;
             }
         }
@@ -17193,7 +17205,7 @@ namespace GreedLast
 
                 return string.IsNullOrEmpty(coachLine)
                     ? "재개 목표: " + target
-                    : "재개 목표: " + CompactUiText(target + " / " + coachLine, 82);
+                    : "재개 목표: " + target + "\n" + CompactUiText(coachLine, 82);
             }
 
             if (snapshot.StartCountdownActive || snapshot.ResumeCountdownActive)
@@ -17579,6 +17591,7 @@ namespace GreedLast
                 bool visualPreviewShortcut = i == (int)GreedLastDevShortcut.VisualDropPreview;
                 bool shortcutVisible = showDevTools
                     && showSideTools
+                    && (!snapshot.ChoiceActive || i < (int)GreedLastDevShortcut.ReviewTargetCheck)
                     && (targetShortcut || visualPreviewShortcut || !snapshot.InfiniteMode)
                     && (!targetShortcut || !string.IsNullOrWhiteSpace(snapshot.ReviewTargetText));
                 devShortcutButtons[i].gameObject.SetActive(shortcutVisible);
@@ -47454,6 +47467,10 @@ namespace GreedLast
                 ? BuildRunLaneBaseLabel(2, compact: true) + "\n" + responseHint + "\n" + timingHint
                 : BuildRunLaneBaseLabel(2, compact: false);
             SetLaneLabelMode(34, true);
+            Text targetLabel = laneLabelTexts[targetIndex];
+            targetLabel.resizeTextForBestFit = false;
+            while (targetLabel.fontSize > 20 && !FeedbackTextFitsBounds(targetLabel))
+                targetLabel.fontSize -= 1;
             SetRunLaneLabelColors(targetIndex, snapshot);
         }
 

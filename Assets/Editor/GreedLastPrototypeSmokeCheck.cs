@@ -3848,6 +3848,8 @@ namespace GreedLast.Editor
             Require(pauseCoach.Contains("재개 목표:", StringComparison.Ordinal), "A paused active trap must expose a resume target line.");
             Require(pauseCoach.Contains("정확→", StringComparison.Ordinal), "A paused active trap must keep the exact-input payoff goal visible.");
             Require(pauseCoach.Contains("바닥→↑점프 회피", StringComparison.Ordinal), "A paused active trap must preserve the required hazard-bound avoidance action.");
+            Require(pauseCoach.Contains("\n바닥→↑점프 회피", StringComparison.Ordinal),
+                "The pause menu must separate its retry target from the hazard/timing coach so long goals cannot create an overflowing single line.");
             Require(pauseCoach.Contains("정박 타이밍", StringComparison.Ordinal), "A paused active trap must preserve the live timing coach.");
             Require(pauseCoach.Contains("목표 유지", StringComparison.Ordinal), "A paused review retry must keep its target status visible in the pause coach.");
             string pauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", pausedSnapshot);
