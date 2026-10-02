@@ -12649,9 +12649,14 @@ namespace GreedLast
 
             if (snapshot.SaveLoadoutUnlocked)
             {
+                pendingRefillRunReviewContext = ShouldStartLobbyNormalAsRefillRun(snapshot)
+                    ? BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail)
+                    : string.Empty;
                 string noCandidateNotice = HasAnyUsableSaveSlot(snapshot)
                     ? "저장할 새 클리어 후보는 없습니다.\n기존 저장 슬롯은 여기서 관리할 수 있습니다."
                     : "저장 조합이 비어 있습니다.\n무한 조합 보충 또는 보충 런으로 새 후보를 만든 뒤 저장하세요.";
+                if (!string.IsNullOrEmpty(pendingRefillRunReviewContext))
+                    noCandidateNotice = pendingRefillRunReviewContext + "\n\n" + noCandidateNotice;
                 OpenSaveLoadoutDraft(
                     snapshot,
                     requireExplicitSlotChoice: false,
@@ -13171,7 +13176,7 @@ namespace GreedLast
                     && !HasAnyUsableSaveSlot(lobbySnapshot))
                 {
                     StartNormalRunCore(
-                        GreedLastApp.BuildRefillRunOpeningContext(),
+                        GreedLastApp.BuildRefillRunOpeningContext(pendingRefillRunReviewContext),
                         refillRun: true);
                     return;
                 }
@@ -14186,6 +14191,7 @@ namespace GreedLast
                     skippedClearMessage = BuildRefillClearSkipSaveMessage(skippedClearMessage);
                 }
 
+                ClearInfinitePreparationContext();
                 stateMachine.SetLobbyReady(backend.LoadLobby());
                 if (skippedClearSave)
                 {
@@ -16015,8 +16021,8 @@ namespace GreedLast
                         holdAmount,
                         judgementPulse,
                         laneBeatCueUrgency,
-                        ShouldShowLaneInputRipple(latestRunSnapshot)
-                            || ShouldShowChoiceConfirmationRipple(choiceConfirmationPulse));
+                        runModeActive && (ShouldShowLaneInputRipple(latestRunSnapshot)
+                            || ShouldShowChoiceConfirmationRipple(choiceConfirmationPulse)));
                     UpdateLaneTargetGlow(
                         i,
                         targetGlow,
@@ -16110,6 +16116,7 @@ namespace GreedLast
             {
                 HideLaneTargetGlows();
                 HideLaneJudgementTags();
+                HideLaneInputRipples();
             }
 
             UpdateTempleDepthBackdrop();
@@ -16281,6 +16288,7 @@ namespace GreedLast
 
             if (!runLike)
             {
+                HideLaneInputRipples();
                 lastStagePresentationKey = string.Empty;
                 lastPresentedRunWasStopped = false;
                 stageTransitionCuePending = false;
@@ -17591,7 +17599,7 @@ namespace GreedLast
                 bool visualPreviewShortcut = i == (int)GreedLastDevShortcut.VisualDropPreview;
                 bool shortcutVisible = showDevTools
                     && showSideTools
-                    && (!snapshot.ChoiceActive || i < (int)GreedLastDevShortcut.ReviewTargetCheck)
+                    && (!(snapshot.ChoiceActive || snapshot.Stopped) || i < (int)GreedLastDevShortcut.ReviewTargetCheck)
                     && (targetShortcut || visualPreviewShortcut || !snapshot.InfiniteMode)
                     && (!targetShortcut || !string.IsNullOrWhiteSpace(snapshot.ReviewTargetText));
                 devShortcutButtons[i].gameObject.SetActive(shortcutVisible);
@@ -28234,6 +28242,13 @@ namespace GreedLast
             }
 
             return touchHold ? 1f : 0.86f;
+        }
+
+        private void HideLaneInputRipples()
+        {
+            if (laneInputRipples == null) return;
+            for (int i = 0; i < laneInputRipples.Length; i++)
+                UpdateLaneInputRipple(i, 0f, 0f, 0f, 0f, false);
         }
 
         private void UpdateLaneInputRipple(

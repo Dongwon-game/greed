@@ -184,6 +184,7 @@ namespace GreedLast.Editor
                 AddCountdownPulseFrames();
                 AddFocusedPracticeOutcomeFrames();
                 AddRefillReviewFrames();
+                AddRefillClearSaveFrames();
                 AddLongRunCounterFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
@@ -1168,12 +1169,25 @@ namespace GreedLast.Editor
                     BindingFlags.Static | BindingFlags.NonPublic).Invoke(null,
                     new object[] { backend.BuildRunAttemptResultMessage(record), outcome });
                 string review = GreedLastApp.BuildNormalRunOpeningContextFromLobbyDetail(notice);
-                var state = new GreedLastStateMachine(new GreedLastRequestGate());
+                var gate = new GreedLastRequestGate();
+                var state = new GreedLastStateMachine(gate);
                 GreedLastStateSnapshot screen = default;
                 state.StateChanged += value => screen = value;
                 state.SetLobbyReady(backend.LoadLobby());
                 state.ShowLocalNotice(notice);
                 GreedLastStateSnapshot lobby = screen;
+                GreedLastStateSnapshot management;
+                GreedLastApp captureApp = CreateIsolatedCaptureApp(backend, state, gate);
+                try
+                {
+                    typeof(GreedLastApp).GetMethod("RequestSaveLoadout", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(captureApp, null);
+                    management = screen;
+                    Require(management.State == GreedLastScreenState.SaveLoadoutDraft
+                        && management.Detail.Contains(review, StringComparison.Ordinal),
+                        "Refill management captures must use the actual app entry and its preserved result goal.");
+                }
+                finally { UnityEngine.Object.DestroyImmediate(captureApp.gameObject); }
                 state.SetInfiniteStartReady(backend.LoadLobby(), review + "\n\n" + backend.BuildInfiniteStartReadyText());
                 GreedLastStateSnapshot preparation = screen;
                 string opening = (string)typeof(GreedLastApp).GetMethod("BuildRefillRunOpeningContext",
@@ -1206,6 +1220,7 @@ namespace GreedLast.Editor
                     }
                     AddViews("lobby", () => ui.Render(lobby));
                     AddViews("preparation", () => ui.Render(preparation));
+                    AddViews("management", () => ui.Render(management));
                     AddViews("choice", () =>
                     {
                         ShowRun(choice);
@@ -1236,6 +1251,98 @@ namespace GreedLast.Editor
                         }
                     });
                 }
+            }
+        }
+
+        private static GreedLastApp CreateIsolatedCaptureApp(GreedLastMockBackend backend,
+            GreedLastStateMachine state, GreedLastRequestGate gate, GreedLastRunCore core = null)
+        {
+            GreedLastApp app = new GameObject("GreedRefillCaptureApp").AddComponent<GreedLastApp>();
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Require(typeof(GreedLastApp).GetField("backend", flags).GetValue(app) == null,
+                "A capture app must remain isolated from the persistent runtime bootstrap.");
+            typeof(GreedLastApp).GetField("backend", flags).SetValue(app, backend);
+            typeof(GreedLastApp).GetField("stateMachine", flags).SetValue(app, state);
+            typeof(GreedLastApp).GetField("requestGate", flags).SetValue(app, gate);
+            typeof(GreedLastApp).GetField("runCore", flags).SetValue(app, core);
+            return app;
+        }
+
+        private static void AddRefillClearSaveFrames()
+        {
+            for (int slot = 0; slot < 3; slot++)
+            {
+                var backend = new GreedLastMockBackend(false, false);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _)
+                    && backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                    "Refill clear captures must begin after legitimate source-slot depletion.");
+                var gate = new GreedLastRequestGate();
+                var state = new GreedLastStateMachine(gate);
+                GreedLastStateSnapshot screen = default;
+                state.StateChanged += value => screen = value;
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                GreedLastApp app = CreateIsolatedCaptureApp(backend, state, gate, core);
+                try
+                {
+                    void Command(string name, params object[] args) => typeof(GreedLastApp)
+                        .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(app, args);
+                    void Capture(string phase)
+                    {
+                        GreedLastStateSnapshot captured = screen;
+                        string name = "93-refill-save-s" + (slot + 1) + "-" + phase;
+                        void Show()
+                        {
+                            if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                            ui.Render(captured);
+                        }
+                        Add(name + "-small", 960, 540, Show);
+                        Add(name + "-tablet", 1024, 768, Show);
+                        Add(name + "-wide", 2340, 1080, Show, 96f);
+                    }
+                    state.SetLobbyReady(backend.LoadLobby());
+                    Command("RequestNormalRun");
+                    Require(run.RefillRun && run.ChoiceActive, "Refill clear captures must use the actual lobby entry.");
+                    GreedLastPrototypeAppLoopCheck.RunToCompletion(core, () => run);
+                    Require(run.EscapeSucceeded && run.SaveEligible, "Refill captures must reach a real saveable escape.");
+                    if (slot == 0)
+                    {
+                        GreedLastRunSnapshot clear = run;
+                        foreach (bool detailed in new[] { false, true })
+                        {
+                            void ShowClear()
+                            {
+                                if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                                ShowRun(clear);
+                                if (detailed)
+                                {
+                                    Button[] shortcuts = Read<Button[]>("devShortcutButtons");
+                                    for (int i = (int)GreedLastDevShortcut.ReviewTargetCheck; i < shortcuts.Length; i++)
+                                        Require(!shortcuts[i].gameObject.activeInHierarchy && !shortcuts[i].IsInteractable(),
+                                            "Result detail must not leave inner development controls blocked behind its text.");
+                                }
+                            }
+                            string name = "93-refill-clear-" + (detailed ? "detail" : "basic");
+                            Add(name + "-small", 960, 540, ShowClear);
+                            Add(name + "-tablet", 1024, 768, ShowClear);
+                            Add(name + "-wide", 2340, 1080, ShowClear, 96f);
+                        }
+                    }
+                    Command("RequestNextRunPattern");
+                    Require(screen.State == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
+                        "Refill capture result commands must create an explicit one-shot candidate.");
+                    if (slot == 0) Capture("candidate");
+                    Command("HandleRunChannelInput", (GreedLastRunChannel)(slot + 1));
+                    Capture("selected");
+                    Command("RequestNextRunPattern");
+                    Require(screen.State == GreedLastScreenState.InfiniteStartReady
+                        && !backend.HasSaveLoadoutCandidate && backend.LoadLobby().SelectedSaveSlotIndex == slot,
+                        "Chosen-slot refill captures must use the actual save-to-preparation transition.");
+                    Capture("preparation");
+                }
+                finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
             }
         }
 
@@ -1899,6 +2006,14 @@ namespace GreedLast.Editor
 
         private static int VerifyVisibleFeedbackAreas()
         {
+            if (!Read<bool>("runModeActive"))
+            {
+                foreach (Image ripple in Read<Image[]>("laneInputRipples"))
+                {
+                    Require(ripple.color.a == 0f,
+                        currentFrame.Name + ": non-run screens must not retain lane input ripples.");
+                }
+            }
             if (Read<GameObject>("pauseMenuOverlay").activeInHierarchy)
             {
                 Text title = Read<Text>("pauseMenuTitleText");
