@@ -15602,6 +15602,14 @@ namespace GreedLast
         private bool comboTierFeedbackPending;
         private int lastGaugeHealth = int.MinValue;
         private int lastGaugeFocus = int.MinValue;
+        private int cachedGaugeHealth;
+        private int cachedGaugeMaxHealth;
+        private string cachedHealthGaugeLabel;
+        private int cachedGaugeFocus;
+        private int cachedGaugeMaxFocus;
+        private bool cachedGaugeFocusActive;
+        private float cachedGaugeFocusRemaining;
+        private string cachedFocusGaugeLabel;
         private int lastProgressThreatLevel = int.MinValue;
         private int threatProgressDirection;
         private string lastRunProgressStageKey = string.Empty;
@@ -17757,19 +17765,46 @@ namespace GreedLast
 
             if (healthGaugeText != null)
             {
-                healthGaugeText.text = "체력 " + FormatHealthValue(snapshot);
+                healthGaugeText.text = GetHealthGaugeLabel(snapshot);
             }
 
             if (focusGaugeText != null)
             {
-                focusGaugeText.text = snapshot.FocusStateActive
-                    ? "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s"
-                    : "집중 " + snapshot.Focus + "/" + snapshot.MaxFocus;
+                focusGaugeText.text = GetFocusGaugeLabel(snapshot);
             }
 
             UpdateHealthDangerPips(snapshot);
             ApplyFocusStateGaugePulse(snapshot, focusRatio);
             UpdateFocusStateTimerPips(snapshot);
+        }
+
+        private string GetHealthGaugeLabel(GreedLastRunSnapshot snapshot)
+        {
+            int maxHealth = Mathf.Max(1, snapshot.MaxHealth);
+            if (cachedHealthGaugeLabel == null || cachedGaugeHealth != snapshot.Health
+                || cachedGaugeMaxHealth != maxHealth)
+            {
+                cachedGaugeHealth = snapshot.Health;
+                cachedGaugeMaxHealth = maxHealth;
+                cachedHealthGaugeLabel = "체력 " + FormatHealthValue(snapshot);
+            }
+            return cachedHealthGaugeLabel;
+        }
+
+        private string GetFocusGaugeLabel(GreedLastRunSnapshot snapshot)
+        {
+            if (cachedFocusGaugeLabel == null || cachedGaugeFocusActive != snapshot.FocusStateActive
+                || (snapshot.FocusStateActive
+                    ? cachedGaugeFocusRemaining != snapshot.FocusStateRemainingSeconds
+                    : cachedGaugeFocus != snapshot.Focus || cachedGaugeMaxFocus != snapshot.MaxFocus))
+            {
+                cachedGaugeFocus = snapshot.Focus;
+                cachedGaugeMaxFocus = snapshot.MaxFocus;
+                cachedGaugeFocusActive = snapshot.FocusStateActive;
+                cachedGaugeFocusRemaining = snapshot.FocusStateRemainingSeconds;
+                cachedFocusGaugeLabel = FormatFocusStatus(snapshot);
+            }
+            return cachedFocusGaugeLabel;
         }
 
         private void TrackRunGaugeValueChanges(GreedLastRunSnapshot snapshot)
@@ -17869,7 +17904,7 @@ namespace GreedLast
 
             if (focusGaugeText != null)
             {
-                focusGaugeText.text = "집중 상태 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s";
+                focusGaugeText.text = GetFocusGaugeLabel(snapshot);
                 focusGaugeText.color = Color32.Lerp(
                     new Color32(255, 214, 105, 255),
                     new Color32(255, 248, 210, 255),

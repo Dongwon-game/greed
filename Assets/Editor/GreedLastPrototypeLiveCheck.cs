@@ -230,6 +230,7 @@ namespace GreedLast.Editor
                 Sample(ui);
                 Sample(ui, updatePresentation: true);
                 MeasurePresentationHelpers(ui);
+                MeasureGaugePresentation(ui);
             }
             finally
             {
@@ -323,6 +324,33 @@ namespace GreedLast.Editor
                     "Helper allocation instrumentation must remain valid and unsaturated: " + name);
                 Debug.Log($"Greed UI helper measurement: {name}, calls=500, gcAllocEvents={allocations.Count}."
                     + " Frozen live snapshot, warmed delegate calls only; not an advancing engine frame or device profile.");
+            }
+        }
+
+        private static void MeasureGaugePresentation(GreedLastRuntimeUi ui)
+        {
+            GreedLastRunSnapshot snapshot = Read<GreedLastRunSnapshot>(ui, "latestRunSnapshot");
+            Require(snapshot.FocusStateActive, "Gauge measurement must include a live focus timer.");
+            var gauges = (Action<GreedLastRunSnapshot>)Delegate.CreateDelegate(
+                typeof(Action<GreedLastRunSnapshot>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("UpdateRunGauges", BindingFlags.Instance | BindingFlags.NonPublic));
+            var focusPulse = (Action<GreedLastRunSnapshot, float>)Delegate.CreateDelegate(
+                typeof(Action<GreedLastRunSnapshot, float>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("ApplyFocusStateGaugePulse", BindingFlags.Instance | BindingFlags.NonPublic));
+            float ratio = Mathf.Clamp01(snapshot.FocusStateRemainingSeconds / 5f);
+            foreach (var sample in new[] {
+                ("UpdateRunGauges", (Action)(() => gauges(snapshot))),
+                ("ApplyFocusStateGaugePulse", (Action)(() => focusPulse(snapshot, ratio))) })
+            {
+                for (int warm = 0; warm < 10; warm++) sample.Item2();
+                using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                    1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+                for (int call = 0; call < 500; call++) sample.Item2();
+                allocations.Stop();
+                Require(allocations.Valid && allocations.Count < allocations.Capacity,
+                    "Gauge allocation instrumentation must remain valid and unsaturated.");
+                Debug.Log($"Greed gauge measurement: {sample.Item1}, calls=500, gcAllocEvents={allocations.Count}."
+                    + " Frozen real live focus snapshot only; not changing timer values, engine frame or device performance.");
             }
         }
 

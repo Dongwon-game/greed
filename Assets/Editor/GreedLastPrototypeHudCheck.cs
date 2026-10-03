@@ -103,6 +103,118 @@ namespace GreedLast.Editor
             }
         }
 
+        internal static void VerifyGaugeLabelReuse(GreedLastRuntimeUi ui)
+        {
+            Func<GreedLastRunSnapshot, string> Bind(string name, bool instance) =>
+                (Func<GreedLastRunSnapshot, string>)(instance
+                    ? Delegate.CreateDelegate(typeof(Func<GreedLastRunSnapshot, string>), ui,
+                        typeof(GreedLastRuntimeUi).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic))
+                    : Delegate.CreateDelegate(typeof(Func<GreedLastRunSnapshot, string>),
+                        typeof(GreedLastRuntimeUi).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)));
+            var health = Bind("GetHealthGaugeLabel", true);
+            var focus = Bind("GetFocusGaugeLabel", true);
+            var freshHealth = Bind("FormatHealthValue", false);
+            var freshFocus = Bind("FormatFocusStatus", false);
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            bool originalPlayerControls = ui.UsePlayerRunControls;
+            if (!originalPlayerControls) ui.ToggleDevCleanView();
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                GreedLastScreenState.InfiniteRun, "Gauge label cache check", string.Empty, 0));
+            int checks = 0;
+            int initialMaxHealth = -1;
+            bool changedMaxHealth = false;
+            bool sawActive = false;
+            bool sawInactive = false;
+            bool sawTimerChange = false;
+            float previousRemaining = -1f;
+            try
+            {
+                foreach (int growth in new[] { 0, 1, 3, 5 })
+                {
+                    core.ConfigureGrowth(growth, Mathf.Min(growth, 3), 0);
+                    core.EnterInfiniteRun();
+                    if (!run.DevInvincible) core.ToggleDevInvincible();
+                    float clock = Time.realtimeSinceStartup;
+                    Check();
+                    for (int frame = 0; frame < 600; frame++)
+                    {
+                        core.Tick(clock += 1f / 60f);
+                        Require(!run.Stopped, "Every growth configuration must remain live throughout gauge verification.");
+                        if (frame == 60) core.FillFocusForTest();
+                        if (frame == 180) core.DropHealthForDangerTest();
+                        Check();
+                        if (frame == 240)
+                        {
+                            core.TogglePause(clock);
+                            Check();
+                            Require(run.Paused && !run.ResumeCountdownActive,
+                                "Gauge timer stability must be checked in a real paused run.");
+                            string pausedFocus = focus(run);
+                            for (int wait = 0; wait < 6; wait++)
+                            {
+                                core.Tick(clock += 0.1f);
+                                Check();
+                                Require(ReferenceEquals(pausedFocus, focus(run)),
+                                    "A paused focus timer must retain its actual frozen label.");
+                            }
+                            core.TogglePause(clock);
+                            Check();
+                            Require(run.ResumeCountdownActive, "Gauge resume verification must use the actual countdown.");
+                            core.Tick(clock += 1.5f);
+                            Check();
+                            Require(!run.Paused && !run.CountdownActive,
+                                "The gauge fixture must return to live play after the countdown.");
+                        }
+                        if (frame == 360)
+                        {
+                            ui.ToggleDevCleanView();
+                            Check();
+                            ui.ToggleDevCleanView();
+                            Check();
+                        }
+                    }
+                    core.ForceStopInfiniteRunForTest();
+                    Check();
+                }
+                core.ConfigureGrowth(0, 0, 0);
+                core.RestartPractice(Time.realtimeSinceStartup);
+                Check();
+                Require(changedMaxHealth && sawActive && sawInactive && sawTimerChange,
+                    "Gauge checks must include real maximum changes, activation/expiry and advancing focus time.");
+                Debug.Log($"Greed gauge label cache passed: {checks} real-snapshot comparisons,"
+                    + " four growth configurations, damage, focus activation/expiry/timer, pause/resume, F11, results and fresh practice; unchanged labels reuse strings without changing value formats. Personal settings and slots unchanged.");
+            }
+            finally
+            {
+                if (ui.UsePlayerRunControls != originalPlayerControls) ui.ToggleDevCleanView();
+            }
+
+            void Check()
+            {
+                string healthLabel = health(run);
+                string focusLabel = focus(run);
+                Require(healthLabel == "체력 " + freshHealth(run) && focusLabel == freshFocus(run),
+                    "Cached gauge labels must match the exact original current-value formatting.");
+                for (int repeat = 0; repeat < 8; repeat++)
+                    Require(ReferenceEquals(healthLabel, health(run)) && ReferenceEquals(focusLabel, focus(run)),
+                        "An unchanged gauge snapshot must reuse both label strings.");
+                ui.RenderRun(run);
+                Require(Read<Text>(ui, "healthGaugeText").text == healthLabel
+                    && Read<Text>(ui, "focusGaugeText").text == focusLabel,
+                    "The actual gauge graphics must immediately reflect current labels in both views.");
+                if (initialMaxHealth < 0) initialMaxHealth = run.MaxHealth;
+                changedMaxHealth |= initialMaxHealth != run.MaxHealth;
+                sawActive |= run.FocusStateActive;
+                sawInactive |= !run.FocusStateActive;
+                sawTimerChange |= run.FocusStateActive && previousRemaining >= 0f
+                    && previousRemaining != run.FocusStateRemainingSeconds;
+                previousRemaining = run.FocusStateActive ? run.FocusStateRemainingSeconds : -1f;
+                checks++;
+            }
+        }
+
         internal static void VerifyIdleSafeAreaRefresh(GreedLastRuntimeUi ui)
         {
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Viewport check", string.Empty, 0));
