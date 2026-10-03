@@ -10892,6 +10892,31 @@ namespace GreedLast.Editor
                 Require(!GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable()
                         && GetRuntimeUiField<Text>(ui, "pauseMenuTitleText").text.StartsWith("재개 ", StringComparison.Ordinal),
                     "Resume countdown must show its count and disable repeated resume clicks.");
+                GreedLastRunRecord beforeResume = core.CreateRunRecord();
+                GreedLastPatternModel resumePattern = snapshot.Pattern;
+                void VerifyVisibleCount(string expected)
+                {
+                    Text heading = GetRuntimeUiField<Text>(ui, "pauseMenuTitleText");
+                    Require(snapshot.ResumeCountdownActive && heading.isActiveAndEnabled
+                        && heading.color.a > 0f && heading.text == "재개 " + expected,
+                        "The foreground resume menu must display its real countdown: expected=" + expected
+                        + ", actual=" + heading.text);
+                    Require(!lanes[0].IsInteractable() && !GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable()
+                        && snapshot.Pattern.Equals(resumePattern) && core.CreateRunRecord().Equals(beforeResume),
+                        "Visible countdown changes must preserve the same trap, record and input locks.");
+                }
+                VerifyVisibleCount("2");
+                float resumeClock = now + 3.2f;
+                foreach (string expected in new[] { "1", "GO" })
+                {
+                    core.Tick(resumeClock += 0.65f);
+                    ui.RenderRun(snapshot);
+                    VerifyVisibleCount(expected);
+                    ui.ToggleDevCleanView();
+                    VerifyVisibleCount(expected);
+                    ui.ToggleDevCleanView();
+                    VerifyVisibleCount(expected);
+                }
                 core.Tick(now + 6f);
                 ui.RenderRun(snapshot);
                 Require(

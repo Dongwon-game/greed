@@ -1066,12 +1066,21 @@ namespace GreedLast.Editor
                         if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                         ShowRun(snapshot);
                         Require(Read<Text>("judgementFeedbackText").text == expectedText,
-                            "The visible countdown pulse must match its actual remaining time.");
+                            "Countdown feedback data must match its actual remaining time.");
+                        VerifyForeground();
+                    }
+                    void VerifyForeground()
+                    {
+                        Text visible = Read<Text>(snapshot.ResumeCountdownActive
+                            ? "pauseMenuTitleText" : "judgementFeedbackText");
+                        Require(visible.isActiveAndEnabled && visible.color.a > 0f
+                            && visible.text == (snapshot.ResumeCountdownActive ? "재개 " : string.Empty) + expectedText,
+                            "The foreground countdown, not a covered label, must show " + expectedText);
                     }
                     string key = "89-countdown-" + name + (detailed ? "-detail" : "-basic");
-                    Add(key + "-small", 960, 540, Show);
-                    Add(key + "-tablet", 1024, 768, Show);
-                    Add(key + "-wide", 2340, 1080, Show, 96f);
+                    Add(key + "-small", 960, 540, Show, beforeUpdate: VerifyForeground);
+                    Add(key + "-tablet", 1024, 768, Show, beforeUpdate: VerifyForeground);
+                    Add(key + "-wide", 2340, 1080, Show, 96f, beforeUpdate: VerifyForeground);
                 }
             }
         }

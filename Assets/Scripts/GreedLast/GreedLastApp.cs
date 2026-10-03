@@ -17151,7 +17151,7 @@ namespace GreedLast
             if (pauseMenuTitleText != null)
             {
                 pauseMenuTitleText.text = snapshot.ResumeCountdownActive
-                    ? "재개 " + Mathf.CeilToInt(snapshot.ResumeCountdownRemainingSeconds)
+                    ? "재개 " + BuildResumeCountdownFeedbackText(snapshot)
                     : BuildRunPauseTitle(snapshot);
             }
 
