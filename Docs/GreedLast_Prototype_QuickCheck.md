@@ -7,6 +7,7 @@
 1. Unity Hub에서 `C:\Projectunity\greed last`를 Unity 6.4로 연다.
 2. `Assets/Scenes/GreedLast_Boot.unity`를 열고 가로 Game 뷰에서 Play한다.
 3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다.
+   같은 검증 빌드의 날짜별 보존 패키지는 `Builds/GreedLastPrototype-verified-20261004.zip`이다. 평소 확인은 위 실행 폴더를 사용한다.
 4. 기존 진행도와 보관할 저장 조합은 유지한다. 확인 때문에 초기화하거나 보관할 조합을 삭제·소모하지 않는다.
 
 ## 이번 추가분 먼저 확인
@@ -67,3 +68,4 @@
 - **외부 자원 유지 추가 검사**: `prototype-retained-scene-navigation-20261003.log`, **23:42 KST**, 일반/빠른 재생 모두 외부 자원이 씬 전환에도 유지되는 세 조건과 탐색 설정 복원을 통과했다. 전체 게임 루프는 앞선 23:31 검사와 구분한다. 개인 진행도/설정과 에디터 재생 설정을 보존한다.
 - **보고서 보존 확인**: 23:54 엔진 전체 루프와 `prototype-archived-layout-20261003.log` **23:59 KST** 렌더 전용 554장 모두 실행별 JSON과 최신 JSON의 바이트 해시 일치를 확인했다. 렌더 전용은 포인터 반복을 포함하지 않는다. 앞선 23:39 전체 포인터/시각 결과는 `Logs/VisualChecks/report-full-20261003-2339.json`, 후속 렌더 결과는 `Logs/VisualChecks/report-layout-20261003-145943-1896883.json`로 분리했다. PNG는 최신 캡처이며 실행별 이미지 보관은 아니다. 시각은 모두 10월 3일 KST이고 파일명의 실행 시각은 UTC다.
 - 빌드는 실행 폴더 `VerifiedBuildInfo.json`의 시각·Unity 버전·스모크·실행기/코드와 글꼴 라이선스/고지 해시로 식별한다. 합성 코어/마우스/터치와 자동 렌더는 실제 휴대폰 센서·오디오 지연·FPS·손 플레이를 대신하지 않는다. 상용 음악·정식 원화·서버·계정·결제·길드는 이번 범위가 아니다.
+- **로컬 실행 패키지**: `GreedLastPrototype-verified-20261004.zip`, 58,422,560바이트·154개 항목. ZIP 내부 실행기/게임 코드·라이선스/고지 해시가 검증 빌드와 같고 Unity 런타임 파일도 존재한다. 프로젝트/로그/개인 저장 데이터는 포함하지 않았다. ZIP SHA-256은 `A738A7F4A51F21DEBF3CED875FD69B303ABF3BA8894B05EA7C9A8C0B25C2DDAE`다. 외부 업로드/배포를 수행한 것은 아니다.
