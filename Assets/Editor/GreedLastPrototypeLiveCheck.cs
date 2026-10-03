@@ -73,6 +73,7 @@ namespace GreedLast.Editor
                 && run.RecentPatternFlow == string.Empty && !run.TimingProfile.Contains("복기 목표", StringComparison.Ordinal),
                 "Restart must discard previous history, counters and target text.");
             VerifyDeferredToolLabels();
+            VerifyUnchangedTimingProfileAllocation();
             Debug.Log($"Greed live publication passed: {checks} fresh-profile comparisons, stable-string reuse, changing focus duration, twelve targets, mixed outcomes, health/threat commands, terminal settlement and restart. Personal slots and settings unchanged.");
         }
 
@@ -231,6 +232,7 @@ namespace GreedLast.Editor
                 Sample(ui, updatePresentation: true);
                 MeasurePresentationHelpers(ui);
                 MeasureGaugePresentation(ui);
+                MeasureTimingProfileReuse();
             }
             finally
             {
@@ -352,6 +354,39 @@ namespace GreedLast.Editor
                 Debug.Log($"Greed gauge measurement: {sample.Item1}, calls=500, gcAllocEvents={allocations.Count}."
                     + " Frozen real live focus snapshot only; not changing timer values, engine frame or device performance.");
             }
+        }
+
+        private static void VerifyUnchangedTimingProfileAllocation()
+        {
+            long events = MeasureTimingProfileReuse();
+            Require(events == 0, "A warmed unchanged timing profile must not allocate a redundant focus-duration string.");
+        }
+
+        private static long MeasureTimingProfileReuse()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.EnterInfiniteRun();
+            core.Tick(clock += 2f);
+            core.FillFocusForTest();
+            core.Tick(clock += 0.2f);
+            Require(run.FocusStateActiveSeconds > 0f, "Profile measurement must include accumulated real focus time.");
+            var published = (Func<bool, string>)Delegate.CreateDelegate(typeof(Func<bool, string>), core,
+                typeof(GreedLastRunCore).GetMethod("GetPublishedTimingProfileText", BindingFlags.Instance | BindingFlags.NonPublic));
+            for (int warm = 0; warm < 10; warm++) published(true);
+            string profile = published(true);
+            string last = null;
+            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            for (int sample = 0; sample < 500; sample++) last = published(true);
+            allocations.Stop();
+            Require(allocations.Valid && allocations.Count < allocations.Capacity && ReferenceEquals(profile, last),
+                "Unchanged profile measurement must keep a valid sampler and the same profile string.");
+            Debug.Log($"Greed timing profile measurement: calls=500, gcAllocEvents={allocations.Count}."
+                + " Frozen accumulated focus time only; not an advancing frame or full profile rebuild.");
+            return allocations.Count;
         }
 
         private static T Read<T>(object target, string field) => (T)target.GetType()

@@ -933,6 +933,7 @@ namespace GreedLast
         private GreedLastRunChannel lastJudgedInputChannel;
         private string cachedTimingProfileText;
         private string cachedTimingProfileFocusDuration;
+        private float cachedTimingProfileFocusSeconds;
         private string cachedRecentPatternFlowText;
 
         public event Action<GreedLastRunSnapshot> SnapshotChanged;
@@ -6680,12 +6681,16 @@ namespace GreedLast
         private string GetPublishedTimingProfileText(bool reuse)
         {
             // Passive Tick only changes the displayed focus duration; commands rebuild all counters.
+            if (reuse && cachedTimingProfileText != null
+                && cachedTimingProfileFocusSeconds == focusStateActiveSeconds)
+                return cachedTimingProfileText;
             string focusDuration = focusStateActiveSeconds.ToString("0.0");
             if (!reuse || cachedTimingProfileText == null || cachedTimingProfileFocusDuration != focusDuration)
             {
                 cachedTimingProfileText = BuildTimingProfileText();
                 cachedTimingProfileFocusDuration = focusDuration;
             }
+            cachedTimingProfileFocusSeconds = focusStateActiveSeconds;
             return cachedTimingProfileText;
         }
     }
