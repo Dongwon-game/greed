@@ -15623,6 +15623,11 @@ namespace GreedLast
         private string cachedCompactTimingGuideBeat;
         private int cachedCompactTimingGuideWindowMs;
         private string cachedCompactTimingGuideLabel;
+        private GreedLastPatternModel cachedCompactActionPattern;
+        private int cachedCompactActionExactScore;
+        private bool cachedCompactActionDevTools;
+        private bool cachedCompactActionRotationTilt;
+        private string cachedCompactActionCue;
         private bool reviewTargetAchievementAnnounced;
         private string lastPresentedReviewTargetText = string.Empty;
         private bool lastActivePatternVisual;
@@ -36346,7 +36351,7 @@ namespace GreedLast
 
             bool compact = !DevToolsEnabled || devCleanViewEnabled;
             string cue = compact
-                ? BuildCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                ? GetCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
                 : BuildActiveActionCueText(snapshot);
             if (string.IsNullOrEmpty(cue))
             {
@@ -46749,10 +46754,52 @@ namespace GreedLast
             return "준비 " + secondsToCore.ToString("0.00") + "s";
         }
 
+        private string GetCompactActiveActionCueText(
+            GreedLastRunSnapshot snapshot,
+            bool devToolsEnabled,
+            bool rotationTiltAvailable)
+        {
+            if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
+                return string.Empty;
+
+            GreedLastPatternModel pattern = snapshot.Pattern;
+            int exactScore = BuildActiveExactScorePreview(snapshot);
+            if (cachedCompactActionCue == null
+                || cachedCompactActionPattern.PatternId != pattern.PatternId
+                || cachedCompactActionPattern.Prompt != pattern.Prompt
+                || cachedCompactActionPattern.Channel != pattern.Channel
+                || cachedCompactActionPattern.TimingType != pattern.TimingType
+                || cachedCompactActionPattern.AvoidanceType != pattern.AvoidanceType
+                || cachedCompactActionExactScore != exactScore
+                || cachedCompactActionDevTools != devToolsEnabled
+                || cachedCompactActionRotationTilt != rotationTiltAvailable)
+            {
+                cachedCompactActionPattern = pattern;
+                cachedCompactActionExactScore = exactScore;
+                cachedCompactActionDevTools = devToolsEnabled;
+                cachedCompactActionRotationTilt = rotationTiltAvailable;
+                cachedCompactActionCue = BuildCompactActiveActionCueTextWithScore(
+                    snapshot, devToolsEnabled, rotationTiltAvailable, exactScore);
+            }
+            return cachedCompactActionCue;
+        }
+
         private static string BuildCompactActiveActionCueText(
             GreedLastRunSnapshot snapshot,
             bool devToolsEnabled,
             bool rotationTiltAvailable)
+        {
+            if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
+                return string.Empty;
+            return BuildCompactActiveActionCueTextWithScore(
+                snapshot, devToolsEnabled, rotationTiltAvailable, BuildActiveExactScorePreview(snapshot));
+        }
+
+        private static string BuildCompactActiveActionCueTextWithScore(
+            GreedLastRunSnapshot snapshot,
+            bool devToolsEnabled,
+            bool rotationTiltAvailable,
+            int exactScore)
         {
             if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
                 return string.Empty;
@@ -46762,7 +46809,7 @@ namespace GreedLast
             if (GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
                 action += " · " + BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable);
 
-            return action + "\n정확 +" + BuildActiveExactScorePreview(snapshot)
+            return action + "\n정확 +" + exactScore
                 + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);
         }
 

@@ -233,6 +233,7 @@ namespace GreedLast.Editor
                 MeasurePresentationHelpers(ui);
                 MeasureGaugePresentation(ui);
                 MeasureTimingProfileReuse();
+                MeasureVisibleActionCue(ui);
             }
             finally
             {
@@ -354,6 +355,42 @@ namespace GreedLast.Editor
                 Debug.Log($"Greed gauge measurement: {sample.Item1}, calls=500, gcAllocEvents={allocations.Count}."
                     + " Frozen real live focus snapshot only; not changing timer values, engine frame or device performance.");
             }
+        }
+
+        private static void MeasureVisibleActionCue(GreedLastRuntimeUi ui)
+        {
+            if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                GreedLastScreenState.InfiniteRun, "Visible action cue measurement", string.Empty, 0));
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.EnterInfiniteRun();
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            Require(run.ActivePattern && !run.CountdownActive && !run.Stopped,
+                "Action cue measurement must use an actual live trap.");
+            ui.RenderRun(run);
+            // Synthetic core time does not advance the UI's transient feedback clock.
+            typeof(GreedLastRuntimeUi).GetField("judgementFeedbackUntil",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(ui, 0f);
+            var update = (Action<GreedLastRunSnapshot, float>)Delegate.CreateDelegate(
+                typeof(Action<GreedLastRunSnapshot, float>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("UpdateActiveActionCue", BindingFlags.Instance | BindingFlags.NonPublic));
+            for (int warm = 0; warm < 10; warm++) update(run, 0.5f);
+            var label = Read<UnityEngine.UI.Text>(ui, "activeActionCueText");
+            Require(label.isActiveAndEnabled && label.color.a > 0f && !string.IsNullOrEmpty(label.text),
+                "Action cue allocation measurement must exercise a visible label, not an early hidden return.");
+            string before = label.text;
+            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            for (int call = 0; call < 500; call++) update(run, 0.5f);
+            allocations.Stop();
+            Require(allocations.Valid && allocations.Count < allocations.Capacity && label.text == before,
+                "Visible action cue measurements must keep valid instrumentation and stable text.");
+            Debug.Log($"Greed visible action cue measurement: calls=500, gcAllocEvents={allocations.Count}."
+                + " Frozen real live trap, basic visible label, warmed delegate calls only; not advancing frames or device performance.");
         }
 
         private static void VerifyUnchangedTimingProfileAllocation()

@@ -10041,6 +10041,7 @@ namespace GreedLast.Editor
             VerifyCompactTimingGuide(ui);
             GreedLastPrototypeHudCheck.VerifyCompactTimingGuideReuse(ui);
             GreedLastPrototypeHudCheck.VerifyGaugeLabelReuse(ui);
+            GreedLastPrototypeHudCheck.VerifyCompactActionCueReuse(ui);
             VerifyCompactActionCues(ui);
             GreedLastPrototypeHudCheck.Run();
             GreedLastPrototypeHudCheck.VerifyIdleSafeAreaRefresh(ui);

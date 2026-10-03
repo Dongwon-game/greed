@@ -103,6 +103,142 @@ namespace GreedLast.Editor
             }
         }
 
+        internal static void VerifyCompactActionCueReuse(GreedLastRuntimeUi ui)
+        {
+            var fresh = (Func<GreedLastRunSnapshot, bool, bool, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, bool, bool, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildCompactActiveActionCueText", BindingFlags.Static | BindingFlags.NonPublic));
+            var cached = (Func<GreedLastRunSnapshot, bool, bool, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, bool, bool, string>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("GetCompactActiveActionCueText", BindingFlags.Instance | BindingFlags.NonPublic));
+            var tiltAvailable = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), typeof(GreedLastRuntimeUi)
+                .GetMethod("IsRuntimeRotationTiltAvailable", BindingFlags.Static | BindingFlags.NonPublic));
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            bool originalPlayerControls = ui.UsePlayerRunControls;
+            if (!originalPlayerControls) ui.ToggleDevCleanView();
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                GreedLastScreenState.InfiniteRun, "Action cue cache check", string.Empty, 0));
+            float clock = Time.realtimeSinceStartup;
+            int checks = 0;
+            int visibleChecks = 0;
+            bool sawFocus = false;
+            bool sawRotation = false;
+            bool sawRecovery = false;
+            try
+            {
+                core.EnterInfiniteRun();
+                core.ToggleDevInvincible();
+                for (int frame = 0; frame < 2400; frame++)
+                {
+                    core.Tick(clock += 1f / 60f);
+                    if (frame == 360) core.FillFocusForTest();
+                    if (frame == 600 || frame == 1200) core.RaiseInfiniteThreatForTest();
+                    Check();
+                    if (!run.ActivePattern || run.CountdownActive) continue;
+                    int count = run.SuccessCount + run.GoodCount + run.MissCount;
+                    if (count % 3 == 2) continue;
+                    float delta = count % 3 == 1
+                        ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
+                    {
+                        core.HandleInput(run.Pattern.Channel, clock);
+                        Check();
+                    }
+                }
+                core.TogglePause(clock);
+                Check();
+                Require(cached(run, true, false) == string.Empty, "Pause must hide the cached active cue.");
+                core.TogglePause(clock);
+                Check();
+                Require(run.ResumeCountdownActive, "Action cue checks must include a real resume countdown.");
+                core.Tick(clock += 2f);
+                Check();
+                core.ForceStopInfiniteRunForTest();
+                Check();
+                Require(cached(run, true, false) == string.Empty, "Results must not restore the active cue.");
+                core.Enter();
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                    GreedLastScreenState.RunCoreTest, "Action cue types", string.Empty, 0));
+                for (int action = 0; action < 5; action++)
+                {
+                    core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock += 3f);
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    Require(run.ActivePattern, "All authored avoidance/rotation cues must be live.");
+                    Check();
+                    ui.ToggleDevCleanView();
+                    Call(ui, "UpdateRunTimingVisuals");
+                    ui.ToggleDevCleanView();
+                    Check();
+                }
+                GreedLastPatternModel source = run.Pattern;
+                var patternField = typeof(GreedLastRunCore).GetField("currentPattern",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                // Isolated fixture variants exercise prompt-only and same-ID cache invalidation.
+                foreach (GreedLastPatternModel variant in new[] {
+                    Variant(source.PatternId, source.Channel, source.TimingType, "[복구]", source.AvoidanceType),
+                    Variant(source.PatternId, source.Channel, source.TimingType, "회전 통로", source.AvoidanceType),
+                    Variant("cue-check-floor", source.Channel, source.TimingType, string.Empty, source.AvoidanceType),
+                    Variant(source.PatternId, GreedLastRunChannel.Left, source.TimingType, source.Prompt, source.AvoidanceType),
+                    Variant(source.PatternId, source.Channel, GreedLastTimingType.Perfect, source.Prompt, source.AvoidanceType),
+                    Variant("cue-check", source.Channel, source.TimingType, string.Empty, GreedLastAvoidanceType.Jump),
+                    Variant("cue-check", source.Channel, source.TimingType, string.Empty, GreedLastAvoidanceType.Slide) })
+                {
+                    patternField.SetValue(core, variant);
+                    core.Tick(clock += 0.001f);
+                    Check();
+                }
+                core.RestartPractice(clock);
+                Check();
+                core.Tick(clock += 2f);
+                Check();
+                Require(sawFocus && sawRotation && sawRecovery && visibleChecks > 1000,
+                    "Action cue checks must cover visible changing score/focus, authored rotations and prompt-only recovery.");
+                Debug.Log($"Greed compact action cue cache passed: {checks} snapshot checks, {visibleChecks} visible basic labels,"
+                    + " four capability combinations, focus/threat/score changes, five authored actions, prompt/ID/channel/timing/avoidance invalidation, F11, pause/countdown/results and fresh practice. Fixture-only pattern variants; personal settings and slots unchanged.");
+            }
+            finally
+            {
+                if (ui.UsePlayerRunControls != originalPlayerControls) ui.ToggleDevCleanView();
+            }
+
+            GreedLastPatternModel Variant(string id, GreedLastRunChannel channel, GreedLastTimingType timing,
+                string prompt, GreedLastAvoidanceType avoidance) => new GreedLastPatternModel(
+                    id, channel, timing, prompt, run.Pattern.TelegraphSeconds, run.Pattern.CoreSeconds,
+                    run.Pattern.SuccessWindowSeconds, run.Pattern.GoodWindowSeconds, run.Pattern.HitSeconds, avoidance);
+            void Check()
+            {
+                foreach (bool tools in new[] { false, true })
+                foreach (bool tilt in new[] { false, true })
+                {
+                    string label = cached(run, tools, tilt);
+                    Require(label == fresh(run, tools, tilt), "Cached action cue must equal its current original label.");
+                    for (int repeat = 0; repeat < 4; repeat++)
+                        Require(ReferenceEquals(label, cached(run, tools, tilt)), "Unchanged action cue must reuse one string.");
+                }
+                string expected = fresh(run, true, tiltAvailable());
+                ui.RenderRun(run);
+                typeof(GreedLastRuntimeUi).GetField("judgementFeedbackUntil", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(ui, 0f);
+                Call(ui, "UpdateRunTimingVisuals");
+                Text graphic = Read<Text>(ui, "activeActionCueText");
+                if (!string.IsNullOrEmpty(expected))
+                {
+                    Require(graphic.isActiveAndEnabled && graphic.color.a > 0f && graphic.text == expected,
+                        "The visible basic action cue must immediately show the current cached label.");
+                    visibleChecks++;
+                    sawFocus |= run.FocusStateActive;
+                    sawRotation |= GreedLastRunCore.IsRotationPattern(run.Pattern);
+                    sawRecovery |= run.Pattern.Prompt?.Contains("[복구]", StringComparison.Ordinal) == true;
+                }
+                else Require(graphic.color.a == 0f || string.IsNullOrEmpty(graphic.text),
+                    "Blocked action cues must remain hidden even after a cached label exists.");
+                checks++;
+            }
+        }
+
         internal static void VerifyGaugeLabelReuse(GreedLastRuntimeUi ui)
         {
             Func<GreedLastRunSnapshot, string> Bind(string name, bool instance) =>
