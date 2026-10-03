@@ -135,6 +135,125 @@ namespace GreedLast.Editor
             Debug.Log("Greed Last HUD transitions passed: repeated pause/countdown/GO, choice, fresh run, infinite result, lobby, save and record screens hide/restore their own runner cues.");
         }
 
+        internal static void VerifyMenuTimingTransitions(GreedLastRuntimeUi ui)
+        {
+            string[] timingFields = { "trapMarker", "trapIllustration", "laneDangerBand", "trapGlow",
+                "trapCorridorShadow", "trapStrike", "trapContactCue", "goodTimingBand", "successTimingBand",
+                "centerTimingBand", "rhythmBreakLine", "inputTimingTraceMarker", "inputTimingTraceText",
+                "activeActionCueText", "timingGuideText", "resolvedTrapAfterimage", "resolvedTrapImpact", "feedbackFlash",
+                "runnerPreparationCue", "runnerPreparationSymbolText" };
+            bool Visible(Graphic graphic) => graphic != null && graphic.isActiveAndEnabled && graphic.color.a > 0f
+                && (!(graphic is Text label) || !string.IsNullOrEmpty(label.text));
+            void RequireHidden(string context)
+            {
+                foreach (string field in timingFields)
+                    Require(!Visible(Read<Graphic>(ui, field)), context + " must immediately hide " + field);
+                foreach (string field in new[] { "timingBeatPips", "trapWarningRails", "threeActionExactBurstPips",
+                    "runnerFootfallPips", "runnerActionTrails", "runMotionLines" })
+                    foreach (Image part in Read<Image[]>(ui, field))
+                        Require(!Visible(part), context + " must immediately hide " + field);
+            }
+            int cases = 0;
+            foreach (GreedLastJudgementResult result in new[] { GreedLastJudgementResult.None,
+                GreedLastJudgementResult.Success, GreedLastJudgementResult.Good, GreedLastJudgementResult.Miss })
+            foreach (GreedLastScreenState destination in new[] { GreedLastScreenState.SaveLoadoutDraft,
+                GreedLastScreenState.InfiniteLoadoutSelect, GreedLastScreenState.InfiniteStartReady,
+                GreedLastScreenState.LobbyReady, GreedLastScreenState.InfiniteRecordBoard,
+                GreedLastScreenState.GrowthBoard, GreedLastScreenState.ProfileBoard })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.EnterInfiniteRun();
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Require(run.ActivePattern, "Menu timing checks need an authored live trap.");
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun,
+                    "주행", string.Empty, 0));
+                ui.RenderRun(run);
+                Call(ui, "Update");
+                Require(Visible(Read<Image>(ui, "goodTimingBand")), "The source timing band must first be visible.");
+                if (result == GreedLastJudgementResult.None)
+                {
+                    GreedLastRunRecord beforePause = core.CreateRunRecord();
+                    GreedLastPatternModel beforePattern = run.Pattern;
+                    core.TogglePause(clock += 0.1f);
+                    ui.RenderRun(run);
+                    Require(run.Paused && !run.CountdownActive, "A real pause must precede the blocked-frame check.");
+                    RequireHidden("Pause render before UI Update");
+                    core.TogglePause(clock += 0.1f);
+                    ui.RenderRun(run);
+                    Require(run.ResumeCountdownActive, "Resume must retain its real lead-in countdown.");
+                    RequireHidden("Resume countdown render before UI Update");
+                    Require(core.CreateRunRecord().Equals(beforePause), "Pause/countdown cleanup must not add gameplay progress.");
+                    core.Tick(clock += 2f);
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    Require(run.ActivePattern && !run.CountdownActive && !run.Paused
+                        && run.Pattern.Equals(beforePattern) && core.CreateRunRecord().Equals(beforePause)
+                        && Visible(Read<Image>(ui, "goodTimingBand")), "The same live trap and unchanged record must restore its timing band after resume.");
+                }
+                if (result != GreedLastJudgementResult.None)
+                {
+                    float delta = result == GreedLastJudgementResult.Good
+                        ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    GreedLastRunChannel channel = result == GreedLastJudgementResult.Miss
+                        ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Center : GreedLastRunChannel.Left)
+                        : run.Pattern.Channel;
+                    core.HandleInput(channel, clock += run.Pattern.CoreSeconds - run.ElapsedSeconds
+                        - core.InputTimingOffsetSeconds + delta);
+                    Require(run.LastResult == result && !run.Stopped,
+                        "The source judgement must be produced by actual input: expected=" + result
+                        + ", actual=" + run.LastResult + ", stopped=" + run.Stopped
+                        + ", delta=" + run.LastInputTimingDeltaSeconds + ", ignore=" + run.IgnoreReason + ", miss=" + run.MissReason);
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    Require(Visible(Read<Image>(ui, result == GreedLastJudgementResult.Miss
+                        ? "rhythmBreakLine" : "inputTimingTraceMarker")), "The source feedback must first be visible.");
+                }
+                GreedLastRunRecord before = core.CreateRunRecord();
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(destination, "메뉴", string.Empty, 0));
+                RequireHidden(result + " -> " + destination);
+                if (destination != GreedLastScreenState.LobbyReady)
+                    Require(!Read<GameObject>(ui, "runnerAvatarRoot").activeInHierarchy
+                        && !Read<Image>(ui, "runnerShadow").gameObject.activeInHierarchy,
+                        "Non-lobby menus must immediately hide the live runner and shadow: " + destination);
+                Call(ui, "Update");
+                RequireHidden("Menu update " + result + " -> " + destination);
+                Require(core.CreateRunRecord().Equals(before), "Timing cleanup must not change gameplay data.");
+                if (result == GreedLastJudgementResult.Miss)
+                {
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun,
+                        "주행", string.Empty, 0));
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    Require(run.Staggered && Visible(Read<Image>(ui, "goodTimingBand")),
+                        "A real live Miss must still display its recovery band.");
+                    core.TogglePause(clock += 0.1f);
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    RequireHidden("Paused Miss recovery update");
+                    core.TogglePause(clock += 0.1f);
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    RequireHidden("Countdown Miss recovery update");
+                    Require(core.CreateRunRecord().Equals(before), "Pausing a real Miss must not change its recorded outcome.");
+                    for (int step = 0; step < 16 && !run.Stopped; step++) core.Tick(clock += 3f);
+                    Require(run.Stopped && run.Health == 0, "Recovery checks must reach a natural terminal failure.");
+                    ui.RenderRun(run);
+                    Call(ui, "Update");
+                    RequireHidden("Natural health-zero recovery update");
+                }
+                cases++;
+            }
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady,
+                "로비", string.Empty, 0));
+            Debug.Log("Greed menu timing transitions passed: " + cases
+                + " actual active/exact/Good/Miss sources across seven menus, seven live pause/resume restorations"
+                + " and seven stagger pause/countdown/natural health-zero results without changing stored settings or slots.");
+        }
+
         internal static void VerifyCompactProgress(GreedLastRuntimeUi ui)
         {
             bool previousCleanView = Read<bool>(ui, "devCleanViewEnabled");

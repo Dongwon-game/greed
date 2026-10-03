@@ -2006,7 +2006,25 @@ namespace GreedLast.Editor
 
         private static int VerifyVisibleFeedbackAreas()
         {
-            if (!Read<bool>("runModeActive"))
+            bool runActive = Read<bool>("runModeActive");
+            GreedLastRunSnapshot snapshot = Read<GreedLastRunSnapshot>("latestRunSnapshot");
+            if (!runActive || snapshot.Paused || snapshot.CountdownActive || snapshot.ChoiceActive || snapshot.Stopped)
+            {
+                foreach (string field in new[] { "trapMarker", "trapIllustration", "laneDangerBand", "trapGlow",
+                    "trapCorridorShadow", "trapStrike", "trapContactCue", "goodTimingBand", "successTimingBand",
+                    "centerTimingBand", "rhythmBreakLine", "inputTimingTraceMarker",
+                    "resolvedTrapAfterimage", "resolvedTrapImpact", "feedbackFlash" })
+                {
+                    Graphic part = Read<Graphic>(field);
+                    Require(part == null || !part.isActiveAndEnabled || part.color.a == 0f,
+                        currentFrame.Name + ": non-live screens must not retain timing feedback: " + field);
+                }
+                foreach (string field in new[] { "runMotionLines", "runnerFootfallPips", "runnerActionTrails" })
+                    foreach (Image part in Read<Image[]>(field))
+                        Require(part == null || !part.isActiveAndEnabled || part.color.a == 0f,
+                            currentFrame.Name + ": non-live screens must not retain motion feedback: " + field);
+            }
+            if (!runActive)
             {
                 foreach (Image ripple in Read<Image[]>("laneInputRipples"))
                 {

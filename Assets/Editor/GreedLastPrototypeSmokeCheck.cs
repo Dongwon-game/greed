@@ -10043,6 +10043,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeHudCheck.Run();
             GreedLastPrototypeHudCheck.VerifyIdleSafeAreaRefresh(ui);
             GreedLastPrototypeHudCheck.VerifyRunTransitions(ui);
+            GreedLastPrototypeHudCheck.VerifyMenuTimingTransitions(ui);
             GreedLastPrototypeHudCheck.VerifyCompactProgress(ui);
             GreedLastPrototypeAudioCheck.Run(ui);
             GreedLastPrototypePointerCheck.Run(ui);

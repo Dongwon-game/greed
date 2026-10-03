@@ -16289,6 +16289,11 @@ namespace GreedLast
             if (!runLike)
             {
                 HideLaneInputRipples();
+                HideRunTimingFeedback();
+                HideResolvedTrapAfterimage();
+                ClearFeedbackFlash();
+                UpdateForwardMotionLines();
+                UpdateRunnerAvatar();
                 lastStagePresentationKey = string.Empty;
                 lastPresentedRunWasStopped = false;
                 stageTransitionCuePending = false;
@@ -16627,6 +16632,15 @@ namespace GreedLast
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
+            if (!IsLiveRunControlWindow(snapshot))
+            {
+                HideRunTimingFeedback();
+                HideResolvedTrapAfterimage();
+                ClearFeedbackFlash();
+                UpdateForwardMotionLines();
+                UpdateRunnerAvatar();
+                UpdateJudgementFeedbackText();
+            }
             ApplyStoppedRunPresentation(snapshot);
             ApplyDevCleanView();
         }
@@ -36010,40 +36024,41 @@ namespace GreedLast
             }
         }
 
+        private void HideRunTimingFeedback()
+        {
+            HideTrapDangerVisuals();
+            HideTimingBands();
+            HideActiveActionCue();
+            HideInputTimingTrace();
+            HideRhythmBreakLine();
+            HideThreeActionExactBurst();
+            if (timingGuideText != null)
+            {
+                timingGuideText.text = string.Empty;
+                timingGuideText.rectTransform.localScale = Vector3.one;
+            }
+        }
+
         private void UpdateRunTimingVisuals()
         {
             if (trapMarker == null || judgementLine == null || !hasRunSnapshot)
             {
-                HideTrapDangerVisuals();
-                HideActiveActionCue();
-                HideInputTimingTrace();
-                HideRhythmBreakLine();
-                HideThreeActionExactBurst();
+                HideRunTimingFeedback();
                 return;
             }
 
             if (!runModeActive)
             {
-                HideTrapDangerVisuals();
                 SetJudgementLineY(0.22f);
                 judgementLine.color = new Color32(255, 238, 181, 120);
                 ApplyJudgementLinePulse();
-                HideTimingBands();
-                if (timingGuideText != null)
-                {
-                    timingGuideText.text = string.Empty;
-                    timingGuideText.rectTransform.localScale = Vector3.one;
-                }
+                HideRunTimingFeedback();
 
                 lastActivePatternVisual = false;
                 runEntryTrapRevealPending = false;
                 runEntryTrapRevealStartedAt = 0f;
                 runEntryTrapRevealUntil = 0f;
                 targetCuePlayed = false;
-                HideActiveActionCue();
-                HideInputTimingTrace();
-                HideRhythmBreakLine();
-                HideThreeActionExactBurst();
                 return;
             }
 
@@ -36728,7 +36743,7 @@ namespace GreedLast
 
         private void ApplyStaggerRecoveryVisuals()
         {
-            if (judgementLine == null || !hasRunSnapshot)
+            if (judgementLine == null || !hasRunSnapshot || !IsLiveRunControlWindow(latestRunSnapshot))
             {
                 return;
             }
