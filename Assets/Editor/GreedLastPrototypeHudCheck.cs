@@ -105,6 +105,7 @@ namespace GreedLast.Editor
 
         internal static void VerifyCompactActionCueReuse(GreedLastRuntimeUi ui)
         {
+            VerifyPatternRouteTokens();
             var fresh = (Func<GreedLastRunSnapshot, bool, bool, string>)Delegate.CreateDelegate(
                 typeof(Func<GreedLastRunSnapshot, bool, bool, string>), typeof(GreedLastRuntimeUi)
                     .GetMethod("BuildCompactActiveActionCueText", BindingFlags.Static | BindingFlags.NonPublic));
@@ -237,6 +238,27 @@ namespace GreedLast.Editor
                     "Blocked action cues must remain hidden even after a cached label exists.");
                 checks++;
             }
+        }
+
+        private static void VerifyPatternRouteTokens()
+        {
+            var hasRoute = (Func<GreedLastPatternModel, string, bool>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastPatternModel, string, bool>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("PatternHasRoute", BindingFlags.Static | BindingFlags.NonPublic));
+            int cases = 0;
+            foreach (string route in new[] { null, string.Empty, "안정", "변주", "압박", "사용자", "안정][압박" })
+            foreach (string prompt in new[] { null, string.Empty, "[안정]", "[변주]", "[압박]", "압박",
+                "[사용자]", "[안정][압박]", "[압박] [복구]" })
+            {
+                var pattern = new GreedLastPatternModel("route-token-check", GreedLastRunChannel.Center,
+                    GreedLastTimingType.Perfect, prompt, 1f, 2f, 0.1f, 0.25f, 2.3f);
+                bool expected = !string.IsNullOrEmpty(route) && !string.IsNullOrEmpty(prompt)
+                    && prompt.Contains("[" + route + "]", StringComparison.Ordinal);
+                Require(hasRoute(pattern, route) == expected,
+                    "Fixed route tokens must preserve exact bracket matching and unknown-route fallback.");
+                cases++;
+            }
+            Debug.Log($"Greed route token reuse passed: {cases} route/prompt cases, exact brackets, empty inputs and unknown-route fallback.");
         }
 
         internal static void VerifyGaugeLabelReuse(GreedLastRuntimeUi ui)

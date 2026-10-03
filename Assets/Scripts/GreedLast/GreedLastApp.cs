@@ -45181,9 +45181,17 @@ namespace GreedLast
 
         private static bool PatternHasRoute(GreedLastPatternModel pattern, string route)
         {
-            return !string.IsNullOrEmpty(route)
-                && !string.IsNullOrEmpty(pattern.Prompt)
-                && pattern.Prompt.Contains("[" + route + "]", StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(route) || string.IsNullOrEmpty(pattern.Prompt))
+                return false;
+            string token;
+            switch (route)
+            {
+                case "안정": token = "[안정]"; break;
+                case "변주": token = "[변주]"; break;
+                case "압박": token = "[압박]"; break;
+                default: token = "[" + route + "]"; break;
+            }
+            return pattern.Prompt.Contains(token, StringComparison.Ordinal);
         }
 
         private static string BuildChoiceProfileScoreBonusPreview(GreedLastRunSnapshot snapshot)
