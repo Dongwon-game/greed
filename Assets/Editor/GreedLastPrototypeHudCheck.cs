@@ -639,7 +639,9 @@ namespace GreedLast.Editor
                         "Progress check", string.Empty, 0));
                     ui.RenderRun(run);
                     Require(progress.text == expected && progress.fontSize == 34
-                        && progress.rectTransform.rect.height == 40f && !progress.raycastTarget,
+                        && progress.rectTransform.rect.height == 56f
+                        && progress.preferredHeight <= progress.rectTransform.rect.height
+                        && !progress.raycastTarget,
                         "Clean progress must show a readable single-line stage/count/threat without taking input: " + expected);
                 }
                 void BeginLive()
@@ -670,7 +672,7 @@ namespace GreedLast.Editor
                         && Read<Text>(ui, "stageTransitionText").color.a > 0f,
                         "F11 must restore detailed progress and the practice banner immediately.");
                     ui.ToggleDevCleanView();
-                    Require(progress.text == "연습 1/3" && progressRoot.anchorMin.y == 0.705f
+                    Require(progress.text == "연습 1/3" && progressRoot.anchorMin.y == 0.69f
                         && Read<Text>(ui, "stageTransitionText").color.a == 0f
                         && !Read<bool>(ui, "stageTransitionCuePending")
                         && laneHit.sizeDelta == laneHitSize,

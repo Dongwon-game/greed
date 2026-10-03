@@ -214,7 +214,8 @@ namespace GreedLast.Editor
                         Text wrongFeedback = Read<Text>(ui, "judgementFeedbackText");
                         if (!run.Stopped)
                             Require(wrongFeedback.fontSize == 36 && wrongFeedback.text.Split('\n').Length == 2
-                                && wrongFeedback.rectTransform.rect.height == 100f,
+                                && wrongFeedback.rectTransform.rect.height == 124f
+                                && wrongFeedback.preferredHeight <= wrongFeedback.rectTransform.rect.height + 1f,
                                 "Visible compact wrong-lane copy must fit its fixed two-line surface without enlarging over gauges.");
                     }
                 }

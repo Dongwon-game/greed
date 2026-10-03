@@ -1,0 +1,5 @@
+# Preserve pinned font and license bytes across Windows checkouts.
+Assets/Resources/GreedLast/Fonts/*.otf -text
+Assets/Resources/GreedLast/Fonts/*.ttf -text
+Assets/ThirdParty/NotoSansKR/OFL.txt -text
+Assets/ThirdParty/NotoSansSymbols2/OFL.txt -text

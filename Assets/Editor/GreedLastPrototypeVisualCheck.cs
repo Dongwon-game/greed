@@ -36,6 +36,7 @@ namespace GreedLast.Editor
             public bool succeeded;
             public string error;
             public bool pointerLoopPassed;
+            public bool pointerLoopIncluded;
             public int pointerLoopCases;
             public int pointerLoopClicks;
             public int pointerLoopCanceledCommands;
@@ -80,6 +81,17 @@ namespace GreedLast.Editor
         [MenuItem(MenuPath)]
         public static void Run()
         {
+            Begin(true);
+        }
+
+        [MenuItem("Greed Last/Capture Prototype Layout Only")]
+        public static void RunRenderOnly()
+        {
+            Begin(false);
+        }
+
+        private static void Begin(bool includePointerLoop)
+        {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 throw new InvalidOperationException("Stop Play mode before capturing prototype frames.");
@@ -96,14 +108,18 @@ namespace GreedLast.Editor
             {
                 startedUtc = DateTime.UtcNow.ToString("O"),
                 unityVersion = Application.unityVersion,
+                pointerLoopIncluded = includePointerLoop,
             };
             try
             {
-                GreedLastPrototypeAppLoopCheck.RunPointerLoop();
-                report.pointerLoopPassed = true;
-                report.pointerLoopCases = GreedLastPrototypeAppLoopCheck.LastPointerCaseCount;
-                report.pointerLoopClicks = GreedLastPrototypeAppLoopCheck.LastPointerClickCount;
-                report.pointerLoopCanceledCommands = GreedLastPrototypeAppLoopCheck.LastCanceledCommandCount;
+                if (includePointerLoop)
+                {
+                    GreedLastPrototypeAppLoopCheck.RunPointerLoop();
+                    report.pointerLoopPassed = true;
+                    report.pointerLoopCases = GreedLastPrototypeAppLoopCheck.LastPointerCaseCount;
+                    report.pointerLoopClicks = GreedLastPrototypeAppLoopCheck.LastPointerClickCount;
+                    report.pointerLoopCanceledCommands = GreedLastPrototypeAppLoopCheck.LastCanceledCommandCount;
+                }
                 captureScene = EditorSceneManager.NewPreviewScene();
                 camera = new GameObject("GreedVisualCheckCamera", typeof(Camera)).GetComponent<Camera>();
                 camera.orthographic = true;
@@ -1858,6 +1874,25 @@ namespace GreedLast.Editor
             return count;
         }
 
+        private static bool HasVisibleText(Text label) => label.isActiveAndEnabled
+            && label.color.a >= 0.01f && !string.IsNullOrWhiteSpace(label.text);
+
+        private static Bounds GetTextGlyphBounds(RectTransform root, Text label)
+        {
+            TextGenerator generator = label.cachedTextGenerator;
+            generator.Populate(label.text, label.GetGenerationSettings(label.rectTransform.rect.size));
+            Bounds bounds = default;
+            // UI Text appends a trailing empty quad, which is not a rendered glyph.
+            for (int i = 0; i < generator.verts.Count - 4; i++)
+            {
+                Vector3 point = root.InverseTransformPoint(label.rectTransform.TransformPoint(
+                    generator.verts[i].position / label.pixelsPerUnit));
+                if (i == 0) bounds = new Bounds(point, Vector3.zero);
+                else bounds.Encapsulate(point);
+            }
+            return bounds;
+        }
+
         private static int VerifyLaneModuleInputs()
         {
             if (!Read<bool>("runModeActive") || !Read<bool>("hasRunSnapshot")
@@ -2071,15 +2106,28 @@ namespace GreedLast.Editor
                     || string.IsNullOrWhiteSpace(label.text)) continue;
                 VerifyTextBounds(label);
                 Require(label.preferredHeight <= label.rectTransform.rect.height + 1f,
-                    currentFrame.Name + ": feedback text is vertically clipped: " + label.name);
+                    currentFrame.Name + ": feedback text is vertically clipped: " + label.name
+                        + " / needed " + label.preferredHeight + " / available " + label.rectTransform.rect.height);
                 if (gauges.activeInHierarchy)
                 {
                     Bounds textBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, label.rectTransform);
                     Bounds gaugeBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(root, gauges.transform);
                     Require(!textBounds.Intersects(gaugeBounds),
-                        currentFrame.Name + ": feedback overlaps the health/focus gauges: " + label.name);
+                        currentFrame.Name + ": feedback overlaps the health/focus gauges: " + label.name
+                            + " / text " + textBounds + " / gauges " + gaugeBounds);
                 }
                 count++;
+            }
+            Text guide = Read<Text>("timingGuideText");
+            foreach (string field in new[] { "activeActionCueText", "judgementFeedbackText" })
+            {
+                Text label = Read<Text>(field);
+                if (!HasVisibleText(guide) || !HasVisibleText(label)) continue;
+                Bounds guideGlyphs = GetTextGlyphBounds(root, guide);
+                Bounds feedbackGlyphs = GetTextGlyphBounds(root, label);
+                Require(!guideGlyphs.Intersects(feedbackGlyphs),
+                    currentFrame.Name + ": timing and feedback glyphs overlap: " + label.name
+                        + " / guide " + guideGlyphs + " / feedback " + feedbackGlyphs);
             }
             return count;
         }

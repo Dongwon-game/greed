@@ -31,6 +31,8 @@ namespace GreedLast.Editor
 
         private static void RunChecks()
         {
+            GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
+            GreedLastPrototypeFontCheck.Run();
             Require(
                 GreedLastDevToolPolicy.ShouldEnable(isEditor: true, isDebugBuild: false)
                     && GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: true)
@@ -1755,21 +1757,21 @@ namespace GreedLast.Editor
                     && !GreedLastRunCore.IsRotationPattern(structuredOverride),
                 "Only authored rotation-corridor patterns must enter the NOM-style rotation branch.");
             Require(
-                InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", leftRotation) == "통로→↺회전"
-                    && InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", rightRotation) == "통로→↻회전",
+                InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", leftRotation) == "통로→⭯회전"
+                    && InvokeRuntimeUiLabel("BuildTrapResponseCueLabel", rightRotation) == "통로→⭮회전",
                 "Rotation-corridor traps must read as corridor rotation, not generic side twisting.");
             Require(
                 InvokeRuntimeUiLabel("BuildActiveActionResponseLabel", leftRotation) == "좌회전"
                     && InvokeRuntimeUiLabel("BuildActiveActionResponseLabel", rightRotation) == "우회전",
                 "Rotation-corridor active action cues must expand the compact rotation label into a left/right turn.");
             Require(
-                InvokeRuntimeUiLabel("BuildActiveAvoidanceCoach", leftRotation) == "통로→↺회전 정렬"
-                    && InvokeRuntimeUiLabel("BuildPatternAvoidanceObjectiveSuffix", rightRotation) == " / 통로→↻회전 정렬",
+                InvokeRuntimeUiLabel("BuildActiveAvoidanceCoach", leftRotation) == "통로→⭯회전 정렬"
+                    && InvokeRuntimeUiLabel("BuildPatternAvoidanceObjectiveSuffix", rightRotation) == " / 통로→⭮회전 정렬",
                 "Rotation-corridor coach and objective text must read as alignment instead of generic avoidance.");
             Require(
-                InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Success) == "통로→↺회전 정렬"
-                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Good) == "통로→↺회전 보정 정렬"
-                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", rightRotation, GreedLastJudgementResult.Miss) == "통로→↻회전 정렬 실패",
+                InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Success) == "통로→⭯회전 정렬"
+                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", leftRotation, GreedLastJudgementResult.Good) == "통로→⭯회전 보정 정렬"
+                    && InvokeRuntimeUiLabel("BuildRunnerOutcomeLabel", rightRotation, GreedLastJudgementResult.Miss) == "통로→⭮회전 정렬 실패",
                 "Rotation-corridor judgement feedback must preserve the alignment wording for success, Good, and miss.");
             Require(
                 InvokeRuntimeUiLabel("BuildRotationInputHintForMode", leftRotation, true) == "Q/A/←"
@@ -13015,7 +13017,7 @@ namespace GreedLast.Editor
             };
             string[] expectedActions = { "점프", "숙이기", "비틀기" };
             string[] expectedLaneHazards = { "바닥", "상단", "측면" };
-            string[] expectedNextLabels = { "다음 ↓ 숙이기", "다음 ↔ 비틀기", "다음 ↺ 회전 Q" };
+            string[] expectedNextLabels = { "다음 ↓ 숙이기", "다음 ↔ 비틀기", "다음 ⭯ 회전 Q" };
             string[] expectedRoles = { "충전", "반격", "연쇄" };
             string[] expectedRolePayoffs =
             {
@@ -13970,7 +13972,7 @@ namespace GreedLast.Editor
             string[] expectedRotationShortcutHints = { "Q / 좌 기울임", "E / 우 기울임" };
             string[] expectedRotationEditorHints = { "Q/A/←", "E/D/→" };
             string[] expectedRotationMobileHints = { "좌 기울임", "우 기울임" };
-            string[] expectedRotationActions = { "↺ 좌회전 정렬", "↻ 우회전 정렬" };
+            string[] expectedRotationActions = { "⭯ 좌회전 정렬", "⭮ 우회전 정렬" };
             string[] expectedRotationCenterRewardTexts =
             {
                 "정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus,
@@ -14006,7 +14008,7 @@ namespace GreedLast.Editor
                         + rotationMobileActionCue);
                 Require(
                     InvokeRuntimeUiLabel("BuildAvoidanceTestShortcutLabel", snapshot)
-                        == (i == 0 ? "다음 ↻ 회전 E" : "다음 ↑ 점프"),
+                        == (i == 0 ? "다음 ⭮ 회전 E" : "다음 ↑ 점프"),
                     "The avoidance-cycle shortcut label must continue through both rotation-corridor samples.");
 
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
@@ -14018,7 +14020,7 @@ namespace GreedLast.Editor
                     "A resolved rotation-corridor sample must keep its last judged pattern for result feedback.");
                 Require(
                     InvokeRuntimeUiLabel("BuildJudgementFeedbackPatternCueLabel", snapshot)
-                        == (i == 0 ? "통로→↺회전" : "통로→↻회전"),
+                        == (i == 0 ? "통로→⭯회전" : "통로→⭮회전"),
                     "Resolved rotation-corridor feedback must still resolve the compact corridor cue from the last judged pattern.");
                 Require(
                     InvokeRuntimeUiLabel("BuildJudgementHistoryResponseSymbol", snapshot) == "↔",
@@ -16446,7 +16448,7 @@ namespace GreedLast.Editor
                 "The record board compactor must strip infinite Good review, progress, and exact-payoff purpose fragments.");
             string mobileHintSanitizedBoardLine = InvokeMockBackendStaticLabel(
                 "CompactRecordBoardLine",
-                "[S] 900점 / 정답키 A/← / 정답 좌 탭 / 터치 탭 / 위험→동작·탭·1박·보상 / 위험→동작·키·1박·보상 / 위험 + 동작 + 키 + 1박 전 + 보상 / 바닥 위험 → ↑ 점프 회피 · A/← · 1박 전 · 정확+140→집중 집중+1 보정+25 / 바닥→↑점프 · 정확→충전+1 / 상단→↓숙이기 · 정확→반격+50 / 측면→↔비틀기 · 정확→연쇄+1 / 통로→↻회전 / 통로→↺회전 · 정확→연쇄+1 / 우 기울임 / 좌 탭 / 콤5");
+                "[S] 900점 / 정답키 A/← / 정답 좌 탭 / 터치 탭 / 위험→동작·탭·1박·보상 / 위험→동작·키·1박·보상 / 위험 + 동작 + 키 + 1박 전 + 보상 / 바닥 위험 → ↑ 점프 회피 · A/← · 1박 전 · 정확+140→집중 집중+1 보정+25 / 바닥→↑점프 · 정확→충전+1 / 상단→↓숙이기 · 정확→반격+50 / 측면→↔비틀기 · 정확→연쇄+1 / 통로→⭮회전 / 통로→⭯회전 · 정확→연쇄+1 / 우 기울임 / 좌 탭 / 콤5");
             Require(
                 mobileHintSanitizedBoardLine == "[S] 900점 / 콤5",
                 "The record board compactor must strip editor key, mobile touch, active action cue, rotation/tilt cue, and lane payoff fragments.");

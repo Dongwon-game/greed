@@ -27,6 +27,12 @@ namespace GreedLast.Editor
             public string executableSha256;
             public string runtimeAssemblyPath;
             public string runtimeAssemblySha256;
+            public string bundledFontLicensePath;
+            public string bundledFontLicenseSha256;
+            public string bundledSymbolFontLicensePath;
+            public string bundledSymbolFontLicenseSha256;
+            public string bundledFontNoticePath;
+            public string bundledFontNoticeSha256;
         }
 
         [MenuItem("Greed Last/Rebuild Boot Scene")]
@@ -124,6 +130,13 @@ namespace GreedLast.Editor
         private static void WriteVerifiedBuildInfo()
         {
             const string assemblyPath = "GreedLastPrototype_Data/Managed/Assembly-CSharp.dll";
+            const string fontLicenseName = "NotoSansKR-OFL.txt";
+            string fontLicensePath = Path.Combine(WindowsBuildDirectory, fontLicenseName);
+            File.Copy("Assets/ThirdParty/NotoSansKR/OFL.txt", fontLicensePath, true);
+            const string symbolLicenseName = "NotoSansSymbols2-OFL.txt";
+            const string fontNoticeName = "NotoSansKR-NOTICE.txt";
+            File.Copy("Assets/ThirdParty/NotoSansSymbols2/OFL.txt", Path.Combine(WindowsBuildDirectory, symbolLicenseName), true);
+            File.Copy("Assets/ThirdParty/NotoSansKR/NOTICE.txt", Path.Combine(WindowsBuildDirectory, fontNoticeName), true);
             var info = new VerifiedBuildInfo
             {
                 verifiedAtUtc = DateTime.UtcNow.ToString("O"),
@@ -135,6 +148,12 @@ namespace GreedLast.Editor
                 executableSha256 = HashFile(WindowsBuildPath),
                 runtimeAssemblyPath = assemblyPath,
                 runtimeAssemblySha256 = HashFile(Path.Combine(WindowsBuildDirectory, assemblyPath)),
+                bundledFontLicensePath = fontLicenseName,
+                bundledFontLicenseSha256 = HashFile(fontLicensePath),
+                bundledSymbolFontLicensePath = symbolLicenseName,
+                bundledSymbolFontLicenseSha256 = HashFile(Path.Combine(WindowsBuildDirectory, symbolLicenseName)),
+                bundledFontNoticePath = fontNoticeName,
+                bundledFontNoticeSha256 = HashFile(Path.Combine(WindowsBuildDirectory, fontNoticeName)),
             };
             // Hash game code as well as Unity's reusable launcher; its timestamp alone is not a build ID.
             File.WriteAllText(Path.Combine(WindowsBuildDirectory, "VerifiedBuildInfo.json"), JsonUtility.ToJson(info, true));

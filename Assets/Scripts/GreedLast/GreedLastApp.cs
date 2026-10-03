@@ -275,6 +275,11 @@ namespace GreedLast
                 activeToken = default;
             }
         }
+
+        public void CancelPending()
+        {
+            activeToken = default;
+        }
     }
 
     public sealed class GreedLastMockBackend
@@ -10668,6 +10673,8 @@ namespace GreedLast
 
     public sealed class GreedLastApp : MonoBehaviour
     {
+        private static GreedLastApp activeApp;
+
         public const int PrototypeVSyncCount = 0;
         public const int PrototypeTargetFrameRate = 60;
 
@@ -10696,6 +10703,8 @@ namespace GreedLast
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
         private bool applicationPaused;
+        private bool appStarted;
+        private bool interruptedBootPending;
         private int recordBoardPageIndex;
         private int profileBoardPageIndex;
         private int preferredRecordBoardPageIndex;
@@ -10742,6 +10751,8 @@ namespace GreedLast
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
 
 #if UNITY_EDITOR
+        public const string EditorPlayModeCheckKey = "GreedLast.EditorTests.PlayModeCheck";
+
         public static void ResetPrototypeProgressForEditor()
         {
             GreedLastMockBackend.ClearPersistedProgressForEditor();
@@ -10753,20 +10764,37 @@ namespace GreedLast
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
         {
+            if (FindAnyObjectByType<GreedLastApp>(FindObjectsInactive.Include) != null) return;
             var root = new GameObject(nameof(GreedLastApp));
             root.AddComponent<GreedLastApp>();
-            DontDestroyOnLoad(root);
         }
 
         private void Awake()
         {
+            if (Application.isPlaying)
+            {
+                if (activeApp != null && activeApp != this)
+                {
+                    enabled = false;
+                    Destroy(this);
+                    return;
+                }
+                activeApp = this;
+                DontDestroyOnLoad(gameObject);
+            }
             QualitySettings.vSyncCount = PrototypeVSyncCount;
             Application.targetFrameRate = PrototypeTargetFrameRate;
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             ConfigurePrototypeMobileOrientation();
 
             requestGate = new GreedLastRequestGate();
+#if UNITY_EDITOR
+            bool isolatedPlayModeCheck = UnityEditor.SessionState.GetBool(EditorPlayModeCheckKey, false);
+            backend = new GreedLastMockBackend(
+                loadPersistedData: !isolatedPlayModeCheck, persistData: !isolatedPlayModeCheck);
+#else
             backend = new GreedLastMockBackend();
+#endif
             stateMachine = new GreedLastStateMachine(requestGate);
             runCore = new GreedLastRunCore();
 
@@ -10797,6 +10825,7 @@ namespace GreedLast
                 HandleRunChannelInput);
             runtimeUi.RotationTiltPreferenceChanged += HandleRotationTiltPreferenceChanged;
             runtimeUi.ViewportChanged += HandleViewportChanged;
+            runtimeUi.PresentationSuspended += HandlePresentationSuspended;
 
             stateMachine.StateChanged += runtimeUi.Render;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
@@ -10830,21 +10859,47 @@ namespace GreedLast
 
         private void Start()
         {
+            appStarted = true;
             StartCoroutine(BootThenConnect());
+        }
+
+        private void OnEnable()
+        {
+            if (!interruptedBootPending) return;
+            interruptedBootPending = false;
+            StartCoroutine(BootThenConnect());
+        }
+
+        private void OnDisable()
+        {
+            HandlePresentationSuspended();
+            // Inactive hosts stop Unity coroutines; a component-only disable does not.
+            if (appStarted && !gameObject.activeInHierarchy && requestGate != null && requestGate.Busy)
+            {
+                requestGate.CancelPending();
+                interruptedBootPending = true;
+            }
         }
 
         private void OnDestroy()
         {
+            if (activeApp == this) activeApp = null;
             if (stateMachine != null && runtimeUi != null)
             {
                 stateMachine.StateChanged -= runtimeUi.Render;
                 runtimeUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
                 runtimeUi.ViewportChanged -= HandleViewportChanged;
+                runtimeUi.PresentationSuspended -= HandlePresentationSuspended;
             }
 
             if (runCore != null)
             {
                 runCore.SnapshotChanged -= HandleRunSnapshotChanged;
+            }
+            if (Application.isPlaying && runtimeUi != null)
+            {
+                runtimeUi.enabled = false;
+                Destroy(runtimeUi);
             }
         }
 
@@ -10883,6 +10938,14 @@ namespace GreedLast
 
         private void HandleViewportChanged()
         {
+            ResetRotationDragTracking();
+            ResetRotationTiltSensorTracking(requireNeutralRelease: true);
+            PublishRotationTiltGateState();
+        }
+
+        private void HandlePresentationSuspended()
+        {
+            PauseRunForAppBackground();
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -14308,6 +14371,9 @@ namespace GreedLast
 
         private void MarkPracticeCompletedIfNeeded()
         {
+#if UNITY_EDITOR
+            if (UnityEditor.SessionState.GetBool(EditorPlayModeCheckKey, false)) return;
+#endif
             if (!runCore.IsPracticeComplete
                 || !hasLatestAppRunSnapshot || !IsFullPracticeCompletion(latestAppRunSnapshot)
                 || PlayerPrefs.GetInt(PracticeCompletedPrefsKey, 0) == 1)
@@ -15260,6 +15326,8 @@ namespace GreedLast
         private const string HapticsEnabledPrefsKey = "GreedLast.RuntimeUi.HapticsEnabled";
         private const string RotationTiltEnabledPrefsKey = "GreedLast.RuntimeUi.RotationTiltEnabled";
         private const string MotionComfortEnabledPrefsKey = "GreedLast.RuntimeUi.MotionComfortEnabled";
+        private static Font prototypeRegularFont;
+        private static Font prototypeBoldFont;
         private static readonly Color32 ButtonNormalColor = new Color32(205, 166, 70, 255);
         private static readonly Color32 ButtonHighlightedColor = new Color32(238, 204, 114, 255);
         private static readonly Color32 ButtonPressedColor = new Color32(165, 124, 48, 255);
@@ -15284,6 +15352,9 @@ namespace GreedLast
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
 
         private GameObject rootPanel;
+        private GameObject ownedCanvas;
+        private GameObject ownedCamera;
+        private GameObject ownedEventSystem;
         private RectTransform rootPanelRect;
         private Image rootBackground;
         private RawImage prototypeEntranceBackdrop;
@@ -15673,6 +15744,7 @@ namespace GreedLast
 
         public event Action<bool> RotationTiltPreferenceChanged;
         public event Action ViewportChanged;
+        public event Action PresentationSuspended;
 
         public void Initialize(
             Action onPracticeRunRequested,
@@ -17062,9 +17134,9 @@ namespace GreedLast
                 case 2:
                     return "↔ 비틀기";
                 case 3:
-                    return "↺ 회전 Q";
+                    return "⭯ 회전 Q";
                 case 4:
-                    return "↻ 회전 E";
+                    return "⭮ 회전 E";
                 default:
                     return "↑ 점프";
             }
@@ -18500,8 +18572,8 @@ namespace GreedLast
             {
                 runProgressText.text = label;
                 runProgressText.fontSize = compact ? 34 : BuildRunProgressFontSize(label);
-                SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, compact ? 0.705f : 0.715f, 760f, 64f);
-                SetAnchored(runProgressText.rectTransform, 0.5f, 1.1f, 720f, compact ? 40f : 36f);
+                SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, compact ? 0.69f : 0.715f, 760f, 64f);
+                SetAnchored(runProgressText.rectTransform, 0.5f, compact ? 1.3f : 1.1f, 720f, compact ? 56f : 40f);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);
                 float downbeatTextBlend = BuildRunProgressDownbeatColorBlend(progressDownbeatLift);
                 int textAlpha = BuildRunProgressTextAlpha(230, progressDownbeatLift);
@@ -26292,6 +26364,7 @@ namespace GreedLast
             EnsureEventSystem();
 
             GameObject canvasObject = new GameObject("GreedLastCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            ownedCanvas = canvasObject;
             PreserveDuringPlay(canvasObject);
 
             Canvas canvas = canvasObject.GetComponent<Canvas>();
@@ -27475,7 +27548,7 @@ namespace GreedLast
             fillImage.raycastTarget = false;
 
             valueText = CreateText(gaugeRoot.transform, name + "Value", string.Empty, 32, TextAnchor.MiddleLeft, FontStyle.Bold);
-            SetAnchored(valueText.rectTransform, 0.5f, 0.92f, 360f, 44f);
+            SetAnchored(valueText.rectTransform, 0.5f, 0.92f, 360f, 52f);
             valueText.color = new Color32(237, 239, 231, 240);
             valueText.raycastTarget = false;
 
@@ -27752,13 +27825,13 @@ namespace GreedLast
             CreateRunnerAvatar(laneRoot.transform);
 
             activeActionCueText = CreateText(parent, "ActiveActionCue", string.Empty, 40, TextAnchor.MiddleCenter, FontStyle.Bold);
-            SetAnchored(activeActionCueText.rectTransform, 0.5f, 0.405f, 1000f, 90f);
+            SetAnchored(activeActionCueText.rectTransform, 0.5f, 0.425f, 1000f, 132f);
             activeActionCueText.color = new Color32(255, 238, 181, 0);
             activeActionCueText.raycastTarget = false;
 
             timingGuideText = CreateText(laneRoot.transform, "TimingGuide", string.Empty, 28, TextAnchor.MiddleCenter, FontStyle.Bold);
             timingGuideText.raycastTarget = false;
-            SetAnchored(timingGuideText.rectTransform, 0.5f, 0.04f, 760f, 64f);
+            SetAnchored(timingGuideText.rectTransform, 0.5f, 0.12f, 1100f, 64f);
             timingGuideText.color = new Color32(218, 226, 218, 220);
         }
 
@@ -27911,6 +27984,7 @@ namespace GreedLast
         private void OnEnable()
         {
             sensoryComponentEnabled = true;
+            if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(true);
             RefreshAudioPlaybackState();
         }
 
@@ -27919,6 +27993,8 @@ namespace GreedLast
             sensoryComponentEnabled = false;
             RefreshAudioPlaybackState();
             CancelPendingUiInput();
+            if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(false);
+            PresentationSuspended?.Invoke();
         }
 
         private void OnDestroy()
@@ -27932,6 +28008,12 @@ namespace GreedLast
                 else DestroyImmediate(clip);
             }
             ownedAudioClips.Clear();
+            if (Application.isPlaying)
+            {
+                if (ownedCanvas != null) Destroy(ownedCanvas);
+                if (ownedCamera != null) Destroy(ownedCamera);
+                if (ownedEventSystem != null) Destroy(ownedEventSystem);
+            }
         }
 
         private void CreateAudio()
@@ -27987,7 +28069,7 @@ namespace GreedLast
             }
         }
 
-        private static void EnsureCamera()
+        private void EnsureCamera()
         {
             if (FindAnyObjectByType<Camera>() != null)
             {
@@ -27995,6 +28077,7 @@ namespace GreedLast
             }
 
             GameObject cameraObject = new GameObject("GreedLastCamera", typeof(Camera), typeof(AudioListener));
+            ownedCamera = cameraObject;
             PreserveDuringPlay(cameraObject);
 
             Camera camera = cameraObject.GetComponent<Camera>();
@@ -28005,7 +28088,7 @@ namespace GreedLast
             camera.transform.position = new Vector3(0f, 0f, -10f);
         }
 
-        private static void EnsureEventSystem()
+        private void EnsureEventSystem()
         {
             EventSystem existing = FindAnyObjectByType<EventSystem>();
             if (existing != null)
@@ -28015,6 +28098,7 @@ namespace GreedLast
             }
 
             GameObject eventSystem = new GameObject("GreedLastEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            ownedEventSystem = eventSystem;
             // GreedLastApp owns keyboard commands; Submit/Move would also activate the last clicked button.
             eventSystem.GetComponent<EventSystem>().sendNavigationEvents = false;
             PreserveDuringPlay(eventSystem);
@@ -28053,9 +28137,17 @@ namespace GreedLast
             GameObject textObject = CreateRect(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(800f, 160f));
             Text text = textObject.AddComponent<Text>();
             text.text = value;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            bool bold = style == FontStyle.Bold || style == FontStyle.BoldAndItalic;
+            if (bold && prototypeBoldFont == null)
+                prototypeBoldFont = Resources.Load<Font>("GreedLast/Fonts/NotoSansKR-Bold");
+            if (!bold && prototypeRegularFont == null)
+                prototypeRegularFont = Resources.Load<Font>("GreedLast/Fonts/NotoSansKR-Regular");
+            Font bundledFont = bold ? prototypeBoldFont : prototypeRegularFont;
+            text.font = bundledFont != null ? bundledFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = size;
-            text.fontStyle = style;
+            text.fontStyle = bundledFont != null
+                ? (style == FontStyle.Italic || style == FontStyle.BoldAndItalic ? FontStyle.Italic : FontStyle.Normal)
+                : style;
             text.alignment = alignment;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
@@ -44350,7 +44442,7 @@ namespace GreedLast
             if (!compact && lastPresentedJudgementRecommendationReady)
                 text += (CountTextLines(text) >= 3 ? " · " : "\n")
                     + "보정 추천 준비 " + FormatTimingRecommendation(snapshot);
-            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.405f, 1100f, 100f);
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.42f, 1100f, 124f);
             if (compact)
             {
                 judgementFeedbackText.fontSize = snapshot.LastResult == GreedLastJudgementResult.Miss ? 36 : 40;
@@ -44412,7 +44504,7 @@ namespace GreedLast
             lastPresentedJudgementSnapshot = default;
             lastPresentedJudgementRecommendationReady = false;
             // Leave room for the largest GO pulse above the health/focus gauges.
-            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.425f, 850f, 126f);
+            SetAnchored(judgementFeedbackText.rectTransform, 0.5f, 0.44f, 850f, 160f);
             judgementFeedbackOffsetX = 0f;
             judgementFeedbackPopUntil = 0f;
             judgementFeedbackText.text = BuildResumeCountdownFeedbackText(snapshot);
@@ -47249,7 +47341,7 @@ namespace GreedLast
         {
             if (GreedLastRunCore.IsRotationPattern(pattern))
             {
-                return BuildRotationPatternDirection(pattern) < 0f ? "↺" : "↻";
+                return BuildRotationPatternDirection(pattern) < 0f ? "⭯" : "⭮";
             }
 
             return FormatRunnerResponseSymbol(BuildRunnerResponseType(pattern));
@@ -47654,7 +47746,7 @@ namespace GreedLast
             if (header)
             {
                 rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1.15f);
-                rect.sizeDelta = new Vector2(360f, 100f);
+                rect.sizeDelta = new Vector2(360f, 112f);
                 rect.anchoredPosition = Vector2.zero;
             }
             else
