@@ -37,20 +37,30 @@ namespace GreedLast.Editor
                     }
                     Require(clips.Count == 30, "Every audio-only UI instance must create its 30 prototype tones.");
                     allocated.AddRange(clips);
-                    Read<AudioSource>(ui, "rhythmAudio").clip = shared;
+                    AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
+                    ownedSource.clip = shared;
+                    AudioSource externalSource = host.AddComponent<AudioSource>();
+                    externalSource.playOnAwake = false;
+                    externalSource.clip = shared;
+                    externalSource.volume = 0.37f;
                     Call(ui, "OnDisable");
                     foreach (AudioClip clip in clips)
                         Require(clip != null, "A temporary UI disable must preserve its sounds for re-enable.");
                     Call(ui, "OnEnable");
                     ReleaseEditorAudio(host);
                     ReleaseEditorAudio(host);
+                    Require(ownedSource == null && host.GetComponents<AudioSource>().Length == 1,
+                        "UI-only teardown must release its generated source without requiring host destruction.");
+                    Require(externalSource != null && externalSource.clip == shared
+                        && Mathf.Approximately(externalSource.volume, 0.37f),
+                        "UI-only teardown must leave an unrelated host source, clip and volume unchanged.");
                     UnityEngine.Object.DestroyImmediate(host);
                     host = null;
                     foreach (AudioClip clip in clips)
                         Require(clip == null, "Destroying the owning UI must release every generated audio clip.");
                     Require(shared != null, "Destroying one UI must not release an externally supplied clip.");
                 }
-                Debug.Log("Greed Last audio ownership passed: three explicit Edit-mode teardown cycles released 90 owned tones, preserved an external clip and tolerated duplicate cleanup.");
+                Debug.Log("Greed Last audio ownership passed: three explicit Edit-mode teardown cycles released 90 owned tones and three generated sources, preserved unrelated sources/clips/volume and tolerated duplicate cleanup before host destruction.");
             }
             finally
             {

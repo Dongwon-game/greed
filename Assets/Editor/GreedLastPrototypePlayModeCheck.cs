@@ -208,6 +208,10 @@ namespace GreedLast.Editor
             public bool domainReloadObserved, externalResourcesPreserved, disabledAudioStopped;
             public bool inactiveHostPausedRun, interruptedBootRecovered;
             public bool disabledUiPausedRun, componentRemovalReleasedUi;
+            public bool generatedAudioSourceReleased, externalAudioSourcePreserved, externalNavigationRestored;
+            public int externalNavigationCases, externalNavigationSceneReloadCases;
+            public int audioSourcesAfterComponentRemoval;
+            public bool borrowedSceneReloadRecovered;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -440,7 +444,10 @@ namespace GreedLast.Editor
                 report.lifecycleJudgements = report.judgements;
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyFullLoop();
                 AudioClip ownedTone = Read<AudioClip>(ui, "beatClip");
+                AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
                 GameObject formerHost = app.gameObject;
+                AudioSource unrelatedSource = formerHost.AddComponent<AudioSource>();
+                unrelatedSource.playOnAwake = false;
                 UnityEngine.Object.Destroy(app);
                 yield return null;
                 yield return null;
@@ -453,6 +460,9 @@ namespace GreedLast.Editor
                 Require(formerHost != null && formerHost.GetComponent<GreedLastRuntimeUi>() == null,
                     "Removing an app component must not destroy its host or leave a live orphaned UI component.");
                 report.componentRemovalReleasedUi = true;
+                report.audioSourcesAfterComponentRemoval = formerHost.GetComponents<AudioSource>().Length;
+                report.generatedAudioSourceReleased = ownedSource == null && report.audioSourcesAfterComponentRemoval == 1;
+                report.externalAudioSourcePreserved = unrelatedSource != null && unrelatedSource.gameObject == formerHost;
                 UnityEngine.Object.Destroy(formerHost);
                 yield return null;
                 InvokeStatic(typeof(GreedLastApp), "Create");
@@ -474,23 +484,105 @@ namespace GreedLast.Editor
                 UnityEngine.Object.Destroy(app.gameObject);
                 yield return null;
                 yield return null;
-                var externalCamera = new GameObject("GreedLastExternalCameraCheck", typeof(Camera), typeof(AudioListener));
-                var externalEvents = new GameObject("GreedLastExternalEventsCheck",
-                    typeof(UnityEngine.EventSystems.EventSystem), typeof(UnityEngine.EventSystems.StandaloneInputModule));
+                report.externalNavigationRestored = true;
+                for (int settingsCase = 0; settingsCase < 3; settingsCase++)
+                {
+                    var externalCamera = new GameObject("GreedLastExternalCameraCheck", typeof(Camera), typeof(AudioListener));
+                    var externalEvents = new GameObject("GreedLastExternalEventsCheck",
+                        typeof(EventSystem), typeof(StandaloneInputModule));
+                    UnityEngine.Object.DontDestroyOnLoad(externalCamera);
+                    UnityEngine.Object.DontDestroyOnLoad(externalEvents);
+                    EventSystem borrowedEvents = externalEvents.GetComponent<EventSystem>();
+                    bool originalNavigation = settingsCase == 0;
+                    borrowedEvents.sendNavigationEvents = originalNavigation;
+                    InvokeStatic(typeof(GreedLastApp), "Create");
+                    Attach(FindApp());
+                    yield return null;
+                    Require(Read<GameObject>(ui, "ownedCamera") == null && Read<GameObject>(ui, "ownedEventSystem") == null
+                        && !borrowedEvents.sendNavigationEvents,
+                        "An app must preserve external objects and isolate its keyboard commands while active.");
+                    yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                    yield return null;
+                    Require(externalCamera != null && externalEvents != null && !borrowedEvents.sendNavigationEvents
+                        && Read<GameObject>(ui, "ownedCamera") == null && Read<GameObject>(ui, "ownedEventSystem") == null
+                        && Count<Camera>() == 1 && Count<EventSystem>() == 1,
+                        "Retained borrowed resources must remain external and unique after a scene reload.");
+                    report.externalNavigationSceneReloadCases++;
+                    if (settingsCase == 2) borrowedEvents.sendNavigationEvents = true;
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    Require(externalCamera != null && externalEvents != null && CountNamed<Canvas>("GreedLastCanvas") == 0,
+                        "App teardown must preserve external camera/input objects and release only its own UI.");
+                    report.externalResourcesPreserved = true;
+                    report.externalNavigationRestored &= borrowedEvents.sendNavigationEvents == (settingsCase == 2 || originalNavigation);
+                    report.externalNavigationCases++;
+                    UnityEngine.Object.Destroy(externalCamera);
+                    UnityEngine.Object.Destroy(externalEvents);
+                    yield return null;
+                }
+                Require(report.generatedAudioSourceReleased && report.externalAudioSourcePreserved
+                    && report.externalNavigationRestored,
+                    "Teardown ownership mismatch: generated audio source released=" + report.generatedAudioSourceReleased
+                        + ", unrelated host audio preserved=" + report.externalAudioSourcePreserved
+                        + ", external navigation restored=" + report.externalNavigationRestored);
+                yield return VerifyBorrowedSceneReload();
+            }
+
+            private IEnumerator VerifyBorrowedSceneReload()
+            {
+                var sceneCamera = new GameObject("GreedLastBorrowedSceneCamera", typeof(Camera), typeof(AudioListener));
+                var sceneEvents = new GameObject("GreedLastBorrowedSceneEvents", typeof(EventSystem), typeof(StandaloneInputModule));
                 InvokeStatic(typeof(GreedLastApp), "Create");
                 Attach(FindApp());
-                yield return null;
+                float deadline = Time.realtimeSinceStartup + 10f;
+                while (state.CurrentState != GreedLastScreenState.LobbyReady)
+                { Require(Time.realtimeSinceStartup < deadline, "Borrowed-scene app did not reach its lobby."); yield return null; }
                 Require(Read<GameObject>(ui, "ownedCamera") == null && Read<GameObject>(ui, "ownedEventSystem") == null,
-                    "An app using external camera/input objects must not claim ownership of them.");
+                    "The scene-reload fixture must initially borrow scene-owned resources.");
+                GreedLastApp originalApp = app;
+                GreedLastRuntimeUi originalUi = ui;
+                yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                yield return null;
+                yield return null;
+                Require(sceneCamera == null && sceneEvents == null && FindApp() == originalApp && ui == originalUi,
+                    "A scene reload must remove borrowed scene resources but preserve the app and its UI.");
+                Require(Count<Camera>() == 1 && Count<AudioListener>() == 1 && Count<EventSystem>() == 1,
+                    "Persistent UI must recover one camera/listener/input system after its borrowed scene resources unload.");
+                EventSystem events = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+                StandaloneInputModule module = events.GetComponent<StandaloneInputModule>();
+                input = events.gameObject.AddComponent<GreedLastPrototypeKeyboardInput>();
+                module.inputOverride = input;
+                input.MouseEnabled = true;
+                input.MousePosition = new Vector2(-1000f, -1000f);
+                yield return null;
+                yield return null;
+                Require(module.IsActive() && !events.sendNavigationEvents,
+                    "Recovered scene input must retain engine-owned pointer dispatch without duplicate keyboard navigation.");
+                yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                Require(state.CurrentState == GreedLastScreenState.RunCoreTest && run.PracticeMode,
+                    "The recovered EventSystem must open practice through an actual engine mouse click.");
+                yield return TapTouch(Read<Button>(ui, "pauseButton"));
+                Require(run.Paused, "Recovered engine touch must open the real practice pause menu.");
+                GreedLastRunSnapshot frozen = run;
+                for (int reloadIndex = 0; reloadIndex < 2; reloadIndex++)
+                {
+                    yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                    yield return null;
+                    AssertFrozen(frozen);
+                    Require(FindApp() == originalApp && ui == originalUi
+                        && Count<Camera>() == 1 && Count<AudioListener>() == 1 && Count<EventSystem>() == 1,
+                        "Repeated scene loads must preserve one paused app and one set of recovered resources.");
+                }
+                yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                    "An actual engine touch must still return from practice after borrowed resources unload.");
+                report.borrowedSceneReloadRecovered = true;
                 UnityEngine.Object.Destroy(app.gameObject);
                 yield return null;
                 yield return null;
-                Require(externalCamera != null && externalEvents != null && CountNamed<Canvas>("GreedLastCanvas") == 0,
-                    "App teardown must preserve external camera/input objects and release only its own UI.");
-                report.externalResourcesPreserved = true;
-                UnityEngine.Object.Destroy(externalCamera);
-                UnityEngine.Object.Destroy(externalEvents);
-                yield return null;
+                Require(Count<Camera>() == 0 && Count<AudioListener>() == 0 && Count<EventSystem>() == 0,
+                    "Recovered resources must be owned by the app and released on final teardown.");
             }
 
             private IEnumerator VerifyFullLoop()

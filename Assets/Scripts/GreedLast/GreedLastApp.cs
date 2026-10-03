@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace GreedLast
@@ -15355,6 +15356,9 @@ namespace GreedLast
         private GameObject ownedCanvas;
         private GameObject ownedCamera;
         private GameObject ownedEventSystem;
+        private AudioSource ownedAudioSource;
+        private EventSystem borrowedEventSystem;
+        private bool borrowedNavigationEvents;
         private RectTransform rootPanelRect;
         private Image rootBackground;
         private RawImage prototypeEntranceBackdrop;
@@ -26362,6 +26366,7 @@ namespace GreedLast
             liveSettingCleanViewGroups.Clear();
             EnsureCamera();
             EnsureEventSystem();
+            if (Application.isPlaying) SceneManager.sceneLoaded += RestoreSceneResources;
 
             GameObject canvasObject = new GameObject("GreedLastCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             ownedCanvas = canvasObject;
@@ -28000,6 +28005,7 @@ namespace GreedLast
         private void OnDestroy()
         {
             StopRhythmAudio();
+            SceneManager.sceneLoaded -= RestoreSceneResources;
             // Only generated tones belong to this UI; imported or externally assigned clips do not.
             foreach (AudioClip clip in ownedAudioClips)
             {
@@ -28008,6 +28014,12 @@ namespace GreedLast
                 else DestroyImmediate(clip);
             }
             ownedAudioClips.Clear();
+            if (ownedAudioSource != null)
+            {
+                if (Application.isPlaying) Destroy(ownedAudioSource);
+                else DestroyImmediate(ownedAudioSource);
+            }
+            RestoreBorrowedNavigation();
             if (Application.isPlaying)
             {
                 if (ownedCanvas != null) Destroy(ownedCanvas);
@@ -28023,6 +28035,7 @@ namespace GreedLast
             rotationTiltEnabled = IsRotationTiltEnabledFromPrefs();
             motionComfortEnabled = PlayerPrefs.GetInt(MotionComfortEnabledPrefsKey, 1) == 1;
             rhythmAudio = gameObject.AddComponent<AudioSource>();
+            ownedAudioSource = rhythmAudio;
             rhythmAudio.playOnAwake = false;
             rhythmAudio.loop = false;
             rhythmAudio.spatialBlend = 0f;
@@ -28093,6 +28106,11 @@ namespace GreedLast
             EventSystem existing = FindAnyObjectByType<EventSystem>();
             if (existing != null)
             {
+                if (existing == borrowedEventSystem
+                    || (ownedEventSystem != null && existing.gameObject == ownedEventSystem)) return;
+                RestoreBorrowedNavigation();
+                borrowedEventSystem = existing;
+                borrowedNavigationEvents = existing.sendNavigationEvents;
                 existing.sendNavigationEvents = false;
                 return;
             }
@@ -28102,6 +28120,21 @@ namespace GreedLast
             // GreedLastApp owns keyboard commands; Submit/Move would also activate the last clicked button.
             eventSystem.GetComponent<EventSystem>().sendNavigationEvents = false;
             PreserveDuringPlay(eventSystem);
+        }
+
+        private void RestoreSceneResources(Scene scene, LoadSceneMode mode)
+        {
+            if (rootPanel == null) return;
+            // The persistent canvas can outlive a camera or input system borrowed from its former scene.
+            EnsureCamera();
+            EnsureEventSystem();
+        }
+
+        private void RestoreBorrowedNavigation()
+        {
+            // Restore only our keyboard isolation; preserve a later external enable.
+            if (borrowedEventSystem != null && !borrowedEventSystem.sendNavigationEvents)
+                borrowedEventSystem.sendNavigationEvents = borrowedNavigationEvents;
         }
 
         private static Button CreateButton(Transform parent, string name, string label)
