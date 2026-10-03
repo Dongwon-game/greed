@@ -17,6 +17,7 @@
 2. 에디터에서만 선택적으로 런 중 Hierarchy의 런타임 `GreedLastApp` 오브젝트를 잠시 껐다 켠다. 비활성 동안 거리/집중/체력이 변하지 않고 복원된 메뉴에서 재개 카운트를 거쳐야 한다. 앱 오브젝트를 삭제하거나 개인 진행도를 초기화할 필요는 없다.
 3. 재생을 멈춘 상태에서 `Greed Last/Run Engine Play Mode Lifecycle Check`로 격리 검사를 실행할 수 있다. 실제 일반/빠른 재생, 재진입/씬 로딩, 앱/UI 비활성화와 부팅 중단/복귀, 앱 컴포넌트 제거의 생성 오브젝트/AudioSource 해제, 외부 오브젝트/오디오 보존과 탐색 설정 세 조건 복원, 씬 소유 자원 소실 뒤 실제 마우스/터치 복구와 반복 재로드의 정지 상태를 대조한다. 개인 진행도/설정은 변경하지 않고 재생 설정은 복원한다. 보고서는 `Logs/PlayModeChecks/latest-report.json`이다. 실기기 센서/소리 지연/FPS와 화면 이미지는 별도 확인한다.
 4. `Greed Last/Run Engine Play Mode Full Loop Check`는 위 검사에 일반 런 전체 8선택·15함정·탈출→S2 저장 1회→준비 취소→무한 두 번 실제 시작·자연 체력 0→자동 비움·기록→빈 칸 보충 재진입을 더한다. 확장 루프는 무적/구간 바로가기 없이 검사하며 보관할 개인 슬롯은 사용하지 않는다.
+5. 보고서의 `succeeded`, `fullLoopIncluded` 또는 `pointerLoopIncluded`, `archivedReport`를 함께 본다. `Logs/PlayModeChecks`와 `Logs/VisualChecks`의 실행별 JSON은 후속 검사와 별개로 남으며 `latest-report.json`은 가장 최근 실행이다. 렌더 전용 통과를 전체 포인터 통과로, 수명 검사만의 통과를 일반/저장/무한 전체 루프 통과로 해석하지 않는다. PNG는 최신 캡처이며 실행별 이미지 보관은 아니다.
 
 ### 주행 표시
 

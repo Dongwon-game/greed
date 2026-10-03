@@ -35,6 +35,7 @@ namespace GreedLast.Editor
             public string unityVersion;
             public bool succeeded;
             public string error;
+            public string archivedReport;
             public bool pointerLoopPassed;
             public bool pointerLoopIncluded;
             public int pointerLoopCases;
@@ -2185,7 +2186,11 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            File.WriteAllText("Logs/VisualChecks/latest-report.json", JsonUtility.ToJson(report, true));
+            report.archivedReport = "report-" + (report.pointerLoopIncluded ? "full-" : "layout-")
+                + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
+            string json = JsonUtility.ToJson(report, true);
+            File.WriteAllText(Path.Combine("Logs/VisualChecks", report.archivedReport), json);
+            File.WriteAllText("Logs/VisualChecks/latest-report.json", json);
         }
 
         private static T Read<T>(string name)

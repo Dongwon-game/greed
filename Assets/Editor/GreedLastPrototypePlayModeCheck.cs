@@ -152,7 +152,11 @@ namespace GreedLast.Editor
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                File.WriteAllText(Path.Combine(directory, "latest-report.json"), JsonUtility.ToJson(results, true));
+                results.archivedReport = "report-" + (results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
+                    + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
+                string json = JsonUtility.ToJson(results, true);
+                File.WriteAllText(Path.Combine(directory, results.archivedReport), json);
+                File.WriteAllText(Path.Combine(directory, "latest-report.json"), json);
             }
             catch (Exception error) { results.succeeded = false; results.error += error; }
             if (results.succeeded) Debug.Log("Greed engine Play-mode check passed: two engine-driven cycles, normal/domain-reload-disabled entry, boot, pause/countdown, scene reload, actual-module synthetic mouse/touch and owned-object teardown. Full clear/save/two-start loop="
@@ -194,7 +198,7 @@ namespace GreedLast.Editor
         }
         [Serializable] private sealed class Results
         {
-            public string startedUtc, completedUtc, unityVersion, error;
+            public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch samples and OS-focus simulation; no manual core Tick, UI Update, request-draining or private clock edits. Not hardware input, rendered-image, device FPS or audio-latency testing.";
             public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded;
             public List<Cycle> cycles = new List<Cycle>();

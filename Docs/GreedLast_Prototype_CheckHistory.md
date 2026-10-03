@@ -2,6 +2,7 @@
 
 ## 2026-10-03 밤의 재현과 검증 구분
 
+- 보고서 보존 추가 뒤 `prototype-archived-engine-full-loop-20261003.log` 23:54 KST의 전체 엔진 두 사이클과 `prototype-archived-layout-20261003.log` 23:59 KST의 렌더 전용 554장을 통과했다. `archivedReport` 파일과 최신 보고서 해시를 대조했다. 엔진은 외부 자원 유지 세 설정 조건도 전체 게임 루프와 함께 포함한다. 전체 포인터/시각 23:39 결과는 `Logs/VisualChecks/report-full-20261003-2339.json`에 별도 보존하며 렌더 전용으로 대체하지 않는다. PNG는 최신 캡처다. 마지막 변경은 편집기 검사/보고서에 한정하며 게임 코드는 23:43 비개발 빌드의 `D6F598D67716F9C4DBDB71227406D5A77EBF2C267A7BAC5B919D9B31AF1B3042`와 같다.
 - 포함 한글 글꼴 적용 후 두 줄 행동/판정, 큰 GO, 진행 막대와 실제 글리프 경계를 재검사했다. 영역 높이와 타이밍 안내 간격/폭을 맞췄으며 입력 영역·판정 폭·점수/체력/저장 규칙은 바꾸지 않았다.
 - `prototype-bundled-font-full-visual-20261003.log` 22:48 KST는 포인터 5조건 정상 1,390회/취소 1,285회를 통과했지만 마지막 태블릿 안내 줄바꿈에서 전체 시각 검사가 실패했다. 수정 뒤 `prototype-bundled-font-wide-guide-render-20261003.log` 22:55 KST의 554장은 렌더 전용 통과이며 장기 포인터 검사를 포함하지 않는다.
 - `prototype-bundled-font-integrated-verified-20261003.log` 22:59 KST는 원본 글꼴/라이선스 해시·전체 스모크·비개발 Windows 빌드를 통과했다. 코드 SHA-256 `922AAF523B80153513208A69E913F22D5613F6F975CB5253A7114ECAC57F7BC6`는 아래 자원 복구 수정 전 결과다.
