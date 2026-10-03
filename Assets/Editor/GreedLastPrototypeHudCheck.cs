@@ -7,6 +7,102 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeHudCheck
     {
+        internal static void VerifyCompactTimingGuideReuse(GreedLastRuntimeUi ui)
+        {
+            var fresh = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildCompactTimingGuideLabel", BindingFlags.Static | BindingFlags.NonPublic));
+            var cached = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("GetCompactTimingGuideLabel", BindingFlags.Instance | BindingFlags.NonPublic));
+            bool originalPlayerControls = ui.UsePlayerRunControls;
+            if (!originalPlayerControls) ui.ToggleDevCleanView();
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                GreedLastScreenState.InfiniteRun, "Timing guide cache check", string.Empty, 0));
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            int comparisons = 0;
+            int firstWindow = -1;
+            bool changedWindow = false;
+            bool sawEarly = false;
+            bool sawCenter = false;
+            bool sawLate = false;
+            bool sawMissed = false;
+            try
+            {
+                core.EnterInfiniteRun();
+                core.ToggleDevInvincible();
+                for (int frame = 0; frame < 2400; frame++)
+                {
+                    core.Tick(clock += 1f / 60f);
+                    if (frame == 600 || frame == 1200) core.RaiseInfiniteThreatForTest();
+                    Check();
+                    if (!run.ActivePattern || run.CountdownActive) continue;
+                    int count = run.SuccessCount + run.GoodCount + run.MissCount;
+                    if (count % 3 == 2) continue;
+                    float delta = count % 3 == 1
+                        ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
+                    {
+                        core.HandleInput(run.Pattern.Channel, clock);
+                        Check();
+                    }
+                    if (frame % 240 == 0)
+                    {
+                        ui.ToggleDevCleanView();
+                        Call(ui, "UpdateRunTimingVisuals");
+                        ui.ToggleDevCleanView();
+                        Check();
+                    }
+                }
+                core.TogglePause(clock);
+                Check();
+                Require(cached(run) == string.Empty, "Paused timing must not inherit the last active compact label.");
+                core.TogglePause(clock);
+                Check();
+                core.Tick(clock += 2f);
+                Check();
+                core.ForceStopInfiniteRunForTest();
+                Check();
+                Require(cached(run) == string.Empty, "Terminal timing must not revive a cached active label.");
+                core.RestartPractice(clock);
+                core.Tick(clock += 2f);
+                Check();
+                Require(changedWindow && sawEarly && sawCenter && sawLate && sawMissed,
+                    "Cache checks must cover actual changing windows, approach, exact center, late Good and missed timing.");
+                Debug.Log($"Greed compact timing cache passed: {comparisons} real-snapshot comparisons,"
+                    + " repeated string reuse, changing threat windows, early/center/late/missed timing, F11 round trips, pause/countdown/terminal and fresh practice. Personal settings and slots unchanged.");
+            }
+            finally
+            {
+                if (ui.UsePlayerRunControls != originalPlayerControls) ui.ToggleDevCleanView();
+            }
+
+            void Check()
+            {
+                string expected = fresh(run);
+                string label = cached(run);
+                Require(label == expected, "Cached compact timing must equal its current uncached label.");
+                for (int repeat = 0; repeat < 8; repeat++)
+                    Require(ReferenceEquals(label, cached(run)), "Unchanged compact timing must reuse one string.");
+                comparisons++;
+                ui.RenderRun(run);
+                Call(ui, "UpdateRunTimingVisuals");
+                if (string.IsNullOrEmpty(expected)) return;
+                Require(Read<Text>(ui, "timingGuideText").text == expected,
+                    "The actual basic timing graphic must use the current cached label.");
+                int window = Mathf.RoundToInt(run.Pattern.SuccessWindowSeconds * 1000f);
+                if (firstWindow < 0) firstWindow = window;
+                changedWindow |= firstWindow != window;
+                sawEarly |= expected.Contains("박 전", StringComparison.Ordinal);
+                sawCenter |= expected.StartsWith("정박", StringComparison.Ordinal);
+                sawLate |= expected == "늦음 · Good 가능";
+                sawMissed |= expected == "놓침";
+            }
+        }
+
         internal static void VerifyIdleSafeAreaRefresh(GreedLastRuntimeUi ui)
         {
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Viewport check", string.Empty, 0));

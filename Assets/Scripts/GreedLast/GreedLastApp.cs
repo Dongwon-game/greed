@@ -15612,6 +15612,9 @@ namespace GreedLast
         private GreedLastRunSnapshot lastPresentedJudgementSnapshot;
         private bool lastPresentedJudgementRecommendationReady;
         private bool lastTimingRecommendationReady;
+        private string cachedCompactTimingGuideBeat;
+        private int cachedCompactTimingGuideWindowMs;
+        private string cachedCompactTimingGuideLabel;
         private bool reviewTargetAchievementAnnounced;
         private string lastPresentedReviewTargetText = string.Empty;
         private bool lastActivePatternVisual;
@@ -29289,7 +29292,7 @@ namespace GreedLast
             float activationImpact = BuildBeatMarkerFocusGuardImpact();
             float livePulse = GetGameplayBeatPulse();
             float urgencyPulse = BuildFocusStateUrgencyPulse(latestRunSnapshot.FocusStateRemainingSeconds, livePulse);
-            float focusPulse = Mathf.Max(activationImpact, 0.32f + livePulse * 0.34f, urgencyPulse);
+            float focusPulse = Mathf.Max(activationImpact, Mathf.Max(0.32f + livePulse * 0.34f, urgencyPulse));
 
             float lineY = judgementLine.rectTransform.anchorMin.y;
             float halfHeight = Mathf.Lerp(0.016f, 0.038f, focusPulse) + urgencyPulse * 0.010f;
@@ -36246,7 +36249,7 @@ namespace GreedLast
                 bool compactGuide = !DevToolsEnabled || devCleanViewEnabled;
                 timingGuideText.fontSize = compactGuide ? 36 : 28;
                 timingGuideText.text = compactGuide
-                    ? BuildCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
+                    ? GetCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
                 Color32 guideColor = GetTimingGuideColor(latestRunSnapshot);
                 if (exactPulse > 0f)
                 {
@@ -46588,13 +46591,37 @@ namespace GreedLast
 
         private static string BuildCompactTimingGuideLabel(GreedLastRunSnapshot snapshot)
         {
+            return BuildCompactTimingGuideLabelFromBeat(BuildCompactTimingGuideBeat(snapshot),
+                Mathf.RoundToInt(snapshot.Pattern.SuccessWindowSeconds * 1000f));
+        }
+
+        private string GetCompactTimingGuideLabel(GreedLastRunSnapshot snapshot)
+        {
+            string beat = BuildCompactTimingGuideBeat(snapshot);
+            int windowMs = Mathf.RoundToInt(snapshot.Pattern.SuccessWindowSeconds * 1000f);
+            if (cachedCompactTimingGuideLabel == null || cachedCompactTimingGuideBeat != beat
+                || cachedCompactTimingGuideWindowMs != windowMs)
+            {
+                cachedCompactTimingGuideBeat = beat;
+                cachedCompactTimingGuideWindowMs = windowMs;
+                cachedCompactTimingGuideLabel = BuildCompactTimingGuideLabelFromBeat(beat, windowMs);
+            }
+            return cachedCompactTimingGuideLabel;
+        }
+
+        private static string BuildCompactTimingGuideBeat(GreedLastRunSnapshot snapshot)
+        {
             if (!ShouldShowActivePatternVisuals(snapshot) || !snapshot.Pattern.IsValid) return string.Empty;
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds) return "놓침";
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.SuccessWindowSeconds) return "늦음 · Good 가능";
-
-            string beat = Mathf.Abs(snapshot.CoreDeltaSeconds) <= BuildCenterHitWindow(snapshot.Pattern)
+            return Mathf.Abs(snapshot.CoreDeltaSeconds) <= BuildCenterHitWindow(snapshot.Pattern)
                 ? "정박" : BuildActivePatternBeatCue(snapshot);
-            return beat + " · 정확 ±" + Mathf.RoundToInt(snapshot.Pattern.SuccessWindowSeconds * 1000f) + "ms";
+        }
+
+        private static string BuildCompactTimingGuideLabelFromBeat(string beat, int windowMs)
+        {
+            if (beat == string.Empty || beat == "놓침" || beat == "늦음 · Good 가능") return beat;
+            return beat + " · 정확 ±" + windowMs + "ms";
         }
 
         private static string BuildTimingGuideLabel(GreedLastRunSnapshot snapshot)
@@ -47015,7 +47042,13 @@ namespace GreedLast
             }
 
             int beatsToCore = Mathf.Clamp(Mathf.CeilToInt(secondsToCore / beatInterval), 1, 4);
-            return beatsToCore + "박 전";
+            switch (beatsToCore)
+            {
+                case 1: return "1박 전";
+                case 2: return "2박 전";
+                case 3: return "3박 전";
+                default: return "4박 전";
+            }
         }
 
         private static float BuildActiveBeatCueUrgency(GreedLastRunSnapshot snapshot)

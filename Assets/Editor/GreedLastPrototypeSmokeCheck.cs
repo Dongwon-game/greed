@@ -10039,6 +10039,7 @@ namespace GreedLast.Editor
         {
             VerifyPlayfieldReadability(ui);
             VerifyCompactTimingGuide(ui);
+            GreedLastPrototypeHudCheck.VerifyCompactTimingGuideReuse(ui);
             VerifyCompactActionCues(ui);
             GreedLastPrototypeHudCheck.Run();
             GreedLastPrototypeHudCheck.VerifyIdleSafeAreaRefresh(ui);

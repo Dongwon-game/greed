@@ -228,6 +228,8 @@ namespace GreedLast.Editor
                 canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
                 Sample(null);
                 Sample(ui);
+                Sample(ui, updatePresentation: true);
+                MeasurePresentationHelpers(ui);
             }
             finally
             {
@@ -239,7 +241,7 @@ namespace GreedLast.Editor
             }
         }
 
-        private static void Sample(GreedLastRuntimeUi ui)
+        private static void Sample(GreedLastRuntimeUi ui, bool updatePresentation = false)
         {
             if (ui != null) ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
                 GreedLastScreenState.InfiniteRun, "Live measurement", string.Empty, 0));
@@ -253,11 +255,17 @@ namespace GreedLast.Editor
                 if (ui != null) ui.RenderRun(value);
             };
             float clock = Time.realtimeSinceStartup;
+            Action updateUi = updatePresentation
+                ? (Action)Delegate.CreateDelegate(typeof(Action), ui,
+                    typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic))
+                : null;
+            int uiUpdates = 0;
             core.EnterInfiniteRun();
             core.ToggleDevInvincible();
             for (int frame = 0; frame < 180; frame++) Step();
             int beforePublications = publications;
             int beforeJudgements = run.SuccessCount + run.GoodCount + run.MissCount;
+            int beforeUiUpdates = uiUpdates;
             using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
                 1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
             long beforeTime = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -270,18 +278,51 @@ namespace GreedLast.Editor
             int judgements = run.SuccessCount + run.GoodCount + run.MissCount - beforeJudgements;
             Require(!run.Stopped && !run.Paused && run.Distance > 100f && judgements >= 8,
                 "Measurement must advance an actual live infinite run, not an idle result.");
-            Debug.Log($"Greed live measurement: {(ui == null ? "core" : "core+RenderRun")}, frames={SampleFrames}, publications={publications - beforePublications}, judgements={judgements}, gcAllocEvents={allocations.Count}, eventsPerFrame={(double)allocations.Count / SampleFrames:F1}, instrumentedElapsedMs={milliseconds:F3}. Synthetic 60 Hz core publications only; allocation byte size, UI Update, GPU, full frame time and device performance are not measured. No saved slots or settings changed.");
+            Require(!updatePresentation || uiUpdates - beforeUiUpdates == SampleFrames,
+                "Presentation measurements must call the real UI Update once per synthetic step.");
+            string mode = ui == null ? "core" : updatePresentation ? "core+RenderRun+UiUpdate" : "core+RenderRun";
+            Debug.Log($"Greed live measurement: {mode}, frames={SampleFrames}, publications={publications - beforePublications}, judgements={judgements}, uiUpdates={uiUpdates - beforeUiUpdates}, gcAllocEvents={allocations.Count}, eventsPerFrame={(double)allocations.Count / SampleFrames:F1}, instrumentedElapsedMs={milliseconds:F3}. Synthetic 60 Hz core progression; UI Update is invoked manually only in the third mode. Engine frame clocks, allocation byte size, canvas rebuilds, GPU, full frame time and device performance are not measured. No saved slots or settings changed.");
 
             void Step()
             {
                 clock += 1f / 60f;
                 core.Tick(clock);
-                if (!run.ActivePattern || run.CountdownActive) return;
-                int count = run.SuccessCount + run.GoodCount + run.MissCount;
-                float delta = count % 4 == 0
-                    ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
-                if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
-                    core.HandleInput(run.Pattern.Channel, clock);
+                if (run.ActivePattern && !run.CountdownActive)
+                {
+                    int count = run.SuccessCount + run.GoodCount + run.MissCount;
+                    float delta = count % 4 == 0
+                        ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
+                        core.HandleInput(run.Pattern.Channel, clock);
+                }
+                if (updateUi != null)
+                {
+                    updateUi();
+                    uiUpdates++;
+                }
+            }
+        }
+
+        private static void MeasurePresentationHelpers(GreedLastRuntimeUi ui)
+        {
+            foreach (string name in new[] { "UpdatePrototypeEntranceBackdrop", "UpdatePrototypeRunCorridorBackdrop",
+                "UpdateRhythmBeatSchedule", "UpdateKeyboardLaneHoldVisuals", "UpdateRunAtmosphere",
+                "UpdateHealthDangerEdges", "UpdateTempleDepthBackdrop", "UpdateForwardMotionLines",
+                "UpdateRunnerAvatar", "UpdateStageTransitionBanner", "UpdateRunTimingVisuals",
+                "KeepRunnerCuesAboveTimingGuide", "UpdateResolvedTrapAfterimage", "UpdateJudgementHistoryDots",
+                "ApplyFocusStateAuraBand", "UpdateFeedbackFlash" })
+            {
+                var update = (Action)Delegate.CreateDelegate(typeof(Action), ui,
+                    typeof(GreedLastRuntimeUi).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic));
+                for (int warm = 0; warm < 10; warm++) update();
+                using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                    1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+                for (int sample = 0; sample < 500; sample++) update();
+                allocations.Stop();
+                Require(allocations.Valid && allocations.Count < allocations.Capacity,
+                    "Helper allocation instrumentation must remain valid and unsaturated: " + name);
+                Debug.Log($"Greed UI helper measurement: {name}, calls=500, gcAllocEvents={allocations.Count}."
+                    + " Frozen live snapshot, warmed delegate calls only; not an advancing engine frame or device profile.");
             }
         }
 
