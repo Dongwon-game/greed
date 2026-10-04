@@ -11,6 +11,7 @@ namespace GreedLast.Editor
         public static void Run()
         {
             Require(CanRun(), "Continuous timeline checks require Edit mode.");
+            RunAuthoredModes();
             float[][] schedules = { new[] { 1f / 30f }, new[] { 1f / 60f }, new[] { 1f / 120f },
                 new[] { 0.008f, 0.04f, 0.017f, 0.025f } };
             foreach (float[] schedule in schedules)
@@ -24,7 +25,57 @@ namespace GreedLast.Editor
         }
 
         [MenuItem("Greed Last/Run Continuous Timeline Check", true)]
+        [MenuItem("Greed Last/Run Authored Run Mode Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        [MenuItem("Greed Last/Run Authored Run Mode Check")]
+        public static void RunAuthoredModes()
+        {
+            Require(CanRun(), "Authored mode checks require Edit mode.");
+            int cases = 0;
+            GreedLastAvoidanceType[] basic = { GreedLastAvoidanceType.Jump, GreedLastAvoidanceType.Slide, GreedLastAvoidanceType.Twist };
+            string[] routes = { "안정 루트", "변주 루트", "압박 루트" };
+            GreedLastAvoidanceType[][] routeActions = { basic,
+                new[] { GreedLastAvoidanceType.Twist, GreedLastAvoidanceType.Slide, GreedLastAvoidanceType.Jump },
+                new[] { GreedLastAvoidanceType.Slide, GreedLastAvoidanceType.Twist, GreedLastAvoidanceType.Jump } };
+            void Check(int chapter, int step, bool practice, bool infinite, bool final, string route, GreedLastAvoidanceType expected)
+            {
+                GreedLastAvoidanceType actual = GreedLastRunCore.GetAuthoredAvoidanceType(chapter, step, practice, infinite, final, route);
+                Require(actual == expected, $"Authored action mode mismatch: chapter={chapter}, step={step}, practice={practice}, infinite={infinite}, final={final}, route={route}, expected={expected}, actual={actual}.");
+                cases++;
+            }
+            for (int step = 0; step < 3; step++)
+            {
+                Check(1, step, false, false, false, string.Empty, basic[step]);
+                Check(2, step, true, false, false, "압박 루트", basic[step]);
+                for (int route = 0; route < routes.Length; route++)
+                {
+                    foreach (int chapter in new[] { 2, 3 })
+                        Check(chapter, step, false, false, false, routes[route], routeActions[route][step]);
+                    Check(4, step, false, false, true, routes[route], routeActions[2][step]);
+                }
+                foreach (int chapter in new[] { 1, 4 })
+                    foreach (string route in new[] { string.Empty, "안정 루트", "변주 루트", "압박 루트" })
+                        Check(chapter, step, false, true, chapter == 4, route, GreedLastAvoidanceType.None);
+            }
+
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            var preferred = (Func<GreedLastAvoidanceType>)Delegate.CreateDelegate(typeof(Func<GreedLastAvoidanceType>), core,
+                typeof(GreedLastRunCore).GetMethod("BuildPreferredAvoidanceType", BindingFlags.Instance | BindingFlags.NonPublic));
+            core.EnterPractice();
+            Require(run.PracticeMode && preferred() == GreedLastAvoidanceType.Jump,
+                "A real practice entry must retain its authored opening action.");
+            core.Enter();
+            Require(!run.PracticeMode && !run.InfiniteMode && preferred() == GreedLastAvoidanceType.Jump,
+                "A real normal entry must retain its chapter-one authored actions.");
+            core.EnterInfiniteRun();
+            Require(run.InfiniteMode && !run.PracticeMode && run.ChapterIndex == 1
+                && preferred() == GreedLastAvoidanceType.None,
+                "Actual infinite entry uses chapter index one but must not inherit normal chapter-one action preference.");
+            Debug.Log($"Greed authored run modes passed: {cases} contracts and three actual mode entries. Normal/practice/final routes remain authored; infinite selection has no normal-chapter action preference. No personal settings or slots changed.");
+        }
 
         public static (GreedLastRunSnapshot before, GreedLastRunSnapshot after) VerifyLongInfiniteRun(
             Action<GreedLastRunSnapshot> observe = null)

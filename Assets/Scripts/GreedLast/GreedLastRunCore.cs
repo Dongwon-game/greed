@@ -5654,6 +5654,11 @@ namespace GreedLast
             string activeRouteProfile)
         {
             int step = Mathf.Max(0, chapterProgress) % ChapterTargetPatterns;
+            if (infiniteMode)
+            {
+                return GreedLastAvoidanceType.None;
+            }
+
             if (practiceMode || chapterIndex <= 1)
             {
                 switch (step)
@@ -5665,11 +5670,6 @@ namespace GreedLast
                     default:
                         return GreedLastAvoidanceType.Twist;
                 }
-            }
-
-            if (infiniteMode)
-            {
-                return GreedLastAvoidanceType.None;
             }
 
             if (finalValidation || chapterIndex >= 4)
