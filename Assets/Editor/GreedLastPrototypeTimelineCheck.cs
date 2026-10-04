@@ -87,6 +87,8 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot afterFinalInput = default;
             int publications = 0;
             int frames = 0;
+            int[] timingVisits = new int[4];
+            int[] avoidanceVisits = new int[4];
             float clock = Time.realtimeSinceStartup;
             var freshProfile = (Func<string>)Delegate.CreateDelegate(typeof(Func<string>), core,
                 typeof(GreedLastRunCore).GetMethod("BuildTimingProfileText", BindingFlags.Instance | BindingFlags.NonPublic));
@@ -151,6 +153,13 @@ namespace GreedLast.Editor
                 Require(untilInput >= -0.01f, "Every long-run trap must retain a playable lead-in.");
                 Advance(untilInput);
                 GreedLastRunSnapshot before = run;
+                int timing = (int)before.Pattern.TimingType;
+                int avoidance = (int)before.Pattern.AvoidanceType;
+                Require(timing > 0 && timing < timingVisits.Length
+                    && avoidance > 0 && avoidance < avoidanceVisits.Length,
+                    "Every selected long-run trap must retain a playable timing and avoidance action.");
+                timingVisits[timing]++;
+                avoidanceVisits[avoidance]++;
                 float inputDelta = run.CoreDeltaSeconds + run.InputTimingOffsetSeconds;
                 core.HandleInput(run.Pattern.Channel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == input + 1
@@ -172,6 +181,9 @@ namespace GreedLast.Editor
             Require(run.InfiniteSectionsCleared == targetInputs / 3 && run.MaxInfiniteThreatLevel == 5
                 && run.Score > 100000 && run.Health > 0 && !run.SaveEligible,
                 "1,200 real inputs must complete 400 infinite sections without creating a normal-run save candidate.");
+            for (int axis = 1; axis <= 3; axis++)
+                Require(timingVisits[axis] > 0 && avoidanceVisits[axis] > 0,
+                    "Actual infinite selection must include all three timing axes and actions, not only pass helper contracts.");
             int unanswered = 0;
             while (!run.Stopped)
             {
@@ -204,6 +216,8 @@ namespace GreedLast.Editor
             Debug.Log($"Greed long infinite timeline passed: {targetInputs} exact inputs, 400 completed sections,"
                 + $" {unanswered} natural unanswered traps, {frames} synthetic ticks, score={record.Score},"
                 + $" distance={record.Distance:F1}m. No private clock edits, trap shortcuts, invincibility or personal slot writes; not device endurance or performance measurement.");
+            Debug.Log($"Greed long infinite selection coverage: timing={timingVisits[1]}/{timingVisits[2]}/{timingVisits[3]},"
+                + $" avoidance={avoidanceVisits[1]}/{avoidanceVisits[2]}/{avoidanceVisits[3]}. Counts are observed coverage, not an equal-frequency design requirement.");
             return (beforeFinalInput, afterFinalInput);
         }
 

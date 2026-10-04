@@ -189,7 +189,8 @@ namespace GreedLast.Editor
                     && cycle.heldChoiceCannotAdvance && cycle.multiTouchFreshTapRecovered);
                 if (results.succeeded && results.fullLoopIncluded)
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
-                        && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses);
+                        && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
+                        && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce);
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
             try
@@ -276,6 +277,8 @@ namespace GreedLast.Editor
             public bool multiTouchFirstInputOnly, heldChoiceCannotAdvance, multiTouchFreshTapRecovered;
             public int consecutiveMultiTouchChoiceCases, multiTouchPreparationCases;
             public bool multiTouchPreparationPreservedUses;
+            public int multiTouchConfirmationCases;
+            public bool multiTouchConfirmationsConsumedOnce;
             public int engineMultiTouchBatches, engineTouchContacts;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
@@ -1176,11 +1179,13 @@ namespace GreedLast.Editor
                 report.savedSlotIndex = 1;
                 yield return TapTouch(Read<Button[]>(ui, "laneButtons")[report.savedSlotIndex]);
                 yield return WaitSeconds(0.4f);
-                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                yield return ConfirmWithTwoFingers(Read<Button>(ui, "nextPatternButton"), false);
                 GreedLastLobbySnapshot saved = backend.LoadLobby();
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
-                    && saved.SaveSlotOccupied[1] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[2],
-                    "One actual save must consume the candidate into selected S2 only.");
+                    && saved.SaveSlotOccupied[1] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[2]
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2,
+                    "Two confirmation fingers must save the candidate exactly once into S2 with both starts intact.");
+                report.multiTouchConfirmationCases++;
                 yield return ClickMouse(Read<Button>(ui, "saveLoadoutButton"));
                 Require(!backend.HasSaveLoadoutCandidate && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2,
                     "Opening save management again must not recreate a candidate or duplicate the saved result.");
@@ -1196,11 +1201,12 @@ namespace GreedLast.Editor
                 for (int use = 0; use < 2; use++)
                 {
                     yield return PrepareInfinite();
-                    yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                    yield return ConfirmWithTwoFingers(Read<Button>(ui, "nextPatternButton"), use != 0);
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode && !run.Stopped
                         && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 1 - use
                         && backend.LoadLobby().SaveSlotOccupied[1] == (use == 0),
                         "Only actual infinite start may consume a use, with immediate source auto-clear on its second start.");
+                    report.multiTouchConfirmationCases++;
                     report.actualInfiniteStarts++;
                     if (run.DevInvincible) core.ToggleDevInvincible();
                     bool inputOnce = false;
@@ -1223,6 +1229,7 @@ namespace GreedLast.Editor
                         "Each real-time infinite result must return to the lobby normally.");
                 }
                 report.infiniteNaturalFailures = true;
+                report.multiTouchConfirmationsConsumedOnce = report.multiTouchConfirmationCases == 3;
                 Require(!backend.LoadLobby().SaveSlotOccupied[1] && !backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
                     "The twice-used slot must be empty and reject a third start.");
                 report.exhaustedSlotAutoCleared = true;
@@ -1256,6 +1263,22 @@ namespace GreedLast.Editor
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(2, 2, uses);
                 report.multiTouchPreparationPreservedUses = true;
+            }
+
+            private IEnumerator ConfirmWithTwoFingers(Button button, bool releaseSecondFirst)
+            {
+                Vector2 point = ScreenPoint(button);
+                yield return TouchFrame(TouchAt(81, point, TouchPhase.Began), TouchAt(82, point, TouchPhase.Began));
+                yield return TouchFrame(TouchAt(81, point, TouchPhase.Stationary), TouchAt(82, point, TouchPhase.Stationary));
+                int released = releaseSecondFirst ? 82 : 81;
+                int held = releaseSecondFirst ? 81 : 82;
+                yield return TouchFrame(TouchAt(released, point, TouchPhase.Ended), TouchAt(held, point, TouchPhase.Stationary));
+                GreedLastScreenState confirmedState = state.CurrentState;
+                yield return WaitSeconds(0.4f);
+                yield return TouchFrame(TouchAt(held, point, TouchPhase.Ended));
+                yield return TouchFrame();
+                Require(state.CurrentState == confirmedState,
+                    "Releasing the second confirmation finger after transition must not invoke a new screen command.");
             }
 
             private IEnumerator VerifyConsecutiveChoiceTouches()
