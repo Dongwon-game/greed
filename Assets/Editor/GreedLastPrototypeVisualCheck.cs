@@ -99,6 +99,8 @@ namespace GreedLast.Editor
                 throw new InvalidOperationException("Stop Play mode before capturing prototype frames.");
             }
 
+            GreedLastPrototypePlayModeCheck.RequireAsyncBatchLifetime();
+
             if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
             {
                 throw new InvalidOperationException("Visual capture needs a graphics device; do not use -nographics.");

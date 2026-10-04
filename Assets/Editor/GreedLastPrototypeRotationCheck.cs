@@ -194,6 +194,9 @@ namespace GreedLast.Editor
                     Sample(-0.9f);
                     Require(accepted == before, "The first post-interruption held sample must not submit: " + interruption);
                     Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                    Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+                    Require(ui.AcceptsPlayerInput,
+                        "The fixture must restore foreground input before testing a new deliberate movement: " + interruption);
                     FreshRotation(resetSensor: false);
                     for (int frame = 0; frame < 12; frame++)
                         Require(!Sample(-0.9f), "A newly live corridor must not revive the interrupted hold: " + interruption);

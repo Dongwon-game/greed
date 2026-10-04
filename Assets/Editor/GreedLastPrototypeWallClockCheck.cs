@@ -16,6 +16,7 @@ namespace GreedLast.Editor
         {
             Require(active == null && !EditorApplication.isPlayingOrWillChangePlaymode,
                 "The wall-clock check requires Edit mode and no other wall-clock check.");
+            GreedLastPrototypePlayModeCheck.RequireAsyncBatchLifetime();
             active = new Check();
             try { active.Begin(); }
             catch (Exception error) { active.Finish(error); }

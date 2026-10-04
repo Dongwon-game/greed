@@ -453,6 +453,7 @@ namespace GreedLast.Editor
                             TouchFrame(input, module, TouchAt(92, screenPoint + Vector2.up * dragPixels, TouchPhase.Ended));
                             Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
                                 "A drag begun while suspended must not become a foreground scroll.");
+                            input.Touches = Array.Empty<Touch>();
                             input.MouseEnabled = true;
                             input.MousePosition = screenPoint;
                             input.ScrollDelta = Vector2.down;
@@ -464,6 +465,7 @@ namespace GreedLast.Editor
                             scroll.verticalNormalizedPosition = 1f;
                             input.MouseEnabled = false;
                             TouchFrame(input, module, TouchAt(93, screenPoint, TouchPhase.Began));
+                            TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels * 0.25f, TouchPhase.Moved));
                             TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels * 0.5f, TouchPhase.Moved));
                             frozen = scroll.content.anchoredPosition;
                             Require(frozen.y > 1f, "The interrupted drag fixture must first perform a real foreground scroll.");

@@ -46,6 +46,7 @@ namespace GreedLast.Editor
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
                 "The engine lifecycle check requires an idle Edit-mode editor.");
+            RequireAsyncBatchLifetime();
             var scene = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootScene);
             Require(scene != null, "The existing prototype boot scene is required.");
             VerifyCanceledGate();
@@ -67,6 +68,27 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Play Mode Full Loop Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
+
+        internal static void RequireAsyncBatchLifetime()
+        {
+            Require(!HasImmediateBatchQuit(Application.isBatchMode, Environment.GetCommandLineArgs()),
+                "Asynchronous prototype checks must run without -quit; the check exits after writing its final report.");
+        }
+
+        private static bool HasImmediateBatchQuit(bool batchMode, string[] arguments)
+            => batchMode && Array.Exists(arguments,
+                value => string.Equals(value, "-quit", StringComparison.OrdinalIgnoreCase));
+
+        internal static void VerifyAsyncBatchArguments()
+        {
+            Require(!HasImmediateBatchQuit(false, new[] { "-quit" })
+                && !HasImmediateBatchQuit(true, Array.Empty<string>())
+                && !HasImmediateBatchQuit(true, new[] { "-batchmode", "Logs/quit-check.log" }),
+                "Interactive editors and self-exiting batch checks must remain usable.");
+            Require(HasImmediateBatchQuit(true, new[] { "-batchmode", "-quit" })
+                && HasImmediateBatchQuit(true, new[] { "-QUIT" }),
+                "An immediate batch quit must be rejected before creating test resources or changing play settings.");
+        }
 
         private static void BeginCycle()
         {
@@ -224,6 +246,8 @@ namespace GreedLast.Editor
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
             public bool suspendedFreshInputPreservedRun, disabledAppBlockedNewInput;
+            public bool releasedUiBlockedCommands, releasedUiDetachedCallbacks, releasedUiRestartRecovered;
+            public bool releasedUiBootSafe;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -496,6 +520,8 @@ namespace GreedLast.Editor
                     "A clean restart must create exactly one new UI.");
                 report.restartAfterDestroy = true;
                 report.interruptedBootRecovered = true;
+
+                yield return VerifyReleasedPresentation();
 
                 UnityEngine.Object.Destroy(app.gameObject);
                 yield return null;
@@ -1080,6 +1106,96 @@ namespace GreedLast.Editor
             {
                 float until = Time.realtimeSinceStartup + seconds;
                 while (Time.realtimeSinceStartup < until) yield return null;
+            }
+
+            private IEnumerator VerifyReleasedPresentation()
+            {
+                state.SetRunCoreTest();
+                core.RestartPractice(Time.realtimeSinceStartup);
+                float deadline = Time.realtimeSinceStartup + 8f;
+                while (!run.ActivePattern || run.CountdownActive)
+                {
+                    Require(Time.realtimeSinceStartup < deadline, "Released-screen check needs a live engine practice trap.");
+                    yield return null;
+                }
+                GameObject canvas = Read<GameObject>(ui, "ownedCanvas");
+                UnityEngine.Object.Destroy(ui);
+                yield return null;
+                yield return null;
+                Require(run.Paused && Count<GreedLastRuntimeUi>() == 0 && canvas == null,
+                    "Removing presentation must first pause the live run and release its owned canvas.");
+                GreedLastRunSnapshot frozen = run;
+                GreedLastScreenState screen = state.CurrentState;
+                Call(app, "RequestToggleRunPause");
+                Require(run.Paused && !run.ResumeCountdownActive,
+                    "A released screen must not resume an invisible run through keyboard commands.");
+                Call(app, "RequestNextRunPattern");
+                Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                Call(app, "RequestReturnToLobby");
+                Require(run.Paused && !run.ResumeCountdownActive && state.CurrentState == screen,
+                    "A released screen must not accept hidden resume, lane, primary or lobby commands.");
+                AssertFrozen(frozen);
+                report.releasedUiBlockedCommands = true;
+                state.ShowLocalNotice("격리 화면 해제 확인");
+                yield return WaitSeconds(0.15f);
+                AssertFrozen(frozen);
+                Require(CountNamed<Canvas>("GreedLastCanvas") == 0,
+                    "A released presentation callback must not recreate an orphaned canvas.");
+                report.releasedUiDetachedCallbacks = true;
+
+                UnityEngine.Object.Destroy(app.gameObject);
+                yield return null;
+                yield return null;
+                InvokeStatic(typeof(GreedLastApp), "Create");
+                Attach(FindApp());
+                deadline = Time.realtimeSinceStartup + 10f;
+                while (state.CurrentState != GreedLastScreenState.LobbyReady)
+                {
+                    Require(Time.realtimeSinceStartup < deadline, "A normal restart must recover after presentation removal.");
+                    yield return null;
+                }
+                Require(Count<GreedLastApp>() == 1 && CountNamed<Canvas>("GreedLastCanvas") == 1
+                    && ui.AcceptsPlayerInput,
+                    "Restart must recover one playable UI, not leave the released callback or a duplicate canvas.");
+                EventSystem events = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+                input = events.gameObject.AddComponent<GreedLastPrototypeKeyboardInput>();
+                events.GetComponent<StandaloneInputModule>().inputOverride = input;
+                input.MouseEnabled = true;
+                input.MousePosition = new Vector2(-1000f, -1000f);
+                yield return null;
+                yield return null;
+                yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                Require(state.CurrentState == GreedLastScreenState.RunCoreTest && run.PracticeMode,
+                    "A fresh real-module click must still start practice after presentation removal and restart.");
+                report.releasedUiRestartRecovered = true;
+
+                UnityEngine.Object.Destroy(app.gameObject);
+                yield return null;
+                yield return null;
+                InvokeStatic(typeof(GreedLastApp), "Create");
+                Attach(FindApp());
+                deadline = Time.realtimeSinceStartup + 10f;
+                while (!Read<GreedLastRequestGate>(app, "requestGate").Busy)
+                {
+                    Require(Time.realtimeSinceStartup < deadline, "Released boot-screen check needs an active boot request.");
+                    yield return null;
+                }
+                UnityEngine.Object.Destroy(ui);
+                yield return null;
+                yield return null;
+                while (state.CurrentState != GreedLastScreenState.LobbyReady)
+                {
+                    Require(Time.realtimeSinceStartup < deadline, "Boot must release its request after presentation removal.");
+                    yield return null;
+                }
+                Call(app, "RequestNormalRun");
+                state.ShowLocalNotice("격리 부팅 화면 해제 확인");
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                    && !Read<GreedLastRequestGate>(app, "requestGate").Busy
+                    && !Read<bool>(app, "hasLatestAppRunSnapshot")
+                    && Count<GreedLastRuntimeUi>() == 0 && CountNamed<Canvas>("GreedLastCanvas") == 0,
+                    "A removed boot screen must finish its request without recreating UI or starting a hidden run.");
+                report.releasedUiBootSafe = true;
             }
 
             private void Attach(GreedLastApp value)

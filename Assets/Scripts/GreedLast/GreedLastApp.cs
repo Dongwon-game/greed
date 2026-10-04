@@ -10828,6 +10828,7 @@ namespace GreedLast
             runtimeUi.RotationTiltPreferenceChanged += HandleRotationTiltPreferenceChanged;
             runtimeUi.ViewportChanged += HandleViewportChanged;
             runtimeUi.PresentationSuspended += HandlePresentationSuspended;
+            runtimeUi.PresentationReleased += HandlePresentationReleased;
 
             stateMachine.StateChanged += runtimeUi.Render;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
@@ -10894,6 +10895,7 @@ namespace GreedLast
                 runtimeUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
                 runtimeUi.ViewportChanged -= HandleViewportChanged;
                 runtimeUi.PresentationSuspended -= HandlePresentationSuspended;
+                runtimeUi.PresentationReleased -= HandlePresentationReleased;
             }
 
             if (runCore != null)
@@ -10945,6 +10947,18 @@ namespace GreedLast
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
+        }
+
+        private void HandlePresentationReleased(GreedLastRuntimeUi releasedUi)
+        {
+            if (!ReferenceEquals(runtimeUi, releasedUi)) return;
+            stateMachine.StateChanged -= releasedUi.Render;
+            releasedUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
+            releasedUi.ViewportChanged -= HandleViewportChanged;
+            releasedUi.PresentationSuspended -= HandlePresentationSuspended;
+            releasedUi.PresentationReleased -= HandlePresentationReleased;
+            runtimeUi = null;
+            HandlePresentationSuspended();
         }
 
         private void HandlePresentationSuspended()
@@ -12520,7 +12534,7 @@ namespace GreedLast
         private bool CanAcceptPlayerInput()
         {
             return isActiveAndEnabled && applicationHasFocus && !applicationPaused
-                && (runtimeUi == null || runtimeUi.AcceptsPlayerInput);
+                && runtimeUi != null && runtimeUi.AcceptsPlayerInput;
         }
 
         private void RefreshPlayerInputAvailability()
@@ -15804,6 +15818,7 @@ namespace GreedLast
         public event Action<bool> RotationTiltPreferenceChanged;
         public event Action ViewportChanged;
         public event Action PresentationSuspended;
+        public event Action<GreedLastRuntimeUi> PresentationReleased;
 
         public void Initialize(
             Action onPracticeRunRequested,
@@ -28102,6 +28117,7 @@ namespace GreedLast
 
         private void OnDestroy()
         {
+            PresentationReleased?.Invoke(this);
             StopRhythmAudio();
             SceneManager.sceneLoaded -= RestoreSceneResources;
             AudioSettings.OnAudioConfigurationChanged -= HandleAudioConfigurationChanged;

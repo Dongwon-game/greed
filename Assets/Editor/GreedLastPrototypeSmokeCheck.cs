@@ -31,6 +31,7 @@ namespace GreedLast.Editor
 
         private static void RunChecks()
         {
+            GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
             Require(
