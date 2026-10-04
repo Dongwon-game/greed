@@ -1373,6 +1373,14 @@ namespace GreedLast.Editor
             typeof(GreedLastApp).GetField("stateMachine", flags).SetValue(app, state);
             typeof(GreedLastApp).GetField("requestGate", flags).SetValue(app, gate);
             typeof(GreedLastApp).GetField("runCore", flags).SetValue(app, core);
+            GreedLastRuntimeUi captureUi = app.gameObject.AddComponent<GreedLastRuntimeUi>();
+            GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(captureUi, playerControls: true);
+            typeof(GreedLastApp).GetField("runtimeUi", flags).SetValue(app, captureUi);
+            GameObject panel = (GameObject)typeof(GreedLastRuntimeUi).GetField("rootPanel", flags).GetValue(captureUi);
+            // Edit-mode fixtures own their Canvas through the host, unlike the persistent player UI.
+            panel.GetComponentInParent<Canvas>().transform.SetParent(app.transform, false);
+            Require(captureUi.AcceptsPlayerInput,
+                "A capture app command needs its own live foreground presentation.");
             return app;
         }
 
