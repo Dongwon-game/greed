@@ -20,6 +20,8 @@ namespace GreedLast.Editor
             ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
                 GreedLastScreenState.InfiniteRun, "Timing guide cache check", string.Empty, 0));
             var core = new GreedLastRunCore();
+            typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(core, 0f);
             GreedLastRunSnapshot run = default;
             core.SnapshotChanged += value => run = value;
             float clock = Time.realtimeSinceStartup;

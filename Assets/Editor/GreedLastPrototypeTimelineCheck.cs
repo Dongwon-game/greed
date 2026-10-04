@@ -127,7 +127,9 @@ namespace GreedLast.Editor
                 AwaitPattern();
                 if (run.Stopped) break;
                 int count = Judgements();
-                Advance(run.Pattern.HitSeconds - run.ElapsedSeconds + 0.05f);
+                Advance(Mathf.Max(run.Pattern.HitSeconds,
+                    run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                    - run.ElapsedSeconds + 0.05f);
                 Require(Judgements() == count + 1 && run.MissReason == "no_input" && ++unanswered <= 32,
                     "Long-run natural failure must resolve each unanswered trap once, including earned protection.");
             }
@@ -327,7 +329,9 @@ namespace GreedLast.Editor
                 if (correct % 3 == 0) PauseCycle();
                 if (mode == 2 && correct >= 30)
                 {
-                    Advance(Mathf.Max(0f, run.Pattern.HitSeconds - run.ElapsedSeconds) + 0.05f);
+                    Advance(Mathf.Max(0f, Mathf.Max(run.Pattern.HitSeconds,
+                        run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                        - run.ElapsedSeconds) + 0.05f);
                     Require(run.MissReason == "no_input", "Unanswered infinite traps must produce one natural miss.");
                     continue;
                 }

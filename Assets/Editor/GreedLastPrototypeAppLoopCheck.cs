@@ -136,6 +136,7 @@ namespace GreedLast.Editor
                 VerifyMenuInputRippleCleanup(ui, backend, state);
 
                 VerifySlowRunPresentation(app, backend, state, core);
+                VerifyInterruptedCommandProtection(app, ui, backend, state, core);
 
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
@@ -714,6 +715,41 @@ namespace GreedLast.Editor
             finally { state.StateChanged -= SlowPresentation; }
         }
 
+        private static void VerifyInterruptedCommandProtection(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core)
+        {
+            int cases = 0;
+            foreach (bool opening in new[] { false, true })
+            foreach (string command in new[] { "HandleRunChannelInput", "RequestNextRunPattern", "RequestToggleRunPause" })
+            {
+                state.SetRunCoreTest();
+                float lastFrame = Time.realtimeSinceStartup - 0.75f;
+                core.RestartPractice(opening ? lastFrame : lastFrame - 2f);
+                if (!opening)
+                {
+                    core.Tick(lastFrame);
+                    core.RequestNextPattern(lastFrame);
+                    core.Tick(lastFrame);
+                }
+                GreedLastRunSnapshot before = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                Require(opening ? before.StartCountdownActive : before.ActivePattern,
+                    "Interrupted command coverage requires its real pending opening or authored trap.");
+                Method(app, command).Invoke(app, command == "HandleRunChannelInput"
+                    ? new object[] { before.Pattern.IsValid ? before.Pattern.Channel : GreedLastRunChannel.Left } : null);
+                GreedLastRunSnapshot after = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+                Require(after.Paused && !after.ResumeCountdownActive && after.ActivePattern == before.ActivePattern
+                    && Mathf.Abs(after.ElapsedSeconds - before.ElapsedSeconds) < 0.0001f
+                    && Mathf.Abs(after.StartCountdownRemainingSeconds - before.StartCountdownRemainingSeconds) < 0.0001f
+                    && after.Distance == before.Distance && after.Health == before.Health && after.Score == before.Score
+                    && after.FocusStateRemainingSeconds == before.FocusStateRemainingSeconds && after.MissCount == before.MissCount
+                    && Read<GameObject>(ui, "pauseMenuOverlay").activeInHierarchy,
+                    "An app-bound command arriving before Update must freeze the last displayed state: " + command + "/" + opening);
+                cases++;
+            }
+            state.SetLobbyReady(backend.LoadLobby());
+            Debug.Log($"Greed interrupted app commands passed: {cases} isolated command callbacks before Update across active trap/opening countdown. Synthetic past frame times, not hardware input or engine frame-stall measurement; personal slots/settings unchanged.");
+        }
+
         private static void VerifySlowRunPresentation(GreedLastApp app, GreedLastMockBackend backend,
             GreedLastStateMachine state, GreedLastRunCore core)
         {
@@ -1177,7 +1213,9 @@ namespace GreedLast.Editor
                     Require(before.ActivePattern && (int)before.Pattern.AvoidanceType == step + attempt + 1,
                         "Focused outcomes must use only their real remaining authored traps.");
                     if (outcome == "no-input")
-                        core.Tick(clock += before.Pattern.HitSeconds + 0.02f - before.ElapsedSeconds);
+                        core.Tick(clock += Mathf.Max(before.Pattern.HitSeconds,
+                            before.Pattern.CoreSeconds + before.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                            + 0.02f - before.ElapsedSeconds);
                     else
                     {
                         clock += before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds;

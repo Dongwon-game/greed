@@ -65,6 +65,7 @@ namespace GreedLast.Editor
                         "The fixture needs a real normal-run trap after its opening choices.");
                 }
 
+                VerifyCalibratedWaitingGuide(ui);
                 foreach (float delta in new[] { -0.012f, 0f, 0.012f, 0.075f })
                 {
                     FreshPractice();
@@ -136,7 +137,8 @@ namespace GreedLast.Editor
                     Require(run.ActivePattern && run.DevInvincible, "Repeated misses need a protected live trap.");
                     int before = Read<int>(ui, "judgementHistoryCount");
                     int health = run.Health;
-                    clock += run.Pattern.HitSeconds + 0.1f;
+                    clock += Mathf.Max(run.Pattern.HitSeconds,
+                        run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds) + 0.1f;
                     core.Tick(clock);
                     Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "no_input"
                         && !run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds == 0f
@@ -308,7 +310,9 @@ namespace GreedLast.Editor
 
                 FreshNormal();
                 core.ToggleDevInvincible();
-                core.Tick(clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.1f);
+                core.Tick(clock += Mathf.Max(run.Pattern.HitSeconds,
+                    run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                    - run.ElapsedSeconds + 0.1f);
                 Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "no_input"
                     && !run.HasJudgedInputTiming
                     && !run.JudgementText.Contains("빠름 ", StringComparison.Ordinal)
@@ -443,6 +447,65 @@ namespace GreedLast.Editor
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
         private static void Write(GreedLastRuntimeUi ui, string name, object value) => typeof(GreedLastRuntimeUi)
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(ui, value);
+        private static void Call(GreedLastRuntimeUi ui, string name) => typeof(GreedLastRuntimeUi)
+            .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+
+        private static void VerifyCalibratedWaitingGuide(GreedLastRuntimeUi ui)
+        {
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            var deck = (GreedLastPatternModel[])typeof(GreedLastRunCore).GetField("patternDeck", fields)
+                .GetValue(new GreedLastRunCore());
+            int cases = 0;
+            for (int index = 0; index < 3; index++)
+            foreach (float offset in new[] { -0.2f, -0.1f, 0f, 0.1f, 0.2f })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += snapshot => { run = snapshot; ui.RenderRun(snapshot); };
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                    GreedLastScreenState.RunCoreTest, "Calibration waiting check", string.Empty, 0));
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                core.RestartPractice(16f);
+                core.Tick(18f);
+                typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", fields).SetValue(core, offset);
+                typeof(GreedLastRunCore).GetField("devNextPatternOverride", fields).SetValue(core, deck[index]);
+                core.RequestNextPattern(19f);
+                float tapAt = 19f + run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds + 0.05f;
+                core.Tick(tapAt);
+                Require(run.ActivePattern && run.MissCount == 0, "Waiting copy needs a still-live authored trap.");
+                bool waiting = Mathf.Abs(run.CoreDeltaSeconds + offset) <= run.Pattern.GoodWindowSeconds;
+                Color32 color = (Color32)typeof(GreedLastRuntimeUi).GetMethod("GetTimingGuideColor",
+                    BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { run });
+                Require(color.Equals(waiting ? new Color32(105, 168, 190, 245) : new Color32(207, 87, 65, 235)),
+                    "Pending calibrated input must use a waiting color, not the missed-window red.");
+                int historyCount = Read<int>(ui, "judgementHistoryCount");
+                string compact = Label("BuildCompactTimingGuideLabel", run);
+                string detail = Label("BuildTimingGuideLabel", run);
+                string lane = Label("BuildLaneTimingHint", run);
+                Require(waiting ? compact == "보정 입력 대기" && detail.Contains("보정 입력 대기", StringComparison.Ordinal)
+                    && !detail.Contains("지난 박", StringComparison.Ordinal) && lane == "보정 대기"
+                    : compact == "놓침" && detail.Contains("놓침", StringComparison.Ordinal) && lane == "놓침",
+                    "Timing copy must distinguish a pending calibrated input from an actually missed input window.");
+                Call(ui, "UpdateRunTimingVisuals");
+                Require(Read<Text>(ui, "timingGuideText").text == compact,
+                    "The actual compact guide must display its calibrated waiting state.");
+                ui.ToggleDevCleanView();
+                Call(ui, "UpdateRunTimingVisuals");
+                Require(Read<Text>(ui, "timingGuideText").text == detail,
+                    "F11 detail must agree without inventing a resolved judgement.");
+                ui.ToggleDevCleanView();
+                Require(Read<int>(ui, "judgementHistoryCount") == historyCount
+                    && run.SuccessCount + run.GoodCount + run.MissCount == 0,
+                    "Waiting copy and F11 must not create a judgement before an actual input.");
+                core.HandleInput(run.Pattern.Channel, tapAt);
+                Require(run.LastResult == (waiting ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss)
+                    && run.SuccessCount + run.GoodCount + run.MissCount == 1,
+                    "Waiting/missed guide state must agree with the one actual input outcome.");
+                cases++;
+            }
+            Debug.Log($"Greed calibrated waiting guide passed: {cases} cases, three timing types and five offsets, compact/detail/lane state and actual input agreement. Authored beat/visual travel unchanged; no personal preferences written.");
+        }
+
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException("Greed judgement presentation: " + message);

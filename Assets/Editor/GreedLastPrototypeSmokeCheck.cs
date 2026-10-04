@@ -10387,6 +10387,9 @@ namespace GreedLast.Editor
         private static void VerifyCompactTimingGuide(GreedLastRuntimeUi ui)
         {
             var core = new GreedLastRunCore();
+            // This fixture checks authored boundaries; offset coverage lives in the judgement check.
+            typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(core, 0f);
             GreedLastRunSnapshot run = default;
             core.SnapshotChanged += value => run = value;
             core.Enter();

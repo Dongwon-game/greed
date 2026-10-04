@@ -1,12 +1,122 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEditor;
 using UnityEngine;
 
 namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeAudioCheck
     {
+        [MenuItem("Greed Last/Run Audio Configuration Recovery Check")]
+        public static void VerifyAudioConfigurationRecovery()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Audio reset checks require Edit mode.");
+            var host = new GameObject("GreedLastAudioConfigurationCheck");
+            AudioClip shared = AudioClip.Create("external_audio_reset_control", 64, 1, 44100, false);
+            GreedLastRuntimeUi ui = null;
+            string volumeKey = "GreedLast.RuntimeUi.SfxVolume";
+            bool hadVolume = PlayerPrefs.HasKey(volumeKey);
+            float savedVolume = PlayerPrefs.GetFloat(volumeKey);
+            try
+            {
+                ui = host.AddComponent<GreedLastRuntimeUi>();
+                Call(ui, "CreateAudio");
+                var samples = new Dictionary<string, float[]>(StringComparer.Ordinal);
+                var originalClips = Read<List<AudioClip>>(ui, "ownedAudioClips").ToArray();
+                Require(originalClips.Length == 30 && Read<bool>(ui, "audioConfigurationSubscribed"),
+                    "Audio creation must subscribe exactly one recovery owner with 30 generated tones.");
+                foreach (AudioClip clip in originalClips)
+                {
+                    var pcm = new float[clip.samples * clip.channels];
+                    Require(clip.GetData(pcm, 0), "Original generated PCM must be readable.");
+                    samples.Add(clip.name, pcm);
+                }
+                AudioSource source = Read<AudioSource>(ui, "rhythmAudio");
+                source.clip = shared;
+                AudioSource external = host.AddComponent<AudioSource>();
+                external.playOnAwake = false;
+                external.clip = shared;
+                external.volume = 0.37f;
+                int interruptions = 0;
+                ui.PresentationSuspended += () => interruptions++;
+
+                for (int cycle = 0; cycle < 6; cycle++)
+                {
+                    float volume = cycle == 1 ? 0f : 0.13f + cycle * 0.1f;
+                    Write(ui, "sfxVolume", volume);
+                    Write(ui, "hapticsEnabled", cycle % 2 == 0);
+                    Write(ui, "rotationTiltEnabled", cycle % 2 != 0);
+                    Write(ui, "motionComfortEnabled", cycle % 2 == 0);
+                    var oldClips = Read<List<AudioClip>>(ui, "ownedAudioClips").ToArray();
+                    bool disabled = cycle % 2 == 1;
+                    if (disabled)
+                    {
+                        ui.enabled = false;
+                        Call(ui, "OnDisable");
+                    }
+                    Write(ui, "rhythmBeatIndex", 7);
+                    Write(ui, "nextBeatSoundAt", 123f);
+                    int before = interruptions;
+                    Call(ui, "HandleAudioConfigurationChanged", cycle % 2 == 0);
+                    Require(interruptions == before + 1 && Read<int>(ui, "rhythmBeatIndex") == 0
+                        && Read<float>(ui, "nextBeatSoundAt") == 0f,
+                        "Every reset must cancel pending presentation and old beat scheduling once.");
+                    if (disabled)
+                    {
+                        Require(Read<bool>(ui, "audioConfigurationPending") && source.mute && !CanPlay(ui),
+                            "A disabled UI must defer tone rebuilding and keep feedback blocked.");
+                        foreach (AudioClip clip in oldClips) Require(clip != null, "Deferred recovery must not partially replace tones.");
+                        Call(ui, "HandleAudioConfigurationChanged", true);
+                        Require(Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 30,
+                            "Repeated disabled resets must coalesce without accumulating tones.");
+                        ui.enabled = true;
+                        Call(ui, "OnEnable");
+                    }
+                    Require(!Read<bool>(ui, "audioConfigurationPending")
+                        && Read<AudioSource>(ui, "rhythmAudio") == source && host.GetComponents<AudioSource>().Length == 2
+                        && Mathf.Approximately(source.volume, volume) && source.mute == (volume == 0f),
+                        "Recovery must reuse its source and retain the selected gain, including mute.");
+                    Require(Read<bool>(ui, "hapticsEnabled") == (cycle % 2 == 0)
+                        && Read<bool>(ui, "rotationTiltEnabled") == (cycle % 2 != 0)
+                        && Read<bool>(ui, "motionComfortEnabled") == (cycle % 2 == 0),
+                        "Audio recovery must not reload or reset unrelated transient preferences.");
+                    foreach (AudioClip clip in oldClips) Require(clip == null, "Replaced generated tones must be released.");
+                    List<AudioClip> rebuilt = Read<List<AudioClip>>(ui, "ownedAudioClips");
+                    Require(rebuilt.Count == 30, "Recovery must recreate all prototype cues exactly once.");
+                    foreach (AudioClip clip in rebuilt)
+                    {
+                        Require(clip != null && samples.TryGetValue(clip.name, out float[] expected)
+                            && clip.samples * clip.channels == expected.Length, "Every regenerated tone must retain its identity and length.");
+                        var actual = new float[clip.samples * clip.channels];
+                        Require(clip.GetData(actual, 0), "Rebuilt generated PCM must be readable.");
+                        float[] original = samples[clip.name];
+                        for (int sample = 0; sample < actual.Length; sample++)
+                            Require(actual[sample] == original[sample], "Recovery must reproduce the authored PCM, not blank tones.");
+                    }
+                    Require(shared != null && source.clip == shared && external.clip == shared
+                        && Mathf.Approximately(external.volume, 0.37f),
+                        "Audio recovery must leave shared clips and unrelated sources untouched.");
+                }
+                ReleaseEditorAudio(host);
+                Require(!Read<bool>(ui, "audioConfigurationSubscribed")
+                    && !Read<bool>(ui, "audioConfigurationPending") && Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 0,
+                    "Teardown must unsubscribe and clear every generated tone.");
+                Call(ui, "HandleAudioConfigurationChanged", true);
+                Require(Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 0,
+                    "A stale reset callback must not resurrect disposed audio.");
+                Require(PlayerPrefs.HasKey(volumeKey) == hadVolume && PlayerPrefs.GetFloat(volumeKey).Equals(savedVolume),
+                    "Transient recovery tests must not change the personal volume preference.");
+                Debug.Log("Greed audio configuration recovery passed: six rebuild cycles and nine simulated callbacks, disabled reset coalescing, all 30 PCM waveforms identical, source/gain/settings/shared clips preserved, teardown unsubscription and no stale resurrection. No OS audio reset or hardware capture.");
+            }
+            finally
+            {
+                if (ui != null) ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+                if (shared != null) UnityEngine.Object.DestroyImmediate(shared);
+            }
+        }
+
         internal static void ReleaseEditorAudio(GameObject host)
         {
             if (host == null) return;
@@ -144,6 +254,7 @@ namespace GreedLast.Editor
                 VerifyOpeningCountdown(ui);
                 VerifySynchronizedPulseCurve();
                 VerifyInfiniteBeatTempos(ui);
+                VerifyAudioConfigurationRecovery();
                 Debug.Log("Greed Last audio state checks passed: master gain once, immediate mute, independent haptics, focus/pause callback order, disable/re-enable and blocked background feedback. No device audio capture was performed.");
             }
             finally

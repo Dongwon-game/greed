@@ -196,6 +196,8 @@ namespace GreedLast.Editor
                 AddReviewRecommendationFrames();
                 AddActualInputChannelFrames();
                 AddStructuredTimingFrames();
+                AddCalibratedWaitingFrames();
+                AddInterruptedFramePauseFrames();
                 AddPracticeMissFrames();
                 AddFocusedPracticeFrames();
                 AddCountdownPulseFrames();
@@ -596,7 +598,8 @@ namespace GreedLast.Editor
                     }
                 }
                 GreedLastRunSnapshot before = run;
-                if (kind == 4) core.Tick(clock += run.Pattern.HitSeconds + 0.1f);
+                if (kind == 4) core.Tick(clock += Mathf.Max(run.Pattern.HitSeconds,
+                    run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds) + 0.1f);
                 else
                 {
                     float goodDelta = (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
@@ -692,7 +695,8 @@ namespace GreedLast.Editor
                     breakCore.Tick(breakClock += 2f);
                     breakCore.Tick(breakClock += 1f);
                     GreedLastRunSnapshot before = broken;
-                    if (outcome == "no-input") breakCore.Tick(breakClock + broken.Pattern.HitSeconds + 0.02f);
+                    if (outcome == "no-input") breakCore.Tick(breakClock + Mathf.Max(broken.Pattern.HitSeconds,
+                        broken.Pattern.CoreSeconds + broken.Pattern.GoodWindowSeconds - breakCore.InputTimingOffsetSeconds) + 0.02f);
                     else
                     {
                         float delta = outcome == "good"
@@ -752,7 +756,9 @@ namespace GreedLast.Editor
                     {
                         if (!infinite && consumed < 2)
                         {
-                            clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.02f;
+                            clock += Mathf.Max(run.Pattern.HitSeconds,
+                                run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                                - run.ElapsedSeconds + 0.02f;
                             core.Tick(clock);
                         }
                         else
@@ -931,6 +937,75 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void AddCalibratedWaitingFrames()
+        {
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            var deck = (GreedLastPatternModel[])typeof(GreedLastRunCore).GetField("patternDeck", fields)
+                .GetValue(new GreedLastRunCore());
+            for (int index = 0; index < 3; index++)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                core.RestartPractice(clock);
+                core.Tick(clock += 2f);
+                typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", fields).SetValue(core, -0.2f);
+                typeof(GreedLastRunCore).GetField("devNextPatternOverride", fields).SetValue(core, deck[index]);
+                core.RequestNextPattern(clock += 1f);
+                core.Tick(clock + run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds + 0.05f);
+                GreedLastRunSnapshot pending = run;
+                Require(pending.ActivePattern && pending.CoreDeltaSeconds > pending.Pattern.GoodWindowSeconds
+                    && Mathf.Abs(pending.CoreDeltaSeconds + pending.InputTimingOffsetSeconds) <= pending.Pattern.GoodWindowSeconds
+                    && pending.SuccessCount + pending.GoodCount + pending.MissCount == 0,
+                    "Waiting capture requires a genuine pending calibrated input, not a resolved judgement.");
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowRun(pending);
+                        if (detailed) ui.ToggleDevCleanView();
+                        typeof(GreedLastRuntimeUi).GetMethod("UpdateRunTimingVisuals", fields).Invoke(ui, null);
+                        Require(Read<Text>("timingGuideText").text.Contains("보정 입력 대기", StringComparison.Ordinal),
+                            "The captured guide must display pending input in basic and detailed views.");
+                    }
+                    string name = "90-calibrated-wait-" + pending.Pattern.TimingType.ToString().ToLowerInvariant()
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddInterruptedFramePauseFrames()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            core.RestartPractice(clock);
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            core.Tick(clock += 0.25f);
+            GreedLastRunSnapshot before = run;
+            Require(core.PauseForInterruptedFrame(clock + 0.75f) && run.Paused && !run.ResumeCountdownActive
+                && run.Distance == before.Distance && run.Health == before.Health,
+                "Interrupted frame capture must use a real frozen core snapshot.");
+            GreedLastRunSnapshot paused = run;
+            void Show()
+            {
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                ShowRun(paused);
+                Require(Read<GameObject>("pauseMenuOverlay").activeInHierarchy,
+                    "Frame interruption must display the real pause menu, not an unclickable frozen run.");
+            }
+            Add("91-frame-interruption-small", 960, 540, Show);
+            Add("91-frame-interruption-tablet", 1024, 768, Show);
+            Add("91-frame-interruption-wide", 2340, 1080, Show, 96f);
+        }
+
         private static void AddLongRunCounterFrames()
         {
             var frames = GreedLastPrototypeTimelineCheck.VerifyLongInfiniteRun();
@@ -958,7 +1033,9 @@ namespace GreedLast.Editor
                 core.Tick(clock += 1f);
                 Require(run.ActivePattern, "Practice Miss captures need an authored live trap.");
                 GreedLastRunSnapshot before = run;
-                if (kind == 0) core.Tick(clock += run.Pattern.HitSeconds - run.ElapsedSeconds + 0.1f);
+                if (kind == 0) core.Tick(clock += Mathf.Max(run.Pattern.HitSeconds,
+                    run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                    - run.ElapsedSeconds + 0.1f);
                 else
                 {
                     float delta = kind * (run.Pattern.GoodWindowSeconds + 0.04f);
@@ -1120,7 +1197,9 @@ namespace GreedLast.Editor
                         if (attempt > 0) core.RequestNextPattern(clock += 2f);
                         Require(run.ActivePattern, "Focused result captures need their actual authored remaining trap.");
                         if (outcome == "no-input")
-                            core.Tick(clock += run.Pattern.HitSeconds + 0.02f - run.ElapsedSeconds);
+                            core.Tick(clock += Mathf.Max(run.Pattern.HitSeconds,
+                                run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
+                                + 0.02f - run.ElapsedSeconds);
                         else
                         {
                             clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;

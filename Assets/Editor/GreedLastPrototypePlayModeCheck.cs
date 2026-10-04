@@ -199,7 +199,7 @@ namespace GreedLast.Editor
         [Serializable] private sealed class Results
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
-            public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch samples and OS-focus simulation; no manual core Tick, UI Update, request-draining or private clock edits. Not hardware input, rendered-image, device FPS or audio-latency testing.";
+            public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
             public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded;
             public List<Cycle> cycles = new List<Cycle>();
         }
@@ -216,6 +216,10 @@ namespace GreedLast.Editor
             public int externalNavigationCases, externalNavigationSceneReloadCases;
             public int audioSourcesAfterComponentRemoval;
             public bool borrowedSceneReloadRecovered;
+            public bool calibratedLateTouchAccepted, audioResetPreservedRun, audioResetCanceledHeldCommand;
+            public bool audioResetInterruptedCountdown, disabledAudioResetRecovered;
+            public int simulatedAudioConfigurationCallbacks;
+            public bool blockedEngineFramePreservedRun;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -446,6 +450,8 @@ namespace GreedLast.Editor
                     "The real engine input module must cover mouse, touch and interrupted command release.");
                 report.pauseCycles++;
                 report.lifecycleJudgements = report.judgements;
+                yield return VerifyCalibratedTouchAndAudioRecovery();
+                yield return VerifyBlockedEngineFrame();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyFullLoop();
                 AudioClip ownedTone = Read<AudioClip>(ui, "beatClip");
                 AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
@@ -533,6 +539,118 @@ namespace GreedLast.Editor
                 yield return VerifyBorrowedSceneReload();
             }
 
+            private IEnumerator VerifyCalibratedTouchAndAudioRecovery()
+            {
+                if (!run.Paused && !run.Stopped) Call(app, "RequestToggleRunPause");
+                yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
+                yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                float originalOffset = core.InputTimingOffsetSeconds;
+                typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(core, -0.2f);
+                float deadline = Time.realtimeSinceStartup + 10f;
+                while (!run.ActivePattern || run.ElapsedSeconds <= run.Pattern.HitSeconds + 0.004f)
+                {
+                    Require(!run.Stopped && run.MissCount == 0 && Time.realtimeSinceStartup < deadline,
+                        "A calibrated engine touch must retain its real trap after the original impact deadline.");
+                    yield return null;
+                }
+                GreedLastPatternModel pattern = run.Pattern;
+                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)pattern.Channel - 1]);
+                Require(run.GoodCount == 1 && run.MissCount == 0 && run.LastResult == GreedLastJudgementResult.Good
+                    && run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds > pattern.SuccessWindowSeconds
+                    && run.LastInputTimingDeltaSeconds <= pattern.GoodWindowSeconds,
+                    "The actual input module must accept a late calibrated Good that preceding Update ticks used to expire.");
+                report.calibratedLateTouchAccepted = true;
+                typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(core, originalOffset);
+                deadline = Time.realtimeSinceStartup + 10f;
+                while (!run.ActivePattern)
+                { Require(Time.realtimeSinceStartup < deadline, "The practice must continue after its calibrated Good."); yield return null; }
+
+                AudioSource source = Read<AudioSource>(ui, "rhythmAudio");
+                float volume = source.volume;
+                var oldClips = Read<List<AudioClip>>(ui, "ownedAudioClips").ToArray();
+                yield return PressMouse(Read<Button>(ui, "pauseButton"));
+                Require(!run.Paused, "A held pause command must remain pending before audio interruption.");
+                Call(ui, "HandleAudioConfigurationChanged", true);
+                report.simulatedAudioConfigurationCallbacks++;
+                Require(run.Paused && !run.ResumeCountdownActive && !source.isPlaying,
+                    "An active audio reconfiguration must freeze the current trap and stop its obsolete voices.");
+                GreedLastRunSnapshot frozen = run;
+                yield return ReleaseMouse();
+                yield return null;
+                AssertFrozen(frozen);
+                Require(run.Paused && !run.ResumeCountdownActive,
+                    "The command held across audio interruption must not reopen gameplay on release.");
+                report.audioResetCanceledHeldCommand = true;
+                report.canceledEngineCommands++;
+                foreach (AudioClip clip in oldClips) Require(clip == null, "Reconfigured Play-mode tones must be destroyed after the engine frame.");
+                Require(Read<AudioSource>(ui, "rhythmAudio") == source && Mathf.Approximately(source.volume, volume)
+                    && Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 30,
+                    "Actual Play-mode recovery must reuse its source and regenerate only its 30 tones.");
+                yield return WaitSeconds(0.3f);
+                AssertFrozen(frozen);
+                report.audioResetPreservedRun = true;
+
+                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                Require(run.ResumeCountdownActive, "Audio recovery must use the ordinary resume countdown.");
+                yield return WaitSeconds(0.2f);
+                Call(ui, "HandleAudioConfigurationChanged", false);
+                report.simulatedAudioConfigurationCallbacks++;
+                Require(run.Paused && !run.ResumeCountdownActive,
+                    "A second audio configuration callback must interrupt, not skip, an unfinished resume.");
+                AssertFrozen(frozen);
+                report.audioResetInterruptedCountdown = true;
+
+                ui.enabled = false;
+                oldClips = Read<List<AudioClip>>(ui, "ownedAudioClips").ToArray();
+                Call(ui, "HandleAudioConfigurationChanged", true);
+                Call(ui, "HandleAudioConfigurationChanged", false);
+                report.simulatedAudioConfigurationCallbacks += 2;
+                Require(Read<bool>(ui, "audioConfigurationPending") && source.mute,
+                    "A disabled presentation must remember audio resets without rebuilding partial sounds.");
+                yield return WaitSeconds(0.2f);
+                AssertFrozen(frozen);
+                foreach (AudioClip clip in oldClips) Require(clip != null, "Disabled audio resets must coalesce until re-enable.");
+                ui.enabled = true;
+                yield return null;
+                yield return null;
+                Require(!Read<bool>(ui, "audioConfigurationPending")
+                    && Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 30 && run.Paused,
+                    "Actual OnEnable must restore one fresh tone set and keep its preserved pause menu.");
+                foreach (AudioClip clip in oldClips) Require(clip == null, "Deferred obsolete tones must release on engine re-enable.");
+                report.disabledAudioResetRecovered = true;
+                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                deadline = Time.realtimeSinceStartup + 8f;
+                while (run.Paused)
+                { AssertFrozen(frozen); Require(Time.realtimeSinceStartup < deadline, "Recovered countdown did not finish."); yield return null; }
+                Require(run.Pattern.PatternId == frozen.Pattern.PatternId && run.ActivePattern && run.MissCount == frozen.MissCount
+                    && run.ElapsedSeconds < frozen.ElapsedSeconds,
+                    "Audio reconfiguration must resume the same trap with its existing lead-in, not timeout or replace it.");
+            }
+
+            private IEnumerator VerifyBlockedEngineFrame()
+            {
+                GreedLastRunSnapshot frozen = run;
+                // A bounded main-thread stall, not a private clock edit or an OS/device test.
+                System.Threading.Thread.Sleep(750);
+                yield return null;
+                Require(run.Paused && !run.ResumeCountdownActive && run.ActivePattern
+                    && run.Pattern.PatternId == frozen.Pattern.PatternId
+                    && Mathf.Abs(run.ElapsedSeconds - frozen.ElapsedSeconds) < 0.0001f
+                    && run.MissCount == frozen.MissCount,
+                    "A blocked engine frame must pause at its last presented trap time, not charge an unseen miss.");
+                AssertFrozen(frozen);
+                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                float deadline = Time.realtimeSinceStartup + 8f;
+                while (run.Paused)
+                { AssertFrozen(frozen); Require(Time.realtimeSinceStartup < deadline, "Frame-interruption resume did not finish."); yield return null; }
+                Require(run.ActivePattern && run.Pattern.PatternId == frozen.Pattern.PatternId
+                    && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
+                    "A frame interruption must preserve the same trap and ordinary resume lead-in.");
+                report.blockedEngineFramePreservedRun = true;
+            }
+
             private IEnumerator VerifyBorrowedSceneReload()
             {
                 var sceneCamera = new GameObject("GreedLastBorrowedSceneCamera", typeof(Camera), typeof(AudioListener));
@@ -593,7 +711,7 @@ namespace GreedLast.Editor
             {
                 float began = Time.realtimeSinceStartup;
                 GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
-                core.ForceStopInfiniteRunForTest();
+                if (!run.Stopped && !run.Paused) yield return ClickMouse(Read<Button>(ui, "pauseButton"));
                 yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady, "The engine result action must return to the lobby.");
                 yield return ClickMouse(Read<Button>(ui, "normalRunButton"));

@@ -739,6 +739,7 @@ namespace GreedLast
         private const float StartBufferSeconds = 0.25f;
         private const float ResumeCountdownSeconds = 1.4f;
         private const float ResumeBufferSeconds = 0.65f;
+        public const float MaxInteractiveFrameGapSeconds = 0.5f;
         private const int TimingRecommendationMinSamples = 3;
         private const float CenterHitWindowScale = 0.45f;
         private const int PrecisionStreakFocusStep = 3;
@@ -1546,6 +1547,30 @@ namespace GreedLast
                 BuildTimingProfileText());
         }
 
+        public bool PauseForInterruptedFrame(float now)
+        {
+            if (float.IsNaN(now) || float.IsInfinity(now)
+                || now - lastTickAt <= MaxInteractiveFrameGapSeconds
+                || stopped || phase == GreedLastRunPhase.None || phase == GreedLastRunPhase.ChoiceSelecting)
+                return false;
+
+            if (paused)
+            {
+                if (!resumeCountdownActive) return false;
+                resumeCountdownActive = false;
+                judgementText = "화면 갱신이 멈춰 재개 카운트를 정지했습니다.\n재개하면 2-1-GO부터 다시 이어집니다.";
+                lastTickAt = now;
+                Publish(now);
+                return true;
+            }
+
+            if (!startCountdownActive && !CanPauseNow()) return false;
+            // Freeze at the last presented frame, not after charging the unseen wall-clock gap.
+            PauseAt(lastTickAt, "화면 갱신이 오래 멈춰 일시정지했습니다.\n재개하면 2-1-GO 뒤 같은 구간을 이어갑니다.");
+            lastTickAt = now;
+            return true;
+        }
+
         public void Tick(float now)
         {
             float deltaTime = Mathf.Max(0f, now - lastTickAt);
@@ -1615,7 +1640,10 @@ namespace GreedLast
             }
 
             float elapsed = now - patternStartedAt;
-            if (!inputConsumed && elapsed > currentPattern.HitSeconds)
+            // Calibration can move a valid late Good beyond the authored impact time.
+            float inputDeadline = Mathf.Max(currentPattern.HitSeconds,
+                currentPattern.CoreSeconds + currentPattern.GoodWindowSeconds - inputTimingOffsetSeconds);
+            if (!inputConsumed && elapsed > inputDeadline)
             {
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,

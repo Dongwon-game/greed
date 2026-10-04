@@ -10947,6 +10947,7 @@ namespace GreedLast
         private void HandlePresentationSuspended()
         {
             PauseRunForAppBackground();
+            runtimeUi?.CancelPendingUiInput();
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -10999,7 +11000,13 @@ namespace GreedLast
 
             if (IsRunState())
             {
-                runCore.Tick(Time.realtimeSinceStartup);
+                float now = Time.realtimeSinceStartup;
+                if (runCore.PauseForInterruptedFrame(now))
+                {
+                    HandlePresentationSuspended();
+                    return;
+                }
+                runCore.Tick(now);
                 if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
                 {
                     RequestToggleRunPause();
@@ -12511,7 +12518,8 @@ namespace GreedLast
                 return false;
             }
 
-            runCore.PauseForAppBackground(Time.realtimeSinceStartup);
+            float now = Time.realtimeSinceStartup;
+            if (!runCore.PauseForInterruptedFrame(now)) runCore.PauseForAppBackground(now);
             return true;
         }
 
@@ -13251,6 +13259,13 @@ namespace GreedLast
 
             if (IsRunState())
             {
+                float now = Time.realtimeSinceStartup;
+                // A queued primary command must not bypass interruption recovery.
+                if (runCore.PauseForInterruptedFrame(now))
+                {
+                    HandlePresentationSuspended();
+                    return;
+                }
                 if (runCore.IsPaused)
                 {
                     runCore.TogglePause(Time.realtimeSinceStartup);
@@ -13367,6 +13382,12 @@ namespace GreedLast
                 }
 
                 float now = Time.realtimeSinceStartup;
+                // EventSystem can process a queued tap before this app's Update after a stall.
+                if (runCore.PauseForInterruptedFrame(now))
+                {
+                    HandlePresentationSuspended();
+                    return;
+                }
                 if (ShouldBlockRunEntryLaneInput(now, runEntryLaneInputBlockUntil))
                 {
                     return;
@@ -14076,7 +14097,13 @@ namespace GreedLast
         {
             if (IsRunState())
             {
-                runCore.TogglePause(Time.realtimeSinceStartup);
+                float now = Time.realtimeSinceStartup;
+                if (runCore.PauseForInterruptedFrame(now))
+                {
+                    HandlePresentationSuspended();
+                    return;
+                }
+                runCore.TogglePause(now);
             }
         }
 
@@ -15536,6 +15563,8 @@ namespace GreedLast
         private Image feedbackFlash;
         private AudioSource rhythmAudio;
         private readonly List<AudioClip> ownedAudioClips = new List<AudioClip>();
+        private bool audioConfigurationPending;
+        private bool audioConfigurationSubscribed;
         private bool sensoryHasFocus = true;
         private bool sensoryAppPaused;
         private bool sensoryComponentEnabled = true;
@@ -27953,7 +27982,7 @@ namespace GreedLast
             for (int i = 0; i < laneHeldPointers.Length; i++) ClearLanePointerHold(i);
         }
 
-        private void CancelPendingUiInput()
+        internal void CancelPendingUiInput()
         {
             ClearLanePointerHolds();
             if (rootPanel == null) return;
@@ -27990,6 +28019,7 @@ namespace GreedLast
         {
             sensoryComponentEnabled = true;
             if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(true);
+            RecoverAudioConfiguration();
             RefreshAudioPlaybackState();
         }
 
@@ -28006,14 +28036,10 @@ namespace GreedLast
         {
             StopRhythmAudio();
             SceneManager.sceneLoaded -= RestoreSceneResources;
-            // Only generated tones belong to this UI; imported or externally assigned clips do not.
-            foreach (AudioClip clip in ownedAudioClips)
-            {
-                if (clip == null) continue;
-                if (Application.isPlaying) Destroy(clip);
-                else DestroyImmediate(clip);
-            }
-            ownedAudioClips.Clear();
+            AudioSettings.OnAudioConfigurationChanged -= HandleAudioConfigurationChanged;
+            audioConfigurationSubscribed = false;
+            audioConfigurationPending = false;
+            ReleaseOwnedAudioClips();
             if (ownedAudioSource != null)
             {
                 if (Application.isPlaying) Destroy(ownedAudioSource);
@@ -28039,8 +28065,50 @@ namespace GreedLast
             rhythmAudio.playOnAwake = false;
             rhythmAudio.loop = false;
             rhythmAudio.spatialBlend = 0f;
+            CreatePrototypeTones();
+            if (!audioConfigurationSubscribed)
+            {
+                AudioSettings.OnAudioConfigurationChanged += HandleAudioConfigurationChanged;
+                audioConfigurationSubscribed = true;
+            }
             RefreshAudioPlaybackState();
+        }
 
+        private void HandleAudioConfigurationChanged(bool deviceWasChanged)
+        {
+            if (ownedAudioSource == null || ownedAudioClips.Count == 0) return;
+            audioConfigurationPending = true;
+            StopRhythmAudio();
+            ResetRhythmBeatSchedule();
+            CancelPendingUiInput();
+            PresentationSuspended?.Invoke();
+            RecoverAudioConfiguration();
+            RefreshAudioPlaybackState();
+        }
+
+        private void RecoverAudioConfiguration()
+        {
+            if (!audioConfigurationPending || !isActiveAndEnabled || ownedAudioSource == null) return;
+            // Device resets invalidate generated PCM; reuse the source and keep the chosen preferences.
+            ReleaseOwnedAudioClips();
+            CreatePrototypeTones();
+            audioConfigurationPending = false;
+        }
+
+        private void ReleaseOwnedAudioClips()
+        {
+            if (rhythmAudio != null && ownedAudioClips.Contains(rhythmAudio.clip)) rhythmAudio.clip = null;
+            foreach (AudioClip clip in ownedAudioClips)
+            {
+                if (clip == null) continue;
+                if (Application.isPlaying) Destroy(clip);
+                else DestroyImmediate(clip);
+            }
+            ownedAudioClips.Clear();
+        }
+
+        private void CreatePrototypeTones()
+        {
             beatClip = CreateTone("beat_tick", 760f, 0.045f, 0.18f);
             downbeatClip = CreateDoubleTone("downbeat_pulse", 220f, 440f, 0.085f, 0.20f);
             focusBeatClip = CreateTone("focus_beat", 1120f, 0.055f, 0.18f);
@@ -46064,7 +46132,7 @@ namespace GreedLast
             }
         }
 
-        private bool CanPlaySensoryFeedback => sensoryComponentEnabled && isActiveAndEnabled
+        private bool CanPlaySensoryFeedback => sensoryComponentEnabled && isActiveAndEnabled && !audioConfigurationPending
             && sensoryHasFocus && !sensoryAppPaused;
 
         private void RefreshAudioPlaybackState()
@@ -46785,6 +46853,7 @@ namespace GreedLast
         private static string BuildCompactTimingGuideBeat(GreedLastRunSnapshot snapshot)
         {
             if (!ShouldShowActivePatternVisuals(snapshot) || !snapshot.Pattern.IsValid) return string.Empty;
+            if (ShouldWaitForCalibratedInput(snapshot)) return "보정 입력 대기";
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds) return "놓침";
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.SuccessWindowSeconds) return "늦음 · Good 가능";
             return Mathf.Abs(snapshot.CoreDeltaSeconds) <= BuildCenterHitWindow(snapshot.Pattern)
@@ -46793,8 +46862,16 @@ namespace GreedLast
 
         private static string BuildCompactTimingGuideLabelFromBeat(string beat, int windowMs)
         {
-            if (beat == string.Empty || beat == "놓침" || beat == "늦음 · Good 가능") return beat;
+            if (beat == string.Empty || beat == "놓침" || beat == "늦음 · Good 가능" || beat == "보정 입력 대기") return beat;
             return beat + " · 정확 ±" + windowMs + "ms";
+        }
+
+        private static bool ShouldWaitForCalibratedInput(GreedLastRunSnapshot snapshot)
+        {
+            return ShouldShowActivePatternVisuals(snapshot) && snapshot.Pattern.IsValid
+                && snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds
+                && Mathf.Abs(snapshot.CoreDeltaSeconds + snapshot.InputTimingOffsetSeconds)
+                    <= snapshot.Pattern.GoodWindowSeconds;
         }
 
         private static string BuildTimingGuideLabel(GreedLastRunSnapshot snapshot)
@@ -46824,14 +46901,16 @@ namespace GreedLast
                 return "대기";
             }
 
-            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
-            string timingWord = BuildTimingGuideWordFromValues(
+            bool waitingForInput = ShouldWaitForCalibratedInput(snapshot);
+            float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds
+                + (waitingForInput ? snapshot.InputTimingOffsetSeconds : 0f));
+            string timingWord = waitingForInput ? "보정 입력 대기" : BuildTimingGuideWordFromValues(
                 snapshot.CoreDeltaSeconds,
                 BuildCenterHitWindow(snapshot.Pattern),
                 snapshot.Pattern.SuccessWindowSeconds,
                 snapshot.Pattern.GoodWindowSeconds);
 
-            string beatCue = BuildActivePatternBeatCue(snapshot);
+            string beatCue = waitingForInput ? string.Empty : BuildActivePatternBeatCue(snapshot);
             if (!string.IsNullOrEmpty(beatCue))
             {
                 timingWord = beatCue + " · " + timingWord;
@@ -47525,6 +47604,11 @@ namespace GreedLast
                 return new Color32(125, 139, 143, 180);
             }
 
+            if (ShouldWaitForCalibratedInput(snapshot))
+            {
+                return new Color32(105, 168, 190, 245);
+            }
+
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
             if (absoluteDelta <= BuildCenterHitWindow(snapshot.Pattern))
             {
@@ -47889,6 +47973,7 @@ namespace GreedLast
 
         private static string BuildLaneTimingHint(GreedLastRunSnapshot snapshot)
         {
+            if (ShouldWaitForCalibratedInput(snapshot)) return "보정 대기";
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
             string beatCue = BuildActivePatternBeatCue(snapshot);
             if (absoluteDelta <= BuildCenterHitWindow(snapshot.Pattern))
