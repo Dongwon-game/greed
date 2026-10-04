@@ -1,5 +1,19 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-04 입력·오디오·프레임 복구 재현
+
+- 로컬 구현 `df9ffec`을 보존했다. `prototype-interrupted-command-baseline-20261004.log`는 Update 전에 도착한 정지 버튼이 끊긴 시간을 더하는 경로를 재현했다. 수정 뒤 스모크와 포인터 검사에서 활성 함정/시작 카운트의 레인·주명령·정지 여섯 콜백이 같은 수치의 정지로 복구됐다. 이 여섯 사례는 과거 프레임 시각을 넣은 모의 콜백이며 별도의 실제 750ms 엔진 중단 검사와 구분한다.
+- `prototype-recovery-full-visual-20261004.log` **14:37 KST**: 575장/빈 화면 0장, 버튼 3,888/위치 19,440/모듈 명령 4,485/레인 2,550/스크롤 72, 정상 1,390/취소 1,285회 통과. 추가 대기 18장과 중단 정지 3장의 글자 경계를 포함한다. `report-full-20261004-053751-2211735.json`을 보존하고 최신 보고서와 해시를 대조했다. 마지막 정지 명령 가드 후 `prototype-interrupted-command-final-pointer-20261004.log`도 같은 정상/취소 횟수를 통과했다.
+- `prototype-interrupted-command-final-engine-20261004.log` **14:47 KST**: 실제 두 재생 방식의 전체 루프와 보정/오디오/750ms 중단 검사 통과. 각각 실제 마우스 30/터치 38·취소 2, 전체 일반 8선택/15함정·S2 한 번 저장·준비 취소 무소모·무한 두 번 시작·자동 비움·자연 실패·기록·보충이 통과했다. `report-full-loop-20261004-054718-9806890.json`과 최신 JSON 해시가 같고 개인 설정 보존도 보고서로 확인했다.
+- `prototype-recovery-verified-build-20261004.log` **14:50 KST**: 전체 스모크와 비개발 Windows 빌드/실행기·코드·두 OFL/고지 해시 일치. 게임 코드 해시 `5957A0C930564A8C45720567C031EB1D1CBEB8055C2084D9D26438275B6B182C`. 이전 패키지를 유지하고 `GreedLastPrototype-verified-20261004-recovery.zip`을 새로 보존했다. 155항목/58,423,394바이트와 내부 해시/Unity 런타임 통과, ZIP 해시 `F393D936202720B789C802B1C4957C2F74E500C826C9247577260B7600C9FE55`. 프로젝트/개인 데이터나 외부 업로드는 포함하지 않는다.
+- `prototype-calibration-deadline-baseline-runtime-20261004.log`는 -200ms 보정의 유효한 늦은 Good을 앞선 Tick이 `no_input`으로 처리하는 실제 문제를 재현했다. 그 전 `prototype-calibration-deadline-baseline-20261004.log`의 잘못된 필드 이름에 따른 테스트 예외는 게임 오류 재현으로 취급하지 않는다.
+- 수정 뒤 `prototype-calibration-deadline-fixed-20261004.log`와 전체 스모크에서 6,300사례를 통과했다. 원래 충돌/보정된 Good 마감 중 늦은 시각까지 기다리며 폭·점수·박자/함정 이동은 유지한다. 초기 UI/캐시 테스트는 개인 보정값을 암묵적으로 읽었고 일부 무입력 테스트는 예전 마감까지만 기다렸다. 기본 경계는 메모리 0 보정으로 명시하고 보정 15조건과 연장된 무입력 마감은 따로 검사하도록 바로잡았다.
+- `prototype-calibrated-guide-baseline-runtime-20261004.log`는 실제 입력을 받을 수 있는데 기본/상세/레인 안내가 `놓침`인 불일치를 재현했다. 그 전 테스트 헬퍼 누락과 이후 중간 컴파일 오류는 최종 성공과 구분한다. `prototype-calibrated-guide-verified-20261004.log`와 후속 스모크는 대기 문구·색·F11·실제 Good/Miss와 입력 전 판정 미발생을 확인한다.
+- `prototype-audio-configuration-20261004.log`는 생성 PCM 재복구 여섯 회·모의 콜백 아홉 회, 30파형 동일성·소스/설정 재사용·외부 클립 보존·비활성 콜백 병합·종료 후 복구 금지를 통과했다. 실제 OS 오디오 초기화나 이어폰 지연을 측정한 것은 아니다.
+- `prototype-blocked-frame-baseline-20261004.log`는 750ms 엔진 지연에 보이지 않은 주행 시간이 합산되는 문제를 재현했다. 수정 뒤 `prototype-frame-protection-verified-clock-20261004.log`의 16조건과 `prototype-frame-protection-verified-engine-20261004.log`의 두 실제 재생 방식에서 마지막 프레임의 동일 함정/체력/거리/집중 보존과 재개를 통과했다. 중간 컴파일/경계 테스트 설정 오류는 해결했으며 게임 동작 재현과 구분한다.
+- `prototype-recovery-final-smoke-20261004.log`는 전체 회귀를 통과했다. `prototype-recovery-engine-full-loop-20261004.log`는 새 연습 검사의 종료 뒤, 이전 무한 결과를 가정하고 숨은 로비 버튼을 누르려던 테스트 시작 경로에서 실패했다. 실제 정지 메뉴를 거치도록 고친 `prototype-recovery-verified-engine-full-loop-20261004.log`는 **14:30 KST**에 일반/빠른 재생 두 사이클 모두 통과했다.
+- 해당 전체 엔진 실행은 각 일반 8선택·15함정·탈출→S2 한 번 저장→준비 취소 무소모→무한 실제 두 번 시작·자연 체력 0→자동 비움·기록·빈 칸 보충을 포함한다. 각 마우스 30클릭/터치 38탭·중단 명령 취소 2회·모의 오디오 콜백 4회, 음수 보정 늦은 터치와 750ms 지연 보존도 통과했다. 개인 설정/진행도는 같으며 `Logs/PlayModeChecks/report-full-loop-20261004-053002-8765437.json`으로 보존했다. 합성 입력과 콜백이며 휴대폰 센서/지연/FPS 검사는 아니다.
+
 ## 2026-10-03 밤의 재현과 검증 구분
 
 - 10월 4일에는 같은 검증 Windows 빌드를 `Builds/GreedLastPrototype-verified-20261004.zip`으로 로컬 보존했다. 154개 항목·58,422,560바이트이며 내부 실행기/코드·두 OFL/고지 해시를 빌드 식별값과 대조했다. 프로젝트/개인 데이터나 외부 업로드는 포함하지 않는다. ZIP SHA-256은 `A738A7F4A51F21DEBF3CED875FD69B303ABF3BA8894B05EA7C9A8C0B25C2DDAE`다.
