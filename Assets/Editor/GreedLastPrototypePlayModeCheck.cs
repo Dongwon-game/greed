@@ -220,6 +220,8 @@ namespace GreedLast.Editor
             public bool audioResetInterruptedCountdown, disabledAudioResetRecovered;
             public int simulatedAudioConfigurationCallbacks;
             public bool blockedEngineFramePreservedRun;
+            public int audioBackgroundOrderCases;
+            public bool audioBackgroundOrdersPreservedRun;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -452,6 +454,7 @@ namespace GreedLast.Editor
                 report.lifecycleJudgements = report.judgements;
                 yield return VerifyCalibratedTouchAndAudioRecovery();
                 yield return VerifyBlockedEngineFrame();
+                yield return VerifyAudioBackgroundOrders();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyFullLoop();
                 AudioClip ownedTone = Read<AudioClip>(ui, "beatClip");
                 AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
@@ -649,6 +652,105 @@ namespace GreedLast.Editor
                     && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
                     "A frame interruption must preserve the same trap and ordinary resume lead-in.");
                 report.blockedEngineFramePreservedRun = true;
+            }
+
+            private IEnumerator VerifyAudioBackgroundOrders()
+            {
+                int[][] orders =
+                {
+                    new[] { 0, 1, 2 }, new[] { 0, 2, 1 }, new[] { 1, 0, 2 },
+                    new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 }
+                };
+                AudioSource source = Read<AudioSource>(ui, "rhythmAudio");
+                float volume = source.volume;
+                for (int phase = 0; phase < 2; phase++)
+                {
+                    for (int caseIndex = 0; caseIndex < orders.Length; caseIndex++)
+                    {
+                        Require(run.ActivePattern && !run.Paused && !run.Stopped,
+                            "Combined interruptions must start from a real live engine trap.");
+                        bool interruptCountdown = phase == 1;
+                        if (interruptCountdown)
+                        {
+                            yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                            yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                            yield return WaitSeconds(0.08f);
+                            Require(run.ResumeCountdownActive, "The combined callback fixture must interrupt an actual countdown.");
+                        }
+                        else yield return PressMouse(Read<Button>(ui, "pauseButton"));
+                        GreedLastRunSnapshot frozen = run;
+                        AudioClip[] obsolete = Read<List<AudioClip>>(ui, "ownedAudioClips").ToArray();
+                        bool uiFirst = caseIndex % 2 == 0;
+                        foreach (int kind in orders[caseIndex])
+                        {
+                            if (kind == 0)
+                            {
+                                Call(ui, "HandleAudioConfigurationChanged", caseIndex % 2 == 0);
+                                report.simulatedAudioConfigurationCallbacks++;
+                            }
+                            else
+                            {
+                                string method = kind == 1 ? "OnApplicationFocus" : "OnApplicationPause";
+                                bool value = kind != 1;
+                                if (uiFirst) { Call(ui, method, value); Call(app, method, value); }
+                                else { Call(app, method, value); Call(ui, method, value); }
+                            }
+                        }
+                        Require(run.Paused && !run.ResumeCountdownActive && source.mute && !source.isPlaying,
+                            "Audio/focus/background ordering must cancel countdowns and keep background voices blocked.");
+                        if (!interruptCountdown)
+                        {
+                            yield return ReleaseMouse();
+                            report.canceledEngineCommands++;
+                        }
+                        yield return null;
+                        yield return null;
+                        AssertFrozen(frozen);
+                        foreach (AudioClip clip in obsolete) Require(clip == null,
+                            "Every combined reset must release its obsolete engine-owned tones.");
+                        Require(Read<AudioSource>(ui, "rhythmAudio") == source
+                            && Read<List<AudioClip>>(ui, "ownedAudioClips").Count == 30
+                            && Mathf.Approximately(source.volume, volume),
+                            "Combined recovery must retain one source, 30 fresh tones and the selected volume.");
+
+                        // Foreground notifications are duplicated and reversed without an automatic resume.
+                        for (int repeat = 0; repeat < 2; repeat++)
+                        {
+                            if (uiFirst)
+                            {
+                                Call(app, "OnApplicationPause", false);
+                                Call(ui, "OnApplicationPause", false);
+                                Call(ui, "OnApplicationFocus", true);
+                                Call(app, "OnApplicationFocus", true);
+                            }
+                            else
+                            {
+                                Call(app, "OnApplicationFocus", true);
+                                Call(ui, "OnApplicationFocus", true);
+                                Call(ui, "OnApplicationPause", false);
+                                Call(app, "OnApplicationPause", false);
+                            }
+                        }
+                        yield return WaitSeconds(0.08f);
+                        Require(run.Paused && !run.ResumeCountdownActive
+                            && run.Pattern.PatternId == frozen.Pattern.PatternId && run.MissCount == frozen.MissCount,
+                            "Duplicate foreground notifications must preserve the pause and the same trap, not resume a held command.");
+                        AssertFrozen(frozen);
+                        yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                        float deadline = Time.realtimeSinceStartup + 8f;
+                        while (run.Paused)
+                        {
+                            AssertFrozen(frozen);
+                            Require(Time.realtimeSinceStartup < deadline, "Combined recovery countdown did not finish.");
+                            yield return null;
+                        }
+                        Require(run.ActivePattern && run.Pattern.PatternId == frozen.Pattern.PatternId
+                            && run.MissCount == frozen.MissCount && run.ElapsedSeconds < frozen.ElapsedSeconds,
+                            "Explicit recovery must retain the same trap with the ordinary lead-in after every callback order.");
+                        report.audioBackgroundOrderCases++;
+                    }
+                }
+                report.audioBackgroundOrdersPreservedRun = report.audioBackgroundOrderCases == 12;
             }
 
             private IEnumerator VerifyBorrowedSceneReload()
