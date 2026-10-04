@@ -1,7 +1,22 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-04 밤 - 화면 해제와 검사 완료 판별
+
+- 최종 `e9f136a`의 `prototype-presentation-owned-fixture-full-visual-20261004.log`는 **22:21 KST** 575장/빈 화면 0·같은 실행의 정상 1,430/취소 1,385·중단 스크롤 576회를 통과했다. `report-full-20261004-132126-3013537.json`과 최신 보고서 바이트 해시 일치, 타이틀/주행/정지와 작은 보충 관리 PNG를 직접 확인했다. 검사는 임시 앱의 자체 살아 있는 UI를 사용하고 Canvas도 앱과 함께 정리한다. 게임 DLL/21:58 검증 빌드는 변하지 않았다.
+- 후속 스모크 첫 호출 `prototype-presentation-owned-fixture-final-smoke-20261004.log`는 존재하지 않는 `RunBatch`를 지정한 호출 오류이며 검사가 실행되지 않았다. 실제 `Run` 진입점을 소스에서 확인한 `prototype-presentation-owned-fixture-smoke-verified-20261004.log`는 **22:24 KST** 전체 회귀/Unity 오류 없음·종료 코드 0을 통과했다. 호출 오류를 게임 오류 재현이나 검사 통과로 기록하지 않는다.
+- `prototype-presentation-fixture-final-visual-20261004.log`는 캡처 준비를 통과해 렌더에 진입했지만, 편집 모드 임시 UI의 Canvas 정리 누락을 확인해 제가 띄운 해당 검사 프로세스만 중단했다. 종료 코드 -1/새 완료 보고서 없음이며 통과로 기록하지 않는다. Canvas를 임시 앱의 자식으로 소유해 함께 해제하도록 검사만 보완하고 `prototype-presentation-owned-fixture-full-visual-20261004.log`로 다시 실행한다. 사용자의 에디터/앱과 개인 데이터는 건드리지 않았다.
+- `prototype-released-presentation-final-visual-20261004.log`의 22:03 KST 실행은 포인터 정상 1,430/취소 1,385회를 통과했지만 캡처 준비에서 실패했다. 보충 결과용 임시 앱에 UI가 없던 예전 검사 구성으로, 화면 없는 명령 차단과 충돌했다. 임시 앱마다 자체 살아 있는 UI를 연결하고 함께 해제하도록 검사만 보완했다. 렌더 0장이므로 전체 화면 통과로 적지 않으며 후속 실제 결과는 빠른 확인을 따른다.
+- `f5ff478`의 `prototype-released-presentation-final-engine-20261004.log`는 21:58 KST 두 실제 재생 방식에서 화면 해제 뒤 명령 차단/콜백 분리/새 앱 복구/부팅 중 해제와 기존 전체 게임 루프를 통과했다. 같은 시각의 최종 스모크/비개발 빌드, presentation ZIP의 내부 다섯 해시, 빌드의 편집기 코드 제외와 헤드리스 초기 예외 없음까지 확인했다. 세부 식별값은 빠른 확인에 있다. 합성 입력/콜백과 초기 구동은 손 플레이/휴대폰 성능 확인을 대신하지 않는다.
+- `prototype-released-presentation-baseline-20261004.log`의 실제 엔진 검사에서 UI 컴포넌트 해제 뒤 로비 명령이 남은 표시 콜백을 호출해 `MissingReferenceException`을 일으켰다. 개인 설정은 보존했다. 화면 없는 명령을 잠그고 화면 해제 신호에서 앱의 표시/설정/중단 구독을 정리한다. 최종 실제 루프/새 빌드 결과는 빠른 확인의 최신 검증을 따른다.
+- `prototype-foreground-scroll-integrated-visual-20261004.log`는 잘못 붙인 `-quit` 때문에 포인터까지만 실행하고 종료 코드 0으로 끝났다. 새 전체 화면 보고서가 없었으므로 통과로 기록하지 않았다. 올바른 옵션의 `prototype-foreground-scroll-full-visual-20261004.log`는 21:32 KST 575장/빈 화면 0·정상 1,430/취소 1,385회·중단 스크롤 576회를 같은 실행에 통과했다. 이것은 후속 화면 해제 수정 전 체크포인트다.
+- 같은 호출 실수를 막는 명시적 옵션 검사를 세 비동기 검사에 넣었다. `prototype-async-quit-rejected-visual/engine/wallclock-20261004.log` 세 실행은 예상 구성 오류와 종료 코드 1을 확인했다. 올바른 옵션의 `prototype-async-lifetime-positive-wallclock-20261004.log`는 21:36 KST 실제 에디터 시각 40초·15판정·세 정지/재개를 통과했다. 개인 데이터 초기화나 실제 폰/오디오 지연 검사는 아니다.
+- `prototype-foreground-scroll-verified-build-20261004.log`의 기울임 실패는 테스트가 포커스 복귀 없이 새 움직임을 요구한 구성 문제였다. 복귀와 입력 허용을 명시한 `prototype-foreground-scroll-final-build-20261004.log`는 21:20 KST 전체 스모크/비개발 빌드를 통과했다. 보존된 foreground ZIP(58,423,968바이트·155항목, SHA-256 `4B59CFDDE6F88B8BF7AC6BE190DF648F03BEC908D46CAC63C5412718E94C6F4F`)은 후속 화면 해제 수정 전 빌드다.
+- 위 foreground 빌드의 실제 DLL 메타데이터에서 UnityEditor 참조·편집기 테스트 타입·개인 초기화/테스트 저장 API가 없는 것을 확인했다. `prototype-foreground-standalone-startup-20261004.log`는 실행기를 헤드리스로 20초 구동해 초기 예외 없음과 해당 제품의 Greed 저장값 불변을 확인했다. 손 플레이/렌더/기기 성능 검사는 아니며 테스트로 띄운 프로세스만 종료했다.
+
 ## 2026-10-04 오후 - 복귀 전 새 입력 차단
 
+- `prototype-suspended-scroll-baseline-20261004.log`는 버튼이 잠긴 동안에도 긴 비교 본문이 실제 모듈의 휠 입력으로 움직이는 오류를 재현했다. 우리 UI의 활성 ScrollRect만 중단/복원하도록 보완했다. `prototype-suspended-input-full-visual-20261004.log`는 포인터 다섯 조건의 정상 1,430/취소 1,385회까지 통과했으나 렌더의 새 스크롤 테스트가 종료된 터치를 남겨 복귀 후 마우스 휠을 처리하지 못했다. 종료 터치를 비우는 테스트 수정 후의 렌더와 포인터 결과는 구분한다.
+- 첫 이동이 드래그 시작 임계만 넘은 상태에서 위치 변화까지 기대하던 테스트도 양의 대조군을 실제 두 이동으로 고쳤다. 두 경우 모두 테스트 구성 문제로, 중단 중 실제 휠 이동 오류와 구분한다. `prototype-suspended-scroll-final-render-20261004.log`는 16:21 KST 렌더 전용 575장·중단 스크롤 576회를 통과했으며 전체 포인터 통과로 확대하지 않는다.
 - `prototype-suspended-fresh-input-baseline-20261004.log`는 앱 포커스가 없는 정지 메뉴에서 새 재개 클릭이 카운트다운을 시작하는 실제 오류를 재현했다. 기존 검사는 중단 전에 누르던 명령을 주로 검사했고, 중단 뒤 새로 들어온 명령은 빠져 있었다.
 - `prototype-suspended-fresh-input-fixed-20261004.log`에서 새 여덟 입력 사례는 통과했으나 기존 회전 테스트가 포커스/정지 복귀 없이 로비 버튼을 누르던 흐름으로 실패했다. 복귀를 명시한 `prototype-suspended-input-final-app-20261004.log`는 전체 앱 검사까지 통과했다. 이후 앱만 먼저 중단되는 소리/진동 차단도 같은 입력 기준에 연결했다.
 - 새 엔진 검사 중 지역 Canvas 참조 컴파일 오류, 터치 Began을 다음 프레임에도 반복하던 오류, 시작 기프트 후 카운트에서 정지 메뉴 없이 숨은 로비 버튼을 찾던 오류는 테스트 작성 문제이며 게임 오류 재현으로 취급하지 않는다. 터치는 Began→Stationary→Ended로, 메뉴 복귀는 실제 정지 메뉴를 거치도록 바로잡았다. 최종 검사 결과는 빠른 확인의 검증 항목에 따로 둔다.
