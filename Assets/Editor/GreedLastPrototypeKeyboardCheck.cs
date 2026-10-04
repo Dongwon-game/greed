@@ -420,6 +420,77 @@ namespace GreedLast.Editor
                     Require(Mathf.Abs(scroll.content.anchoredPosition.y - afterCancel) < 1f,
                         "A new tap after canceled scrolling must not reuse the previous drag offset.");
                     Require(laneCalls == 0, "Scrolling comparison or records must never select an underlying slot.");
+                    foreach (bool appSignal in new[] { true, false })
+                    {
+                        MethodInfo lifecycle = typeof(GreedLastRuntimeUi).GetMethod(
+                            appSignal ? "SetAppInputAvailable" : "OnApplicationFocus",
+                            BindingFlags.Instance | BindingFlags.NonPublic);
+                        scroll.StopMovement();
+                        scroll.verticalNormalizedPosition = 1f;
+                        Vector2 frozen = scroll.content.anchoredPosition;
+                        try
+                        {
+                            lifecycle.Invoke(ui, new object[] { false });
+                            Require(!ui.AcceptsPlayerInput, "Suspended scroll checks must first lock player input.");
+                            input.Touches = Array.Empty<Touch>();
+                            input.MouseEnabled = true;
+                            input.MousePosition = screenPoint;
+                            input.ScrollDelta = Vector2.down;
+                            module.Process();
+                            input.ScrollDelta = Vector2.zero;
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "The input module must not wheel-scroll a suspended menu: appSignal=" + appSignal);
+                            input.MouseEnabled = false;
+                            TouchFrame(input, module, TouchAt(91, screenPoint, TouchPhase.Began));
+                            TouchFrame(input, module, TouchAt(91, screenPoint + Vector2.up * dragPixels, TouchPhase.Moved));
+                            TouchFrame(input, module, TouchAt(91, screenPoint + Vector2.up * dragPixels, TouchPhase.Canceled));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "A fresh background drag must not move suspended comparison/record text.");
+                            TouchFrame(input, module, TouchAt(92, screenPoint, TouchPhase.Began));
+                            lifecycle.Invoke(ui, new object[] { true });
+                            TouchFrame(input, module, TouchAt(92, screenPoint, TouchPhase.Stationary));
+                            TouchFrame(input, module, TouchAt(92, screenPoint + Vector2.up * dragPixels, TouchPhase.Moved));
+                            TouchFrame(input, module, TouchAt(92, screenPoint + Vector2.up * dragPixels, TouchPhase.Ended));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "A drag begun while suspended must not become a foreground scroll.");
+                            input.MouseEnabled = true;
+                            input.MousePosition = screenPoint;
+                            input.ScrollDelta = Vector2.down;
+                            module.Process();
+                            input.ScrollDelta = Vector2.zero;
+                            Require(scroll.content.anchoredPosition.y > frozen.y + 1f,
+                                "A genuinely new foreground wheel input must still scroll the same menu.");
+                            scroll.StopMovement();
+                            scroll.verticalNormalizedPosition = 1f;
+                            input.MouseEnabled = false;
+                            TouchFrame(input, module, TouchAt(93, screenPoint, TouchPhase.Began));
+                            TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels * 0.5f, TouchPhase.Moved));
+                            frozen = scroll.content.anchoredPosition;
+                            Require(frozen.y > 1f, "The interrupted drag fixture must first perform a real foreground scroll.");
+                            lifecycle.Invoke(ui, new object[] { false });
+                            TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels, TouchPhase.Moved));
+                            lifecycle.Invoke(ui, new object[] { true });
+                            TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels * 1.25f, TouchPhase.Moved));
+                            TouchFrame(input, module, TouchAt(93, screenPoint + Vector2.up * dragPixels * 1.25f, TouchPhase.Ended));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "Suspending a held drag must preserve its position across background motion and foreground release.");
+                        }
+                        finally
+                        {
+                            lifecycle.Invoke(ui, new object[] { true });
+                            scroll.StopMovement();
+                        }
+                    }
+                    scroll.enabled = false;
+                    try
+                    {
+                        typeof(GreedLastRuntimeUi).GetMethod("SetAppInputAvailable", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .Invoke(ui, new object[] { false });
+                        typeof(GreedLastRuntimeUi).GetMethod("SetAppInputAvailable", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .Invoke(ui, new object[] { true });
+                        Require(!scroll.enabled, "Foreground recovery must not enable a scroll that was already disabled.");
+                    }
+                    finally { scroll.enabled = true; }
                 });
             }
             finally

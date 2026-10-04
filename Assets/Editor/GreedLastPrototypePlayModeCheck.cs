@@ -222,6 +222,8 @@ namespace GreedLast.Editor
             public bool blockedEngineFramePreservedRun;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
+            public int suspendedFreshInputCases, partialForegroundInputCases;
+            public bool suspendedFreshInputPreservedRun, disabledAppBlockedNewInput;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -455,6 +457,7 @@ namespace GreedLast.Editor
                 yield return VerifyCalibratedTouchAndAudioRecovery();
                 yield return VerifyBlockedEngineFrame();
                 yield return VerifyAudioBackgroundOrders();
+                yield return VerifySuspendedFreshInput();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyFullLoop();
                 AudioClip ownedTone = Read<AudioClip>(ui, "beatClip");
                 AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
@@ -751,6 +754,144 @@ namespace GreedLast.Editor
                     }
                 }
                 report.audioBackgroundOrdersPreservedRun = report.audioBackgroundOrderCases == 12;
+            }
+
+            private IEnumerator VerifySuspendedFreshInput()
+            {
+                GameObject canvas = Read<GameObject>(ui, "ownedCanvas");
+                for (int phase = 0; phase < 2; phase++)
+                {
+                    if (phase == 0) yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                    for (int source = 0; source < 4; source++)
+                    {
+                        if (phase == 1)
+                        {
+                            if (!run.Paused && !run.ChoiceActive && !run.Stopped)
+                                yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                            yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
+                            yield return ClickMouse(Read<Button>(ui, "normalRunButton"));
+                            yield return WaitSeconds(0.4f);
+                            Require(run.ChoiceActive, "Suspended choice input requires the actual normal-run choice screen.");
+                        }
+                        GreedLastRunSnapshot frozen = run;
+                        GreedLastScreenState screen = state.CurrentState;
+                        Button targetButton = phase == 0 ? Read<Button>(ui, "nextPatternButton")
+                            : Read<Button[]>(ui, "laneButtons")[0];
+                        object target = source % 2 == 0 ? (object)app : ui;
+                        string callback = source < 2 ? "OnApplicationFocus" : "OnApplicationPause";
+                        bool background = source >= 2;
+                        Call(target, callback, background);
+                        Require(!ui.AcceptsPlayerInput && !targetButton.IsInteractable()
+                            && Read<AudioSource>(ui, "rhythmAudio").mute,
+                            "Either app or UI suspension must lock the engine-owned controls immediately.");
+                        yield return BlockedPointerPress(targetButton, source % 2 != 0, null);
+                        Call(app, "RequestNextRunPattern");
+                        Call(app, "RequestToggleRunPause");
+                        Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                        Call(app, "RequestReturnToLobby");
+                        AssertSuspendedCommandState(frozen, screen);
+                        yield return BlockedPointerPress(targetButton, source % 2 != 0,
+                            () => Call(target, callback, !background));
+                        Require(ui.AcceptsPlayerInput, "A fully restored foreground must unlock the same controls.");
+                        AssertSuspendedCommandState(frozen, screen);
+                        if (phase == 1)
+                        {
+                            yield return TapTouch(targetButton);
+                            Require(run.ChoicePrompt != frozen.ChoicePrompt || !run.ChoiceActive,
+                                "A fresh foreground touch must still resolve a readable normal-run choice.");
+                        }
+                        report.suspendedFreshInputCases++;
+                    }
+                }
+
+                if (!run.Paused && !run.ChoiceActive && !run.Stopped)
+                    yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
+                yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                GreedLastRunSnapshot paused = run;
+                Button resume = Read<Button>(ui, "nextPatternButton");
+                for (int order = 0; order < 4; order++)
+                {
+                    Call(app, "OnApplicationFocus", false);
+                    Call(ui, "OnApplicationFocus", false);
+                    Call(app, "OnApplicationPause", true);
+                    Call(ui, "OnApplicationPause", true);
+                    if (order % 2 == 0) Call(app, "OnApplicationFocus", true);
+                    else Call(ui, "OnApplicationPause", false);
+                    Require(!ui.AcceptsPlayerInput, "One foreground notification must not unlock another suspended source.");
+                    yield return BlockedPointerPress(resume, order < 2, null);
+                    AssertSuspendedCommandState(paused, state.CurrentState);
+                    Call(app, "OnApplicationFocus", true);
+                    Call(ui, "OnApplicationFocus", true);
+                    Call(app, "OnApplicationPause", false);
+                    Call(ui, "OnApplicationPause", false);
+                    Require(ui.AcceptsPlayerInput && run.Paused && !run.ResumeCountdownActive,
+                        "All foreground sources must restore input without automatically resuming the run.");
+                    report.partialForegroundInputCases++;
+                }
+                app.enabled = false;
+                yield return null;
+                Require(!ui.AcceptsPlayerInput && canvas.activeInHierarchy
+                    && Read<AudioSource>(ui, "rhythmAudio").mute,
+                    "A disabled app component must lock its still-visible UI.");
+                yield return BlockedPointerPress(resume, false, null);
+                Call(app, "RequestToggleRunPause");
+                AssertSuspendedCommandState(paused, state.CurrentState);
+                app.enabled = true;
+                yield return null;
+                Require(ui.AcceptsPlayerInput, "Re-enabling the app must restore input on its existing UI.");
+                yield return ClickMouse(resume);
+                Require(run.ResumeCountdownActive, "A fresh post-disable click must start the normal countdown.");
+                report.disabledAppBlockedNewInput = true;
+                report.suspendedFreshInputPreservedRun = report.suspendedFreshInputCases == 8
+                    && report.partialForegroundInputCases == 4;
+                Call(app, "RequestReturnToLobby");
+                state.SetInfiniteRun(string.Empty);
+                core.EnterInfiniteRun();
+                if (!run.DevInvincible) core.ToggleDevInvincible();
+                float deadline = Time.realtimeSinceStartup + 8f;
+                while (!run.ActivePattern || run.CountdownActive)
+                {
+                    Require(Time.realtimeSinceStartup < deadline, "Suspended-input checks must restore a live engine run.");
+                    yield return null;
+                }
+            }
+
+            private void AssertSuspendedCommandState(GreedLastRunSnapshot frozen, GreedLastScreenState screen)
+            {
+                AssertFrozen(frozen);
+                Require(run.Paused == frozen.Paused && !run.ResumeCountdownActive
+                    && run.ChoiceActive == frozen.ChoiceActive && run.ChoicePrompt == frozen.ChoicePrompt
+                    && state.CurrentState == screen,
+                    "Blocked new input must not resume, choose, navigate, or alter the engine run: paused="
+                    + run.Paused + "/" + frozen.Paused + ", countdown=" + run.ResumeCountdownActive
+                    + ", choice=" + run.ChoiceActive + "/" + frozen.ChoiceActive
+                    + ", screen=" + state.CurrentState + "/" + screen);
+            }
+
+            private IEnumerator BlockedPointerPress(Button button, bool touch, Action restoreWhileHeld)
+            {
+                Require(button.isActiveAndEnabled && !button.IsInteractable(),
+                    "The negative engine-pointer fixture must target a visible suspended control.");
+                Vector2 point = ScreenPoint(button);
+                input.MouseEnabled = !touch;
+                input.Touches = touch ? new[] { new Touch { fingerId = 72, position = point, phase = TouchPhase.Began } }
+                    : Array.Empty<Touch>();
+                input.MousePosition = point;
+                input.MouseDown = input.MouseHeld = !touch;
+                yield return null;
+                input.MouseDown = false;
+                if (touch) input.Touches = new[] { new Touch { fingerId = 72, position = point, phase = TouchPhase.Stationary } };
+                restoreWhileHeld?.Invoke();
+                yield return null;
+                if (touch) input.Touches = new[] { new Touch { fingerId = 72, position = point, phase = TouchPhase.Ended } };
+                else { input.MouseHeld = false; input.MouseUp = true; }
+                yield return null;
+                input.Touches = Array.Empty<Touch>();
+                input.MouseUp = false;
+                yield return null;
+                report.canceledEngineCommands++;
             }
 
             private IEnumerator VerifyBorrowedSceneReload()

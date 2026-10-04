@@ -56,6 +56,7 @@ namespace GreedLast.Editor
             public int checkedModuleClicks;
             public int checkedModuleLaneInputs;
             public int checkedModuleScrolls;
+            public int checkedSuspendedScrolls;
             public int checkedControlPoints;
             public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
@@ -1814,6 +1815,7 @@ namespace GreedLast.Editor
                     checkedModuleClicks = checkedModuleClicks,
                     checkedModuleLaneInputs = checkedModuleLaneInputs,
                     checkedModuleScrolls = checkedModuleScrolls,
+                    checkedSuspendedScrolls = checkedModuleScrolls * 8,
                     checkedControlPoints = checkedControlPoints,
                     checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,

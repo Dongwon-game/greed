@@ -77,6 +77,17 @@ namespace GreedLast.Editor
             LastPointerCaseCount++;
         }
 
+        [MenuItem("Greed Last/Run Suspended Player Input Check")]
+        public static void RunSuspendedPlayerInputCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode,
+                "Suspended-input checks require an idle Edit-mode editor.");
+            Run();
+        }
+
+        [MenuItem("Greed Last/Run Suspended Player Input Check", true)]
+        private static bool CanRunSuspendedPlayerInputCheck() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -137,6 +148,7 @@ namespace GreedLast.Editor
 
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
+                VerifySuspendedPlayerInput(app, ui, backend, state, core, () => run);
 
                 Click(ui, "practiceRunButton");
                 Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
@@ -1640,6 +1652,114 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void VerifySuspendedPlayerInput(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            foreach (bool choice in new[] { false, true })
+            foreach (int source in new[] { 0, 1, 2, 3 })
+            {
+                state.SetLobbyReady(backend.LoadLobby());
+                if (choice) Method(app, "StartNormalRunCore").Invoke(app, new object[] { string.Empty, false });
+                else
+                {
+                    Method(app, "RequestPracticeRun").Invoke(app, null);
+                    Method(app, "RequestToggleRunPause").Invoke(app, null);
+                }
+                GreedLastRunSnapshot before = latest();
+                Require(choice ? before.ChoiceActive : before.Paused,
+                    "Suspended input fixtures must start at a real choice or pause menu.");
+                Write(app, "runEntryLaneInputBlockUntil", 0f);
+                Write(app, "runChoiceInputBlockUntil", 0f);
+                object target = source % 2 == 0 ? (object)app : ui;
+                string lifecycle = source < 2 ? "OnApplicationFocus" : "OnApplicationPause";
+                bool backgroundValue = source >= 2;
+                try
+                {
+                    Method(target, lifecycle).Invoke(target, new object[] { backgroundValue });
+                    Button button = choice ? Read<Button[]>(ui, "laneButtons")[0] : Read<Button>(ui, "nextPatternButton");
+                    Require(!ui.AcceptsPlayerInput && !button.IsInteractable()
+                        && Read<CanvasGroup>(ui, "playerInputGroup").blocksRaycasts
+                        && Read<AudioSource>(ui, "rhythmAudio").mute,
+                        "Suspended controls must reject input/feedback without exposing scene clicks.");
+                    if (usePointerModule)
+                    {
+                        RefreshPointerViewport(button);
+                        GreedLastPrototypeKeyboardCheck.ClickOnce(UnityEngine.Object.FindAnyObjectByType<EventSystem>(),
+                            button, useTouch);
+                        canceledCommandPresses++;
+                    }
+                    else
+                    {
+                        var pointer = new PointerEventData(EventSystem.current)
+                            { button = PointerEventData.InputButton.Left, eligibleForClick = true };
+                        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                        if (pointer.eligibleForClick)
+                            ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                    }
+                    GreedLastScreenState screenBefore = state.CurrentState;
+                    Method(app, "RequestNextRunPattern").Invoke(app, null);
+                    Method(app, "RequestToggleRunPause").Invoke(app, null);
+                    Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Left });
+                    Method(app, "RequestReturnToLobby").Invoke(app, null);
+                    GreedLastRunSnapshot after = latest();
+                    Require(after.Paused == before.Paused && !after.ResumeCountdownActive
+                        && after.ChoiceActive == before.ChoiceActive && after.ChoicePrompt == before.ChoicePrompt
+                        && after.Health == before.Health && after.Score == before.Score && after.Distance == before.Distance
+                        && state.CurrentState == screenBefore,
+                        "Fresh input while suspended must not resume or choose: choice=" + choice + " / source=" + source);
+                    void RestoreForeground()
+                    {
+                        Method(target, lifecycle).Invoke(target, new object[] { !backgroundValue });
+                    }
+                    if (usePointerModule)
+                    {
+                        RefreshPointerViewport(button);
+                        GreedLastPrototypeKeyboardCheck.ClickOnce(UnityEngine.Object.FindAnyObjectByType<EventSystem>(),
+                            button, useTouch, whileHeld: RestoreForeground);
+                        canceledCommandPresses++;
+                    }
+                    else
+                    {
+                        var pointer = new PointerEventData(EventSystem.current)
+                            { button = PointerEventData.InputButton.Left, eligibleForClick = true };
+                        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                        RestoreForeground();
+                        ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                        if (pointer.eligibleForClick)
+                            ExecuteEvents.Execute(button.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                    }
+                    Require(ui.AcceptsPlayerInput && latest().Paused == before.Paused
+                        && !latest().ResumeCountdownActive && latest().ChoicePrompt == before.ChoicePrompt,
+                        "A press started while suspended must not become a new foreground command.");
+                }
+                finally
+                {
+                    Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+                    Method(ui, "OnApplicationFocus").Invoke(ui, new object[] { true });
+                    Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+                    Method(ui, "OnApplicationPause").Invoke(ui, new object[] { false });
+                }
+                if (choice)
+                {
+                    Write(app, "runEntryLaneInputBlockUntil", 0f);
+                    Write(app, "runChoiceInputBlockUntil", 0f);
+                    Click(Read<Button[]>(ui, "laneButtons")[0]);
+                    Require(latest().ChoicePrompt != before.ChoicePrompt || !latest().ChoiceActive,
+                        "A genuinely new foreground choice must still work.");
+                }
+                else
+                {
+                    Click(ui, "nextPatternButton");
+                    Require(latest().ResumeCountdownActive, "A genuinely new foreground resume must still work.");
+                }
+                core.Exit();
+            }
+            state.SetLobbyReady(backend.LoadLobby());
+            Debug.Log("Greed suspended player input passed: eight app/UI focus/pause sources at real pause/choice menus, fresh blocked clicks, four direct commands, blocked-start presses released after return, and normal foreground retry. Synthetic events/module only; personal slots and settings unchanged.");
+        }
+
         private static void VerifyHeldResumeInterruption(GreedLastApp app, GreedLastRuntimeUi ui,
             Func<GreedLastRunSnapshot> latest)
         {
@@ -1771,6 +1891,9 @@ namespace GreedLast.Editor
             ArmRotationDrag(app);
             Method(app, "OnApplicationPause").Invoke(app, new object[] { true });
             RequireRotationDragReleased(app, "App suspension must discard its old mouse start position and direction.");
+            Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
+            Method(app, "OnApplicationPause").Invoke(app, new object[] { false });
+            Require(ui.AcceptsPlayerInput, "The rotation fixture must restore foreground before its next player command.");
             core.TogglePause(clock);
             Write(core, "resumeCountdownEndsAt", 0f);
             core.Tick(clock);

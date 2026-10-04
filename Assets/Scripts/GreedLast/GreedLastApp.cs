@@ -10704,6 +10704,7 @@ namespace GreedLast
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
         private bool applicationPaused;
+        private bool applicationHasFocus = true;
         private bool appStarted;
         private bool interruptedBootPending;
         private int recordBoardPageIndex;
@@ -10866,6 +10867,7 @@ namespace GreedLast
 
         private void OnEnable()
         {
+            RefreshPlayerInputAvailability();
             if (!interruptedBootPending) return;
             interruptedBootPending = false;
             StartCoroutine(BootThenConnect());
@@ -10873,6 +10875,7 @@ namespace GreedLast
 
         private void OnDisable()
         {
+            runtimeUi?.SetAppInputAvailable(false);
             HandlePresentationSuspended();
             // Inactive hosts stop Unity coroutines; a component-only disable does not.
             if (appStarted && !gameObject.activeInHierarchy && requestGate != null && requestGate.Busy)
@@ -10993,7 +10996,7 @@ namespace GreedLast
 
         private void Update()
         {
-            if (stateMachine == null || runCore == null)
+            if (stateMachine == null || runCore == null || !CanAcceptPlayerInput())
             {
                 return;
             }
@@ -12482,6 +12485,7 @@ namespace GreedLast
         {
             bool wasPaused = applicationPaused;
             applicationPaused = pauseStatus;
+            RefreshPlayerInputAvailability();
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -12502,6 +12506,8 @@ namespace GreedLast
 
         private void OnApplicationFocus(bool hasFocus)
         {
+            applicationHasFocus = hasFocus;
+            RefreshPlayerInputAvailability();
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -12509,6 +12515,17 @@ namespace GreedLast
             {
                 PauseRunForAppBackground();
             }
+        }
+
+        private bool CanAcceptPlayerInput()
+        {
+            return isActiveAndEnabled && applicationHasFocus && !applicationPaused
+                && (runtimeUi == null || runtimeUi.AcceptsPlayerInput);
+        }
+
+        private void RefreshPlayerInputAvailability()
+        {
+            runtimeUi?.SetAppInputAvailable(isActiveAndEnabled && applicationHasFocus && !applicationPaused);
         }
 
         private bool PauseRunForAppBackground()
@@ -13118,7 +13135,7 @@ namespace GreedLast
 
         private bool TryBeginLobbyAction(out GreedLastRequestToken token)
         {
-            if (!stateMachine.CoreActionsEnabled
+            if (!CanAcceptPlayerInput() || !stateMachine.CoreActionsEnabled
                 || (stateMachine.CurrentState != GreedLastScreenState.LobbyReady
                     && stateMachine.CurrentState != GreedLastScreenState.ReSyncPending))
             {
@@ -13158,6 +13175,7 @@ namespace GreedLast
 
         private void RequestNextRunPattern()
         {
+            if (!CanAcceptPlayerInput()) return;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard)
             {
                 MoveRecordBoardPage(1);
@@ -13341,6 +13359,7 @@ namespace GreedLast
 
         private void HandleRunChannelInput(GreedLastRunChannel channel)
         {
+            if (!CanAcceptPlayerInput()) return;
             if (channel < GreedLastRunChannel.Left || channel > GreedLastRunChannel.Right) return;
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
@@ -14095,6 +14114,7 @@ namespace GreedLast
 
         private void RequestToggleRunPause()
         {
+            if (!CanAcceptPlayerInput()) return;
             if (IsRunState())
             {
                 float now = Time.realtimeSinceStartup;
@@ -14243,6 +14263,7 @@ namespace GreedLast
 
         private void RequestReturnToLobby()
         {
+            if (!CanAcceptPlayerInput()) return;
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
             {
                 bool skippedClearSave = backend.HasSaveLoadoutCandidate;
@@ -15568,6 +15589,9 @@ namespace GreedLast
         private bool sensoryHasFocus = true;
         private bool sensoryAppPaused;
         private bool sensoryComponentEnabled = true;
+        private bool appInputAvailable = true;
+        private CanvasGroup playerInputGroup;
+        private readonly List<ScrollRect> suspendedPlayerScrolls = new List<ScrollRect>();
         private AudioClip beatClip;
         private AudioClip downbeatClip;
         private AudioClip focusBeatClip;
@@ -15774,6 +15798,8 @@ namespace GreedLast
 
         public bool RotationTiltEnabled => rotationTiltEnabled;
         public bool UsePlayerRunControls => !DevToolsEnabled || devCleanViewEnabled;
+        public bool AcceptsPlayerInput => appInputAvailable && sensoryComponentEnabled
+            && isActiveAndEnabled && sensoryHasFocus && !sensoryAppPaused;
 
         public event Action<bool> RotationTiltPreferenceChanged;
         public event Action ViewportChanged;
@@ -26414,6 +26440,8 @@ namespace GreedLast
             canvasBackground.raycastTarget = false;
 
             rootPanel = CreateRect("Root", canvas.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            playerInputGroup = rootPanel.AddComponent<CanvasGroup>();
+            RefreshPlayerInputGroup();
             rootPanelRect = rootPanel.GetComponent<RectTransform>();
             ApplySafeArea(force: true);
             rootBackground = rootPanel.AddComponent<Image>();
@@ -26637,6 +26665,7 @@ namespace GreedLast
             RegisterCleanViewControls(liveSettingCleanViewGroups, timingOffsetButtons);
             RegisterCleanViewControls(liveSettingCleanViewGroups, sfxVolumeButtons);
             RegisterCleanViewControls(liveSettingCleanViewGroups, hapticsButton);
+            RefreshPlayerInputGroup();
         }
 
         private void CreatePauseMenuOverlay(Transform parent)
@@ -27990,6 +28019,41 @@ namespace GreedLast
                 button.CancelPendingPresses();
         }
 
+        internal void SetAppInputAvailable(bool available)
+        {
+            appInputAvailable = available;
+            RefreshPlayerInputGroup();
+            RefreshAudioPlaybackState();
+        }
+
+        private void RefreshPlayerInputGroup()
+        {
+            if (playerInputGroup != null)
+            {
+                playerInputGroup.interactable = AcceptsPlayerInput;
+                // Keep the menu occluding the scene even when its controls are suspended.
+                playerInputGroup.blocksRaycasts = true;
+            }
+            if (!AcceptsPlayerInput)
+            {
+                CancelPendingUiInput();
+                // ScrollRect does not consult CanvasGroup.interactable; OnDisable also cancels its drag.
+                if (rootPanel == null) return;
+                foreach (ScrollRect scroll in rootPanel.GetComponentsInChildren<ScrollRect>(true))
+                {
+                    if (!scroll.enabled) continue;
+                    suspendedPlayerScrolls.Add(scroll);
+                    scroll.enabled = false;
+                }
+            }
+            else
+            {
+                foreach (ScrollRect scroll in suspendedPlayerScrolls)
+                    if (scroll != null) scroll.enabled = true;
+                suspendedPlayerScrolls.Clear();
+            }
+        }
+
         public bool IsPointerOverInteractiveUi(Vector2 screenPoint)
         {
             EventSystem events = EventSystem.current;
@@ -28004,20 +28068,23 @@ namespace GreedLast
         private void OnApplicationFocus(bool hasFocus)
         {
             sensoryHasFocus = hasFocus;
+            RefreshPlayerInputGroup();
             RefreshAudioPlaybackState();
-            if (!hasFocus) CancelPendingUiInput();
+            if (!hasFocus) PresentationSuspended?.Invoke();
         }
 
         private void OnApplicationPause(bool paused)
         {
             sensoryAppPaused = paused;
+            RefreshPlayerInputGroup();
             RefreshAudioPlaybackState();
-            if (paused) CancelPendingUiInput();
+            if (paused) PresentationSuspended?.Invoke();
         }
 
         private void OnEnable()
         {
             sensoryComponentEnabled = true;
+            RefreshPlayerInputGroup();
             if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(true);
             RecoverAudioConfiguration();
             RefreshAudioPlaybackState();
@@ -28026,6 +28093,7 @@ namespace GreedLast
         private void OnDisable()
         {
             sensoryComponentEnabled = false;
+            RefreshPlayerInputGroup();
             RefreshAudioPlaybackState();
             CancelPendingUiInput();
             if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(false);
@@ -46132,7 +46200,7 @@ namespace GreedLast
             }
         }
 
-        private bool CanPlaySensoryFeedback => sensoryComponentEnabled && isActiveAndEnabled && !audioConfigurationPending
+        private bool CanPlaySensoryFeedback => appInputAvailable && sensoryComponentEnabled && isActiveAndEnabled && !audioConfigurationPending
             && sensoryHasFocus && !sensoryAppPaused;
 
         private void RefreshAudioPlaybackState()
