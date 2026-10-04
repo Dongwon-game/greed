@@ -190,7 +190,8 @@ namespace GreedLast.Editor
                 if (results.succeeded && results.fullLoopIncluded)
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
-                        && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce);
+                        && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
+                        && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
             try
@@ -1176,18 +1177,20 @@ namespace GreedLast.Editor
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate
                     && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
                     "The clear action must open a save window locked until explicit slot selection.");
-                report.savedSlotIndex = 1;
+                report.savedSlotIndex = report.domainReloadDisabled ? 2 : 1;
                 yield return TapTouch(Read<Button[]>(ui, "laneButtons")[report.savedSlotIndex]);
                 yield return WaitSeconds(0.4f);
                 yield return ConfirmWithTwoFingers(Read<Button>(ui, "nextPatternButton"), false);
                 GreedLastLobbySnapshot saved = backend.LoadLobby();
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
-                    && saved.SaveSlotOccupied[1] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[2]
-                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2,
-                    "Two confirmation fingers must save the candidate exactly once into S2 with both starts intact.");
+                    && saved.SaveSlotOccupied[report.savedSlotIndex]
+                    && !saved.SaveSlotOccupied[(report.savedSlotIndex + 1) % 3]
+                    && !saved.SaveSlotOccupied[(report.savedSlotIndex + 2) % 3]
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 2,
+                    "Two confirmation fingers must save exactly once into the explicitly chosen slot, with other slots empty and both starts intact.");
                 report.multiTouchConfirmationCases++;
                 yield return ClickMouse(Read<Button>(ui, "saveLoadoutButton"));
-                Require(!backend.HasSaveLoadoutCandidate && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2,
+                Require(!backend.HasSaveLoadoutCandidate && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 2,
                     "Opening save management again must not recreate a candidate or duplicate the saved result.");
                 report.candidateConsumedOnce = true;
                 yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
@@ -1195,7 +1198,7 @@ namespace GreedLast.Editor
                 yield return PrepareInfinite();
                 yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady
-                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2,
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 2,
                     "Canceling complete preparation must preserve both actual starts.");
                 report.preparationCancelPreservedUses = true;
                 for (int use = 0; use < 2; use++)
@@ -1203,8 +1206,8 @@ namespace GreedLast.Editor
                     yield return PrepareInfinite();
                     yield return ConfirmWithTwoFingers(Read<Button>(ui, "nextPatternButton"), use != 0);
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode && !run.Stopped
-                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 1 - use
-                        && backend.LoadLobby().SaveSlotOccupied[1] == (use == 0),
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 1 - use
+                        && backend.LoadLobby().SaveSlotOccupied[report.savedSlotIndex] == (use == 0),
                         "Only actual infinite start may consume a use, with immediate source auto-clear on its second start.");
                     report.multiTouchConfirmationCases++;
                     report.actualInfiniteStarts++;
@@ -1230,7 +1233,7 @@ namespace GreedLast.Editor
                 }
                 report.infiniteNaturalFailures = true;
                 report.multiTouchConfirmationsConsumedOnce = report.multiTouchConfirmationCases == 3;
-                Require(!backend.LoadLobby().SaveSlotOccupied[1] && !backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                Require(!backend.LoadLobby().SaveSlotOccupied[report.savedSlotIndex] && !backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
                     "The twice-used slot must be empty and reject a third start.");
                 report.exhaustedSlotAutoCleared = true;
                 yield return ClickMouse(Read<Button>(ui, "infiniteRecordButton"));
@@ -1249,7 +1252,7 @@ namespace GreedLast.Editor
             private IEnumerator PrepareInfinite()
             {
                 GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
-                int uses = Read<int[]>(backend, "saveLoadoutUsesRemaining")[1];
+                int uses = Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex];
                 yield return ClickMouse(Read<Button>(ui, "infiniteButton"));
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "Infinite entry must open preparation, not consume a use.");
                 yield return WaitSeconds(0.4f);
@@ -1258,7 +1261,7 @@ namespace GreedLast.Editor
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(1, 2, uses);
                 Require(Read<int>(app, "infinitePreparationStep") == 2
-                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == uses,
                     "Gift/relic preparation must remain separate from actual start consumption.");
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(2, 2, uses);
@@ -1315,7 +1318,7 @@ namespace GreedLast.Editor
                 yield return WaitSeconds(0.4f);
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
                     && Read<int>(app, "infinitePreparationStep") == expectedStep
-                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == uses,
                     "Held multi-touch must change only one preparation step and never consume or start a saved loadout.");
                 string gift = Read<string>(app, "infinitePreparationGift");
                 string relic = Read<string>(app, "infinitePreparationRelic");
@@ -1324,7 +1327,7 @@ namespace GreedLast.Editor
                 Require(Read<int>(app, "infinitePreparationStep") == expectedStep
                     && Read<string>(app, "infinitePreparationGift") == gift
                     && Read<string>(app, "infinitePreparationRelic") == relic
-                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == uses,
                     "Releasing preparation fingers must preserve the selected gift, relic and remaining starts.");
                 report.multiTouchPreparationCases++;
             }
