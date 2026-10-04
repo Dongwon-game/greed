@@ -41,7 +41,13 @@ namespace GreedLast.Editor
             BeginCheck(true);
         }
 
-        private static void BeginCheck(bool fullLoop)
+        [MenuItem("Greed Last/Run Engine Multi Touch Check")]
+        public static void RunMultiTouch()
+        {
+            BeginCheck(false, true);
+        }
+
+        private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
@@ -59,6 +65,7 @@ namespace GreedLast.Editor
             SessionState.SetInt(Prefix + "cycle", 0);
             SessionState.SetString(Prefix + "reports", JsonUtility.ToJson(new Results()));
             SessionState.SetBool(Prefix + "fullLoop", fullLoop);
+            SessionState.SetBool(Prefix + "multiTouchOnly", multiTouchOnly);
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
             EditorSceneManager.playModeStartScene = scene;
             BeginCycle();
@@ -66,6 +73,7 @@ namespace GreedLast.Editor
 
         [MenuItem("Greed Last/Run Engine Play Mode Lifecycle Check", true)]
         [MenuItem("Greed Last/Run Engine Play Mode Full Loop Check", true)]
+        [MenuItem("Greed Last/Run Engine Multi Touch Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
 
@@ -98,7 +106,7 @@ namespace GreedLast.Editor
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(
-                SessionState.GetBool(Prefix + "fullLoop", false) ? 240 : 100).ToString("O"));
+                SessionState.GetBool(Prefix + "fullLoop", false) ? 300 : 100).ToString("O"));
             EditorApplication.EnterPlaymode();
         }
 
@@ -160,6 +168,10 @@ namespace GreedLast.Editor
             results.completedUtc = DateTime.UtcNow.ToString("O");
             results.unityVersion = Application.unityVersion;
             results.fullLoopIncluded = SessionState.GetBool(Prefix + "fullLoop", false);
+            results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
+            results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
+            if (results.multiTouchOnly)
+                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
@@ -170,19 +182,31 @@ namespace GreedLast.Editor
                 SessionState.GetString(Prefix + "previousScene", string.Empty));
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, false);
             results.succeeded = string.IsNullOrEmpty(results.error) && results.cycles.Count == 2;
+            if (results.succeeded && results.multiTouchIncluded)
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.multiTouchPatternCases == 6
+                    && cycle.multiTouchChoiceCases == 2 && cycle.multiTouchFirstInputOnly
+                    && cycle.heldChoiceCannotAdvance && cycle.multiTouchFreshTapRecovered);
+                if (results.succeeded && results.fullLoopIncluded)
+                    results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
+                        && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses);
+                if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
+            }
             try
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                results.archivedReport = "report-" + (results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
+                results.archivedReport = "report-" + (results.multiTouchOnly ? "multi-touch-"
+                    : results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
                     + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
                 string json = JsonUtility.ToJson(results, true);
                 File.WriteAllText(Path.Combine(directory, results.archivedReport), json);
                 File.WriteAllText(Path.Combine(directory, "latest-report.json"), json);
             }
             catch (Exception error) { results.succeeded = false; results.error += error; }
-            if (results.succeeded) Debug.Log("Greed engine Play-mode check passed: two engine-driven cycles, normal/domain-reload-disabled entry, boot, pause/countdown, scene reload, actual-module synthetic mouse/touch and owned-object teardown. Full clear/save/two-start loop="
-                + results.fullLoopIncluded + ". Personal settings and progress unchanged.");
+            if (results.succeeded) Debug.Log("Greed engine Play-mode check passed: two engine-driven cycles. Full clear/save/two-start loop="
+                + results.fullLoopIncluded + ", multi-touch included=" + results.multiTouchIncluded
+                + ", multi-touch only=" + results.multiTouchOnly + ". Personal settings and progress unchanged. See report scope for actual coverage.");
             else Debug.LogError("Greed engine Play-mode lifecycle check failed: " + results.error);
             if (Application.isBatchMode) EditorApplication.Exit(results.succeeded ? 0 : 1);
         }
@@ -222,7 +246,7 @@ namespace GreedLast.Editor
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
-            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded;
+            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly;
             public List<Cycle> cycles = new List<Cycle>();
         }
         [Serializable] private sealed class Cycle
@@ -248,6 +272,11 @@ namespace GreedLast.Editor
             public bool suspendedFreshInputPreservedRun, disabledAppBlockedNewInput;
             public bool releasedUiBlockedCommands, releasedUiDetachedCallbacks, releasedUiRestartRecovered;
             public bool releasedUiBootSafe;
+            public int multiTouchPatternCases, multiTouchChoiceCases;
+            public bool multiTouchFirstInputOnly, heldChoiceCannotAdvance, multiTouchFreshTapRecovered;
+            public int consecutiveMultiTouchChoiceCases, multiTouchPreparationCases;
+            public bool multiTouchPreparationPreservedUses;
+            public int engineMultiTouchBatches, engineTouchContacts;
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
@@ -333,6 +362,16 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
+                if (SessionState.GetBool(Prefix + "multiTouchOnly", false))
+                {
+                    yield return VerifyMultiTouch();
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    Require(CountNamed<Canvas>("GreedLastCanvas") == 0 && Count<GreedLastApp>() == 0,
+                        "The isolated multi-touch check must release its runtime UI and app.");
+                    yield break;
+                }
                 Button practice = Read<Button>(ui, "practiceRunButton");
                 yield return PressMouse(practice);
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady,
@@ -482,7 +521,11 @@ namespace GreedLast.Editor
                 yield return VerifyBlockedEngineFrame();
                 yield return VerifyAudioBackgroundOrders();
                 yield return VerifySuspendedFreshInput();
-                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyFullLoop();
+                if (SessionState.GetBool(Prefix + "fullLoop", false))
+                {
+                    yield return VerifyMultiTouch();
+                    yield return VerifyFullLoop();
+                }
                 AudioClip ownedTone = Read<AudioClip>(ui, "beatClip");
                 AudioSource ownedSource = Read<AudioSource>(ui, "rhythmAudio");
                 GameObject formerHost = app.gameObject;
@@ -976,6 +1019,114 @@ namespace GreedLast.Editor
                     "Recovered resources must be owned by the app and released on final teardown.");
             }
 
+            private IEnumerator VerifyMultiTouch()
+            {
+                string[] contexts = { string.Empty, "기초연습 숙이기 단계", "기초연습 비틀기 단계" };
+                for (int action = 0; action < contexts.Length; action++)
+                {
+                    for (int order = 0; order < 2; order++)
+                    {
+                        Call(app, "RequestReturnToLobby");
+                        yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                        // Only select the real course starting point; clocks still advance in engine Update.
+                        if (action != 0) core.EnterPractice(contexts[action]);
+                        yield return WaitForTouchablePattern();
+                        Require((int)run.Pattern.AvoidanceType == action + 1,
+                            "Each multi-touch case must exercise a different authored avoidance action.");
+                        int correct = (int)run.Pattern.Channel - 1;
+                        int wrong = (correct + 1) % 3;
+                        Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                        bool correctFirst = order == 0;
+                        Vector2 first = ScreenPoint(lanes[correctFirst ? correct : wrong]);
+                        Vector2 second = ScreenPoint(lanes[correctFirst ? wrong : correct]);
+                        yield return TouchFrame(TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began));
+                        GreedLastRunSnapshot judged = run;
+                        Require(report.judgements == 1
+                            && run.LastResult == (correctFirst ? GreedLastJudgementResult.Success : GreedLastJudgementResult.Miss)
+                            && run.LastJudgedInputChannel == (GreedLastRunChannel)((correctFirst ? correct : wrong) + 1)
+                            && (correctFirst || run.MissReason == "wrong_channel"),
+                            "Two simultaneous channels must resolve once using the first submitted finger, not the later correct finger.");
+                        yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Stationary));
+                        yield return WaitSeconds(0.15f);
+                        Require(report.judgements == 1 && run.Score == judged.Score && run.Health == judged.Health,
+                            "Releasing one finger and holding the other must not create another judgement or reward.");
+                        yield return TouchFrame(TouchAt(74, second, TouchPhase.Canceled));
+                        yield return TouchFrame();
+                        Require(Array.TrueForAll(Read<bool[]>(ui, "laneHoldActive"), held => !held),
+                            "Ending and canceling distinct lane fingers must release every hold.");
+                        report.multiTouchPatternCases++;
+                    }
+                }
+                report.multiTouchFirstInputOnly = report.multiTouchPatternCases == 6;
+
+                foreach (int chosenLane in new[] { 0, 2 })
+                {
+                    Call(app, "RequestReturnToLobby");
+                    yield return ClickMouse(Read<Button>(ui, "normalRunButton"));
+                    yield return WaitSeconds(0.4f);
+                    Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.StartGift,
+                        "Held choice fingers must begin on a real opening gift screen.");
+                    string chosenGift = chosenLane == 0 ? run.ChoiceLeft : run.ChoiceRight;
+                    Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                    Vector2 first = ScreenPoint(lanes[chosenLane]);
+                    Vector2 second = ScreenPoint(lanes[1]);
+                    yield return TouchFrame(TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began));
+                    yield return TouchFrame(TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary));
+                    float deadline = Time.realtimeSinceStartup + 8f;
+                    while (run.ChoiceActive || run.CountdownActive || !run.ActivePattern)
+                    {
+                        Require(Time.realtimeSinceStartup < deadline && report.judgements == 0,
+                            "Held choice touches must not select again or resolve the first countdown trap.");
+                        yield return null;
+                    }
+                    Require(Read<string>(core, "startGift") == chosenGift && Read<int>(core, "choiceHistoryCount") == 1,
+                        "The first finger alone must determine the opening gift across the countdown.");
+                    yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled));
+                    yield return TouchFrame();
+                    Require(report.judgements == 0
+                        && Array.TrueForAll(Read<bool[]>(ui, "laneHoldActive"), held => !held),
+                        "Releasing choice fingers over a live course must not submit a rhythm input.");
+                    yield return WaitForTouchablePattern();
+                    Vector2 target = ScreenPoint(lanes[(int)run.Pattern.Channel - 1]);
+                    yield return TouchFrame(TouchAt(73, target, TouchPhase.Began));
+                    Require(report.judgements == 1 && run.LastResult == GreedLastJudgementResult.Success,
+                        "A fresh tap using a released choice finger ID must still judge the real first trap once.");
+                    yield return TouchFrame(TouchAt(73, target, TouchPhase.Ended));
+                    yield return TouchFrame();
+                    Require(report.judgements == 1, "The fresh tap's release must not create a second reward.");
+                    report.multiTouchChoiceCases++;
+                }
+                report.heldChoiceCannotAdvance = report.multiTouchChoiceCases == 2;
+                report.multiTouchFreshTapRecovered = report.multiTouchFirstInputOnly && report.heldChoiceCannotAdvance;
+                Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
+            }
+
+            private IEnumerator WaitForTouchablePattern()
+            {
+                float deadline = Time.realtimeSinceStartup + 8f;
+                while (!run.ActivePattern || run.CountdownActive
+                    || run.ElapsedSeconds + core.InputTimingOffsetSeconds < run.Pattern.CoreSeconds)
+                {
+                    Require(Time.realtimeSinceStartup < deadline && !run.Stopped,
+                        "The real engine course must reach its calibrated input target before timing out.");
+                    yield return null;
+                }
+            }
+
+            private IEnumerator TouchFrame(params Touch[] touches)
+            {
+                input.MouseEnabled = input.MouseDown = input.MouseHeld = input.MouseUp = false;
+                input.Touches = touches;
+                int began = 0;
+                foreach (Touch touch in touches) if (touch.phase == TouchPhase.Began) began++;
+                report.engineTouchContacts += began;
+                if (began > 1) report.engineMultiTouchBatches++;
+                yield return null;
+            }
+
+            private static Touch TouchAt(int id, Vector2 point, TouchPhase phase)
+                => new Touch { fingerId = id, position = point, phase = phase };
+
             private IEnumerator VerifyFullLoop()
             {
                 float began = Time.realtimeSinceStartup;
@@ -995,7 +1146,10 @@ namespace GreedLast.Editor
                     if (run.ChoiceActive && Time.realtimeSinceStartup >= nextChoiceAt)
                     {
                         GreedLastChoiceKind before = run.ChoiceKind;
-                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
+                        if (before == GreedLastChoiceKind.Node
+                            || (before == GreedLastChoiceKind.Gift && run.ChapterIndex == 2))
+                            yield return VerifyConsecutiveChoiceTouches();
+                        else yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
                         Require(!run.ChoiceActive || run.ChoiceKind != before,
                             "One engine touch must resolve exactly the current readable choice.");
                         report.normalChoices++;
@@ -1092,14 +1246,64 @@ namespace GreedLast.Editor
                 yield return ClickMouse(Read<Button>(ui, "infiniteButton"));
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "Infinite entry must open preparation, not consume a use.");
                 yield return WaitSeconds(0.4f);
-                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
+                yield return VerifyPreparationTouches(0, 1, uses);
                 Require(Read<int>(app, "infinitePreparationStep") == 1, "The engine gift tap must resolve just one preparation step.");
                 yield return WaitSeconds(0.4f);
-                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                yield return VerifyPreparationTouches(1, 2, uses);
                 Require(Read<int>(app, "infinitePreparationStep") == 2
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
                     "Gift/relic preparation must remain separate from actual start consumption.");
                 yield return WaitSeconds(0.4f);
+                yield return VerifyPreparationTouches(2, 2, uses);
+                report.multiTouchPreparationPreservedUses = true;
+            }
+
+            private IEnumerator VerifyConsecutiveChoiceTouches()
+            {
+                GreedLastChoiceKind from = run.ChoiceKind;
+                GreedLastChoiceKind next = from == GreedLastChoiceKind.Node
+                    ? GreedLastChoiceKind.Gift : GreedLastChoiceKind.Relic;
+                int history = Read<int>(core, "choiceHistoryCount");
+                Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                Vector2 first = ScreenPoint(lanes[0]);
+                Vector2 second = ScreenPoint(lanes[2]);
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began));
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary));
+                yield return WaitSeconds(0.4f);
+                Require(run.ChoiceActive && run.ChoiceKind == next && Read<int>(core, "choiceHistoryCount") == history + 1,
+                    "Two opening fingers must advance only one consecutive choice, even after the transition guard expires: " + from);
+                GreedLastRunSnapshot frozen = run;
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled));
+                yield return TouchFrame();
+                Require(run.ChoiceKind == next && Read<int>(core, "choiceHistoryCount") == history + 1,
+                    "Releasing fingers from the previous choice must not choose the new gift or relic.");
+                AssertFrozen(frozen);
+                report.consecutiveMultiTouchChoiceCases++;
+            }
+
+            private IEnumerator VerifyPreparationTouches(int chosenLane, int expectedStep, int uses)
+            {
+                GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
+                Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                Vector2 first = ScreenPoint(lanes[chosenLane]);
+                Vector2 second = ScreenPoint(lanes[(chosenLane + 1) % 3]);
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began));
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary));
+                yield return WaitSeconds(0.4f);
+                Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                    && Read<int>(app, "infinitePreparationStep") == expectedStep
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
+                    "Held multi-touch must change only one preparation step and never consume or start a saved loadout.");
+                string gift = Read<string>(app, "infinitePreparationGift");
+                string relic = Read<string>(app, "infinitePreparationRelic");
+                yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled));
+                yield return TouchFrame();
+                Require(Read<int>(app, "infinitePreparationStep") == expectedStep
+                    && Read<string>(app, "infinitePreparationGift") == gift
+                    && Read<string>(app, "infinitePreparationRelic") == relic
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses,
+                    "Releasing preparation fingers must preserve the selected gift, relic and remaining starts.");
+                report.multiTouchPreparationCases++;
             }
 
             private static IEnumerator WaitSeconds(float seconds)
@@ -1256,6 +1460,7 @@ namespace GreedLast.Editor
                 input.Touches = Array.Empty<Touch>();
                 yield return null;
                 report.engineTouchTaps++;
+                report.engineTouchContacts++;
             }
 
             private static Vector2 ScreenPoint(Button button)
