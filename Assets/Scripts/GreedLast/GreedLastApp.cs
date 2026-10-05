@@ -17089,10 +17089,12 @@ namespace GreedLast
             bool slots = snapshot.State == GreedLastScreenState.SaveLoadoutDraft
                 || snapshot.State == GreedLastScreenState.InfiniteLoadoutSelect;
             bool preparing = snapshot.State == GreedLastScreenState.InfiniteStartReady;
-            bool records = snapshot.State == GreedLastScreenState.InfiniteRecordBoard;
+            bool records = snapshot.State == GreedLastScreenState.InfiniteRecordBoard
+                || snapshot.State == GreedLastScreenState.ProfileBoard;
+            bool growth = snapshot.State == GreedLastScreenState.GrowthBoard;
             bool lobbyNotice = snapshot.State == GreedLastScreenState.LobbyReady && !string.IsNullOrWhiteSpace(detailText.text);
-            if (!slots && !preparing && !records && !lobbyNotice) return;
-            bool choices = slots || (preparing && IsSelectedSaveSlotUsable(snapshot));
+            if (!slots && !preparing && !records && !growth && !lobbyNotice) return;
+            bool choices = slots || growth || (preparing && IsSelectedSaveSlotUsable(snapshot));
             if (!lobbyNotice) subtitleText.text = string.Empty;
             if (preparing && IsSelectedSaveSlotUsable(snapshot))
             {
@@ -17137,10 +17139,10 @@ namespace GreedLast
             content.anchorMax = Vector2.one;
             content.pivot = new Vector2(0.5f, 1f);
             content.anchoredPosition = Vector2.zero;
-            content.sizeDelta = Vector2.zero;
+            content.sizeDelta = new Vector2(-32f, 0f);
             menuDetailScroll.content = content;
             Canvas.ForceUpdateCanvases();
-            content.sizeDelta = new Vector2(0f, Mathf.Max(menuDetailScroll.viewport.rect.height, detailText.preferredHeight + 16f));
+            content.sizeDelta = new Vector2(-32f, Mathf.Max(menuDetailScroll.viewport.rect.height, detailText.preferredHeight + 16f));
             menuDetailScroll.vertical = content.sizeDelta.y > menuDetailScroll.viewport.rect.height + 1f;
             menuDetailScroll.verticalScrollbar.gameObject.SetActive(menuDetailScroll.vertical);
             menuDetailScroll.StopMovement();

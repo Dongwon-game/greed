@@ -39,6 +39,7 @@ namespace GreedLast.Editor
             public bool pointerLoopPassed;
             public bool pointerLoopIncluded;
             public bool scoreBoundaryOnly;
+            public bool progressBoundaryOnly;
             public int pointerLoopCases;
             public int pointerLoopClicks;
             public int pointerLoopCanceledCommands;
@@ -62,6 +63,7 @@ namespace GreedLast.Editor
             public int checkedBlockedLanePoints;
             public int checkedLaneLabels;
             public int checkedFeedbackAreas;
+            public int checkedProgressAreas;
             public int checkedRunnerCueClearances;
             public bool retainedScreen;
             public int brightSamples;
@@ -99,7 +101,13 @@ namespace GreedLast.Editor
             Begin(false, scoreBoundaryOnly: true);
         }
 
-        private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false)
+        [MenuItem("Greed Last/Capture Progress Boundary Checks")]
+        public static void RunProgressBoundaryOnly()
+        {
+            Begin(false, progressBoundaryOnly: true);
+        }
+
+        private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -121,6 +129,7 @@ namespace GreedLast.Editor
                 unityVersion = Application.unityVersion,
                 pointerLoopIncluded = includePointerLoop,
                 scoreBoundaryOnly = scoreBoundaryOnly,
+                progressBoundaryOnly = progressBoundaryOnly,
             };
             try
             {
@@ -217,6 +226,7 @@ namespace GreedLast.Editor
                 AddRefillClearSaveFrames();
                 AddLongRunCounterFrames();
                 AddScoreBoundaryFrames();
+                AddProgressBoundaryFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -231,15 +241,17 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
-                if (scoreBoundaryOnly)
+                if (scoreBoundaryOnly || progressBoundaryOnly)
                 {
+                    string prefix = progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
                     int count = Frames.Count;
                     for (int i = 0; i < count; i++)
                     {
                         Frame frame = Frames.Dequeue();
-                        if (frame.Name.StartsWith("92-score-ceiling-", StringComparison.Ordinal)) Frames.Enqueue(frame);
+                        if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)) Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == 12, "The focused score capture must include only its twelve boundary frames.");
+                    Require(Frames.Count == 12,
+                        "The focused numeric capture must include only its assigned boundary frames.");
                 }
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
@@ -1088,6 +1100,42 @@ namespace GreedLast.Editor
             Add("92-score-ceiling-record-wide", 2340, 1080, () => ui.Render(board), 96f);
         }
 
+        private static void AddProgressBoundaryFrames()
+        {
+            var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            var machine = new GreedLastStateMachine(new GreedLastRequestGate());
+            GreedLastStateSnapshot state = default;
+            machine.StateChanged += value => state = value;
+            backend.AddGrowthPointsForTest(3);
+            machine.SetGrowthBoard(backend.LoadLobby(), backend.BuildGrowthBoardText());
+            AddState("growth-normal", state, "성장 포인트 3");
+            foreach (string field in new[] { "growthPoints", "normalClearCount", "normalFailCount", "normalAbandonCount", "infiniteRunCount" })
+                typeof(GreedLastMockBackend).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(backend, int.MaxValue);
+            machine.SetGrowthBoard(backend.LoadLobby(), backend.BuildGrowthBoardText());
+            AddState("growth-ceiling", state, "성장 포인트 " + int.MaxValue);
+            backend.UpgradeGrowth(GreedLastRunChannel.Center, out _);
+            int balance = backend.LoadLobby().GrowthPoints;
+            Require(balance > 0 && balance < int.MaxValue && backend.GrowthFocusLevel == 1,
+                "The progress capture needs an actual existing-cost purchase from a capped balance.");
+            machine.SetGrowthBoard(backend.LoadLobby(), backend.BuildGrowthBoardText());
+            AddState("growth-purchased", state, "성장 포인트 " + balance);
+            machine.SetProfileBoard(backend.LoadLobby(), backend.BuildProfileBoardText(0), 0);
+            AddState("profile", state, "일반 6442450941회");
+
+            void AddState(string name, GreedLastStateSnapshot snapshot, string expected)
+            {
+                void Show()
+                {
+                    ui.Render(snapshot);
+                    Require(Read<Text>("detailText").text.Contains(expected, StringComparison.Ordinal),
+                        "The visible progress body must retain its wide value after rendering: " + expected);
+                }
+                Add("93-progress-" + name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                Add("93-progress-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                Add("93-progress-" + name + "-wide", 2340, 1080, Show, 96f, 0.16);
+            }
+        }
+
         private static void AddPracticeMissFrames()
         {
             foreach (int kind in new[] { -1, 0, 1 })
@@ -1836,6 +1884,23 @@ namespace GreedLast.Editor
                 graphic.Rebuild(CanvasUpdate.PreRender);
             }
             camera.Render();
+            int checkedProgressAreas = 0;
+            if (currentFrame.Name.StartsWith("93-progress-", StringComparison.Ordinal))
+            {
+                Text body = Read<Text>("detailText");
+                Require(HasVisibleText(body), currentFrame.Name + ": progress body must be visible.");
+                ScrollRect scroll = Read<ScrollRect>("menuDetailScroll");
+                Require(scroll.gameObject.activeInHierarchy && scroll.content == body.rectTransform,
+                    currentFrame.Name + ": progress data must use its separate scrolling area.");
+                Bounds glyphs = GetTextGlyphBounds(scroll.viewport, body);
+                Rect viewport = scroll.viewport.rect;
+                Require(body.cachedTextGenerator.verts.Count > 4
+                    && glyphs.min.x >= viewport.xMin && glyphs.max.x <= viewport.xMax,
+                    currentFrame.Name + ": progress glyph overhangs must stay inside the clipping viewport.");
+                Require(body.preferredHeight <= body.rectTransform.rect.height + 1f,
+                    currentFrame.Name + ": progress body must retain every line without clipping.");
+                checkedProgressAreas = 1;
+            }
             int checkedButtons = VerifyVisibleControlRaycasts(out int checkedControlPoints);
             int checkedBlockedLanePoints = VerifyPausedLaneRaycasts();
             int checkedFeedbackAreas = VerifyVisibleFeedbackAreas();
@@ -1895,6 +1960,7 @@ namespace GreedLast.Editor
                     checkedBlockedLanePoints = checkedBlockedLanePoints,
                     checkedLaneLabels = checkedLaneLabels,
                     checkedFeedbackAreas = checkedFeedbackAreas,
+                    checkedProgressAreas = checkedProgressAreas,
                     checkedRunnerCueClearances = checkedRunnerCueClearances,
                     retainedScreen = currentFrame.RetainedScreen,
                     brightSamples = brightSamples,
@@ -2342,7 +2408,8 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
+            report.archivedReport = "report-" + (report.progressBoundaryOnly ? "progress-boundary-"
+                : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
             string json = JsonUtility.ToJson(report, true);
             File.WriteAllText(Path.Combine("Logs/VisualChecks", report.archivedReport), json);
