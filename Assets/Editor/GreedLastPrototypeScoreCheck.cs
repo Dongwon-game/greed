@@ -124,13 +124,14 @@ namespace GreedLast.Editor
             Require(expected == GreedLastJudgementResult.Miss ? run.Score == initial
                 : initial == 0 ? run.Score > 0 : run.Score == int.MaxValue,
                 "Score rewards must remain unchanged normally and saturate only at the existing storage ceiling.");
+            GreedLastRunSnapshot afterJudgement = run;
             int judged = run.SuccessCount + run.GoodCount + run.MissCount;
             core.HandleInput(channel, clock);
             Require(run.SuccessCount + run.GoodCount + run.MissCount == judged && run.Score == before.Score + run.LastJudgementScoreGain,
                 "A duplicate input must not re-award a boundary judgement.");
             Require(core.CreateInfiniteRunRecord().Score == run.Score && !run.SaveEligible,
                 "Boundary records must preserve the current infinite score without creating a normal-save candidate.");
-            return (before, run);
+            return (before, afterJudgement);
         }
 
         private static void VerifyBundleAwards()

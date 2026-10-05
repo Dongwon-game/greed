@@ -66,6 +66,15 @@ namespace GreedLast.Editor
                 }
 
                 VerifyCalibratedWaitingGuide(ui);
+                var capped = GreedLastPrototypeScoreCheck.VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success);
+                Require(capped.after.LastResult == GreedLastJudgementResult.Success && capped.after.LastJudgementScoreGain == 5,
+                    "Presentation needs the actual boundary judgement, not its subsequent ignored duplicate input.");
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                    GreedLastScreenState.InfiniteRun, "Score ceiling", string.Empty, 0));
+                ui.RenderRun(capped.before);
+                ui.RenderRun(capped.after);
+                Require(Read<Text>(ui, "judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),
+                    "Player score-ceiling feedback must show its actual five awarded points.");
                 foreach (float delta in new[] { -0.012f, 0f, 0.012f, 0.075f })
                 {
                     FreshPractice();
