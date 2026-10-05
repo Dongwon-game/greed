@@ -23,6 +23,36 @@ function Get-AllTypes {
     }
 }
 
+function Assert-DevToolPolicy {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $codes = @($instructions | ForEach-Object { $_.OpCode.Code.ToString() })
+    if (!$Method.IsStatic -or $Method.ReturnType.FullName -ne 'System.Boolean' -or $Method.Parameters.Count -ne 2 -or
+        $Method.Parameters[0].ParameterType.FullName -ne 'System.Boolean' -or $Method.Parameters[1].ParameterType.FullName -ne 'System.Boolean' -or
+        ($codes -join ',') -cne 'Ldarg_0,Ldarg_1,Or,Ret') {
+        throw 'Development policy must return isEditor OR isDebugBuild; update its explicit IL contract if the compiler changes.'
+    }
+}
+
+function Assert-ModeGetter {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $expectedCalls = @(
+        'System.Boolean UnityEngine.Application::get_isEditor()',
+        'System.Boolean UnityEngine.Debug::get_isDebugBuild()',
+        'System.Boolean GreedLast.GreedLastDevToolPolicy::ShouldEnable(System.Boolean,System.Boolean)'
+    )
+    if (!$Method.IsStatic -or $Method.ReturnType.FullName -ne 'System.Boolean' -or $Method.Parameters.Count -ne 0 -or
+        $instructions.Count -ne 4 -or $instructions[3].OpCode.Code.ToString() -ne 'Ret') {
+        throw ('Development mode getter must return only the shared runtime policy: ' + $Method.DeclaringType.Name)
+    }
+    for ($index = 0; $index -lt 3; $index++) {
+        if ($instructions[$index].OpCode.Code.ToString() -ne 'Call' -or $instructions[$index].Operand.FullName -cne $expectedCalls[$index]) {
+            throw ('Development mode getter inputs differ from actual editor/build state: ' + $Method.DeclaringType.Name)
+        }
+    }
+}
+
 function Assert-ConnectionGuard {
     param($Method)
     $instructions = @($Method.Body.Instructions)
@@ -131,6 +161,11 @@ try {
     $resetApis = @($types.Methods | Where-Object { $_.Name -in @('CreatePersistenceTestBackendForEditor', 'ClearPersistedProgressForEditor', 'ResetPrototypeProgressForEditor') })
     $connectionMethods = @($types.Methods | Where-Object { $_.Name -eq 'ToggleOfflineForEditorCheck' })
     if ($editorRefs.Count -ne 0 -or $editorTypes.Count -ne 0 -or $resetApis.Count -ne 0 -or $connectionMethods.Count -ne 2) { throw 'Unexpected release assembly surface.' }
+    $policies = @($types.Methods | Where-Object { $_.DeclaringType.FullName -eq 'GreedLast.GreedLastDevToolPolicy' -and $_.Name -eq 'ShouldEnable' })
+    $modeGetters = @($types.Methods | Where-Object { $_.DeclaringType.FullName -in @('GreedLast.GreedLastApp', 'GreedLast.GreedLastRuntimeUi') -and $_.Name -eq 'get_DevToolsEnabled' })
+    if ($policies.Count -ne 1 -or $modeGetters.Count -ne 2) { throw 'Development policy/getter surface changed; update its explicit verification contract.' }
+    Assert-DevToolPolicy $policies[0]
+    foreach ($method in $modeGetters) { Assert-ModeGetter $method }
     foreach ($method in $connectionMethods) { Assert-ConnectionGuard $method }
     $snapshotNames = @('AddSampleSaveLoadoutForTest', 'AddSampleClearCandidateForTest', 'ConsumeSelectedSaveLoadoutUseForTest', 'AddGrowthPointsForTest', 'MaxGrowthForTest', 'ResetGrowthForTest')
     $snapshotTools = @($types.Methods | Where-Object { $_.DeclaringType.Name -eq 'GreedLastMockBackend' -and $_.Name -in $snapshotNames })
@@ -189,6 +224,8 @@ if ($PackagePath) {
     EditorReferences = $editorRefs.Count
     EditorTestTypes = $editorTypes.Count
     EditorResetApis = $resetApis.Count
+    VerifiedDevelopmentPolicies = $policies.Count
+    VerifiedDevelopmentModeGetters = $modeGetters.Count
     GuardedDevelopmentConnections = $connectionMethods.Count
     GuardedDevelopmentSnapshotTools = $snapshotTools.Count
     GuardedDevelopmentRunCommands = $appTools.Count
