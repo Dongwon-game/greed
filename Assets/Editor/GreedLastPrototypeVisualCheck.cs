@@ -1027,6 +1027,16 @@ namespace GreedLast.Editor
         private static void AddScoreBoundaryFrames()
         {
             var capped = GreedLastPrototypeScoreCheck.VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success);
+            void ShowPreview()
+            {
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                ShowRun(capped.before);
+                Require(Read<Text>("activeActionCueText").text.Contains("정확 +5", StringComparison.Ordinal),
+                    "The visible action cue must preview only the five points still available at the score ceiling.");
+            }
+            Add("92-score-ceiling-preview-small", 960, 540, ShowPreview, settleSeconds: 0.16);
+            Add("92-score-ceiling-preview-tablet", 1024, 768, ShowPreview, settleSeconds: 0.16);
+            Add("92-score-ceiling-preview-wide", 2340, 1080, ShowPreview, 96f, 0.16);
             foreach (bool detailed in new[] { false, true })
             {
                 void Show()

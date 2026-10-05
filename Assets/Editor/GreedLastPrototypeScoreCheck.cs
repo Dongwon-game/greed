@@ -113,6 +113,13 @@ namespace GreedLast.Editor
                 ? -(run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
             Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
             GreedLastRunSnapshot before = run;
+            if (initial > 0)
+            {
+                int available = int.MaxValue - initial;
+                Require(Invoke<int>(typeof(GreedLastRuntimeUi), "BuildActiveExactScorePreview", before) == available
+                    && Invoke<int>(typeof(GreedLastRuntimeUi), "BuildActiveGoodScorePreview", before) == available,
+                    "Before-input exact and Good previews must show only the points still available at the score ceiling.");
+            }
             GreedLastRunChannel channel = expected == GreedLastJudgementResult.Miss
                 ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
                 : run.Pattern.Channel;

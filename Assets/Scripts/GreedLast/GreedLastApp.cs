@@ -23184,13 +23184,15 @@ namespace GreedLast
                 }
             }
 
-            return ApplyFocusStateScorePreview(score, snapshot.FocusStateActive);
+            return Math.Min(Math.Max(0, ApplyFocusStateScorePreview(score, snapshot.FocusStateActive)),
+                int.MaxValue - Mathf.Max(0, snapshot.Score));
         }
 
         private static int BuildActiveGoodScorePreview(GreedLastRunSnapshot snapshot)
         {
             int score = 25 + BuildActiveChoiceProfileGoodBonusPreview(snapshot);
-            return ApplyFocusStateScorePreview(score, snapshot.FocusStateActive);
+            return Math.Min(Math.Max(0, ApplyFocusStateScorePreview(score, snapshot.FocusStateActive)),
+                int.MaxValue - Mathf.Max(0, snapshot.Score));
         }
 
         private static int BuildActiveComboGainPreview(GreedLastRunSnapshot snapshot)
