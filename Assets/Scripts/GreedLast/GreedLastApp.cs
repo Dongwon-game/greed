@@ -5268,7 +5268,9 @@ namespace GreedLast
 
             if (target.Contains("점", StringComparison.Ordinal))
             {
-                int nextScore = Mathf.Max(800, ExtractNumberBeforeMarker(target, "점") + 200);
+                int previousScore = ExtractNumberBeforeMarker(target, "점");
+                if (previousScore > int.MaxValue - 200) return "정박 3연속";
+                int nextScore = Mathf.Max(800, previousScore + 200);
                 return nextScore + (infinite ? "점 갱신" : "점 탈출");
             }
 
@@ -7146,7 +7148,8 @@ namespace GreedLast
                 return "무한 콤보 9 / 현재 " + record.MaxCombo;
             }
 
-            int nextScoreMilestone = Mathf.Max(1000, (record.Score / 500 + 1) * 500);
+            if (record.Score == int.MaxValue) return "다음 구간 무실수";
+            int nextScoreMilestone = (int)Math.Min(int.MaxValue, Math.Max(1000L, ((long)record.Score / 500 + 1) * 500));
             return "무한 " + nextScoreMilestone + "점 갱신 / 현재 " + record.Score + "점";
         }
 
@@ -8796,15 +8799,15 @@ namespace GreedLast
                 return "-";
             }
 
-            int gradeScore = record.Score
+            long gradeScore = (long)record.Score
                 + Mathf.RoundToInt(record.Distance * 2f)
-                + record.Health * 80
-                + record.Focus * 40
-                + record.MaxCombo * 25
-                + Mathf.Clamp(ExtractPrecisionStreak(record.TimingProfile) * 30, 0, 180)
-                + record.SuccessCount * 12
-                + record.GoodCount * 4
-                - record.MissCount * 45;
+                + (long)record.Health * 80
+                + (long)record.Focus * 40
+                + (long)record.MaxCombo * 25
+                + Math.Min((long)ExtractPrecisionStreak(record.TimingProfile) * 30, 180)
+                + (long)record.SuccessCount * 12
+                + (long)record.GoodCount * 4
+                - (long)record.MissCount * 45;
             if (gradeScore >= 1100)
             {
                 return "S";
@@ -8830,12 +8833,12 @@ namespace GreedLast
                 return "-";
             }
 
-            int gradeScore = record.Score
-                + record.SectionsCleared * 120
-                + Mathf.Max(1, record.MaxThreatLevel) * 60
-                + record.MaxCombo * 30
-                + Mathf.Clamp(ExtractPrecisionStreak(record.TimingProfile) * 35, 0, 220)
-                - record.MissCount * 90;
+            long gradeScore = (long)record.Score
+                + (long)record.SectionsCleared * 120
+                + (long)Mathf.Max(1, record.MaxThreatLevel) * 60
+                + (long)record.MaxCombo * 30
+                + Math.Min((long)ExtractPrecisionStreak(record.TimingProfile) * 35, 220)
+                - (long)record.MissCount * 90;
             if (gradeScore >= 2000)
             {
                 return "S";
@@ -14795,7 +14798,9 @@ namespace GreedLast
 
             if (target.Contains("점", StringComparison.Ordinal))
             {
-                int nextScore = Mathf.Max(800, ExtractNumberBeforeMarkerForContext(target, "점") + 200);
+                int previousScore = ExtractNumberBeforeMarkerForContext(target, "점");
+                if (previousScore > int.MaxValue - 200) return "정박 3연속";
+                int nextScore = Mathf.Max(800, previousScore + 200);
                 return nextScore + (infinite ? "점 갱신" : "점 탈출");
             }
 
@@ -46633,10 +46638,10 @@ namespace GreedLast
 
         private static string BuildInfiniteSnapshotGrade(GreedLastRunSnapshot snapshot)
         {
-            int gradeScore = snapshot.Score
-                + snapshot.InfiniteSectionsCleared * 120
-                + snapshot.MaxCombo * 30
-                - snapshot.MissCount * 90;
+            long gradeScore = (long)snapshot.Score
+                + (long)snapshot.InfiniteSectionsCleared * 120
+                + (long)snapshot.MaxCombo * 30
+                - (long)snapshot.MissCount * 90;
             if (gradeScore >= 2000)
             {
                 return "S";

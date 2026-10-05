@@ -208,6 +208,7 @@ namespace GreedLast.Editor
                 AddRefillReviewFrames();
                 AddRefillClearSaveFrames();
                 AddLongRunCounterFrames();
+                AddScoreBoundaryFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -1021,6 +1022,37 @@ namespace GreedLast.Editor
             Add("83-long-infinite-small", 960, 540, Show, settleSeconds: 0.16);
             Add("83-long-infinite-tablet", 1024, 768, Show, settleSeconds: 0.16);
             Add("83-long-infinite-wide", 2340, 1080, Show, 96f, 0.16);
+        }
+
+        private static void AddScoreBoundaryFrames()
+        {
+            var capped = GreedLastPrototypeScoreCheck.VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success);
+            foreach (bool detailed in new[] { false, true })
+            {
+                void Show()
+                {
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowRun(capped.before);
+                    ui.RenderRun(capped.after);
+                    if (detailed) ui.ToggleDevCleanView();
+                    Require(Read<Text>("judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),
+                        "Capped-score feedback must show the actual five awarded points, not an overflow or formula reward.");
+                }
+                string name = "92-score-ceiling-" + (detailed ? "detail" : "basic");
+                Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+            }
+            var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            backend.RegisterInfiniteRun(new GreedLastInfiniteRunRecord(true, int.MaxValue, 10000f,
+                400, 5, "score-boundary", "연쇄형", 1200, 0, 3, 2000, "no_input", string.Empty));
+            var machine = new GreedLastStateMachine(new GreedLastRequestGate());
+            GreedLastStateSnapshot board = default;
+            machine.StateChanged += value => board = value;
+            machine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(2), 2);
+            Add("92-score-ceiling-record-small", 960, 540, () => ui.Render(board));
+            Add("92-score-ceiling-record-tablet", 1024, 768, () => ui.Render(board));
+            Add("92-score-ceiling-record-wide", 2340, 1080, () => ui.Render(board), 96f);
         }
 
         private static void AddPracticeMissFrames()

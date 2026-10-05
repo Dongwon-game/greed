@@ -2353,7 +2353,7 @@ namespace GreedLast
                         + pressureRouteCounterBonus;
                     int focusStateScoreBonus = BuildFocusStateScoreBonus(totalSuccessScore, focusStateWasActive);
                     totalSuccessScore += focusStateScoreBonus;
-                    score += totalSuccessScore;
+                    totalSuccessScore = AddScore(totalSuccessScore);
                     GainFocus(
                         focusGain + centerHitFocusGain + recoveryFocusGain + perfectFocusChargeGain + variationRouteFocusGain,
                         extendActiveState: true,
@@ -2471,8 +2471,8 @@ namespace GreedLast
                             chainBonus += 10 * GetInfiniteThreatLevel();
                         }
 
-                        score += chainBonus;
-                        AppendChoiceEffect("연쇄 박자 x" + rhythmChainLevel + " / 보너스 +" + chainBonus + "점");
+                        int awardedChainBonus = AddScore(chainBonus);
+                        AppendChoiceEffect("연쇄 박자 x" + rhythmChainLevel + " / 보너스 +" + awardedChainBonus + "점");
                     }
                     break;
                 case GreedLastJudgementResult.Good:
@@ -2519,7 +2519,7 @@ namespace GreedLast
                     goodScore += profileGoodBonus;
                     int goodFocusStateScoreBonus = BuildFocusStateScoreBonus(goodScore, focusStateWasActive);
                     goodScore += goodFocusStateScoreBonus;
-                    score += goodScore;
+                    goodScore = AddScore(goodScore);
                     bool focusChainSoftened = focusStateWasActive && comboBeforeResolve > 0;
                     combo = focusChainSoftened ? Mathf.Max(0, comboBeforeResolve - 1) : 0;
                     BreakPrecisionStreak();
@@ -2647,6 +2647,14 @@ namespace GreedLast
             lastJudgementScoreGain = Mathf.Max(0, score - scoreBeforeResolve);
             lastJudgementHealthChange = health - healthBeforeResolve;
             Publish(now);
+        }
+
+        private int AddScore(int amount)
+        {
+            // Keep the existing int save schema without wrapping a long infinite run below zero.
+            int awarded = (int)Math.Min(Math.Max(0, amount), (long)int.MaxValue - score);
+            score += awarded;
+            return awarded;
         }
 
         private string BuildRouteBundleBreakText()
@@ -4180,7 +4188,7 @@ namespace GreedLast
                     maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     return "체력 +1";
                 case "고점 본능":
-                    score += 80;
+                    AddScore(80);
                     return "점수 +80";
                 case "안정 루트":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
@@ -4191,7 +4199,7 @@ namespace GreedLast
                 case "압박 루트":
                     combo += 1;
                     maxCombo = Mathf.Max(maxCombo, combo);
-                    score += 120;
+                    AddScore(120);
                     return "콤보 +1 / 점수 +120 / 좁은 판정 / Clutch +" + PressureRouteClutchScoreBonus;
                 case "집중 축":
                     return AppendGiftStackReward(selected, ApplyChoiceFocusReward(2));
@@ -4202,10 +4210,10 @@ namespace GreedLast
                 case "연쇄 축":
                     combo += 2;
                     maxCombo = Mathf.Max(maxCombo, combo);
-                    score += 60;
+                    AddScore(60);
                     return AppendGiftStackReward(selected, "콤보 +2 / 점수 +60");
                 case "황금 박동":
-                    score += 200;
+                    AddScore(200);
                     return "점수 +200";
                 case "사막의 잔상":
                     health = Mathf.Min(BuildBonusHealthCap(), health + 1);
@@ -4432,7 +4440,7 @@ namespace GreedLast
             GainFocus(bonus.FocusBonus, extendActiveState: true, out _, out _);
             combo = Mathf.Clamp(combo + bonus.ComboBonus, 0, 9);
             maxCombo = Mathf.Max(maxCombo, combo);
-            score += bonus.ScoreBonus;
+            AddScore(bonus.ScoreBonus);
             return BuildInfiniteLoadoutBonusPreview(loadoutRecord);
         }
 
@@ -4818,8 +4826,7 @@ namespace GreedLast
                     int currentThreatLevel = GetInfiniteThreatLevel();
                     maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, currentThreatLevel);
                     threatRose = currentThreatLevel > previousThreatLevel;
-                    int sectionBonus = 50 * currentThreatLevel;
-                    score += sectionBonus;
+                    int sectionBonus = AddScore(50 * currentThreatLevel);
                     judgementText += "\n무한 구간 유지 보너스 +" + sectionBonus
                         + " / 위협 " + currentThreatLevel
                         + "\n" + BuildCompletedBundlePerformanceText();
@@ -5111,9 +5118,9 @@ namespace GreedLast
             if (HasActiveRoute("압박 루트"))
             {
                 pressureRouteBundleCount += 1;
-                score += PressureRouteBundleScoreBonus;
+                int awarded = AddScore(PressureRouteBundleScoreBonus);
                 return AppendThreeActionExactText(
-                    "패턴 묶음 완벽 - 압박 완주 / 점수 +" + PressureRouteBundleScoreBonus
+                    "패턴 묶음 완벽 - 압박 완주 / 점수 +" + awarded
                         + " / " + ApplyRouteBundleFocusReward(1, FocusStateBundleExtensionSeconds),
                     threeActionExact);
             }

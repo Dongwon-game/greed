@@ -1567,6 +1567,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeSettingsCheck.Run();
             GreedLastPrototypeClockCheck.Run();
             GreedLastPrototypeTimelineCheck.Run();
+            GreedLastPrototypeScoreCheck.Run();
             GreedLastPrototypeJudgementCheck.Run();
             GreedLastPrototypeLiveCheck.Run();
             GreedLastPrototypeRotationCheck.Run();
