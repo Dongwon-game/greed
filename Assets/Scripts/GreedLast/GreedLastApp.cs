@@ -571,7 +571,7 @@ namespace GreedLast
                 }
 
                 InsertNormalRanking(record);
-                normalClearCount += 1;
+                normalClearCount = AddNonNegativeProgress(normalClearCount, 1);
                 lastProgressEvent = ProgressEventKind.NormalClear;
                 profileNoticePending = true;
                 AddGrowthPoints(3);
@@ -593,12 +593,12 @@ namespace GreedLast
             InsertNormalAttemptHistory(record);
             if (record.Outcome == GreedLastRunAttemptOutcome.Failed)
             {
-                normalFailCount += 1;
+                normalFailCount = AddNonNegativeProgress(normalFailCount, 1);
                 lastProgressEvent = ProgressEventKind.NormalFailed;
             }
             else if (record.Outcome == GreedLastRunAttemptOutcome.Abandoned)
             {
-                normalAbandonCount += 1;
+                normalAbandonCount = AddNonNegativeProgress(normalAbandonCount, 1);
                 lastProgressEvent = ProgressEventKind.NormalAbandoned;
             }
 
@@ -1052,7 +1052,7 @@ namespace GreedLast
             }
 
             GreedLastRunRecord record = BuildSampleSaveLoadoutRecordForTest(targetSlotIndex, sampleSaveLoadoutSequence);
-            sampleSaveLoadoutSequence += 1;
+            sampleSaveLoadoutSequence = AddNonNegativeProgress(sampleSaveLoadoutSequence, 1);
             saveLoadoutSlots[targetSlotIndex] = record;
             saveLoadoutUsesRemaining[targetSlotIndex] = MaxSaveLoadoutUses;
             saveLoadoutRenameSteps[targetSlotIndex] = 0;
@@ -1103,8 +1103,8 @@ namespace GreedLast
             int sampleOffset = sampleSaveLoadoutSequence;
             GreedLastRunRecord record = WithLoadoutName(
                 BuildSampleSaveLoadoutRecordForTest(referenceSlotIndex, sampleOffset),
-                "테스트 후보 S" + (referenceSlotIndex + 1) + "-" + (sampleOffset + 1));
-            sampleSaveLoadoutSequence += 1;
+                "테스트 후보 S" + (referenceSlotIndex + 1) + "-" + ((long)sampleOffset + 1));
+            sampleSaveLoadoutSequence = AddNonNegativeProgress(sampleSaveLoadoutSequence, 1);
             firstSaveCompleted = true;
             saveLoadoutUnlocked = true;
             saveLoadoutCandidateAvailable = true;
@@ -1116,7 +1116,7 @@ namespace GreedLast
             }
 
             InsertNormalRanking(record);
-            normalClearCount += 1;
+            normalClearCount = AddNonNegativeProgress(normalClearCount, 1);
             lastProgressEvent = ProgressEventKind.NormalClear;
             profileNoticePending = true;
             AddGrowthPoints(3);
@@ -1478,7 +1478,7 @@ namespace GreedLast
             }
 
             InsertInfiniteRanking(record);
-            infiniteRunCount += 1;
+            infiniteRunCount = AddNonNegativeProgress(infiniteRunCount, 1);
             lastProgressEvent = ProgressEventKind.InfiniteRun;
             profileNoticePending = true;
             AddGrowthPoints(BuildInfiniteGrowthReward(record));
@@ -1571,7 +1571,12 @@ namespace GreedLast
 
         private void AddGrowthPoints(int amount)
         {
-            growthPoints = Mathf.Max(0, growthPoints + Mathf.Max(0, amount));
+            growthPoints = AddNonNegativeProgress(growthPoints, amount);
+        }
+
+        private static int AddNonNegativeProgress(int current, int amount)
+        {
+            return (int)Math.Min(int.MaxValue, (long)Mathf.Max(0, current) + Mathf.Max(0, amount));
         }
 
         private static int BuildNormalAttemptGrowthReward(GreedLastRunAttemptRecord record)
@@ -1885,7 +1890,7 @@ namespace GreedLast
                     return true;
                 }
 
-                if (lastInfiniteRunRecord.MissCount >= Mathf.Max(3, lastInfiniteRunRecord.SuccessCount + lastInfiniteRunRecord.GoodCount))
+                if (lastInfiniteRunRecord.MissCount >= Math.Max(3L, (long)lastInfiniteRunRecord.SuccessCount + lastInfiniteRunRecord.GoodCount))
                 {
                     track = 2;
                     reason = "무한 실수 많음";
@@ -2050,7 +2055,7 @@ namespace GreedLast
         {
             string runStatus = bestRunRecord.IsValid
                 ? "일반 " + BuildRunGrade(bestRunRecord) + " 완료"
-                : normalFailCount + normalAbandonCount > 0 ? "일반 재도전 필요" : "일반 대기";
+                : normalFailCount > 0 || normalAbandonCount > 0 ? "일반 재도전 필요" : "일반 대기";
             string saveStatus = HasSaveLoadoutCandidate
                 ? "저장 후보 우선"
                 : HasAnyUsableSaveLoadoutSlot()
@@ -5593,7 +5598,7 @@ namespace GreedLast
                 return "무한 기록자";
             }
 
-            if (normalFailCount + normalAbandonCount > 0)
+            if (normalFailCount > 0 || normalAbandonCount > 0)
             {
                 return "다시 일어서는 자";
             }
@@ -5603,8 +5608,8 @@ namespace GreedLast
 
         private string BuildProfileTierLabel()
         {
-            int score = normalClearCount * 3
-                + infiniteRunCount * 2
+            long score = (long)normalClearCount * 3
+                + (long)infiniteRunCount * 2
                 + Mathf.Clamp(growthSurvivalLevel + growthFocusLevel + growthTimingLevel, 0, GrowthMaxLevel * 3);
             if (bestRunRecord.IsValid && bestRunRecord.Score >= 800)
             {
@@ -5904,7 +5909,7 @@ namespace GreedLast
             return record.IsValid
                 && record.SuccessCount > 0
                 && record.MissCount <= 1
-                && record.SuccessCount >= record.GoodCount + record.MissCount;
+                && record.SuccessCount >= (long)record.GoodCount + record.MissCount;
         }
 
         private static bool HasPrecisionRunRecord(GreedLastRunRecord record)
@@ -6674,7 +6679,7 @@ namespace GreedLast
                 case "focus_guard":
                     return CompactText("집중 보호 발동 후 집중 회복 루트 선택" + avoidanceSuffix, 82);
                 default:
-                    return record.MissCount > record.SuccessCount + record.GoodCount
+                    return record.MissCount > (long)record.SuccessCount + record.GoodCount
                         ? CompactText("타이밍보다 생존 보정 우선" + avoidanceSuffix, 82)
                         : CompactText("현재 루트 유지, 다음 챕터까지 반복" + avoidanceSuffix, 82);
             }
@@ -6840,7 +6845,7 @@ namespace GreedLast
                 return AppendInfiniteAvoidanceTrainingSuffix(loadoutHint, record.TimingProfile);
             }
 
-            if (record.MissCount >= Mathf.Max(3, record.SuccessCount + record.GoodCount))
+            if (record.MissCount >= Math.Max(3L, (long)record.SuccessCount + record.GoodCount))
             {
                 return AppendInfiniteAvoidanceTrainingSuffix("위험도 상승 전 보정권 입력 안정화", record.TimingProfile);
             }
@@ -7567,8 +7572,8 @@ namespace GreedLast
 
         private string BuildRunProgressSummaryText()
         {
-            int normalAttemptCount = normalClearCount + normalFailCount + normalAbandonCount;
-            int survivalAttempts = normalClearCount + normalFailCount;
+            long normalAttemptCount = (long)normalClearCount + normalFailCount + normalAbandonCount;
+            long survivalAttempts = (long)normalClearCount + normalFailCount;
             int survivalRate = survivalAttempts <= 0
                 ? 0
                 : Mathf.RoundToInt(normalClearCount / (float)survivalAttempts * 100f);
@@ -7760,7 +7765,7 @@ namespace GreedLast
 
         private static string FormatRunRecordJudgementCounts(GreedLastRunRecord record)
         {
-            int totalJudgements = record.SuccessCount + record.GoodCount + record.MissCount;
+            long totalJudgements = (long)record.SuccessCount + record.GoodCount + record.MissCount;
             if (totalJudgements <= 0)
             {
                 return record.MaxCombo > 0
@@ -7783,7 +7788,7 @@ namespace GreedLast
             int safeSuccess = Mathf.Max(0, successCount);
             int safeGood = Mathf.Max(0, goodCount);
             int safeMiss = Mathf.Max(0, missCount);
-            int total = safeSuccess + safeGood + safeMiss;
+            long total = (long)safeSuccess + safeGood + safeMiss;
             if (total <= 0)
             {
                 return "판정 기록 없음";
@@ -7810,7 +7815,7 @@ namespace GreedLast
             {
                 classification = "정밀 흐름";
             }
-            else if (focusActivations > 0 && safeSuccess > safeGood + safeMiss)
+            else if (focusActivations > 0 && safeSuccess > (long)safeGood + safeMiss)
             {
                 classification = "집중 활용";
             }
@@ -7866,7 +7871,7 @@ namespace GreedLast
             int stableBundleCount = ExtractTimingProfileCount(timingProfile, "안정 완주 ");
             int variationBundleCount = ExtractTimingProfileCount(timingProfile, "변주 완주 ");
             int pressureBundleCount = ExtractTimingProfileCount(timingProfile, "압박 완주 ");
-            int totalRouteBundles = stableBundleCount + variationBundleCount + pressureBundleCount;
+            long totalRouteBundles = (long)stableBundleCount + variationBundleCount + pressureBundleCount;
             return totalRouteBundles > 0
                 ? summary + " / 경로 완주 " + totalRouteBundles
                 : summary;
@@ -7874,7 +7879,7 @@ namespace GreedLast
 
         private static string BuildJudgementRatioSummary(int successCount, int goodCount, int missCount)
         {
-            int total = Mathf.Max(0, successCount) + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
+            long total = (long)Mathf.Max(0, successCount) + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
             if (total <= 0)
             {
                 return "정확 0% · 보정 0% · 실수 0%";
@@ -7889,7 +7894,7 @@ namespace GreedLast
         private static int CalculateExactRatePercent(int successCount, int goodCount, int missCount)
         {
             int safeSuccess = Mathf.Max(0, successCount);
-            int total = safeSuccess + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
+            long total = (long)safeSuccess + Mathf.Max(0, goodCount) + Mathf.Max(0, missCount);
             return total <= 0 ? 0 : Mathf.RoundToInt(safeSuccess / (float)total * 100f);
         }
 
@@ -8831,8 +8836,8 @@ namespace GreedLast
                 return "-";
             }
 
-            long gradeScore = (long)record.Score
-                + Mathf.RoundToInt(record.Distance * 2f)
+            double gradeScore = record.Score
+                + Math.Round((double)record.Distance * 2.0, MidpointRounding.ToEven)
                 + (long)record.Health * 80
                 + (long)record.Focus * 40
                 + (long)record.MaxCombo * 25
@@ -9513,12 +9518,13 @@ namespace GreedLast
         private GreedLastRunRecord BuildSampleSaveLoadoutRecordForTest(int slotIndex, int sampleOffset = 0)
         {
             int safeSlotIndex = Mathf.Clamp(slotIndex, 0, SaveSlotCount - 1);
-            int sampleSeed = Mathf.Max(1, normalClearCount + infiniteRunCount + safeSlotIndex + sampleOffset + 1);
-            int qualityTier = Mathf.Abs(sampleSeed + safeSlotIndex) % SaveSlotCount;
-            int score = 620 + sampleSeed * 28 + qualityTier * 65;
+            long sampleSeed = Math.Max(1L, (long)Mathf.Max(0, normalClearCount) + Mathf.Max(0, infiniteRunCount)
+                + safeSlotIndex + Mathf.Max(0, sampleOffset) + 1);
+            int qualityTier = (int)((sampleSeed + safeSlotIndex) % SaveSlotCount);
+            int score = (int)Math.Min(int.MaxValue, 620L + sampleSeed * 28 + qualityTier * 65);
             float distance = 76f + sampleSeed * 8.5f + qualityTier * 11f;
             int health = 2 + ((safeSlotIndex + qualityTier) % 3);
-            int focus = 2 + ((sampleSeed + safeSlotIndex) % 3);
+            int focus = 2 + (int)((sampleSeed + safeSlotIndex) % 3);
             int combo = 2 + safeSlotIndex + qualityTier;
             int successCount = 4 + safeSlotIndex + qualityTier;
             int goodCount = qualityTier == 1 ? 1 : 0;
@@ -22220,7 +22226,7 @@ namespace GreedLast
                 return "위험";
             }
 
-            if (snapshot.MissCount >= Mathf.Max(2, snapshot.SuccessCount + snapshot.GoodCount))
+            if (snapshot.MissCount >= Math.Max(2L, (long)snapshot.SuccessCount + snapshot.GoodCount))
             {
                 return "흔들림";
             }
@@ -46766,7 +46772,7 @@ namespace GreedLast
                 return "고위험 도달";
             }
 
-            if (snapshot.MissCount >= Mathf.Max(3, snapshot.SuccessCount + snapshot.GoodCount))
+            if (snapshot.MissCount >= Math.Max(3L, (long)snapshot.SuccessCount + snapshot.GoodCount))
             {
                 return "보정 필요";
             }

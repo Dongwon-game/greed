@@ -4455,7 +4455,7 @@ namespace GreedLast
             int focusBonus = 0;
             int comboBonus = 0;
             int scoreBonus = Mathf.Clamp(Mathf.RoundToInt(loadoutRecord.Score * 0.10f), 0, 200);
-            int judgementTotal = loadoutRecord.SuccessCount + loadoutRecord.GoodCount + loadoutRecord.MissCount;
+            long judgementTotal = (long)loadoutRecord.SuccessCount + loadoutRecord.GoodCount + loadoutRecord.MissCount;
 
             AccumulateLoadoutKeywordBonus(loadoutRecord.StartGift, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
             int survivalGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "생존 축");
@@ -4499,7 +4499,7 @@ namespace GreedLast
                 scoreBonus += 60;
             }
 
-            if (judgementTotal > 0 && loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount >= loadoutRecord.GoodCount + loadoutRecord.MissCount)
+            if (judgementTotal > 0 && loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount >= (long)loadoutRecord.GoodCount + loadoutRecord.MissCount)
             {
                 focusBonus += 1;
                 scoreBonus += 40;
@@ -4509,7 +4509,7 @@ namespace GreedLast
             if (precisionStreak >= 3)
             {
                 focusBonus += 1;
-                scoreBonus += Mathf.Clamp(precisionStreak * 12, 36, 80);
+                scoreBonus += (int)Math.Max(36L, Math.Min(80L, (long)precisionStreak * 12));
             }
 
             if (precisionStreak >= 5)
