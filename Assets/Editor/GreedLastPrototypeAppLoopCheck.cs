@@ -14,6 +14,7 @@ namespace GreedLast.Editor
         private const string PracticeKey = "GreedLast.Onboarding.PracticeCompleted";
         private const string PointerMenuPath = "Greed Last/Run Rendered Input Loop Check";
         private static bool usePointerModule;
+        private static bool growthCommandsOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -88,6 +89,16 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Suspended Player Input Check", true)]
         private static bool CanRunSuspendedPlayerInputCheck() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Growth Command Protection Check")]
+        public static void RunGrowthCommandProtectionCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !growthCommandsOnly,
+                "Growth command checks require an isolated Edit-mode fixture.");
+            growthCommandsOnly = true;
+            try { Run(); }
+            finally { growthCommandsOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -145,6 +156,8 @@ namespace GreedLast.Editor
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
                 VerifyMenuInputRippleCleanup(ui, backend, state);
+                VerifyGrowthCommandProtection(app, ui, backend, state);
+                if (growthCommandsOnly) return;
 
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
@@ -358,6 +371,76 @@ namespace GreedLast.Editor
             Require(Read<Button>(ui, "practiceRunButton").IsInteractable()
                 && Read<Button>(ui, "normalRunButton").IsInteractable(),
                 "Clean entry must keep the actual practice and normal commands usable.");
+        }
+
+        private static void VerifyGrowthCommandProtection(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state)
+        {
+            GreedLastRunChannel originalChannel = Read<GreedLastRunChannel>(app, "lastGrowthUpgradeChannel");
+            float originalAt = Read<float>(app, "lastGrowthUpgradeAt");
+            try
+            {
+                for (int scenario = 0; scenario < 5; scenario++)
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    backend.AddGrowthPointsForTest(9);
+                    Write(app, "backend", backend);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    Method(app, "RequestGrowthBoard").Invoke(app, null);
+                    Require(state.CurrentState == GreedLastScreenState.GrowthBoard,
+                        "The isolated growth command fixture must enter the real growth screen.");
+                    GreedLastLobbySnapshot before = backend.LoadLobby();
+                    PointerEventData heldSecond = null;
+                    Button growthCommand = Read<Button>(ui, "nextPatternButton");
+                    if (scenario == 4)
+                    {
+                        EventSystem events = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
+                        var firstPointer = new PointerEventData(events) { pointerId = 73, eligibleForClick = true };
+                        heldSecond = new PointerEventData(events) { pointerId = 74, eligibleForClick = true };
+                        growthCommand.OnPointerDown(firstPointer);
+                        growthCommand.OnPointerDown(heldSecond);
+                        growthCommand.OnPointerUp(firstPointer);
+                        if (firstPointer.eligibleForClick) growthCommand.OnPointerClick(firstPointer);
+                    }
+                    else if (scenario < 2) Click(ui, "nextPatternButton");
+                    else Click(Read<Button[]>(ui, "laneButtons")[0]);
+                    GreedLastLobbySnapshot first = backend.LoadLobby();
+                    Require(first.GrowthPoints == before.GrowthPoints - 1
+                        && first.GrowthSurvivalLevel + first.GrowthFocusLevel + first.GrowthTimingLevel == 1,
+                        "The first real growth callback must spend the existing cost exactly once.");
+                    Require(Time.realtimeSinceStartup - Read<float>(app, "lastGrowthUpgradeAt") < 0.35f,
+                        "Growth repeat checks must execute before the existing repeat guard expires.");
+                    if (scenario == 4)
+                    {
+                        Write(app, "lastGrowthUpgradeAt", Time.realtimeSinceStartup - 0.36f);
+                        growthCommand.OnPointerUp(heldSecond);
+                        if (heldSecond.eligibleForClick) growthCommand.OnPointerClick(heldSecond);
+                    }
+                    else if (scenario % 2 == 0) Method(app, "RequestNextRunPattern").Invoke(app, null);
+                    else Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Right });
+                    GreedLastLobbySnapshot repeated = backend.LoadLobby();
+                    Require(repeated.GrowthPoints == first.GrowthPoints
+                        && repeated.GrowthSurvivalLevel == first.GrowthSurvivalLevel
+                        && repeated.GrowthFocusLevel == first.GrowthFocusLevel
+                        && repeated.GrowthTimingLevel == first.GrowthTimingLevel,
+                        "A rapid growth command must not spend again when its recommendation or channel changes. Scenario " + scenario);
+
+                    Write(app, "lastGrowthUpgradeAt", Time.realtimeSinceStartup - 0.36f);
+                    Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Right });
+                    GreedLastLobbySnapshot next = backend.LoadLobby();
+                    Require(next.GrowthPoints == first.GrowthPoints - 1
+                        && next.GrowthTimingLevel == first.GrowthTimingLevel + 1,
+                        "A fresh growth command after the existing guard must still buy the chosen track.");
+                }
+                Debug.Log("Greed growth command protection passed: recommended/lane first commands, changed recommendation/channel repeats, canceled second held recommendation after the guard, and fresh post-guard upgrades. In-memory growth only; personal points and slots unchanged.");
+            }
+            finally
+            {
+                Write(app, "backend", originalBackend);
+                Write(app, "lastGrowthUpgradeChannel", originalChannel);
+                Write(app, "lastGrowthUpgradeAt", originalAt);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
         }
 
         private static void VerifyHeldManagementViewSwitch(GreedLastApp app, GreedLastRuntimeUi ui,

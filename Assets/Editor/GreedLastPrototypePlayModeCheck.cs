@@ -171,7 +171,7 @@ namespace GreedLast.Editor
             results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
-                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
+                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
@@ -182,6 +182,12 @@ namespace GreedLast.Editor
                 SessionState.GetString(Prefix + "previousScene", string.Empty));
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, false);
             results.succeeded = string.IsNullOrEmpty(results.error) && results.cycles.Count == 2;
+            if (results.succeeded)
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
+                    && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered);
+                if (!results.succeeded) results.error = "Required engine growth command coverage did not complete.";
+            }
             if (results.succeeded && results.multiTouchIncluded)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.multiTouchPatternCases == 6
@@ -254,6 +260,8 @@ namespace GreedLast.Editor
         [Serializable] private sealed class Cycle
         {
             public bool domainReloadDisabled;
+            public int growthCommandCases;
+            public bool growthFirstCommandOnly, growthHeldReleaseCanceled, growthFreshTapRecovered;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -366,6 +374,7 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
+                yield return VerifyGrowthCommands();
                 if (SessionState.GetBool(Prefix + "multiTouchOnly", false))
                 {
                     yield return VerifyMultiTouch();
@@ -1021,6 +1030,72 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(Count<Camera>() == 0 && Count<AudioListener>() == 0 && Count<EventSystem>() == 0,
                     "Recovered resources must be owned by the app and released on final teardown.");
+            }
+
+            private IEnumerator VerifyGrowthCommands()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    for (int scenario = 0; scenario < 3; scenario++)
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backend.AddGrowthPointsForTest(9);
+                        backendField.SetValue(app, backend);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        Call(app, "RequestGrowthBoard");
+                        yield return null;
+                        Button primary = Read<Button>(ui, "nextPatternButton");
+                        Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                        Vector2 firstPoint = ScreenPoint(scenario == 2 ? lanes[0] : primary);
+                        Vector2 secondPoint = ScreenPoint(scenario == 2 ? lanes[2] : primary);
+                        if (scenario == 0) yield return ClickMouse(primary);
+                        else
+                        {
+                            yield return TouchFrame(TouchAt(73, firstPoint, TouchPhase.Began), TouchAt(74, secondPoint, TouchPhase.Began));
+                            if (scenario == 1)
+                                yield return TouchFrame(TouchAt(73, firstPoint, TouchPhase.Ended), TouchAt(74, secondPoint, TouchPhase.Stationary));
+                        }
+                        GreedLastLobbySnapshot first = backend.LoadLobby();
+                        Require(first.GrowthPoints == 8
+                            && first.GrowthSurvivalLevel + first.GrowthFocusLevel + first.GrowthTimingLevel == 1,
+                            "The first engine growth command must spend the existing one-point cost once.");
+                        if (scenario == 0)
+                        {
+                            Require(Time.realtimeSinceStartup - Read<float>(app, "lastGrowthUpgradeAt") < 0.2f,
+                                "The engine rapid-repeat fixture must still be inside the existing growth guard.");
+                            yield return ClickMouse(primary);
+                        }
+                        yield return WaitSeconds(0.45f);
+                        if (scenario == 1) yield return TouchFrame(TouchAt(74, secondPoint, TouchPhase.Ended));
+                        else if (scenario == 2)
+                            yield return TouchFrame(TouchAt(73, firstPoint, TouchPhase.Ended), TouchAt(74, secondPoint, TouchPhase.Ended));
+                        if (scenario != 0) yield return TouchFrame();
+                        GreedLastLobbySnapshot repeated = backend.LoadLobby();
+                        Require(repeated.GrowthPoints == first.GrowthPoints
+                            && repeated.GrowthSurvivalLevel == first.GrowthSurvivalLevel
+                            && repeated.GrowthFocusLevel == first.GrowthFocusLevel
+                            && repeated.GrowthTimingLevel == first.GrowthTimingLevel,
+                            "A rapid repeat or old held finger released after the guard must not purchase again.");
+                        yield return ClickMouse(scenario == 2 ? lanes[2] : primary);
+                        GreedLastLobbySnapshot fresh = backend.LoadLobby();
+                        Require(fresh.GrowthPoints == 7
+                            && fresh.GrowthSurvivalLevel + fresh.GrowthFocusLevel + fresh.GrowthTimingLevel == 2,
+                            "A fresh engine growth tap after release and the guard must still purchase once.");
+                        report.growthCommandCases++;
+                    }
+                    report.growthFirstCommandOnly = report.growthCommandCases == 3;
+                    report.growthHeldReleaseCanceled = report.growthFirstCommandOnly;
+                    report.growthFreshTapRecovered = report.growthFirstCommandOnly;
+                    Debug.Log("Greed engine growth protection passed: rapid changed recommendations, two held command fingers and two lane fingers; stale releases cannot spend and fresh taps recover. In-memory points only.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                }
             }
 
             private IEnumerator VerifyMultiTouch()

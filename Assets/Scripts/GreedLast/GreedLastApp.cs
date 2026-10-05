@@ -13789,7 +13789,7 @@ namespace GreedLast
         private void UpgradeGrowth(GreedLastRunChannel channel)
         {
             float now = Time.realtimeSinceStartup;
-            if (channel == lastGrowthUpgradeChannel
+            if (lastGrowthUpgradeChannel != GreedLastRunChannel.None
                 && now - lastGrowthUpgradeAt < GrowthUpgradeRepeatBlockSeconds)
             {
                 return;
@@ -13797,6 +13797,7 @@ namespace GreedLast
 
             lastGrowthUpgradeChannel = channel;
             lastGrowthUpgradeAt = now;
+            runtimeUi.CancelPendingUiInput();
             runtimeUi.RecordLaneInput(channel);
             GreedLastLobbySnapshot snapshot = backend.UpgradeGrowth(channel, out string notice);
             stateMachine.SetGrowthBoard(
