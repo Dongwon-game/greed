@@ -1031,6 +1031,8 @@ namespace GreedLast.Editor
             {
                 if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                 ShowRun(capped.before);
+                typeof(GreedLastRuntimeUi).GetMethod("UpdateRunTimingVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(ui, null);
                 Require(Read<Text>("activeActionCueText").text.Contains("정확 +5", StringComparison.Ordinal),
                     "The visible action cue must preview only the five points still available at the score ceiling.");
             }
