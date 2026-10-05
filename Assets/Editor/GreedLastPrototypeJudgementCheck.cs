@@ -78,6 +78,15 @@ namespace GreedLast.Editor
                 ui.RenderRun(capped.after);
                 Require(Read<Text>(ui, "judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),
                     "Player score-ceiling feedback must show its actual five awarded points.");
+                ui.ToggleDevCleanView();
+                GreedLastRunSnapshot detailedScore = Read<GreedLastRunSnapshot>(ui, "lastPresentedJudgementSnapshot");
+                Require(!ui.UsePlayerRunControls && detailedScore.Score == int.MaxValue
+                    && detailedScore.LastJudgementScoreGain == 5
+                    && !string.IsNullOrEmpty(Read<Text>(ui, "judgementFeedbackText").text),
+                    "Detailed feedback must preserve the actual capped judgement while using its existing effect format.");
+                ui.ToggleDevCleanView();
+                Require(Read<Text>(ui, "judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),
+                    "Returning from detailed feedback must retain the five awarded points without replaying them.");
                 foreach (float delta in new[] { -0.012f, 0f, 0.012f, 0.075f })
                 {
                     FreshPractice();

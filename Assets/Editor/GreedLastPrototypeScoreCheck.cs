@@ -21,7 +21,7 @@ namespace GreedLast.Editor
             RunGrades();
             RunTargets();
             VerifyRecordReload();
-            Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload. Numeric boundary values are injected in isolated editor cores; this is not a multi-hour play or device-performance test. Personal settings and slots are not used.");
+            Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload. Numeric boundary values are injected in isolated editor cores; this is not a multi-hour play or device-performance test. Personal settings are preserved and slots are not accessed.");
         }
 
         [MenuItem("Greed Last/Run Score Grade Boundary Check")]

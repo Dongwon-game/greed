@@ -38,6 +38,7 @@ namespace GreedLast.Editor
             public string archivedReport;
             public bool pointerLoopPassed;
             public bool pointerLoopIncluded;
+            public bool scoreBoundaryOnly;
             public int pointerLoopCases;
             public int pointerLoopClicks;
             public int pointerLoopCanceledCommands;
@@ -92,7 +93,13 @@ namespace GreedLast.Editor
             Begin(false);
         }
 
-        private static void Begin(bool includePointerLoop)
+        [MenuItem("Greed Last/Capture Score Boundary Checks")]
+        public static void RunScoreBoundaryOnly()
+        {
+            Begin(false, scoreBoundaryOnly: true);
+        }
+
+        private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -113,6 +120,7 @@ namespace GreedLast.Editor
                 startedUtc = DateTime.UtcNow.ToString("O"),
                 unityVersion = Application.unityVersion,
                 pointerLoopIncluded = includePointerLoop,
+                scoreBoundaryOnly = scoreBoundaryOnly,
             };
             try
             {
@@ -223,6 +231,16 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
+                if (scoreBoundaryOnly)
+                {
+                    int count = Frames.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        Frame frame = Frames.Dequeue();
+                        if (frame.Name.StartsWith("92-score-ceiling-", StringComparison.Ordinal)) Frames.Enqueue(frame);
+                    }
+                    Require(Frames.Count == 12, "The focused score capture must include only its twelve boundary frames.");
+                }
                 Directory.CreateDirectory("Logs/VisualChecks");
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -1047,8 +1065,11 @@ namespace GreedLast.Editor
                     ShowRun(capped.before);
                     ui.RenderRun(capped.after);
                     if (detailed) ui.ToggleDevCleanView();
-                    Require(Read<Text>("judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),
-                        "Capped-score feedback must show the actual five awarded points, not an overflow or formula reward.");
+                    GreedLastRunSnapshot presented = Read<GreedLastRunSnapshot>("lastPresentedJudgementSnapshot");
+                    string feedback = Read<Text>("judgementFeedbackText").text;
+                    Require(presented.Score == int.MaxValue && presented.LastJudgementScoreGain == 5
+                        && (detailed ? !string.IsNullOrEmpty(feedback) : feedback.Contains("+5점", StringComparison.Ordinal)),
+                        "Capped feedback must retain five awarded points in both views and show +5 points in the player format.");
                 }
                 string name = "92-score-ceiling-" + (detailed ? "detail" : "basic");
                 Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
@@ -2321,7 +2342,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.pointerLoopIncluded ? "full-" : "layout-")
+            report.archivedReport = "report-" + (report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
             string json = JsonUtility.ToJson(report, true);
             File.WriteAllText(Path.Combine("Logs/VisualChecks", report.archivedReport), json);
