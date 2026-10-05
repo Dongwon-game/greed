@@ -5897,6 +5897,11 @@ namespace GreedLast
 
         public bool ToggleOfflineForEditorCheck()
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+            {
+                return online;
+            }
+
             online = !online;
             return online;
         }
@@ -13165,7 +13170,7 @@ namespace GreedLast
 
         private void ToggleOfflineForEditorCheck()
         {
-            if (!CanSyncLobby())
+            if (!DevToolsEnabled || !CanSyncLobby())
             {
                 return;
             }
