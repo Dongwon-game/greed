@@ -1022,6 +1022,12 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot AddSampleSaveLoadoutForTest(out string notice)
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+            {
+                notice = "테스트 저장은 개발 모드에서만 사용할 수 있습니다.";
+                return LoadSelectedSaveSlotView();
+            }
+
             if (HasSaveLoadoutCandidate)
             {
                 SelectRecommendedSaveLoadoutSlotForCandidate();
@@ -1072,6 +1078,12 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot AddSampleClearCandidateForTest(out string notice)
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+            {
+                notice = "테스트 후보는 개발 모드에서만 만들 수 있습니다.";
+                return LoadSelectedSaveSlotView();
+            }
+
             if (HasSaveLoadoutCandidate)
             {
                 SelectRecommendedSaveLoadoutSlotForCandidate();
@@ -1121,6 +1133,12 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot ConsumeSelectedSaveLoadoutUseForTest(out string notice)
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+            {
+                notice = "테스트 소모는 개발 모드에서만 사용할 수 있습니다.";
+                return LoadSelectedSaveSlotView();
+            }
+
             if (HasSaveLoadoutCandidate)
             {
                 SelectRecommendedSaveLoadoutSlotForCandidate();
@@ -1515,6 +1533,9 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot AddGrowthPointsForTest(int amount)
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+                return LoadSelectedSaveSlotView();
+
             AddGrowthPoints(amount);
             profileNoticePending = true;
             SavePersistedData();
@@ -1523,6 +1544,9 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot MaxGrowthForTest()
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+                return LoadSelectedSaveSlotView();
+
             growthSurvivalLevel = GrowthMaxLevel;
             growthFocusLevel = GrowthMaxLevel;
             growthTimingLevel = GrowthMaxLevel;
@@ -1533,6 +1557,9 @@ namespace GreedLast
 
         public GreedLastLobbySnapshot ResetGrowthForTest()
         {
+            if (!GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+                return LoadSelectedSaveSlotView();
+
             growthPoints = 0;
             growthSurvivalLevel = 0;
             growthFocusLevel = 0;
@@ -14128,6 +14155,8 @@ namespace GreedLast
 
         private void ToggleRunInvincible()
         {
+            if (!DevToolsEnabled) return;
+
             if (IsRunState())
             {
                 runCore.ToggleDevInvincible();
@@ -14151,6 +14180,8 @@ namespace GreedLast
 
         private void RequestInfiniteTestStop()
         {
+            if (!DevToolsEnabled) return;
+
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun)
             {
                 runCore.ForceStopInfiniteRunForTest();
@@ -14159,6 +14190,8 @@ namespace GreedLast
 
         private void RequestFocusMaxForTest()
         {
+            if (!DevToolsEnabled) return;
+
             if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
             {
                 GreedLastLobbySnapshot snapshot = backend.AddSampleSaveLoadoutForTest(out string notice);
@@ -14183,6 +14216,8 @@ namespace GreedLast
 
         private void RequestThreatUpForTest()
         {
+            if (!DevToolsEnabled) return;
+
             if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
             {
                 GreedLastLobbySnapshot snapshot = backend.ConsumeSelectedSaveLoadoutUseForTest(out string notice);
@@ -14211,6 +14246,8 @@ namespace GreedLast
 
         private void RequestThreatDownForTest()
         {
+            if (!DevToolsEnabled) return;
+
             if (stateMachine.CurrentState == GreedLastScreenState.LobbyReady)
             {
                 GreedLastLobbySnapshot snapshot = backend.AddSampleClearCandidateForTest(out string notice);
@@ -14255,6 +14292,8 @@ namespace GreedLast
 
         private void RequestRunDevShortcut(GreedLastDevShortcut shortcut)
         {
+            if (!DevToolsEnabled) return;
+
             if (shortcut == GreedLastDevShortcut.VisualDropPreview && IsRunState())
             {
                 runtimeUi.CycleDevTrapVisualPreview();

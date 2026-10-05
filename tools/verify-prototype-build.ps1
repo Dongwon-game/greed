@@ -56,6 +56,42 @@ function Assert-ConnectionGuard {
     if ($mutationsBeforeGate.Count -ne 0) { throw 'Connection state can change before its development gate.' }
 }
 
+function Assert-SnapshotToolGuard {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $expectedCalls = @('Application::get_isEditor', 'Debug::get_isDebugBuild', 'GreedLastDevToolPolicy::ShouldEnable')
+    for ($index = 0; $index -lt 3; $index++) {
+        if ($instructions[$index].OpCode.Code.ToString() -ne 'Call' -or !$instructions[$index].Operand.FullName.Contains($expectedCalls[$index])) {
+            throw ('Development snapshot tool mode inputs missing: ' + $Method.Name)
+        }
+    }
+    $branch = $instructions[3]
+    if ($branch.OpCode.Code.ToString() -notin @('Brtrue', 'Brtrue_S')) { throw 'Snapshot tool development branch missing.' }
+    $falsePath = @($instructions | Where-Object { $_.Offset -gt $branch.Offset -and $_.Offset -lt $branch.Operand.Offset })
+    $calls = @($falsePath | Where-Object { $_.OpCode.Code.ToString() -in @('Call', 'Callvirt') })
+    $writes = @($falsePath | Where-Object { $_.OpCode.Code.ToString() -in @('Stfld', 'Stsfld') })
+    if ($calls.Count -ne 1 -or !$calls[0].Operand.FullName.Contains('GreedLastMockBackend::LoadSelectedSaveSlotView()') -or $writes.Count -ne 0 -or $falsePath[-1].OpCode.Code.ToString() -ne 'Ret') {
+        throw ('Nondevelopment snapshot tool must return without persistent mutation: ' + $Method.Name)
+    }
+}
+
+function Assert-AppToolGuard {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    if ($instructions[0].OpCode.Code.ToString() -ne 'Call' -or !$instructions[0].Operand.FullName.Contains('GreedLastApp::get_DevToolsEnabled()')) {
+        throw ('App development tool must check its mode before state access: ' + $Method.Name)
+    }
+    $branch = $instructions[1]
+    if ($branch.OpCode.Code.ToString() -in @('Brfalse', 'Brfalse_S')) {
+        if ($branch.Operand.OpCode.Code.ToString() -ne 'Ret') { throw 'App tool false branch does not return.' }
+    }
+    elseif ($branch.OpCode.Code.ToString() -in @('Brtrue', 'Brtrue_S')) {
+        $falsePath = @($instructions | Where-Object { $_.Offset -gt $branch.Offset -and $_.Offset -lt $branch.Operand.Offset })
+        if ($falsePath.Count -ne 1 -or $falsePath[0].OpCode.Code.ToString() -ne 'Ret') { throw 'App tool false path can execute game commands.' }
+    }
+    else { throw 'App development tool branch missing.' }
+}
+
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $root = Join-Path $project 'Builds\GreedLastPrototype'
 $infoPath = Join-Path $root 'VerifiedBuildInfo.json'
@@ -96,6 +132,13 @@ try {
     $connectionMethods = @($types.Methods | Where-Object { $_.Name -eq 'ToggleOfflineForEditorCheck' })
     if ($editorRefs.Count -ne 0 -or $editorTypes.Count -ne 0 -or $resetApis.Count -ne 0 -or $connectionMethods.Count -ne 2) { throw 'Unexpected release assembly surface.' }
     foreach ($method in $connectionMethods) { Assert-ConnectionGuard $method }
+    $snapshotNames = @('AddSampleSaveLoadoutForTest', 'AddSampleClearCandidateForTest', 'ConsumeSelectedSaveLoadoutUseForTest', 'AddGrowthPointsForTest', 'MaxGrowthForTest', 'ResetGrowthForTest')
+    $snapshotTools = @($types.Methods | Where-Object { $_.DeclaringType.Name -eq 'GreedLastMockBackend' -and $_.Name -in $snapshotNames })
+    $appNames = @('ToggleRunInvincible', 'RequestInfiniteTestStop', 'RequestFocusMaxForTest', 'RequestThreatUpForTest', 'RequestThreatDownForTest', 'RequestRunDevShortcut')
+    $appTools = @($types.Methods | Where-Object { $_.DeclaringType.Name -eq 'GreedLastApp' -and $_.Name -in $appNames })
+    if ($snapshotTools.Count -ne 6 -or $appTools.Count -ne 6) { throw 'Development tool surface changed; update its explicit verification contract.' }
+    foreach ($method in $snapshotTools) { Assert-SnapshotToolGuard $method }
+    foreach ($method in $appTools) { Assert-AppToolGuard $method }
 }
 finally { $assembly.Dispose() }
 
@@ -147,6 +190,8 @@ if ($PackagePath) {
     EditorTestTypes = $editorTypes.Count
     EditorResetApis = $resetApis.Count
     GuardedDevelopmentConnections = $connectionMethods.Count
+    GuardedDevelopmentSnapshotTools = $snapshotTools.Count
+    GuardedDevelopmentRunCommands = $appTools.Count
     Package = $package
     Scope = 'Read-only artifact/IL checks. Does not run the player, modify progress, upload files or measure hardware performance.'
 } | ConvertTo-Json -Depth 4
