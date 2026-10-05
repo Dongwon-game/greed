@@ -28,6 +28,7 @@ namespace GreedLast.Editor
             public string startedUtc;
             public string completedUtc;
             public string unityVersion;
+            public string archivedReport;
             public string scope = "Real editor wall-clock core progression; manual UI Update and automated input. Not Play mode, hardware input, audio latency, allocation, GPU or device FPS measurement.";
             public bool succeeded;
             public string error;
@@ -225,7 +226,11 @@ namespace GreedLast.Editor
                 {
                     string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "WallClockChecks");
                     Directory.CreateDirectory(directory);
-                    File.WriteAllText(Path.Combine(directory, "latest-report.json"), JsonUtility.ToJson(report, true));
+                    report.archivedReport = "report-wallclock-"
+                        + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
+                    string json = JsonUtility.ToJson(report, true);
+                    File.WriteAllText(Path.Combine(directory, report.archivedReport), json);
+                    File.WriteAllText(Path.Combine(directory, "latest-report.json"), json);
                 }
                 catch (Exception reportingError)
                 {
