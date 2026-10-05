@@ -21,7 +21,8 @@ namespace GreedLast.Editor
             RunGrades();
             RunTargets();
             VerifyRecordReload();
-            Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload. Numeric boundary values are injected in isolated editor cores; this is not a multi-hour play or device-performance test. Personal settings are preserved and slots are not accessed.");
+            VerifyLoadoutReload();
+            Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload, and all three isolated normal-save slots with one candidate and two starts. Numeric boundary values are injected in isolated editor cores/records; this is not a multi-hour play or device-performance test. Personal settings are preserved and personal slots are not accessed.");
         }
 
         [MenuItem("Greed Last/Run Score Grade Boundary Check")]
@@ -195,6 +196,81 @@ namespace GreedLast.Editor
                 PlayerPrefs.DeleteKey(key);
                 PlayerPrefs.Save();
             }
+        }
+
+        private static void VerifyLoadoutReload()
+        {
+            for (int slot = 0; slot < 3; slot++)
+            {
+                foreach (int score in new[] { int.MaxValue - 5, int.MaxValue })
+                {
+                    string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "normal-score-" + Guid.NewGuid().ToString("N");
+                    try
+                    {
+                        var record = new GreedLastRunRecord(true, score, 3, 0, 0, 6, 15, 0, 0, 90f,
+                            "score-boundary", "박자 감각", "집중 축", "황금 박동",
+                            "박자 감각 / 안정 루트 / 집중 축 / 황금 박동", string.Empty);
+                        var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        Require(backend.RegisterClear(record).SaveLoadoutCandidateAvailable,
+                            "A capped normal clear must still offer its one save candidate.");
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.ConfirmSaveLoadout();
+                        backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        Require(!backend.HasSaveLoadoutCandidate, "Saving a capped normal record must consume its candidate across reload.");
+                        var saved = (GreedLastRunRecord[])Field(backend, "saveLoadoutSlots").GetValue(backend);
+                        Require(saved[slot].IsValid && saved[slot].Score == score
+                            && saved[slot].PrimaryGift == record.PrimaryGift && string.IsNullOrEmpty(saved[slot].Relic)
+                            && !saved[slot].ChoiceSummary.Contains(record.Relic, StringComparison.Ordinal),
+                            "The chosen slot must retain capped score/gift while excluding the normal-run-only relic through JSON reload.");
+                        backend.SelectSaveLoadoutSlot((slot + 1) % 3);
+                        backend.ConfirmSaveLoadout();
+                        Require(!backend.HasSaveLoadoutCandidate
+                            && !((GreedLastRunRecord[])Field(backend, "saveLoadoutSlots").GetValue(backend))[(slot + 1) % 3].IsValid,
+                            "A second confirmation must not copy the consumed candidate into another slot.");
+                        backend.SelectSaveLoadoutSlot(slot);
+                        for (int use = 0; use < 2; use++)
+                        {
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            string beforePreparation = PlayerPrefs.GetString(key);
+                            Require(!string.IsNullOrEmpty(backend.BuildActiveLoadoutText())
+                                && !string.IsNullOrEmpty(backend.BuildInfiniteStartReadyText())
+                                && PlayerPrefs.GetString(key) == beforePreparation
+                                && ((int[])Field(backend, "saveLoadoutUsesRemaining").GetValue(backend))[slot] == 2 - use,
+                                "Preparation previews must not consume or rewrite a capped loadout.");
+                            Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord consumed, out _, out string error)
+                                && consumed.Score == score && string.IsNullOrEmpty(error),
+                                "Each actual start must retain the capped source record and consume exactly one use.");
+                            var core = new GreedLastRunCore();
+                            GreedLastRunSnapshot run = default;
+                            core.SnapshotChanged += value => run = value;
+                            var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(consumed, "집중 축", "황금 박동");
+                            core.EnterInfiniteRun(prepared);
+                            var bonus = Invoke<GreedLastInfiniteLoadoutBonus>(typeof(GreedLastRunCore), "CalculateInfiniteLoadoutBonus", prepared);
+                            Require(run.InfiniteMode && !run.Stopped && !run.SaveEligible
+                                && run.Score == bonus.ScoreBonus && run.Score < consumed.Score
+                                && string.IsNullOrEmpty(consumed.Relic) && prepared.Relic == "황금 박동",
+                                "The live infinite run must receive only its existing start bonus, not inherit the normal cumulative score.");
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            saved = (GreedLastRunRecord[])Field(backend, "saveLoadoutSlots").GetValue(backend);
+                            Require(saved[slot].IsValid == (use == 0)
+                                && ((int[])Field(backend, "saveLoadoutUsesRemaining").GetValue(backend))[slot] == 1 - use,
+                                "The first start retains one use; the second auto-clears only its source slot across reload.");
+                            for (int other = 0; other < 3; other++)
+                                if (other != slot) Require(!saved[other].IsValid,
+                                    "A boundary start must not populate another slot.");
+                        }
+                        Require(!backend.TryConsumeSelectedSaveLoadout(out _, out _, out _)
+                            && !backend.HasSaveLoadoutCandidate && backend.BuildRecordBoardText(0).Contains("[S]", StringComparison.Ordinal),
+                            "A third start must fail while the capped normal record and its grade remain available.");
+                    }
+                    finally
+                    {
+                        PlayerPrefs.DeleteKey(key);
+                        PlayerPrefs.Save();
+                    }
+                }
+            }
+            Debug.Log("Greed capped loadout reload passed: six isolated score/slot cases, candidate once, preparation without consumption, two starts with existing bonus, auto-clear/reload and third-start rejection. Constructed boundary records, not a full normal-play or device-performance measurement; personal slots/settings unchanged.");
         }
 
         private static FieldInfo Field(object instance, string name)
