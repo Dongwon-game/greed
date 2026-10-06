@@ -1067,6 +1067,11 @@ namespace GreedLast.Editor
                                 "The engine rapid-repeat fixture must still be inside the existing growth guard.");
                             yield return ClickMouse(primary);
                         }
+                        // Began and Ended last one frame; only held fingers remain during the wait.
+                        if (scenario == 1)
+                            yield return TouchFrame(TouchAt(74, secondPoint, TouchPhase.Stationary));
+                        else if (scenario == 2)
+                            yield return TouchFrame(TouchAt(73, firstPoint, TouchPhase.Stationary), TouchAt(74, secondPoint, TouchPhase.Stationary));
                         yield return WaitSeconds(0.45f);
                         if (scenario == 1) yield return TouchFrame(TouchAt(74, secondPoint, TouchPhase.Ended));
                         else if (scenario == 2)
@@ -1126,6 +1131,7 @@ namespace GreedLast.Editor
                             && (correctFirst || run.MissReason == "wrong_channel"),
                             "Two simultaneous channels must resolve once using the first submitted finger, not the later correct finger.");
                         yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Stationary));
+                        yield return TouchFrame(TouchAt(74, second, TouchPhase.Stationary));
                         yield return WaitSeconds(0.15f);
                         Require(report.judgements == 1 && run.Score == judged.Score && run.Health == judged.Health,
                             "Releasing one finger and holding the other must not create another judgement or reward.");
@@ -1352,6 +1358,7 @@ namespace GreedLast.Editor
                 int held = releaseSecondFirst ? 81 : 82;
                 yield return TouchFrame(TouchAt(released, point, TouchPhase.Ended), TouchAt(held, point, TouchPhase.Stationary));
                 GreedLastScreenState confirmedState = state.CurrentState;
+                yield return TouchFrame(TouchAt(held, point, TouchPhase.Stationary));
                 yield return WaitSeconds(0.4f);
                 yield return TouchFrame(TouchAt(held, point, TouchPhase.Ended));
                 yield return TouchFrame();
