@@ -185,7 +185,8 @@ namespace GreedLast.Editor
             if (results.succeeded)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
-                    && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered);
+                    && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
+                    && cycle.growthEntryHeldTapCanceled);
                 if (!results.succeeded) results.error = "Required engine growth command coverage did not complete.";
             }
             if (results.succeeded && results.multiTouchIncluded)
@@ -262,6 +263,7 @@ namespace GreedLast.Editor
             public bool domainReloadDisabled;
             public int growthCommandCases;
             public bool growthFirstCommandOnly, growthHeldReleaseCanceled, growthFreshTapRecovered;
+            public bool growthEntryHeldTapCanceled;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -526,8 +528,8 @@ namespace GreedLast.Editor
                 Require(focusedPause && !run.Paused && report.judgements >= 5,
                     "Engine progression must cover focus pause/resume and multiple real-time judgements.");
                 Require(report.engineMouseClicks >= 3 && report.engineTouchTaps >= 2
-                    && report.canceledEngineCommands == 1,
-                    "The real engine input module must cover mouse, touch and interrupted command release.");
+                    && report.canceledEngineCommands == 2 && report.growthEntryHeldTapCanceled,
+                    "The real engine input module must cover mouse, touch, canceled growth entry and interrupted command release.");
                 report.pauseCycles++;
                 report.lifecycleJudgements = report.judgements;
                 yield return VerifyCalibratedTouchAndAudioRecovery();
@@ -1042,9 +1044,32 @@ namespace GreedLast.Editor
                     {
                         var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                         backend.AddGrowthPointsForTest(9);
+                        if (scenario == 0) backend.AddSampleSaveLoadoutForTest(out _);
                         backendField.SetValue(app, backend);
                         state.SetLobbyReady(backend.LoadLobby());
-                        Call(app, "RequestGrowthBoard");
+                        if (scenario == 0)
+                        {
+                            yield return null;
+                            Vector2 entry = ScreenPoint(Read<Button>(ui, "growthButton"));
+                            yield return TouchFrame(TouchAt(83, entry, TouchPhase.Began), TouchAt(84, entry, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(83, entry, TouchPhase.Stationary), TouchAt(84, entry, TouchPhase.Stationary));
+                            yield return TouchFrame(TouchAt(83, entry, TouchPhase.Ended), TouchAt(84, entry, TouchPhase.Stationary));
+                            Require(state.CurrentState == GreedLastScreenState.GrowthBoard,
+                                "The first entry finger must open the actual growth screen.");
+                            Vector2 command = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
+                            yield return TouchFrame(TouchAt(84, command, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(84, command, TouchPhase.Stationary));
+                            yield return WaitSeconds(0.45f);
+                            yield return TouchFrame(TouchAt(84, command, TouchPhase.Ended));
+                            yield return TouchFrame();
+                            GreedLastLobbySnapshot entered = backend.LoadLobby();
+                            Require(entered.GrowthPoints == 9
+                                && entered.GrowthSurvivalLevel + entered.GrowthFocusLevel + entered.GrowthTimingLevel == 0,
+                                "Moving and releasing an old entry finger over growth must not purchase anything.");
+                            report.growthEntryHeldTapCanceled = true;
+                            report.canceledEngineCommands++;
+                        }
+                        else Call(app, "RequestGrowthBoard");
                         yield return null;
                         Button primary = Read<Button>(ui, "nextPatternButton");
                         Button[] lanes = Read<Button[]>(ui, "laneButtons");
