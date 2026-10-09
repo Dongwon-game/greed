@@ -10952,8 +10952,9 @@ namespace GreedLast
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
-            // A press begun while running must not activate the replacement result action.
-            if (snapshot.Stopped && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Stopped))
+            // A live press must not become a newly opened pause or result command.
+            if ((snapshot.Stopped && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Stopped))
+                || (snapshot.Paused && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Paused)))
                 runtimeUi?.CancelPendingUiInput();
             bool leavingRotation = hasLatestAppRunSnapshot
                 && IsLiveRotationInputWindow(latestAppRunSnapshot)

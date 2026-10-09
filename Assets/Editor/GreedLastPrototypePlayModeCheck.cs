@@ -200,7 +200,8 @@ namespace GreedLast.Editor
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
                         && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
-                        && cycle.liveBackPauseResume && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
+                        && cycle.liveBackPauseResume && cycle.heldPauseCommandsPreservedRun
+                        && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
                         && cycle.heldRunResultCases == 3 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
@@ -272,6 +273,7 @@ namespace GreedLast.Editor
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public bool liveBackPauseResume;
+            public bool heldPauseCommandsPreservedRun;
             public int heldSlotChangeCases;
             public bool heldSlotChangesPreservedData, heldSlotChangeFreshTapRecovered;
             public int heldRunResultCases;
@@ -425,6 +427,7 @@ namespace GreedLast.Editor
                 float until = Time.realtimeSinceStartup + 0.25f;
                 while (Time.realtimeSinceStartup < until) yield return null;
                 Require(run.ElapsedSeconds > before, "The actual app Update must advance the practice clock.");
+                yield return VerifyHeldPauseCommands();
                 Call(app, "TryHandlePauseOrBackKeyboardInput", false, true);
                 GreedLastRunSnapshot frozen = run;
                 until = Time.realtimeSinceStartup + 0.4f;
@@ -546,7 +549,7 @@ namespace GreedLast.Editor
                 Require(focusedPause && !run.Paused && report.judgements >= 5,
                     "Engine progression must cover focus pause/resume and multiple real-time judgements.");
                 Require(report.engineMouseClicks >= 3 && report.engineTouchTaps >= 2
-                    && report.canceledEngineCommands == 2 + report.heldRunResultCases * 2 && report.growthEntryHeldTapCanceled,
+                    && report.canceledEngineCommands == 4 + report.heldRunResultCases * 2 && report.growthEntryHeldTapCanceled,
                     "The real engine input module must cover mouse, touch, canceled growth entry and interrupted command release.");
                 report.pauseCycles++;
                 report.lifecycleJudgements = report.judgements;
@@ -1318,6 +1321,47 @@ namespace GreedLast.Editor
                     backendField.SetValue(app, originalBackend);
                     state.SetLobbyReady(originalBackend.LoadLobby());
                 }
+            }
+
+            private IEnumerator VerifyHeldPauseCommands()
+            {
+                Button primary = Read<Button>(ui, "nextPatternButton");
+                Button back = Read<Button>(ui, "returnLobbyButton");
+                Button pause = Read<Button>(ui, "pauseButton");
+                Vector2 primaryPoint = ScreenPoint(primary), backPoint = ScreenPoint(back);
+                Vector2 pausePoint = ScreenPoint(pause);
+                Require(!run.Paused && primary.IsInteractable() && back.IsInteractable() && pause.IsInteractable(),
+                    "Held pause commands must begin at real live controls.");
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Began), TouchAt(102, backPoint, TouchPhase.Began));
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
+                    TouchAt(103, pausePoint, TouchPhase.Began));
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
+                    TouchAt(103, pausePoint, TouchPhase.Ended));
+                Require(run.Paused && !run.ResumeCountdownActive, "A fresh third-finger pause must open only the pause menu.");
+                GreedLastRunSnapshot frozen = run;
+                primaryPoint = ScreenPoint(primary);
+                backPoint = ScreenPoint(back);
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Moved), TouchAt(102, backPoint, TouchPhase.Moved));
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary));
+                yield return WaitSeconds(0.4f);
+                yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Ended), TouchAt(102, backPoint, TouchPhase.Ended));
+                yield return TouchFrame();
+                AssertFrozen(frozen);
+                Require(run.Paused && !run.ResumeCountdownActive && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                    "Old live fingers moved onto pause-menu commands must not resume or abandon.");
+                yield return TapTouch(primary);
+                Require(run.ResumeCountdownActive, "Only a fresh pause-menu tap must start the original resume countdown.");
+                float deadline = Time.realtimeSinceStartup + 8f;
+                while (run.Paused)
+                {
+                    AssertFrozen(frozen);
+                    Require(Time.realtimeSinceStartup < deadline, "Fresh held-command recovery must finish the engine resume lead-in.");
+                    yield return null;
+                }
+                report.canceledEngineCommands += 2;
+                report.pauseCycles++;
+                report.heldPauseCommandsPreservedRun = true;
+                Debug.Log("Greed engine held pause commands passed: two live command fingers, third-finger pause, moved old releases canceled, fresh resume/countdown recovered without changing run values.");
             }
 
             private IEnumerator VerifyHeldRunResults()

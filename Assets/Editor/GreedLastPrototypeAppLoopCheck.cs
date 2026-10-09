@@ -20,6 +20,7 @@ namespace GreedLast.Editor
         private static bool heldSlotChangesOnly;
         private static bool heldRunResultsOnly;
         private static bool heldPreparationStartsOnly;
+        private static bool heldPauseCommandsOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -154,6 +155,16 @@ namespace GreedLast.Editor
             finally { heldPreparationStartsOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Held Pause Command Check")]
+        public static void RunHeldPauseCommandCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !heldPauseCommandsOnly,
+                "Held pause commands require an isolated Edit-mode fixture.");
+            heldPauseCommandsOnly = true;
+            try { Run(); }
+            finally { heldPauseCommandsOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -210,6 +221,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (heldPauseCommandsOnly)
+                {
+                    VerifyHeldPauseCommands(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (heldPreparationStartsOnly)
                 {
                     VerifyHeldPreparationStarts(app, ui, backend, state, core, () => run);
@@ -244,6 +260,7 @@ namespace GreedLast.Editor
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
                 VerifyHeldPreparationStarts(app, ui, backend, state, core, () => run);
+                VerifyHeldPauseCommands(app, ui, backend, state, core, () => run);
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
                 VerifySuspendedPlayerInput(app, ui, backend, state, core, () => run);
@@ -647,6 +664,79 @@ namespace GreedLast.Editor
                 if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practice);
                 else PlayerPrefs.DeleteKey(PracticeKey);
                 Write(app, "preferredRecordBoardPageIndex", preferredPage);
+                core.Exit();
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHeldPauseCommands(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            try
+            {
+                for (int mode = 0; mode < 3; mode++)
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    Write(app, "backend", backend);
+                    core.ConfigureGrowth(0, 0, 0);
+                    float clock = Time.realtimeSinceStartup;
+                    if (mode == 2)
+                    {
+                        state.SetInfiniteRun("Held pause check");
+                        core.EnterInfiniteRun();
+                        clock = Time.realtimeSinceStartup;
+                    }
+                    else
+                    {
+                        state.SetRunCoreTest();
+                        if (mode == 0) core.RestartPractice(clock);
+                        else
+                        {
+                            core.Enter();
+                            clock = Time.realtimeSinceStartup;
+                            core.HandleInput(GreedLastRunChannel.Left, clock);
+                        }
+                    }
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
+                    var back = (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton");
+                    Require(latest().ActivePattern && !latest().CountdownActive && primary.IsInteractable(),
+                        "Held pause checks require live controls before the pause menu. Mode " + mode
+                            + ", active=" + latest().ActivePattern + ", countdown=" + latest().CountdownActive
+                            + ", stopped=" + latest().Stopped + ", primary=" + primary.IsInteractable());
+                    var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 101, eligibleForClick = true };
+                    var backPointer = new PointerEventData(EventSystem.current) { pointerId = 102, eligibleForClick = true };
+                    primary.OnPointerDown(primaryPointer);
+                    back.OnPointerDown(backPointer);
+                    Method(app, "RequestToggleRunPause").Invoke(app, null);
+                    GreedLastRunSnapshot paused = latest();
+                    Require(paused.Paused && !paused.ResumeCountdownActive, "The actual pause callback must open only the pause menu.");
+                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: back, Pointer: backPointer) })
+                    {
+                        pair.Button.OnPointerUp(pair.Pointer);
+                        if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
+                    }
+                    Require(latest().Paused && !latest().ResumeCountdownActive && latest().Health == paused.Health
+                        && latest().Score == paused.Score && latest().Distance == paused.Distance
+                        && state.CurrentState == (mode == 2 ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest)
+                        && Read<int>(backend, "normalAbandonCount") == 0 && Read<int>(backend, "infiniteRunCount") == 0,
+                        "Old live commands must not resume or abandon the new pause menu. Mode " + mode);
+                    var fresh = new PointerEventData(EventSystem.current) { pointerId = 103, eligibleForClick = true };
+                    primary.OnPointerDown(fresh);
+                    primary.OnPointerUp(fresh);
+                    if (fresh.eligibleForClick) primary.OnPointerClick(fresh);
+                    Require(latest().Paused && latest().ResumeCountdownActive && latest().Health == paused.Health
+                        && latest().Score == paused.Score && latest().Distance == paused.Distance,
+                        "A fresh pause-menu resume must start the existing frozen countdown.");
+                    core.Exit();
+                }
+                Debug.Log("Greed held pause commands passed: three live modes, old primary/back releases cannot resume or abandon, fresh resume retains the original countdown. Isolated data and pointer callbacks only.");
+            }
+            finally
+            {
                 core.Exit();
                 Write(app, "backend", originalBackend);
                 state.SetLobbyReady(originalBackend.LoadLobby());
