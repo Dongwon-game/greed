@@ -200,7 +200,7 @@ namespace GreedLast.Editor
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
                         && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
-                        && cycle.liveBackPauseResume && cycle.heldPauseCommandsPreservedRun
+                        && cycle.liveBackPauseResume && cycle.heldPauseCommandsPreservedRun && cycle.heldNormalClearPreservedResult
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
                         && cycle.heldRunResultCases == 3 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
@@ -274,6 +274,7 @@ namespace GreedLast.Editor
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public bool liveBackPauseResume;
             public bool heldPauseCommandsPreservedRun;
+            public bool heldNormalClearPreservedResult;
             public int heldSlotChangeCases;
             public bool heldSlotChangesPreservedData, heldSlotChangeFreshTapRecovered;
             public int heldRunResultCases;
@@ -1567,9 +1568,23 @@ namespace GreedLast.Editor
                 Require(!run.DevInvincible, "The full normal loop must use real health and natural failure rules.");
                 float nextChoiceAt = Time.realtimeSinceStartup + 0.4f;
                 float deadline = Time.realtimeSinceStartup + 120f;
+                bool heldForClear = false;
+                Vector2 heldPrimaryPoint = default, heldBackPoint = default;
+                int clearsBefore = Read<int>(backend, "normalClearCount");
                 while (!run.Stopped)
                 {
                     Require(Time.realtimeSinceStartup < deadline, "The real-time normal run did not complete within its bounded deadline.");
+                    if (!heldForClear && run.ActivePattern && !run.CountdownActive && !run.Paused
+                        && run.Phase == GreedLastRunPhase.EscapeRunning && run.ChapterProgress == 2)
+                    {
+                        Button primary = Read<Button>(ui, "nextPatternButton"), back = Read<Button>(ui, "returnLobbyButton");
+                        Require(primary.IsInteractable() && back.IsInteractable(), "Clear commands must be held while the last trap is still live.");
+                        heldPrimaryPoint = ScreenPoint(primary);
+                        heldBackPoint = ScreenPoint(back);
+                        yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Began), TouchAt(119, heldBackPoint, TouchPhase.Began));
+                        yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary), TouchAt(119, heldBackPoint, TouchPhase.Stationary));
+                        heldForClear = true;
+                    }
                     if (run.ChoiceActive && Time.realtimeSinceStartup >= nextChoiceAt)
                     {
                         GreedLastChoiceKind before = run.ChoiceKind;
@@ -1587,13 +1602,39 @@ namespace GreedLast.Editor
                     {
                         Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1];
                         int before = report.judgements;
-                        yield return TapTouch(lane);
+                        if (heldForClear)
+                        {
+                            Vector2 point = ScreenPoint(lane);
+                            foreach (TouchPhase phase in new[] { TouchPhase.Began, TouchPhase.Stationary, TouchPhase.Ended })
+                                yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary),
+                                    TouchAt(119, heldBackPoint, TouchPhase.Stationary), TouchAt(71, point, phase));
+                            yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary), TouchAt(119, heldBackPoint, TouchPhase.Stationary));
+                            report.engineTouchTaps++;
+                        }
+                        else yield return TapTouch(lane);
                         Require(report.judgements == before + 1, "A full normal-run touch must resolve exactly one actual trap.");
                     }
                     yield return null;
                 }
                 Require(run.EscapeSucceeded && run.SaveEligible && run.Health > 0 && report.normalChoices >= 4,
                     "The real-time normal loop must recover the core, pass the exit and retain one saveable result.");
+                Require(heldForClear, "The full clear must include commands held across its final trap.");
+                GreedLastRunSnapshot cleared = run;
+                heldPrimaryPoint = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
+                heldBackPoint = ScreenPoint(Read<Button>(ui, "returnLobbyButton"));
+                yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Moved), TouchAt(119, heldBackPoint, TouchPhase.Moved));
+                yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary), TouchAt(119, heldBackPoint, TouchPhase.Stationary));
+                yield return WaitSeconds(0.45f);
+                yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Ended), TouchAt(119, heldBackPoint, TouchPhase.Ended));
+                yield return TouchFrame();
+                Require(run.Stopped && run.EscapeSucceeded && run.SaveEligible && run.Health == cleared.Health
+                    && run.Score == cleared.Score && run.Distance == cleared.Distance && run.Focus == cleared.Focus
+                    && state.CurrentState == GreedLastScreenState.RunCoreTest && !backend.HasSaveLoadoutCandidate
+                    && Read<int>(backend, "normalClearCount") == clearsBefore,
+                    "Old live commands must preserve the clear result without settlement, saving or discard.");
+                report.heldNormalClearPreservedResult = true;
+                report.canceledEngineCommands += 2;
+                Debug.Log("Greed engine held normal clear passed: two commands held through the last natural success, moved old releases preserve the result and save opportunity; no settlement before fresh input.");
                 report.fullNormalClear = true;
                 report.fullNormalJudgements = report.judgements;
                 Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
