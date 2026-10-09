@@ -1,5 +1,29 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-09 후속 슬롯 변경 입력 보호
+
+- **16:28 KST 최종 전체 화면/입력**: `prototype-held-slot-change-final-visual-20261009.log`, `report-full-20261009-072859-5238107.json`. `ceb5764` 기준 599장/빈 화면 0·버튼 4,026/위치 20,130·모듈 명령 4,621/레인 2,631·스크롤 84/중단 스크롤 672·정상 포인터 1,450/취소 명령 1,395/진행 영역 12 통과. 최신/보존 SHA-256 `995D41A02D7383B2E0FC4FF682DA196F9AB7369FCA3703ABAC3DBA3ADCFA089F`. 덮어쓰기·작은 삭제 확인 PNG도 직접 확인했다. PNG는 최신 캡처 폴더를 갱신하며 실행별 PNG 전체 보존/실기기 성능 검사로 표시하지 않는다.
+- **16:18 KST 전체 스모크/비개발 Windows 빌드**: `prototype-held-slot-change-verified-build-20261009.log`. UTC `2026-10-09T07:18:48.6525128Z`, DLL SHA-256 `E2274D3D386F85C7A9A9667B8E8DE0BE63E50B23E666C9B3D91D3B276F31190A`. 게임 기능을 늘리지 않고 기존 슬롯 선택 경계의 입력만 보호했다.
+- `prototype-held-slot-change-standalone-startup-20261009.log`: 위 새 빌드의 헤드리스 20초 생존/초기 예외 0·Greed 저장값 전후 0개. 오류 즉시 중단·개인 저장값이 있으면 생략 조건으로 레지스트리를 읽기만 했고 우리가 실행한 프로세스만 종료했다. 렌더/손 입력/지연/FPS 검사는 아니다.
+- `GreedLastPrototype-verified-20261009-slot-change.zip`은 58,424,988바이트/155항목(파일 154개)이다. 모든 파일 크기·해시와 다섯 식별 해시·14개 비개발 반환 경로, 편집기 참조/검사/초기화 API 제외를 읽기만 하여 대조했다. SHA-256 `D7EE2327BE69D54A12B5A9A79C86FF8EA22D3BC7396306C2865EC3205493FDFF`. 앞선 두 ZIP은 보존했다.
+- `ceb5764`는 저장/무한 관리에서 다른 슬롯을 고를 때 이미 누른 명령을 취소한다. S1의 저장 누름을 유지한 채 S3를 선택하고 떼는 것만으로 새 칸에 저장되던 문제를 재현했다. 저장·준비·두 관리 화면의 삭제/이름 변경 여섯 경로는 선택 자체가 후보/사용권/이름을 바꾸지 않고 새 명령 입력만 실행한다. 기존 저장/무한 규칙은 유지한다.
+- `prototype-held-slot-change-baseline-20261009.log`의 첫 실패는 존재하지 않는 `SaveSlotUsesRemaining` 속성을 사용한 검사 컴파일 오류다. 실제 사용권 필드로 바꾼 `prototype-held-slot-change-baseline-compiled-20261009.log`는 이전 누름의 해제로 새 칸에 저장되는 실제 실패를 재현했다.
+- `prototype-held-slot-change-fixed-20261009.log`와 `prototype-held-slot-change-fixture-details-20261009.log`의 후속 실패는 검사에서 `LoadLobby()`를 호출해 추천 빈 슬롯으로 선택을 다시 바꾼 구성 오류다. 선택을 유지하는 `LoadSelectedSaveSlotView()`로 읽도록 고치고 `prototype-held-slot-change-fixed-selected-view-20261009.log`의 여섯 격리 경우/새 탭 복구를 통과했다. 게임의 추천/선택 규칙과 실패 조건은 바꾸지 않았다.
+- **16:16 KST 전체 엔진**: `prototype-held-slot-change-engine-full-20261009.log`, `report-full-loop-20261009-071654-5376229.json`. 두 방식 각각 슬롯 변경 여섯/확인 창 여섯 유지 입력 취소·모든 기록/사용권/이름 보존·새 탭, 클리어 ESC의 저장 보호/무한 두 종료 정산과 기존 S2/S3 일반 15판정/8선택→한 번 저장→준비 취소→실제 두 번 시작/자동 비움·자연 실패·기록·보충을 통과했다. 각 터치 39묶음/125접점·마우스 79회·개인 설정 불변. 최신/보존 SHA-256 `5FF029FE75535EF8D8FB1E25C32F069950B4344547C13F3DE6C5ADA22B9C6066`. 실제 프레임의 합성 입력/키 라우팅 콜백이며 OS 키/실기기/소리 지연/FPS 검사는 아니다.
+
+## 2026-10-09 앞선 결과 뒤로 가기와 확인 창 입력
+
+- 게임/검사 `ad4bd0d`: 종료 상태에 기존 정지 명령만 보내던 ESC를 결과 뒤로 가기로 연결했다. 일반 클리어는 저장 슬롯 선택, 연습 완료/실패·일반 실패·무한 종료는 기존 한 번 정산/로비로 연결한다. 키보드 이동과 여섯 저장 확인 시작 때 남은 누름을 취소해 늦은 두 번째 손 해제만으로 확인을 건너뛰지 않는다. 새 탭·후보 한 번/실제 시작 두 번·자동 비움과 비용/판정/개인 데이터는 유지한다.
+- `prototype-result-back-baseline-20261009.log`의 첫 실패는 새 검사에서 `SetInfiniteRun` 인자를 빠뜨린 컴파일 오류다. 인자를 고친 `prototype-result-back-baseline-compiled-20261009.log`는 연습 완료 뒤 ESC가 응답하지 않는 실제 기준 실패를 재현했다.
+- `prototype-result-back-fixed-20261009.log`는 첫 구현이 클리어 ESC를 의도적인 저장 포기 로비 동작에 연결해 실패했다. ESC를 저장 선택으로 바로잡았다. 이어 `prototype-result-back-save-protected-20261009.log`는 저장 확정 대신 관리 재진입 콜백을 쓴 검사 오류였으며 실제 확정 콜백으로 수정했다. `prototype-result-back-final-20261009.log`의 격리 결과 라우팅은 종료 코드 0으로 통과했다. 실패 로그는 보존한다.
+- `prototype-held-save-baseline-20261009.log`는 확인 창을 열어도 이전 화면에서 누른 두 번째 명령 손가락이 유효한 실제 문제를 재현했다. 수정 후 `prototype-held-save-fixed-20261009.log`는 덮어쓰기·저장/무한 삭제·저장/무한 이름 변경·저장 포기 여섯 경로의 이전 누름 취소/모든 칸과 사용권·이름 보존/새 탭 복구를 통과했다. 격리 데이터만 사용했다.
+- **15:38 KST 집중 엔진 검사**: `prototype-result-confirmation-engine-focused-20261009.log`, `report-multi-touch-20261009-063801-7360858.json`. 두 재생 방식 각각 성장 세 경우/입장 보호·여섯 저장 확인·최초 입력 여섯/시작 선택 두 경우, 터치 17묶음/42접점·마우스 13회·개인 설정 불변. SHA-256 `6A97E980D2CDBD58B836057656E9266A47144C1D9EB4128D8C73112161BC1716`. `fullLoopIncluded=false`인 집중 검사다.
+- **15:48 KST 전체 엔진 검사**: `prototype-result-confirmation-engine-full-20261009.log`, `report-full-loop-20261009-064832-7496948.json`. 두 방식/S2·S3 각각 여섯 저장 확인과 이전 값 보존/새 탭, 진행 중 키 라우팅 정지·재개, 클리어 ESC의 저장 보호, 무한 종료 ESC 정산 두 번/중복 거절을 통과했다. 일반 15판정/8선택→고른 칸 한 번 저장→준비 취소 무소모→실제 두 번 시작/자동 비움·자연 실패·기록·보충, 각 터치 33묶음/107접점·마우스 79회·개인 설정 불변. 최신/보존 SHA-256 `8A5AB92C774F465B7274D74D7A4FB16C1B2D459B2E865A893CD9DCCB5D7761D1`. 실제 엔진 프레임과 키 라우팅 콜백이며 OS 키·실기기 입력 검사는 아니다.
+- **15:40 KST 전체 스모크/비개발 Windows 빌드**: `prototype-result-confirmation-verified-build-20261009.log`. UTC `2026-10-09T06:40:26.6579345Z`, 게임 DLL SHA-256 `ADC1666D392561642760E8790677F5FD83D010DCFA73E22E2FEBB144BE9F6BF1`. 빌드 후 보완은 편집기 검사 범위/키 경로 검사만이며 게임 DLL은 동일하다.
+- 새 `GreedLastPrototype-verified-20261009-result-confirmation.zip`: 58,424,992바이트/155항목(파일 154개). 전체 파일 크기·해시와 다섯 식별 해시·14개 비개발 반환 경로를 읽기 전용으로 대조했다. SHA-256 `56C7BF65DC9D0C2B3A70F41BCDF38EC677CC6F8DAE6E3109F3FFDD8E77CDC3AF`. 이전 growth-input ZIP은 보존했다. 화면 검사는 별도 완료 결과로 남긴다.
+- `prototype-result-confirmation-standalone-startup-20261009.log`: 새 실행기의 헤드리스 초기 20초 생존/예외 0·제품 Greed 저장값 전후 0개를 확인하고 우리가 시작한 프로세스만 종료했다. 첫 제한 환경의 레지스트리 읽기는 접근 오류가 있어 빈 값으로 인정하지 않고 실행하지 않았다. 읽기 권한 검토 후 오류 즉시 중단/개인 값이 있으면 실행 생략 조건으로 다시 확인했다. 레지스트리 쓰기·초기화는 하지 않았으며 렌더/손 입력/기기 소리 지연/FPS 결과로 확대하지 않는다.
+- **15:58 KST 앞선 전체 화면**: `prototype-result-confirmation-final-visual-20261009.log`, `report-full-20261009-065850-7721713.json`은 `ad4bd0d` 기준 599장/빈 화면 0·버튼 4,026/위치 20,130·모듈 명령 4,621/레인 2,631·스크롤 84/중단 스크롤 672·정상 포인터 1,450/취소 명령 1,395 통과. 최신/보존 SHA-256 `4FF968D2C47A1000CF2053CBAEBCD8CF8D8753284A3329BC99282F787ABE0804`. 작은 주행/정지·클리어/슬롯 선택 PNG를 직접 확인했다. 이 결과는 후속 슬롯 변경 보호 전이며 다음 전체 캡처와 구분한다.
+
 ## 2026-10-06 실제 터치 프레임 후속 확인
 
 - 같은 `1341b9c`의 공개 `Run Engine Multi Touch Check`도 **17:18 KST 두 방식** 통과했다. 각 성장 입장 취소/구매 세 경우·여섯 첫 입력/두 시작 기프트·새 탭 복구·UI 정리·터치 11묶음/24접점·마우스 13회, 개인 설정 불변이다. `report-multi-touch-20261006-081807-1545275.json`, 최신/보존 SHA-256 `903DF07180CEB1CFBEFE14057630B8DCBB8BF52E0C62E8DB3EB7FBAC03BBC13F` 일치. `fullLoopIncluded=false`인 집중 검사이며 아래 17:16 전체 루프 보존본을 대체하지 않는다.
