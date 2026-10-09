@@ -13584,6 +13584,7 @@ namespace GreedLast
 
         private void SelectSaveSlot(GreedLastRunChannel channel)
         {
+            runtimeUi.CancelPendingUiInput();
             int slotIndex = channel == GreedLastRunChannel.Left
                 ? 0
                 : channel == GreedLastRunChannel.Center

@@ -17,6 +17,7 @@ namespace GreedLast.Editor
         private static bool growthCommandsOnly;
         private static bool resultBackOnly;
         private static bool heldConfirmationsOnly;
+        private static bool heldSlotChangesOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -121,6 +122,16 @@ namespace GreedLast.Editor
             finally { heldConfirmationsOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Held Slot Change Check")]
+        public static void RunHeldSlotChangeCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !heldSlotChangesOnly,
+                "Held slot changes require an isolated Edit-mode fixture.");
+            heldSlotChangesOnly = true;
+            try { Run(); }
+            finally { heldSlotChangesOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -177,6 +188,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (heldSlotChangesOnly)
+                {
+                    VerifyHeldSlotChanges(app, ui, backend, state);
+                    return;
+                }
                 if (heldConfirmationsOnly)
                 {
                     VerifyHeldSaveConfirmations(app, ui, backend, state);
@@ -193,6 +209,7 @@ namespace GreedLast.Editor
                 VerifyResultBackNavigation(app, backend, state, core, () => run);
                 VerifyHeldSaveConfirmations(app, ui, backend, state);
 
+                VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
                 VerifySuspendedPlayerInput(app, ui, backend, state, core, () => run);
@@ -679,6 +696,99 @@ namespace GreedLast.Editor
             }
             finally
             {
+                Write(app, "backend", originalBackend);
+                foreach (string field in pendingFields) Write(app, field, false);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHeldSlotChanges(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state)
+        {
+            string[] pendingFields = { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                "saveSlotDetailViewActive", "saveDraftFromRefillRun" };
+            try
+            {
+                foreach (var scenario in new[] {
+                    (Infinite: false, Button: "nextPatternButton"),
+                    (Infinite: false, Button: "saveSlotDeleteButton"),
+                    (Infinite: true, Button: "saveSlotDeleteButton"),
+                    (Infinite: false, Button: "saveSlotRenameButton"),
+                    (Infinite: true, Button: "saveSlotRenameButton"),
+                    (Infinite: true, Button: "nextPatternButton") })
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.AddSampleClearCandidateForTest(out _);
+                    backend.SelectSaveLoadoutSlot(0);
+                    Write(app, "backend", backend);
+                    foreach (string field in pendingFields) Write(app, field, false);
+                    if (scenario.Infinite)
+                        state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                    else
+                        state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                            saveLoadoutCandidateAvailable: true);
+                    var command = Read<Button>(ui, scenario.Button) as GreedLastCommandButton;
+                    Require(command != null && command.isActiveAndEnabled && command.IsInteractable(),
+                        "Slot changes require the actual enabled command: " + scenario.Button);
+                    var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                    var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                    var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                    var held = new PointerEventData(EventSystem.current) { pointerId = 93, eligibleForClick = true };
+                    command.OnPointerDown(held);
+                    // Saving targets the empty S3; management/preparation targets the occupied S2.
+                    int target = !scenario.Infinite && scenario.Button == "nextPatternButton" ? 2 : 1;
+                    Method(app, "HandleRunChannelInput").Invoke(app, new object[] {
+                        target == 2 ? GreedLastRunChannel.Right : GreedLastRunChannel.Center });
+                    Require(backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == target && backend.HasSaveLoadoutCandidate,
+                        "The fixture must select its requested slot and retain its candidate before releasing: "
+                            + scenario.Button + "/" + scenario.Infinite + "/selected="
+                            + backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex + "/candidate=" + backend.HasSaveLoadoutCandidate);
+                    command.OnPointerUp(held);
+                    if (held.eligibleForClick) command.OnPointerClick(held);
+                    Require(state.CurrentState == (scenario.Infinite
+                            ? GreedLastScreenState.InfiniteLoadoutSelect : GreedLastScreenState.SaveLoadoutDraft)
+                        && backend.HasSaveLoadoutCandidate && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == target,
+                        "Releasing the old command after selecting a different slot must not save or enter preparation: "
+                            + scenario.Button + "/" + scenario.Infinite + "/state=" + state.CurrentState
+                            + "/candidate=" + backend.HasSaveLoadoutCandidate + "/selected="
+                            + backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex + "/eligible=" + held.eligibleForClick);
+                    Require(!Read<bool>(app, "saveSlotDeleteConfirmPending")
+                        && !Read<bool>(app, "saveSlotRenameConfirmPending")
+                        && !Read<bool>(app, "saveDraftOverwriteConfirmPending"),
+                        "A held command must not open a confirmation for the newly selected slot.");
+                    for (int slot = 0; slot < records.Length; slot++)
+                        Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]
+                            && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == names[slot],
+                            "Slot selection and canceled commands must preserve every record, use and name.");
+                    var fresh = new PointerEventData(EventSystem.current) { pointerId = 93, eligibleForClick = true };
+                    command.OnPointerDown(fresh);
+                    command.OnPointerUp(fresh);
+                    if (fresh.eligibleForClick) command.OnPointerClick(fresh);
+                    if (scenario.Button == "saveSlotDeleteButton")
+                        Require(Read<bool>(app, "saveSlotDeleteConfirmPending") && backend.HasSaveLoadoutCandidate,
+                            "A fresh delete tap must open confirmation for the newly selected slot without deleting yet.");
+                    else if (scenario.Button == "saveSlotRenameButton")
+                        Require(Read<bool>(app, "saveSlotRenameConfirmPending") && backend.HasSaveLoadoutCandidate,
+                            "A fresh rename tap must open confirmation for the newly selected slot without renaming yet.");
+                    else if (scenario.Infinite)
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[target] == uses[target],
+                            "Fresh preparation must use the selected slot without spending its use.");
+                    else
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && !backend.HasSaveLoadoutCandidate && backend.LoadSelectedSaveSlotView().SaveSlotOccupied[target],
+                            "A fresh save tap must consume its candidate into the explicitly selected empty slot.");
+                }
+                Debug.Log("Greed held slot changes passed: save, preparation and two delete/rename views; old command release cannot act on a newly selected slot, all data remains intact and fresh taps recover. Isolated progress only.");
+            }
+            finally
+            {
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
                 Write(app, "backend", originalBackend);
                 foreach (string field in pendingFields) Write(app, field, false);
                 state.SetLobbyReady(originalBackend.LoadLobby());

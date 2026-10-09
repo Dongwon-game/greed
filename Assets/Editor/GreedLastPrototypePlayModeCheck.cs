@@ -171,7 +171,7 @@ namespace GreedLast.Editor
             results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
-                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
+                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, six held-command slot-change paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
@@ -187,8 +187,9 @@ namespace GreedLast.Editor
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
                     && cycle.growthEntryHeldTapCanceled && cycle.heldSaveConfirmationCases == 6
-                    && cycle.heldSaveConfirmationsPreservedData && cycle.heldSaveConfirmationFreshTapRecovered);
-                if (!results.succeeded) results.error = "Required engine growth command coverage did not complete.";
+                    && cycle.heldSaveConfirmationsPreservedData && cycle.heldSaveConfirmationFreshTapRecovered
+                    && cycle.heldSlotChangeCases == 6 && cycle.heldSlotChangesPreservedData && cycle.heldSlotChangeFreshTapRecovered);
+                if (!results.succeeded) results.error = "Required engine input protection coverage did not complete.";
             }
             if (results.succeeded && results.multiTouchIncluded)
             {
@@ -269,6 +270,8 @@ namespace GreedLast.Editor
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public bool liveBackPauseResume;
+            public int heldSlotChangeCases;
+            public bool heldSlotChangesPreservedData, heldSlotChangeFreshTapRecovered;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -383,6 +386,7 @@ namespace GreedLast.Editor
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
+                yield return VerifyHeldSlotChanges();
                 if (SessionState.GetBool(Prefix + "multiTouchOnly", false))
                 {
                     yield return VerifyMultiTouch();
@@ -1211,6 +1215,98 @@ namespace GreedLast.Editor
                 finally
                 {
                     input.Touches = Array.Empty<Touch>();
+                    ResetPending();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                }
+            }
+
+            private IEnumerator VerifyHeldSlotChanges()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                string[] pendingFields = { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                    "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                    "saveSlotDetailViewActive", "saveDraftFromRefillRun" };
+                void ResetPending()
+                {
+                    foreach (string field in pendingFields)
+                        typeof(GreedLastApp).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, false);
+                }
+                try
+                {
+                    foreach (var scenario in new[] {
+                        (Infinite: false, Button: "nextPatternButton"),
+                        (Infinite: false, Button: "saveSlotDeleteButton"),
+                        (Infinite: true, Button: "saveSlotDeleteButton"),
+                        (Infinite: false, Button: "saveSlotRenameButton"),
+                        (Infinite: true, Button: "saveSlotRenameButton"),
+                        (Infinite: true, Button: "nextPatternButton") })
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        backend.AddSampleClearCandidateForTest(out _);
+                        backend.SelectSaveLoadoutSlot(0);
+                        backendField.SetValue(app, backend);
+                        ResetPending();
+                        if (scenario.Infinite)
+                            state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                        else state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                            saveLoadoutCandidateAvailable: true);
+                        yield return null;
+                        Button command = Read<Button>(ui, scenario.Button);
+                        Require(command.isActiveAndEnabled && command.IsInteractable(),
+                            "Engine slot change requires a usable command: " + scenario.Button);
+                        var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                        var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                        var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                        int target = !scenario.Infinite && scenario.Button == "nextPatternButton" ? 2 : 1;
+                        Vector2 commandPoint = ScreenPoint(command);
+                        Vector2 slotPoint = ScreenPoint(Read<Button[]>(ui, "laneButtons")[target]);
+                        yield return TouchFrame(TouchAt(93, commandPoint, TouchPhase.Began), TouchAt(94, slotPoint, TouchPhase.Began));
+                        yield return TouchFrame(TouchAt(93, commandPoint, TouchPhase.Stationary), TouchAt(94, slotPoint, TouchPhase.Ended));
+                        yield return TouchFrame(TouchAt(93, commandPoint, TouchPhase.Stationary));
+                        yield return WaitSeconds(0.45f);
+                        yield return TouchFrame(TouchAt(93, commandPoint, TouchPhase.Ended));
+                        yield return TouchFrame();
+                        Require(state.CurrentState == (scenario.Infinite
+                                ? GreedLastScreenState.InfiniteLoadoutSelect : GreedLastScreenState.SaveLoadoutDraft)
+                            && backend.HasSaveLoadoutCandidate && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == target,
+                            "The old engine command must not save or enter preparation for the changed slot: " + scenario.Button);
+                        Require(!Read<bool>(app, "saveSlotDeleteConfirmPending") && !Read<bool>(app, "saveSlotRenameConfirmPending")
+                            && !Read<bool>(app, "saveDraftOverwriteConfirmPending"),
+                            "The old engine command must not open confirmation for the changed slot.");
+                        for (int slot = 0; slot < records.Length; slot++)
+                            Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]
+                                && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == names[slot],
+                                "Changing slots and releasing an old engine command must preserve all data.");
+                        yield return TapTouch(command);
+                        if (scenario.Button == "saveSlotDeleteButton")
+                            Require(Read<bool>(app, "saveSlotDeleteConfirmPending") && backend.HasSaveLoadoutCandidate,
+                                "Fresh engine delete must open only the changed-slot confirmation.");
+                        else if (scenario.Button == "saveSlotRenameButton")
+                            Require(Read<bool>(app, "saveSlotRenameConfirmPending") && backend.HasSaveLoadoutCandidate,
+                                "Fresh engine rename must open only the changed-slot confirmation.");
+                        else if (scenario.Infinite)
+                            Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[target] == uses[target],
+                                "Fresh engine preparation must retain the changed-slot use count.");
+                        else Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                                && !backend.HasSaveLoadoutCandidate && backend.LoadSelectedSaveSlotView().SaveSlotOccupied[target],
+                                "Fresh engine save must consume its candidate into the explicitly changed slot.");
+                        report.heldSlotChangeCases++;
+                    }
+                    report.heldSlotChangesPreservedData = report.heldSlotChangeCases == 6;
+                    report.heldSlotChangeFreshTapRecovered = report.heldSlotChangesPreservedData;
+                    Debug.Log("Greed engine held slot changes passed: six two-finger command/slot pairs, delayed old releases blocked, all records/uses/names preserved and fresh actions accepted. In-memory progress only.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    Call(app, "ResetInfinitePreparation");
+                    Call(app, "ClearInfinitePreparationContext");
                     ResetPending();
                     backendField.SetValue(app, originalBackend);
                     state.SetLobbyReady(originalBackend.LoadLobby());
