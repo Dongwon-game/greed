@@ -18,6 +18,8 @@ namespace GreedLast.Editor
         private static bool resultBackOnly;
         private static bool heldConfirmationsOnly;
         private static bool heldSlotChangesOnly;
+        private static bool heldRunResultsOnly;
+        private static bool heldPreparationStartsOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -132,6 +134,26 @@ namespace GreedLast.Editor
             finally { heldSlotChangesOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Held Run Result Check")]
+        public static void RunHeldRunResultCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !heldRunResultsOnly,
+                "Held run results require an isolated Edit-mode fixture.");
+            heldRunResultsOnly = true;
+            try { Run(); }
+            finally { heldRunResultsOnly = false; }
+        }
+
+        [MenuItem("Greed Last/Run Held Preparation Start Check")]
+        public static void RunHeldPreparationStartCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !heldPreparationStartsOnly,
+                "Held preparation starts require an isolated Edit-mode fixture.");
+            heldPreparationStartsOnly = true;
+            try { Run(); }
+            finally { heldPreparationStartsOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -188,6 +210,16 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (heldPreparationStartsOnly)
+                {
+                    VerifyHeldPreparationStarts(app, ui, backend, state, core, () => run);
+                    return;
+                }
+                if (heldRunResultsOnly)
+                {
+                    VerifyHeldRunResults(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (heldSlotChangesOnly)
                 {
                     VerifyHeldSlotChanges(app, ui, backend, state);
@@ -210,6 +242,8 @@ namespace GreedLast.Editor
                 VerifyHeldSaveConfirmations(app, ui, backend, state);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
+                VerifyHeldRunResults(app, ui, backend, state, core, () => run);
+                VerifyHeldPreparationStarts(app, ui, backend, state, core, () => run);
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
                 VerifySuspendedPlayerInput(app, ui, backend, state, core, () => run);
@@ -614,6 +648,154 @@ namespace GreedLast.Editor
                 else PlayerPrefs.DeleteKey(PracticeKey);
                 Write(app, "preferredRecordBoardPageIndex", preferredPage);
                 core.Exit();
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHeldPreparationStarts(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            try
+            {
+                foreach (int uses in new[] { 2, 1 })
+                    for (int relic = 0; relic < 3; relic++)
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        backend.SelectSaveLoadoutSlot(0);
+                        if (uses == 1) Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _), "The last-use fixture needs one prior start.");
+                        Write(app, "backend", backend);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        Method(app, "RequestInfiniteRun").Invoke(app, null);
+                        FinishPreparationTransition(app);
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                        FinishPreparationTransition(app);
+                        Require(Read<int>(app, "infinitePreparationStep") == 1, "The held start must begin before relic confirmation.");
+                        GreedLastRunRecord record = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0];
+                        var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
+                        var held = new PointerEventData(EventSystem.current) { pointerId = 98, eligibleForClick = true };
+                        primary.OnPointerDown(held);
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { (GreedLastRunChannel)(relic + 1) });
+                        Require(Read<int>(app, "infinitePreparationStep") == 2, "The new relic selection must complete preparation normally.");
+                        string gift = Read<string>(app, "infinitePreparationGift"), chosenRelic = Read<string>(app, "infinitePreparationRelic");
+                        FinishPreparationTransition(app);
+                        primary.OnPointerUp(held);
+                        if (held.eligibleForClick) primary.OnPointerClick(held);
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int>(app, "infinitePreparationStep") == 2
+                            && Read<string>(app, "infinitePreparationGift") == gift && Read<string>(app, "infinitePreparationRelic") == chosenRelic
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == uses
+                            && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0].Equals(record)
+                            && !backend.HasSaveLoadoutCandidate,
+                            "An old preparation press must not become a paid start after relic selection. Uses " + uses + ", relic " + relic);
+                        var fresh = new PointerEventData(EventSystem.current) { pointerId = 99, eligibleForClick = true };
+                        primary.OnPointerDown(fresh);
+                        primary.OnPointerUp(fresh);
+                        if (fresh.eligibleForClick) primary.OnPointerClick(fresh);
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteRun && latest().InfiniteMode && !latest().Stopped
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == uses - 1
+                            && backend.LoadSelectedSaveSlotView().SaveSlotOccupied[0] == (uses == 2),
+                            "Only a fresh start must consume once and auto-clear its last-use source.");
+                        core.Exit();
+                    }
+                Debug.Log("Greed held preparation starts passed: three relic choices at two and one remaining uses, old pre-selection command canceled, fresh actual start spends once and last-use source clears. Isolated data only.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHeldRunResults(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
+            int practice = PlayerPrefs.GetInt(PracticeKey);
+            try
+            {
+                PlayerPrefs.SetInt(PracticeKey, 0);
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    Write(app, "backend", backend);
+                    core.ConfigureGrowth(0, 0, 0);
+                    if (mode == 2)
+                    {
+                        state.SetInfiniteRun("Held result check");
+                        core.EnterInfiniteRun();
+                    }
+                    else
+                    {
+                        state.SetRunCoreTest();
+                        if (mode == 0 || mode == 3) core.RestartPractice(Time.realtimeSinceStartup);
+                        else core.Enter();
+                    }
+                    var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
+                    var back = (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton");
+                    var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 95, eligibleForClick = true };
+                    var backPointer = new PointerEventData(EventSystem.current) { pointerId = 96, eligibleForClick = true };
+                    bool pressed = false;
+                    Action pressLiveCommands = () =>
+                    {
+                        Require(primary.IsInteractable() && back.IsInteractable(),
+                            "The old result commands must start as usable live-run controls.");
+                        primary.OnPointerDown(primaryPointer);
+                        back.OnPointerDown(backPointer);
+                        pressed = true;
+                    };
+                    if (mode < 3) RunToFailure(core, latest, pressLiveCommands);
+                    else RunToCompletion(core, latest, pressLiveCommands);
+                    Require(pressed && latest().Stopped && !latest().Paused,
+                        "Held result checks require an actual terminal result after the pointer press.");
+                    GreedLastRunSnapshot terminal = latest();
+                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: back, Pointer: backPointer) })
+                    {
+                        pair.Button.OnPointerUp(pair.Pointer);
+                        if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
+                    }
+                    Require(latest().Stopped && latest().Equals(terminal)
+                        && state.CurrentState == (mode == 2 ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest)
+                        && Read<int>(backend, "normalFailCount") == 0 && Read<int>(backend, "infiniteRunCount") == 0
+                        && !backend.HasSaveLoadoutCandidate,
+                        "An old live-run press must not restart, settle or leave its new result. Mode " + mode);
+                    var fresh = new PointerEventData(EventSystem.current) { pointerId = 97, eligibleForClick = true };
+                    GreedLastCommandButton freshCommand = mode >= 3 ? primary : back;
+                    freshCommand.OnPointerDown(fresh);
+                    freshCommand.OnPointerUp(fresh);
+                    if (fresh.eligibleForClick) freshCommand.OnPointerClick(fresh);
+                    if (mode == 4)
+                        Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate
+                            && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice") && Read<int>(backend, "normalClearCount") == 1,
+                            "A fresh clear action must open one explicit save opportunity, not discard it.");
+                    else if (mode == 3)
+                        Require(state.CurrentState == GreedLastScreenState.RunCoreTest && !latest().PracticeMode
+                            && latest().ChoiceActive && PlayerPrefs.GetInt(PracticeKey) == 1,
+                            "A fresh completed practice action must still mark onboarding and continue to normal choices.");
+                    else
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && Read<int>(backend, "normalFailCount") == (mode == 1 ? 1 : 0)
+                            && Read<int>(backend, "infiniteRunCount") == (mode == 2 ? 1 : 0),
+                            "A fresh result command must settle exactly once and return normally. Mode " + mode);
+                }
+                Debug.Log("Greed held run results passed: three natural failures, completed practice and escaped normal run; old live primary/back releases blocked; fresh settlement/onboarding/explicit save recovered. Isolated progress and synthetic pointer callbacks only.");
+            }
+            finally
+            {
+                core.Exit();
+                if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practice);
+                else PlayerPrefs.DeleteKey(PracticeKey);
+                foreach (string field in new[] { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                    "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                    "saveSlotDetailViewActive", "saveDraftFromRefillRun" }) Write(app, field, false);
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
                 Write(app, "backend", originalBackend);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
@@ -2392,7 +2574,7 @@ namespace GreedLast.Editor
                 message);
         }
 
-        internal static void RunToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
+        internal static void RunToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest, Action beforeFinal = null)
         {
             float clock = Time.realtimeSinceStartup;
             for (int step = 0; step < 100 && !latest().Stopped; step++)
@@ -2408,6 +2590,8 @@ namespace GreedLast.Editor
                 else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                 else
                 {
+                    if (run.ChapterProgress == 2 && (run.PracticeMode || run.Phase == GreedLastRunPhase.EscapeRunning))
+                        beforeFinal?.Invoke();
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
                     core.HandleInput(run.Pattern.Channel, clock);
                     Require(latest().LastResult == GreedLastJudgementResult.Success, "The callback fixture needs exact trap responses.");
@@ -2416,7 +2600,7 @@ namespace GreedLast.Editor
             Require(latest().Stopped, "The bounded callback fixture must reach a terminal result.");
         }
 
-        private static void RunToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
+        private static void RunToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest, Action beforeFatal = null)
         {
             float clock = Time.realtimeSinceStartup;
             for (int step = 0; step < 100 && !latest().Stopped; step++)
@@ -2430,7 +2614,11 @@ namespace GreedLast.Editor
                     core.Tick(clock += 1f);
                 }
                 else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
-                else core.Tick(clock += Mathf.Max(0.02f, run.Pattern.HitSeconds + 0.2f - run.ElapsedSeconds));
+                else
+                {
+                    if (run.Health == 1) beforeFatal?.Invoke();
+                    core.Tick(clock += Mathf.Max(0.02f, run.Pattern.HitSeconds + 0.2f - run.ElapsedSeconds));
+                }
             }
             Require(latest().Stopped && latest().Health == 0
                 && latest().Phase == GreedLastRunPhase.FailResolving,

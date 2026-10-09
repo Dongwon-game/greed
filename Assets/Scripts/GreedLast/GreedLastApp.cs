@@ -10952,6 +10952,9 @@ namespace GreedLast
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
+            // A press begun while running must not activate the replacement result action.
+            if (snapshot.Stopped && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Stopped))
+                runtimeUi?.CancelPendingUiInput();
             bool leavingRotation = hasLatestAppRunSnapshot
                 && IsLiveRotationInputWindow(latestAppRunSnapshot)
                 && GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern)
@@ -12949,6 +12952,7 @@ namespace GreedLast
                 return;
             }
 
+            runtimeUi.CancelPendingUiInput();
             int choiceIndex = Mathf.Clamp((int)channel - 1, 0, 2);
             if (infinitePreparationStep <= 0)
             {

@@ -201,6 +201,8 @@ namespace GreedLast.Editor
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
                         && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
                         && cycle.liveBackPauseResume && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
+                        && cycle.heldRunResultCases == 3 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
+                        && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -272,6 +274,10 @@ namespace GreedLast.Editor
             public bool liveBackPauseResume;
             public int heldSlotChangeCases;
             public bool heldSlotChangesPreservedData, heldSlotChangeFreshTapRecovered;
+            public int heldRunResultCases;
+            public bool heldRunResultsPreservedData, heldRunResultFreshTapRecovered;
+            public int heldPreparationStartCases;
+            public bool heldPreparationStartsPreservedUses;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -387,6 +393,7 @@ namespace GreedLast.Editor
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyHeldRunResults();
                 if (SessionState.GetBool(Prefix + "multiTouchOnly", false))
                 {
                     yield return VerifyMultiTouch();
@@ -539,7 +546,7 @@ namespace GreedLast.Editor
                 Require(focusedPause && !run.Paused && report.judgements >= 5,
                     "Engine progression must cover focus pause/resume and multiple real-time judgements.");
                 Require(report.engineMouseClicks >= 3 && report.engineTouchTaps >= 2
-                    && report.canceledEngineCommands == 2 && report.growthEntryHeldTapCanceled,
+                    && report.canceledEngineCommands == 2 + report.heldRunResultCases * 2 && report.growthEntryHeldTapCanceled,
                     "The real engine input module must cover mouse, touch, canceled growth entry and interrupted command release.");
                 report.pauseCycles++;
                 report.lifecycleJudgements = report.judgements;
@@ -1313,6 +1320,87 @@ namespace GreedLast.Editor
                 }
             }
 
+            private IEnumerator VerifyHeldRunResults()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    for (int mode = 0; mode < 3; mode++)
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backendField.SetValue(app, backend);
+                        core.ConfigureGrowth(0, 0, 0);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        if (mode == 2)
+                        {
+                            state.SetInfiniteRun("Held engine result check");
+                            core.EnterInfiniteRun();
+                        }
+                        else
+                        {
+                            yield return ClickMouse(Read<Button>(ui, mode == 0 ? "practiceRunButton" : "normalRunButton"));
+                            if (mode == 1)
+                            {
+                                yield return WaitSeconds(0.4f);
+                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
+                            }
+                        }
+                        float deadline = Time.realtimeSinceStartup + 25f;
+                        while (!run.ActivePattern || run.CountdownActive || run.Health != 1)
+                        {
+                            Require(Time.realtimeSinceStartup < deadline && !run.Stopped && !run.ChoiceActive,
+                                "The held engine result fixture must naturally reach its last live health point. Mode " + mode);
+                            yield return null;
+                        }
+                        Button primary = Read<Button>(ui, "nextPatternButton");
+                        Button back = Read<Button>(ui, "returnLobbyButton");
+                        Require(primary.IsInteractable() && back.IsInteractable(), "Both held result commands must begin while live.");
+                        Vector2 primaryPoint = ScreenPoint(primary), backPoint = ScreenPoint(back);
+                        yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Began), TouchAt(96, backPoint, TouchPhase.Began));
+                        yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Stationary), TouchAt(96, backPoint, TouchPhase.Stationary));
+                        while (!run.Stopped)
+                        {
+                            Require(Time.realtimeSinceStartup < deadline, "The held result fixture must fail through actual Update.");
+                            yield return null;
+                        }
+                        GreedLastRunSnapshot terminal = run;
+                        yield return WaitSeconds(0.45f);
+                        yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Ended), TouchAt(96, backPoint, TouchPhase.Ended));
+                        yield return TouchFrame();
+                        Require(run.Stopped && run.Phase == terminal.Phase && run.Health == terminal.Health
+                            && run.Score == terminal.Score && run.Distance == terminal.Distance && run.Focus == terminal.Focus
+                            && run.SuccessCount == terminal.SuccessCount && run.GoodCount == terminal.GoodCount
+                            && run.MissCount == terminal.MissCount && run.MaxCombo == terminal.MaxCombo
+                            && state.CurrentState == (mode == 2 ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest)
+                            && Read<int>(backend, "normalFailCount") == 0 && Read<int>(backend, "infiniteRunCount") == 0
+                            && !backend.HasSaveLoadoutCandidate,
+                            "Old engine live presses must leave the result visible without restart, settlement or discard. Mode " + mode
+                                + $" stopped={run.Stopped}, same={run.Equals(terminal)}, state={state.CurrentState},"
+                                + $" normal={Read<int>(backend, "normalFailCount")}, infinite={Read<int>(backend, "infiniteRunCount")},"
+                                + $" candidate={backend.HasSaveLoadoutCandidate}, score={run.Score}/{terminal.Score},"
+                                + $" distance={run.Distance}/{terminal.Distance}");
+                        yield return TapTouch(back);
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && Read<int>(backend, "normalFailCount") == (mode == 1 ? 1 : 0)
+                            && Read<int>(backend, "infiniteRunCount") == (mode == 2 ? 1 : 0),
+                            "A fresh engine result tap must settle exactly once. Mode " + mode);
+                        report.heldRunResultCases++;
+                        report.canceledEngineCommands += 2;
+                    }
+                    report.heldRunResultsPreservedData = report.heldRunResultCases == 3;
+                    report.heldRunResultFreshTapRecovered = report.heldRunResultsPreservedData;
+                    Debug.Log("Greed engine held run results passed: three natural failures with actual held primary/back touches, delayed old releases canceled, fresh settlement recovered. In-memory progress only.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                }
+            }
+
             private IEnumerator VerifyMultiTouch()
             {
                 string[] contexts = { string.Empty, "기초연습 숙이기 단계", "기초연습 비틀기 단계" };
@@ -1615,8 +1703,14 @@ namespace GreedLast.Editor
                 Button[] lanes = Read<Button[]>(ui, "laneButtons");
                 Vector2 first = ScreenPoint(lanes[chosenLane]);
                 Vector2 second = ScreenPoint(lanes[(chosenLane + 1) % 3]);
-                yield return TouchFrame(TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began));
-                yield return TouchFrame(TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary));
+                bool holdStart = expectedStep == 2 && Read<int>(app, "infinitePreparationStep") == 1;
+                Vector2 start = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
+                yield return TouchFrame(holdStart
+                    ? new[] { TouchAt(98, start, TouchPhase.Began), TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began) }
+                    : new[] { TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began) });
+                yield return TouchFrame(holdStart
+                    ? new[] { TouchAt(98, start, TouchPhase.Stationary), TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary) }
+                    : new[] { TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary) });
                 yield return WaitSeconds(0.4f);
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
                     && Read<int>(app, "infinitePreparationStep") == expectedStep
@@ -1624,14 +1718,23 @@ namespace GreedLast.Editor
                     "Held multi-touch must change only one preparation step and never consume or start a saved loadout.");
                 string gift = Read<string>(app, "infinitePreparationGift");
                 string relic = Read<string>(app, "infinitePreparationRelic");
-                yield return TouchFrame(TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled));
+                yield return TouchFrame(holdStart
+                    ? new[] { TouchAt(98, start, TouchPhase.Ended), TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled) }
+                    : new[] { TouchAt(73, first, TouchPhase.Ended), TouchAt(74, second, TouchPhase.Canceled) });
                 yield return TouchFrame();
-                Require(Read<int>(app, "infinitePreparationStep") == expectedStep
+                Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                    && Read<int>(app, "infinitePreparationStep") == expectedStep
                     && Read<string>(app, "infinitePreparationGift") == gift
                     && Read<string>(app, "infinitePreparationRelic") == relic
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == uses,
                     "Releasing preparation fingers must preserve the selected gift, relic and remaining starts.");
                 report.multiTouchPreparationCases++;
+                if (holdStart)
+                {
+                    report.heldPreparationStartCases++;
+                    report.heldPreparationStartsPreservedUses = report.heldPreparationStartCases == 3;
+                    report.canceledEngineCommands++;
+                }
             }
 
             private static IEnumerator WaitSeconds(float seconds)
