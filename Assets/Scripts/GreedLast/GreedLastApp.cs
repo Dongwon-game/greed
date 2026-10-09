@@ -11065,13 +11065,9 @@ namespace GreedLast
                     return;
                 }
                 runCore.Tick(now);
-                if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.P))
-                {
-                    RequestToggleRunPause();
-                    return;
-                }
             }
-            else if (Input.GetKeyDown(KeyCode.Escape) && TryHandleBackKeyboardInput())
+
+            if (TryHandlePauseOrBackKeyboardInput(Input.GetKeyDown(KeyCode.Escape), Input.GetKeyDown(KeyCode.P)))
             {
                 return;
             }
@@ -12520,8 +12516,27 @@ namespace GreedLast
             return false;
         }
 
+        private bool TryHandlePauseOrBackKeyboardInput(bool backPressed, bool pausePressed)
+        {
+            if (!backPressed && !pausePressed) return false;
+            if (backPressed && TryHandleBackKeyboardInput()) return true;
+            if (!IsRunState()) return false;
+            runtimeUi?.CancelPendingUiInput();
+            RequestToggleRunPause();
+            return true;
+        }
+
         private bool TryHandleBackKeyboardInput()
         {
+            if (IsRunState() && hasLatestAppRunSnapshot && latestAppRunSnapshot.Stopped)
+            {
+                runtimeUi?.CancelPendingUiInput();
+                // A back key must not silently discard a clear's one-time save opportunity.
+                if (runCore.CanExitAfterClear) RequestNextRunPattern();
+                else RequestReturnToLobby();
+                return true;
+            }
+
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard
@@ -12529,6 +12544,7 @@ namespace GreedLast
                 || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard
                 || stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
             {
+                runtimeUi?.CancelPendingUiInput();
                 RequestReturnToLobby();
                 return true;
             }
@@ -13647,6 +13663,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutOverwriteConfirmation(string notice)
         {
+            runtimeUi.CancelPendingUiInput();
             saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = true;
@@ -13671,6 +13688,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutDeleteConfirmation()
         {
+            runtimeUi.CancelPendingUiInput();
             saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
@@ -13691,6 +13709,7 @@ namespace GreedLast
 
         private void OpenInfiniteLoadoutDeleteConfirmation()
         {
+            runtimeUi.CancelPendingUiInput();
             saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveSlotDeleteConfirmPending = true;
             saveSlotDetailViewActive = false;
@@ -13706,6 +13725,7 @@ namespace GreedLast
 
         private void OpenSaveLoadoutRenameConfirmation(string notice)
         {
+            runtimeUi.CancelPendingUiInput();
             saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveDraftRequiresExplicitSlotChoice = false;
             saveDraftOverwriteConfirmPending = false;
@@ -13730,6 +13750,7 @@ namespace GreedLast
 
         private void OpenInfiniteLoadoutRenameConfirmation(string notice)
         {
+            runtimeUi.CancelPendingUiInput();
             saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
             saveSlotDeleteConfirmPending = false;
             saveSlotDetailViewActive = false;
@@ -14339,6 +14360,7 @@ namespace GreedLast
                     && Time.realtimeSinceStartup < saveConfirmationInputBlockUntil) return;
                 if (skippedClearSave && !saveDraftSkipConfirmPending)
                 {
+                    runtimeUi.CancelPendingUiInput();
                     saveConfirmationInputBlockUntil = Time.realtimeSinceStartup + SaveConfirmationInputBlockSeconds;
                     saveDraftSkipConfirmPending = true;
                     OpenSaveLoadoutDraft(

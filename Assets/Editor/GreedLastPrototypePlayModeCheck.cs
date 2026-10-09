@@ -171,7 +171,7 @@ namespace GreedLast.Editor
             results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
-                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
+                results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
@@ -186,7 +186,8 @@ namespace GreedLast.Editor
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
-                    && cycle.growthEntryHeldTapCanceled);
+                    && cycle.growthEntryHeldTapCanceled && cycle.heldSaveConfirmationCases == 6
+                    && cycle.heldSaveConfirmationsPreservedData && cycle.heldSaveConfirmationFreshTapRecovered);
                 if (!results.succeeded) results.error = "Required engine growth command coverage did not complete.";
             }
             if (results.succeeded && results.multiTouchIncluded)
@@ -198,6 +199,7 @@ namespace GreedLast.Editor
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
                         && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
+                        && cycle.liveBackPauseResume && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -264,6 +266,9 @@ namespace GreedLast.Editor
             public int growthCommandCases;
             public bool growthFirstCommandOnly, growthHeldReleaseCanceled, growthFreshTapRecovered;
             public bool growthEntryHeldTapCanceled;
+            public int heldSaveConfirmationCases, terminalBackSettlements;
+            public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
+            public bool liveBackPauseResume;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -377,6 +382,7 @@ namespace GreedLast.Editor
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
                 yield return VerifyGrowthCommands();
+                yield return VerifyHeldSaveConfirmations();
                 if (SessionState.GetBool(Prefix + "multiTouchOnly", false))
                 {
                     yield return VerifyMultiTouch();
@@ -408,16 +414,17 @@ namespace GreedLast.Editor
                 float until = Time.realtimeSinceStartup + 0.25f;
                 while (Time.realtimeSinceStartup < until) yield return null;
                 Require(run.ElapsedSeconds > before, "The actual app Update must advance the practice clock.");
-                Call(app, "RequestToggleRunPause");
+                Call(app, "TryHandlePauseOrBackKeyboardInput", false, true);
                 GreedLastRunSnapshot frozen = run;
                 until = Time.realtimeSinceStartup + 0.4f;
                 while (Time.realtimeSinceStartup < until) { AssertFrozen(frozen); yield return null; }
-                Call(app, "RequestToggleRunPause");
+                Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
                 Require(run.ResumeCountdownActive, "Resume must start the lead-in countdown.");
                 deadline = Time.realtimeSinceStartup + 8f;
                 while (run.Paused)
                 { AssertFrozen(frozen); Require(Time.realtimeSinceStartup < deadline, "Engine-driven resume countdown did not finish."); yield return null; }
                 report.pauseCycles++;
+                report.liveBackPauseResume = true;
                 Call(app, "RequestReturnToLobby");
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady,
                     "Leaving unfinished practice must return to the lobby without saving onboarding.");
@@ -1128,6 +1135,88 @@ namespace GreedLast.Editor
                 }
             }
 
+            private IEnumerator VerifyHeldSaveConfirmations()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                string[] pendingFields = { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                    "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                    "saveSlotDetailViewActive", "saveDraftFromRefillRun" };
+                void ResetPending()
+                {
+                    foreach (string field in pendingFields)
+                        typeof(GreedLastApp).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, false);
+                }
+                try
+                {
+                    foreach (var scenario in new[] {
+                        (Infinite: false, Button: "nextPatternButton", Flag: "saveDraftOverwriteConfirmPending"),
+                        (Infinite: false, Button: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending"),
+                        (Infinite: true, Button: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending"),
+                        (Infinite: false, Button: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending"),
+                        (Infinite: true, Button: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending"),
+                        (Infinite: false, Button: "returnLobbyButton", Flag: "saveDraftSkipConfirmPending") })
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        backend.AddSampleClearCandidateForTest(out _);
+                        backend.SelectSaveLoadoutSlot(0);
+                        backendField.SetValue(app, backend);
+                        ResetPending();
+                        if (scenario.Infinite)
+                            state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                        else state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                            saveLoadoutCandidateAvailable: true);
+                        yield return null;
+                        Button command = Read<Button>(ui, scenario.Button);
+                        Require(command.isActiveAndEnabled && command.IsInteractable(),
+                            "Engine held confirmation requires a visible usable command: " + scenario.Button);
+                        var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                        var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                        var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                        Vector2 point = ScreenPoint(command);
+                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Began), TouchAt(92, point, TouchPhase.Began));
+                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Ended), TouchAt(92, point, TouchPhase.Stationary));
+                        Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                            "The first engine release must open only the confirmation: " + scenario.Flag);
+                        yield return TouchFrame(TouchAt(92, point, TouchPhase.Stationary));
+                        yield return WaitSeconds(0.45f);
+                        yield return TouchFrame(TouchAt(92, point, TouchPhase.Ended));
+                        yield return TouchFrame();
+                        Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                            "The old engine finger released after the guard must not confirm: " + scenario.Flag);
+                        for (int slot = 0; slot < records.Length; slot++)
+                            Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]
+                                && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == names[slot],
+                                "The canceled engine confirmation must preserve every record, use and name: " + scenario.Flag);
+                        yield return TapTouch(command);
+                        Require(!Read<bool>(app, scenario.Flag),
+                            "A fresh engine tap must confirm normally after the canceled old finger: " + scenario.Flag);
+                        if (scenario.Flag == "saveSlotDeleteConfirmPending")
+                            Require(!backend.LoadLobby().SaveSlotOccupied[0] && backend.HasSaveLoadoutCandidate,
+                                "Fresh engine delete must clear only its saved slot.");
+                        else if (scenario.Flag == "saveSlotRenameConfirmPending")
+                            Require(Read<int[]>(backend, "saveLoadoutRenameSteps")[0] == names[0] + 1
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == uses[0]
+                                && backend.HasSaveLoadoutCandidate, "Fresh engine rename must rename once without spending a use.");
+                        else Require(!backend.HasSaveLoadoutCandidate,
+                            "Fresh engine overwrite/discard must consume its candidate once.");
+                        report.heldSaveConfirmationCases++;
+                    }
+                    report.heldSaveConfirmationsPreservedData = report.heldSaveConfirmationCases == 6;
+                    report.heldSaveConfirmationFreshTapRecovered = report.heldSaveConfirmationsPreservedData;
+                    Debug.Log("Greed engine held save confirmations passed: six actual EventSystem two-finger openings, delayed old releases blocked, all records/uses/names preserved and fresh taps accepted. In-memory progress only.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    ResetPending();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                }
+            }
+
             private IEnumerator VerifyMultiTouch()
             {
                 string[] contexts = { string.Empty, "기초연습 숙이기 단계", "기초연습 비틀기 단계" };
@@ -1279,10 +1368,12 @@ namespace GreedLast.Editor
                     "The real-time normal loop must recover the core, pass the exit and retain one saveable result.");
                 report.fullNormalClear = true;
                 report.fullNormalJudgements = report.judgements;
-                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
+                yield return null;
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate
                     && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
                     "The clear action must open a save window locked until explicit slot selection.");
+                report.clearBackSaveProtected = true;
                 report.savedSlotIndex = report.domainReloadDisabled ? 2 : 1;
                 yield return TapTouch(Read<Button[]>(ui, "laneButtons")[report.savedSlotIndex]);
                 yield return WaitSeconds(0.4f);
@@ -1333,9 +1424,17 @@ namespace GreedLast.Editor
                     }
                     Require(inputOnce && run.Health == 0 && !run.DevInvincible && !backend.HasSaveLoadoutCandidate,
                         "A consumed source must support its live run until actual natural failure, without a new normal-save opportunity.");
-                    yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
+                    int settledBefore = Read<int>(backend, "infiniteRunCount");
+                    Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
+                    yield return null;
                     Require(state.CurrentState == GreedLastScreenState.LobbyReady,
                         "Each real-time infinite result must return to the lobby normally.");
+                    Require(Read<int>(backend, "infiniteRunCount") == settledBefore + 1,
+                        "The result back callback must settle one infinite record, not duplicate it.");
+                    Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
+                    Require(Read<int>(backend, "infiniteRunCount") == settledBefore + 1,
+                        "Another back callback in the lobby must not settle the same result again.");
+                    report.terminalBackSettlements++;
                 }
                 report.infiniteNaturalFailures = true;
                 report.multiTouchConfirmationsConsumedOnce = report.multiTouchConfirmationCases == 3;

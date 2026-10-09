@@ -15,6 +15,8 @@ namespace GreedLast.Editor
         private const string PointerMenuPath = "Greed Last/Run Rendered Input Loop Check";
         private static bool usePointerModule;
         private static bool growthCommandsOnly;
+        private static bool resultBackOnly;
+        private static bool heldConfirmationsOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -99,6 +101,26 @@ namespace GreedLast.Editor
             finally { growthCommandsOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Result Back Navigation Check")]
+        public static void RunResultBackNavigationCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !resultBackOnly,
+                "Result back checks require an isolated Edit-mode fixture.");
+            resultBackOnly = true;
+            try { Run(); }
+            finally { resultBackOnly = false; }
+        }
+
+        [MenuItem("Greed Last/Run Held Save Confirmation Check")]
+        public static void RunHeldSaveConfirmationCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !heldConfirmationsOnly,
+                "Held confirmation checks require an isolated Edit-mode fixture.");
+            heldConfirmationsOnly = true;
+            try { Run(); }
+            finally { heldConfirmationsOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -155,9 +177,21 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (heldConfirmationsOnly)
+                {
+                    VerifyHeldSaveConfirmations(app, ui, backend, state);
+                    return;
+                }
+                if (resultBackOnly)
+                {
+                    VerifyResultBackNavigation(app, backend, state, core, () => run);
+                    return;
+                }
                 VerifyMenuInputRippleCleanup(ui, backend, state);
                 VerifyGrowthCommandProtection(app, ui, backend, state);
                 if (growthCommandsOnly) return;
+                VerifyResultBackNavigation(app, backend, state, core, () => run);
+                VerifyHeldSaveConfirmations(app, ui, backend, state);
 
                 VerifySlowRunPresentation(app, backend, state, core);
                 VerifyInterruptedCommandProtection(app, ui, backend, state, core);
@@ -439,6 +473,214 @@ namespace GreedLast.Editor
                 Write(app, "backend", originalBackend);
                 Write(app, "lastGrowthUpgradeChannel", originalChannel);
                 Write(app, "lastGrowthUpgradeAt", originalAt);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyResultBackNavigation(GreedLastApp app, GreedLastMockBackend originalBackend,
+            GreedLastStateMachine state, GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
+        {
+            bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
+            int practice = PlayerPrefs.GetInt(PracticeKey);
+            int preferredPage = Read<int>(app, "preferredRecordBoardPageIndex");
+            var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            Write(app, "backend", backend);
+            bool Key(bool back, bool pause) => (bool)Method(app, "TryHandlePauseOrBackKeyboardInput")
+                .Invoke(app, new object[] { back, pause });
+            bool Back() => Key(true, false);
+            void Practice(bool complete)
+            {
+                state.SetRunCoreTest();
+                core.RestartPractice(Time.realtimeSinceStartup);
+                if (complete) RunToCompletion(core, latest);
+                else RunToFailure(core, latest);
+                Require(latest().Stopped && latest().PracticeMode, "Back checks require a real terminal practice result.");
+            }
+            try
+            {
+                state.SetRunCoreTest();
+                core.RestartPractice(Time.realtimeSinceStartup);
+                GreedLastRunSnapshot opening = latest();
+                Require(!Key(false, false) && latest().Equals(opening), "No back/pause key must leave the run unchanged.");
+                Require(Back() && latest().Paused && latest().StartCountdownActive
+                    && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                    "Escape during the opening must still pause instead of abandoning practice.");
+                Require(Key(false, true) && latest().ResumeCountdownActive,
+                    "P must still resume a paused opening through the existing countdown.");
+                core.Exit();
+                state.SetLobbyReady(backend.LoadLobby());
+                Require(!Key(false, true), "P in the lobby must not navigate or mutate progress.");
+
+                foreach (bool completed in new[] { true, false })
+                {
+                    Practice(completed);
+                    GreedLastRunSnapshot terminal = latest();
+                    Require(Key(false, true) && latest().Stopped
+                        && state.CurrentState == GreedLastScreenState.RunCoreTest
+                        && latest().Score == terminal.Score && !backend.HasSaveLoadoutCandidate,
+                        "P on a result must not settle or discard it; only Escape performs back navigation.");
+                    Require(Back() && state.CurrentState == GreedLastScreenState.LobbyReady,
+                        "Escape must return from a completed or failed practice result through the existing lobby action.");
+                    Require(!backend.HasSaveLoadoutCandidate && Read<int>(backend, "normalClearCount") == 0
+                        && Read<int>(backend, "normalFailCount") == 0 && Read<int>(backend, "infiniteRunCount") == 0,
+                        "Practice back navigation must not create normal/infinite records or save opportunities.");
+                    Require(!Back(), "A second Escape in the lobby must not repeat terminal settlement.");
+                }
+
+                for (int scenario = 0; scenario < 2; scenario++)
+                {
+                    state.SetRunCoreTest();
+                    core.Enter();
+                    RunToCompletion(core, latest);
+                    Require(latest().SaveEligible && Back()
+                        && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                        && backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
+                        "Escape after a clear must open the same explicit save-slot choice, never silently discard or save it.");
+                    if (scenario == 0)
+                    {
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                        Method(app, "RequestNextRunPattern").Invoke(app, null);
+                        GreedLastLobbySnapshot saved = backend.LoadLobby();
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
+                            && saved.SaveSlotOccupied[1] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[2],
+                            "The keyboard-opened clear candidate must save once into the explicitly chosen S2.");
+                        Require(!Back() && !backend.HasSaveLoadoutCandidate,
+                            "Escape after saving must not reconstruct a consumed candidate.");
+                    }
+                    else
+                    {
+                        var returnCommand = (GreedLastCommandButton)Read<Button>(Read<GreedLastRuntimeUi>(app, "runtimeUi"), "returnLobbyButton");
+                        var oldPointer = new PointerEventData(EventSystem.current) { pointerId = 79, eligibleForClick = true };
+                        returnCommand.OnPointerDown(oldPointer);
+                        Require(Back() && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                            && backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftSkipConfirmPending"),
+                            "Escape from an unsaved draft must first show the existing discard confirmation.");
+                        Require(!oldPointer.eligibleForClick, "Keyboard back must cancel a return button pressed before the confirmation.");
+                        Require(Back() && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                            && backend.HasSaveLoadoutCandidate,
+                            "A rapid second Escape must not bypass the existing discard confirmation guard.");
+                        FinishSaveConfirmation(app);
+                        returnCommand.OnPointerUp(oldPointer);
+                        if (oldPointer.eligibleForClick) returnCommand.OnPointerClick(oldPointer);
+                        Require(backend.HasSaveLoadoutCandidate && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft,
+                            "Releasing a pre-Escape return pointer after the guard must not discard the candidate.");
+                        Require(Back() && state.CurrentState == GreedLastScreenState.LobbyReady
+                            && !backend.HasSaveLoadoutCandidate && backend.LoadLobby().SaveSlotOccupied[1],
+                            "A later intentional discard must consume only the new candidate and preserve the prior S2.");
+                    }
+                }
+
+                state.SetRunCoreTest();
+                core.Enter();
+                RunToFailure(core, latest);
+                Require(latest().Stopped && !latest().SaveEligible && Back()
+                    && state.CurrentState == GreedLastScreenState.LobbyReady
+                    && Read<int>(backend, "normalFailCount") == 1 && !backend.HasSaveLoadoutCandidate,
+                    "Escape after a natural normal failure must register that failure once without a save candidate.");
+                Require(!Back() && Read<int>(backend, "normalFailCount") == 1,
+                    "Repeated lobby back must not duplicate a failed normal record.");
+
+                state.SetInfiniteRun("Result back check");
+                core.EnterInfiniteRun();
+                RunToFailure(core, latest);
+                Require(latest().Stopped && latest().InfiniteMode && Back()
+                    && state.CurrentState == GreedLastScreenState.LobbyReady
+                    && Read<int>(backend, "infiniteRunCount") == 1,
+                    "Escape after natural infinite failure must use the existing single record settlement.");
+                Require(!Back() && Read<int>(backend, "infiniteRunCount") == 1,
+                    "A repeated Escape must not duplicate the infinite record.");
+                Debug.Log("Greed result back navigation passed: opening pause/P resume, completed/failed practice, clear-to-explicit-S2 single save, protected draft discard, natural normal/infinite failure and single settlement. Application routing callbacks and isolated in-memory progress only; no OS key injection.");
+            }
+            finally
+            {
+                if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practice);
+                else PlayerPrefs.DeleteKey(PracticeKey);
+                Write(app, "preferredRecordBoardPageIndex", preferredPage);
+                core.Exit();
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHeldSaveConfirmations(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state)
+        {
+            string[] pendingFields = { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                "saveSlotDetailViewActive", "saveDraftFromRefillRun" };
+            try
+            {
+                foreach (var scenario in new[] {
+                    (Infinite: false, Button: "nextPatternButton", Flag: "saveDraftOverwriteConfirmPending"),
+                    (Infinite: false, Button: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending"),
+                    (Infinite: true, Button: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending"),
+                    (Infinite: false, Button: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending"),
+                    (Infinite: true, Button: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending"),
+                    (Infinite: false, Button: "returnLobbyButton", Flag: "saveDraftSkipConfirmPending") })
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.AddSampleClearCandidateForTest(out _);
+                    backend.SelectSaveLoadoutSlot(0);
+                    Write(app, "backend", backend);
+                    foreach (string field in pendingFields) Write(app, field, false);
+                    if (scenario.Infinite)
+                        state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                    else
+                        state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                            saveLoadoutCandidateAvailable: true);
+                    var command = Read<Button>(ui, scenario.Button) as GreedLastCommandButton;
+                    Require(command != null && command.isActiveAndEnabled && command.IsInteractable(),
+                        "Held confirmations require the actual usable command: " + scenario.Button);
+                    var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                    var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                    var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                    PointerEventData Pointer(int id) => new PointerEventData(EventSystem.current)
+                        { pointerId = id, eligibleForClick = true };
+                    void Release(PointerEventData pointer)
+                    {
+                        command.OnPointerUp(pointer);
+                        if (pointer.eligibleForClick) command.OnPointerClick(pointer);
+                    }
+                    PointerEventData first = Pointer(91);
+                    PointerEventData held = Pointer(92);
+                    command.OnPointerDown(first);
+                    command.OnPointerDown(held);
+                    Release(first);
+                    Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                        "The first finger must open, not commit, the pending confirmation: " + scenario.Flag);
+                    Require(!held.eligibleForClick,
+                        "Opening a confirmation must cancel the already-held second command finger: " + scenario.Flag);
+                    FinishSaveConfirmation(app);
+                    Release(held);
+                    Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                        "The old finger released after the guard must not confirm: " + scenario.Flag);
+                    for (int slot = 0; slot < records.Length; slot++)
+                        Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]
+                            && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == names[slot],
+                            "A canceled confirmation must preserve every slot record, use and name: " + scenario.Flag);
+                    PointerEventData fresh = Pointer(92);
+                    command.OnPointerDown(fresh);
+                    Release(fresh);
+                    Require(!Read<bool>(app, scenario.Flag), "A fresh post-guard finger must still confirm: " + scenario.Flag);
+                    if (scenario.Flag == "saveSlotDeleteConfirmPending")
+                        Require(!backend.LoadLobby().SaveSlotOccupied[0] && backend.HasSaveLoadoutCandidate,
+                            "Fresh delete must clear only the selected saved slot, not the candidate.");
+                    else if (scenario.Flag == "saveSlotRenameConfirmPending")
+                        Require(Read<int[]>(backend, "saveLoadoutRenameSteps")[0] == names[0] + 1
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == uses[0]
+                            && backend.HasSaveLoadoutCandidate, "Fresh rename must rename once without spending a use.");
+                    else
+                        Require(!backend.HasSaveLoadoutCandidate,
+                            "Fresh overwrite/discard must consume its candidate exactly once.");
+                }
+                Debug.Log("Greed held save confirmations passed: overwrite, two delete views, two rename views and discard; first release opens, old delayed release cannot confirm, fresh release confirms once. Direct pointer events and isolated progress; no personal slot changes.");
+            }
+            finally
+            {
+                Write(app, "backend", originalBackend);
+                foreach (string field in pendingFields) Write(app, field, false);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
         }
