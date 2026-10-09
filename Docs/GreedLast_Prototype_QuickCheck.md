@@ -7,7 +7,7 @@
 1. Unity Hub에서 `C:\Projectunity\greed last`를 Unity 6.4로 연다.
 2. `Assets/Scenes/GreedLast_Boot.unity`를 열고 가로 Game 뷰에서 Play한다.
 3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다.
-   같은 검증 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261009-slot-change.zip`이다. 평소 확인은 위 실행 폴더를 사용한다. 이전 result-confirmation/growth-input/progress-layout/progress/release-tools ZIP은 앞선 보존본이다.
+   같은 검증 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261009-transition-input.zip`이다. 평소 확인은 위 실행 폴더를 사용한다. 이전 slot-change/result-confirmation/growth-input/progress-layout/progress/release-tools ZIP은 앞선 보존본이다.
 4. 기존 진행도와 보관할 저장 조합은 유지한다. 확인 때문에 초기화하거나 보관할 조합을 삭제·소모하지 않는다.
 
 처음부터 끝까지 한 환경에서 확인한다. 에디터 Play와 Windows 실행 파일은 [Unity의 PlayerPrefs 저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)가 달라 처음 보이는 조합/설정이 다를 수 있다. 환경을 옮긴 뒤 빈 슬롯을 기존 저장 소실로 단정하거나 레지스트리를 직접 복사·초기화하지 않는다.
