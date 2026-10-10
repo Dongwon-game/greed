@@ -122,6 +122,40 @@ function Assert-AppToolGuard {
     else { throw 'App development tool branch missing.' }
 }
 
+function Assert-SaveResolutionGuards {
+    param($Method, [string]$MutationName)
+    $instructions = @($Method.Body.Instructions)
+    $mutationSignature = 'System.String GreedLast.GreedLastMockBackend::' + $MutationName + '()'
+    $mutations = @($instructions | Where-Object {
+        $_.OpCode.Code.ToString() -in @('Call', 'Callvirt') -and $_.Operand.FullName -ceq $mutationSignature
+    })
+    if ($mutations.Count -ne 2 -or $Method.Body.ExceptionHandlers.Count -ne 0) {
+        throw ('Save resolution mutation paths changed; update the explicit IL contract: ' + $Method.Name)
+    }
+    foreach ($mutation in $mutations) {
+        $end = [Array]::IndexOf($instructions, $mutation)
+        if ($end -lt 5) { throw ('Save resolution input cancellation missing: ' + $Method.Name) }
+        $block = @($instructions[($end - 5)..$end])
+        $codes = @($block | ForEach-Object { $_.OpCode.Code.ToString() })
+        if (($codes -join ',') -cne 'Ldarg_0,Ldfld,Callvirt,Ldarg_0,Ldfld,Callvirt' -or
+            $block[1].Operand.FullName -cne 'GreedLast.GreedLastRuntimeUi GreedLast.GreedLastApp::runtimeUi' -or
+            $block[2].Operand.FullName -cne 'System.Void GreedLast.GreedLastRuntimeUi::CancelPendingUiInput()' -or
+            $block[4].Operand.FullName -cne 'GreedLast.GreedLastMockBackend GreedLast.GreedLastApp::backend') {
+            throw ('Save resolution must cancel its own UI input immediately before mutation: ' + $Method.Name)
+        }
+        # Reject a branch into the guarded block that could skip cancellation.
+        foreach ($instruction in $instructions) {
+            $operandType = $instruction.OpCode.OperandType.ToString()
+            if ($operandType -notin @('InlineBrTarget', 'ShortInlineBrTarget', 'InlineSwitch')) { continue }
+            foreach ($target in @($instruction.Operand)) {
+                if ($target.Offset -gt $block[0].Offset -and $target.Offset -le $mutation.Offset) {
+                    throw ('Save resolution branch bypasses input cancellation: ' + $Method.Name)
+                }
+            }
+        }
+    }
+}
+
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $root = Join-Path $project 'Builds\GreedLastPrototype'
 $infoPath = Join-Path $root 'VerifiedBuildInfo.json'
@@ -174,6 +208,14 @@ try {
     if ($snapshotTools.Count -ne 6 -or $appTools.Count -ne 6) { throw 'Development tool surface changed; update its explicit verification contract.' }
     foreach ($method in $snapshotTools) { Assert-SnapshotToolGuard $method }
     foreach ($method in $appTools) { Assert-AppToolGuard $method }
+    $saveResolutions = @($types.Methods | Where-Object {
+        $_.DeclaringType.FullName -eq 'GreedLast.GreedLastApp' -and $_.Name -in @('RequestRenameSaveLoadoutSlot', 'RequestDeleteSaveLoadoutSlot')
+    })
+    if ($saveResolutions.Count -ne 2) { throw 'Save resolution command surface changed.' }
+    foreach ($method in $saveResolutions) {
+        $mutationName = if ($method.Name -eq 'RequestRenameSaveLoadoutSlot') { 'RenameSelectedSaveLoadoutSlot' } else { 'DeleteSelectedSaveLoadoutSlot' }
+        Assert-SaveResolutionGuards $method $mutationName
+    }
 }
 finally { $assembly.Dispose() }
 
@@ -229,6 +271,7 @@ if ($PackagePath) {
     GuardedDevelopmentConnections = $connectionMethods.Count
     GuardedDevelopmentSnapshotTools = $snapshotTools.Count
     GuardedDevelopmentRunCommands = $appTools.Count
+    GuardedSaveConfirmationMutations = $saveResolutions.Count * 2
     Package = $package
     Scope = 'Read-only artifact/IL checks. Does not run the player, modify progress, upload files or measure hardware performance.'
 } | ConvertTo-Json -Depth 4

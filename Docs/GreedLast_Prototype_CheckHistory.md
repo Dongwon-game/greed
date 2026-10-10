@@ -1,12 +1,17 @@
 # Greed Last 프로토타입 과거 확인 기록
 
-## 2026-10-10 확인 취소·확정 유지 입력 - 검증 중
+## 2026-10-10 확인 취소·확정 유지 입력
 
 - `prototype-confirmation-resolution-baseline-20261010.log`: 활성 삭제 확인 버튼에 실제 등록한 누름을 유지한 채 다른 손으로 확인을 취소해도 예전 해제로 확인이 다시 열리는 문제를 재현했다. `reopened=True/canceled=False`이며 검사 구성 실패가 아닌 런타임 전환 누락이다.
 - `prototype-confirmation-resolution-fixed-20261010.log`: 저장/무한 관리의 삭제·이름 취소 네 경우, 이름 확정 두 경우, 삭제 확정 뒤 유지한 로비 명령 두 경우, 저장 포기 취소 한 경우를 통과했다. 요청한 수정만 한 번 적용·후보/다른 기록/사용권 보존·해제 전 실제 누름 취소/새 명령 복구를 격리 포인터 콜백으로 확인했다.
 - **18:37 KST 전체 엔진**: `prototype-confirmation-resolution-engine-20261010.log`, `report-full-loop-20261010-093733-4177777.json`. 두 재생 방식 각각 확인 취소/확정 아홉 경우·등록된 유지 명령 42개·새 입력 복구와 S2/S3 일반 클리어→한 번 저장→준비 취소 무소모→실제 두 번 시작/자동 비움·기록/보충을 통과했다. 각 마우스 83회/터치 접점 194개와 개인 설정 불변이다. SHA-256 `C17A8CF1E728D79C789EEC6C5F835FCFB958F20C952FF374BD8E3387533CB11A`. 실제 엔진 프레임의 합성 입력이며 OS 키/휴대폰 입력·지연/FPS 검사가 아니다.
 - **18:40 KST 다른 칸 보존 집중 엔진**: `prototype-confirmation-neighbor-engine-20261010.log`, `report-multi-touch-20261010-094043-8929497.json`. 두 방식 각각 이름을 한 번 바꾼 S2/사용권 2회를 남기고 S1의 취소·이름/삭제 확정 아홉 경우를 확인했다. 다른 조합/이름/사용권·후보 보존과 새 입력 복구, 등록된 유지 명령 21개/터치 30묶음·96접점·개인 설정 불변 통과. SHA-256 `95133FFAA7E5FA76A6FF5132D2E2D284072D7602268AFB41032563152ADAE2E7`. `fullLoopIncluded=false/multiTouchOnly=true`인 집중 검사이며 위 18:37 전체 흐름 보고서를 대체하지 않는다. 이 보완은 편집기 검사만이고 게임은 동일하다.
-- 확인 취소와 실제 이름/삭제 확정 직전에만 남은 입력을 취소한다. 시간 보호·문구·저장 형식·한 번 저장/실제 두 번 시작은 유지한다. 후속 렌더 포인터/새 실행 빌드는 진행 중이며 아래 17시대 빌드를 후속 변경의 빌드로 표시하지 않는다.
+- `prototype-confirmation-resolution-rendered-pointer-20261010.log`: 다섯 크기/좌우 노치 조건의 실제 모듈 입력 1,450회·중단 명령 취소 1,395회와 일반/저장/무한/보충의 전체 버튼 경로를 통과했다. 각 조건에서 격리 확인 취소·확정/이름 있는 다른 조합 보존도 확인했다. 후자는 직접 포인터 콜백이며 실제 다중 터치 프레임은 위 집중 엔진 보고서의 근거를 사용한다. 화면 배치는 변경하지 않아 17:22의 599장 캡처는 앞선 배치 근거로 유지하며 후속 PNG 캡처로 표시하지 않는다.
+- **18:50 KST 전체 스모크/비개발 Windows**: `prototype-confirmation-resolution-verified-build-20261010.log`, UTC `2026-10-10T09:50:18.0113098Z`. 게임/검사 `c83f14e`의 DLL SHA-256 `164313B1DCC98D563BD58F5D351AF5C54BAEDB80ECD129F209601F9965FAC8FC`, EXE `5BE81B3FA7DF7C08CADEE6F79D6FF3FE95481420F166BA8127390EA669C8B12C`. 기존 Boot 씬을 다시 만들지 않았고 시간 보호·문구·저장 형식·한 번 저장/실제 두 번 시작은 유지한다.
+- 새 보존본 `GreedLastPrototype-verified-20261010-confirmation-resolution.zip`: 58,425,575바이트/154파일, SHA-256 `4E83A78E2703CC489A4CA0437DD1682D5149A3F2F041945DBBA2906277872AC7`. 모든 파일/다섯 식별 해시·14개 비개발 잠금·개발 조건/모드 getter·편집기 참조/검사/초기화 API 제외를 읽기 대조했다. 이전 ZIP은 보존한다.
+- **18:51 KST 초기 실행**: `prototype-confirmation-resolution-standalone-startup-20261010.log`, `Logs/StandaloneChecks/report-startup-20261010-095152-4394532.json`, SHA-256 `AB5C3D705BE43A89F12F928372C25E3334A906C278CA6F081C6578B35306DE49`. 새 DLL 식별값을 포함해 헤드리스 20초 생존/초기 예외 0·개인 Greed 값 전후 0개/우리가 시작한 프로세스 종료를 보존했다. 기존 개인 값/읽기 실패는 실행 생략이며 레지스트리 쓰기/초기화는 없다. 렌더/소리/손 입력/FPS 검사와 구분한다.
+- **19:05 KST 실제 DLL 입력 보호 대조**: `tools/verify-prototype-build.ps1`에 이름/삭제의 두 관리 화면, 총 네 변경 경로의 `CancelPendingUiInput` 선행 호출과 올바른 UI/백엔드 참조·보호 구간으로의 우회 분기 금지를 추가했다. 현재 ZIP의 154파일/기존 14개 개발 잠금과 네 저장 확인 변경 보호를 통과했다. 이 검사 도구 변경으로 게임 DLL/빌드/ZIP은 바뀌지 않는다.
+- `Logs/prototype-save-resolution-guard-audit-20261010.json`, SHA-256 `B0F228527AC3F71737E91A936E630EA97BDD7F0D2C093A58478C40A579C5EA07`: 네 경로 × 취소 누락/잘못된 UI 참조/일반 분기 우회/switch 우회 16가지와 앞선 compact-hud DLL의 두 실제 취소 누락, 총 18가지를 거부했다. 이전 DLL은 보존 ZIP에서 메모리로만 읽고 결함도 메모리 안에서만 만들었다. 파일 추출·변조·플레이어 실행·개인 데이터 변경·업로드가 없으며 동작 검사는 위 실제 엔진 결과와 구분한다.
 
 ## 2026-10-10 기본 주행 문구와 새 실행 빌드
 
