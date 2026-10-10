@@ -38,6 +38,11 @@ namespace GreedLast.Editor
             public int pauses;
             public int resumes;
             public int visibleActionCueUpdates;
+            public int compactHudChecks;
+            public int detailedHudChecks;
+            public int pausedHudChecks;
+            public int countdownHudChecks;
+            public bool freshPracticeHudReset;
             public float elapsedSeconds;
         }
 
@@ -56,6 +61,8 @@ namespace GreedLast.Editor
             private Func<string> freshProfile;
             private Func<GreedLastRunSnapshot, string> freshHealth;
             private Func<GreedLastRunSnapshot, string> freshFocus;
+            private Func<GreedLastRunSnapshot, string> freshCompactHud;
+            private Func<GreedLastRunSnapshot, string> freshDetailedHud;
             private Func<GreedLastRunSnapshot, bool, bool, string> freshActionCue;
             private Func<bool> rotationTiltAvailable;
             private float startedAt;
@@ -84,6 +91,9 @@ namespace GreedLast.Editor
                 updateUi = (Action)Method("Update").CreateDelegate(typeof(Action), ui);
                 freshHealth = BindLabel("FormatHealthValue");
                 freshFocus = BindLabel("FormatFocusStatus");
+                freshCompactHud = BindLabel("BuildCompactLiveRunHud");
+                freshDetailedHud = (Func<GreedLastRunSnapshot, string>)Method("BuildDetailedRunHud")
+                    .CreateDelegate(typeof(Func<GreedLastRunSnapshot, string>), ui);
                 freshActionCue = (Func<GreedLastRunSnapshot, bool, bool, string>)typeof(GreedLastRuntimeUi)
                     .GetMethod("BuildCompactActiveActionCueText", BindingFlags.Static | BindingFlags.NonPublic)
                     .CreateDelegate(typeof(Func<GreedLastRunSnapshot, bool, bool, string>));
@@ -111,6 +121,20 @@ namespace GreedLast.Editor
                 Require(Read<Text>("healthGaugeText").text == "체력 " + freshHealth(snapshot)
                     && Read<Text>("focusGaugeText").text == freshFocus(snapshot),
                     "Real-time gauge graphics must preserve the current original formats.");
+                VerifyCurrentHud();
+            }
+
+            private void VerifyCurrentHud()
+            {
+                if (run.Stopped) return;
+                bool compact = ui.UsePlayerRunControls;
+                string expected = compact ? freshCompactHud(run) : freshDetailedHud(run);
+                Require(Read<Text>("runHudText").text == expected,
+                    "Real-time run HUD must retain the current original text across pause, countdown and F11.");
+                if (compact) report.compactHudChecks++;
+                else report.detailedHudChecks++;
+                if (run.Paused && !run.ResumeCountdownActive) report.pausedHudChecks++;
+                if (run.CountdownActive) report.countdownHudChecks++;
             }
 
             private void Tick()
@@ -169,6 +193,7 @@ namespace GreedLast.Editor
                         }
                     }
                     updateUi();
+                    VerifyCurrentHud();
                     Text actionCue = Read<Text>("activeActionCueText");
                     if (ui.UsePlayerRunControls && actionCue.isActiveAndEnabled && actionCue.color.a > 0f
                         && !string.IsNullOrEmpty(actionCue.text))
@@ -183,10 +208,20 @@ namespace GreedLast.Editor
                     report.judgements = run.SuccessCount + run.GoodCount + run.MissCount;
                     Require(report.pauses == 3 && report.resumes == 3 && report.judgements >= 8
                         && report.publications > report.judgements && detailsShown && detailsHidden
-                        && report.visibleActionCueUpdates > 0,
+                        && report.visibleActionCueUpdates > 0 && report.compactHudChecks > 0
+                        && report.detailedHudChecks > 0 && report.pausedHudChecks > 0
+                        && report.countdownHudChecks > 0,
                         "The real-time check must cover three completed pause/resume cycles, mixed judgements and both views.");
                     core.ForceStopInfiniteRunForTest();
                     Require(run.Stopped, "The real-time run must retain its terminal settlement.");
+                    core.RestartPractice(now);
+                    updateUi();
+                    VerifyCurrentHud();
+                    report.freshPracticeHudReset = run.PracticeMode && !run.Stopped && run.Score == 0
+                        && run.Distance == 0f && run.Combo == 0 && run.SuccessCount == 0
+                        && run.GoodCount == 0 && run.MissCount == 0;
+                    Require(report.freshPracticeHudReset,
+                        "A fresh practice HUD must not inherit the settled infinite run's totals.");
                     Finish(null);
                 }
                 catch (Exception error) { Finish(error); }
@@ -240,7 +275,9 @@ namespace GreedLast.Editor
                 active = null;
                 if (report.succeeded)
                     Debug.Log($"Greed wall-clock UI check passed: {report.elapsedSeconds:F2}s, {report.updates} manual UI updates,"
-                        + $" {report.publications} real-time publications, {report.judgements} judgements, {report.visibleActionCueUpdates} visible action cue checks, three pause/resume cycles and F11. Personal settings and slots unchanged. {report.scope}");
+                        + $" {report.publications} real-time publications, {report.judgements} judgements, {report.visibleActionCueUpdates} visible action cue checks,"
+                        + $" HUD compact/detailed={report.compactHudChecks}/{report.detailedHudChecks}, paused/countdown={report.pausedHudChecks}/{report.countdownHudChecks},"
+                        + " three pause/resume cycles, F11 and fresh practice HUD reset. Personal settings and slots unchanged. " + report.scope);
                 else Debug.LogError("Greed wall-clock UI check failed: " + report.error);
                 if (Application.isBatchMode) EditorApplication.Exit(report.succeeded ? 0 : 1);
             }

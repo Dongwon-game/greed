@@ -1,5 +1,18 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-10 기본 주행 문구와 새 실행 빌드
+
+- 런타임 `12c241a`는 기본 HUD의 점수·거리·콤보·정확/Good/Miss 표시를 같은 형식으로 유지하며 같게 표시되는 문구만 재사용한다. 가변 문화권은 기존 생성기를 사용한다. 게임 규칙·화면 배치·개인 데이터 형식은 바꾸지 않았다.
+- `prototype-compact-hud-cache-focused-fixed-20261010.log`: 세 읽기 전용 문화권과 같은 객체의 가변 숫자 형식, 실제 정확/Good/Miss·정지/재개·F11·종료/새 연습·점수 상한에서 원래 생성 문구와 3,570회 대조/동일 표시 1,428회 재사용 통과. 앞선 focused 실패는 멎은 코어의 발행 제한을 고려하지 않은 총 사례 수 기대치였다. 후속 검사는 실제 상태 방문과 문구 대조/재사용을 각각 확인한다.
+- `prototype-compact-hud-allocation-baseline-fixed-20261010.log`와 `prototype-compact-hud-cache-measured-20261010.log`: 같은 합성 1,800단계/1,817발행/17판정에서 코어 28,068 이벤트는 같고 코어+RenderRun은 79,359→68,053, 코어+RenderRun+수동 UI Update는 79,377→68,071 메모리 할당 이벤트다. 동결된 동일 문구 500회는 원래 4,000/캐시 0 이벤트. 약 14.24% 감소는 이벤트 수이며 할당 바이트/CPU/FPS 개선으로 표시하지 않는다. 첫 baseline의 마지막 집중 상태 가정 실패는 별도 측정 코어로 분리했다.
+- **17:12 KST 전체 스모크/비개발 Windows**: `prototype-compact-hud-verified-build-20261010.log`, UTC `2026-10-10T08:12:39.3734481Z`. DLL SHA-256 `1B3DA4E9E5077CFA8645046BDC58EEFF0F4F0AA3F87AC0FCB2BA1078AF681A0E`, EXE `5BE81B3FA7DF7C08CADEE6F79D6FF3FE95481420F166BA8127390EA669C8B12C`. 기존 Boot 씬을 재생성하지 않았다.
+- 새 보존본 `GreedLastPrototype-verified-20261010-compact-hud.zip`: 58,425,549바이트/154파일, SHA-256 `D723DA0EAA19738A54343D7D0BC61D6A3030701672435034B0DDC8F2FB9A3AB9`. 전체 파일/다섯 식별 해시·14개 비개발 잠금·개발 조건/모드 getter·편집기 참조/검사/초기화 API 제외를 읽기 대조했다. 이전 ZIP은 그대로 보존한다.
+- **17:22 KST 전체 화면/입력**: `prototype-compact-hud-final-visual-20261010.log`, `report-full-20261010-082207-9490172.json`. 599장/빈 화면 0·버튼 4,026/위치 20,130·모듈 명령 4,621/레인 2,631·스크롤 84/중단 스크롤 672·진행 영역 12·포인터 정상 1,450/취소 1,395 통과. SHA-256 `34E2144D678951FF35D42CBCE3FABDD98D8B2010F40B7C2E62C061FA3642AD7C`. 작은 주행/정지/S2 선택 PNG도 직접 확인했다. PNG는 최신 캡처 폴더이며 전체 실행별 PNG 보존·손맛/폰 FPS 검사가 아니다.
+- **17:31 KST HUD 수정 뒤 최종 전체 엔진**: `prototype-compact-hud-final-engine-20261010.log`, `report-full-loop-20261010-083112-0157078.json`. 두 재생 방식 각각 등록된 유지 명령 21개·자연 실패 세 모드 × 두 표시·정지 두 표시·정비 세 경우, 일반 15판정/8선택→S2/S3 한 번 저장→준비 취소 무소모→실제 두 번 시작/자동 비움·자연 실패·기록·보충을 통과했다. 첫 방식의 기본 클리어와 재로드 없는 방식의 상세 클리어, 마우스 83회/터치 55묶음·다중 터치 48묶음/158접점과 개인 설정 불변도 통과했다. SHA-256 `9976BBFA8346D5491ADC2F77C56660A5AB249C0B39D55703B06B50CB017D4BE5`. 실제 엔진 프레임의 합성 입력이며 OS 키/휴대폰 입력·오디오 지연/FPS 검사가 아니다.
+- **17:33 KST 실제 시각 HUD 후속**: `prototype-compact-hud-wallclock-20261010.log`, `report-wallclock-20261010-083337-8661665.json`. 40.00초/15판정/세 정지·재개와 F11 왕복에서 기본 문구 44,601회·상세 문구 2,348회/정지 2,808회·카운트 9,542회를 원래 최신 문구와 대조했다. 보이는 행동 안내 8,165회와 종료 뒤 새 연습의 0점/거리/콤보/판정 수 복원도 통과했다. SHA-256 `C4D9B1B9B253595DCB508C3B076046662FBDD7FF3D18E7346871435EE8C22A0F`. 편집기 실제 시각의 수동 UI Update/자동 입력이며 Play 모드·하드웨어 입력·할당/오디오 지연/GPU/FPS 검사가 아니다. 이 보완은 편집기 검사에만 적용하며 위 실행 DLL/ZIP은 그대로다.
+- `prototype-compact-hud-final-smoke-20261010.log`의 후속 전체 컴파일/스모크도 통과했다. 새 실제 시각 문구 검사 외에도 기존 긴 무한 타임라인·일반/무한/저장·입력/복구와 3,570개 HUD 대조를 유지했다. 게임 DLL/ZIP은 위 17:12 빌드다.
+- **17:24 KST 초기 실행**: `prototype-compact-hud-standalone-confirmed-20261010.log`, `Logs/StandaloneChecks/report-startup-20261010-082416-4021516.json`/SHA-256 `A0DF678843298AA74C68FEA80DC4D5D7EC6D43A050DDCCF1FEAEA2ADCDF429CB`. 헤드리스 20초 생존/초기 예외 0·개인 Greed 값 전후 0개와 우리가 실행한 프로세스의 종료를 JSON으로 보존했다. 읽기 실패/기존 개인 값이면 실행을 생략하는 조건이며 레지스트리 쓰기/초기화는 없다. 앞선 startup 로그는 보존하되 이 JSON을 확인 가능한 초기 구동 근거로 사용한다. 렌더/소리 지연/실제 손 입력/FPS 검사가 아니다.
+
 ## 2026-10-10 실제 등록된 유지 입력
 
 - 10월 9일 결과·정지·클리어 검사에서 두 번째 손을 기본 표시의 숨겨진 로비 버튼에 놓은 범위 누락을 발견했다. `prototype-held-registration-baseline-20261010.log`와 `report-lifecycle-20261010-073814-2269613.json`은 `ReturnLobbyButton active=False, pending=0`을 확인했다. 이전 게임 수정/중앙 누름 재현은 유지하되 두 명령 모두 등록됐다는 근거로 확대하지 않는다. 이전 실행별 보고서는 수정하지 않았다.
