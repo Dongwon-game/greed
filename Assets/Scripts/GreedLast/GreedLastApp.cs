@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -15891,6 +15892,11 @@ namespace GreedLast
         private GreedLastRunSnapshot latestRunSnapshot;
         private bool hasRunSnapshot;
         private bool devCleanViewEnabled = true;
+        private CultureInfo cachedCompactHudCulture;
+        private int cachedCompactHudScore, cachedCompactHudCombo;
+        private int cachedCompactHudSuccess, cachedCompactHudGood, cachedCompactHudMiss;
+        private float cachedCompactHudDistance;
+        private string cachedCompactHudPrefix, cachedCompactHudSuffix, cachedCompactHudDistanceText, cachedCompactHudText;
         private readonly List<CanvasGroup> devCleanViewGroups = new List<CanvasGroup>();
         private readonly List<CanvasGroup> liveSettingCleanViewGroups = new List<CanvasGroup>();
 
@@ -16029,7 +16035,7 @@ namespace GreedLast
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);
-                runHudText.text = cleanView ? BuildCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
+                runHudText.text = cleanView ? GetCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
                 runHudText.fontSize = cleanView ? 38 : BuildRunHudFontSize(latestRunSnapshot, detailedRunHud);
                 if (cleanView)
                     SetAnchored(runHudText.rectTransform, 0.5f, 0.265f, 1450f, 150f);
@@ -16063,6 +16069,40 @@ namespace GreedLast
             return snapshot.InfiniteMode
                 ? BuildInfiniteRunHud(snapshot, runState)
                 : BuildNormalRunHud(snapshot, runState, chapterText, choiceText);
+        }
+
+        private string GetCompactLiveRunHud(GreedLastRunSnapshot snapshot)
+        {
+            CultureInfo culture = CultureInfo.CurrentCulture;
+            // Mutable number formats can change without replacing the culture object.
+            if (!culture.IsReadOnly || !culture.NumberFormat.IsReadOnly) return BuildCompactLiveRunHud(snapshot);
+            bool sameTotals = cachedCompactHudText != null && ReferenceEquals(cachedCompactHudCulture, culture)
+                && cachedCompactHudScore == snapshot.Score && cachedCompactHudCombo == snapshot.Combo
+                && cachedCompactHudSuccess == snapshot.SuccessCount && cachedCompactHudGood == snapshot.GoodCount
+                && cachedCompactHudMiss == snapshot.MissCount;
+            if (sameTotals && cachedCompactHudDistance.Equals(snapshot.Distance)) return cachedCompactHudText;
+            string distance = snapshot.Distance.ToString("0.0");
+            if (sameTotals && distance == cachedCompactHudDistanceText)
+            {
+                cachedCompactHudDistance = snapshot.Distance;
+                return cachedCompactHudText;
+            }
+            if (!sameTotals)
+            {
+                cachedCompactHudCulture = culture;
+                cachedCompactHudScore = snapshot.Score;
+                cachedCompactHudCombo = snapshot.Combo;
+                cachedCompactHudSuccess = snapshot.SuccessCount;
+                cachedCompactHudGood = snapshot.GoodCount;
+                cachedCompactHudMiss = snapshot.MissCount;
+                cachedCompactHudPrefix = snapshot.Score.ToString("N0") + "점 · ";
+                cachedCompactHudSuffix = "m · 콤보 " + snapshot.Combo
+                    + "\n정확 " + snapshot.SuccessCount + " · Good " + snapshot.GoodCount + " · Miss " + snapshot.MissCount;
+            }
+            cachedCompactHudDistance = snapshot.Distance;
+            cachedCompactHudDistanceText = distance;
+            cachedCompactHudText = cachedCompactHudPrefix + distance + cachedCompactHudSuffix;
+            return cachedCompactHudText;
         }
 
         private static string BuildCompactLiveRunHud(GreedLastRunSnapshot snapshot)

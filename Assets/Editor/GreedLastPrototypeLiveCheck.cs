@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Reflection;
 using UnityEditor;
 using Unity.Profiling;
@@ -146,6 +147,7 @@ namespace GreedLast.Editor
                 Require(timingButtons[1].GetComponentInChildren<UnityEngine.UI.Text>(true).text == recommendation,
                     "Visible clean practice-result calibration must not inherit a deferred live label.");
                 VerifyLongRunPresentation(ui);
+                VerifyCompactLiveHudCache(ui);
                 Debug.Log("Greed hidden tool labels passed: clean publication deferral, immediate latest F11 focus/threat labels, live detail updates, repeated hiding, paused visibility and terminal locks.");
 
                 string Label(string field) => Read<UnityEngine.UI.Button>(ui, field)
@@ -425,23 +427,144 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void VerifyCompactLiveHudCache(GreedLastRuntimeUi ui)
+        {
+            var build = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildCompactLiveRunHud", BindingFlags.Static | BindingFlags.NonPublic));
+            var cached = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("GetCompactLiveRunHud", BindingFlags.Instance | BindingFlags.NonPublic));
+            CultureInfo originalCulture = CultureInfo.CurrentCulture;
+            bool playerControls = ui.UsePlayerRunControls;
+            GreedLastRunSnapshot last = default;
+            string previousText = null, previousCached = null;
+            CultureInfo previousCulture = null;
+            int checks = 0, reused = 0;
+            try
+            {
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                foreach (CultureInfo culture in new[] { CultureInfo.ReadOnly((CultureInfo)originalCulture.Clone()),
+                    CultureInfo.ReadOnly(new CultureInfo("ko-KR")), CultureInfo.ReadOnly(new CultureInfo("fr-FR")) })
+                {
+                    CultureInfo.CurrentCulture = culture;
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                        GreedLastScreenState.InfiniteRun, "Compact HUD cache check", string.Empty, 0));
+                    var core = new GreedLastRunCore();
+                    core.SnapshotChanged += Check;
+                    core.EnterInfiniteRun();
+                    core.ToggleDevInvincible();
+                    float clock = Time.realtimeSinceStartup;
+                    for (int frame = 0; frame < 1200; frame++)
+                    {
+                        clock += 1f / 60f;
+                        core.Tick(clock);
+                        if (frame == 300 || frame == 330)
+                        {
+                            core.TogglePause(clock);
+                            Require(frame == 300 ? last.Paused && !last.ResumeCountdownActive : last.ResumeCountdownActive,
+                                "Compact HUD checks must actually visit pause and its resume countdown.");
+                        }
+                        if (frame == 600)
+                        {
+                            ui.ToggleDevCleanView();
+                            ui.ToggleDevCleanView();
+                            Check(last);
+                        }
+                        if (!last.ActivePattern || last.CountdownActive || last.Paused) continue;
+                        int count = last.SuccessCount + last.GoodCount + last.MissCount;
+                        float delta = count % 3 == 1
+                            ? (last.Pattern.SuccessWindowSeconds + last.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                        if (last.ElapsedSeconds + core.InputTimingOffsetSeconds >= last.Pattern.CoreSeconds + delta)
+                            core.HandleInput(count % 3 == 2
+                                ? (GreedLastRunChannel)((int)last.Pattern.Channel % 3 + 1) : last.Pattern.Channel, clock);
+                    }
+                    Require(last.SuccessCount > 0 && last.GoodCount > 0 && last.MissCount > 0,
+                        "Every culture must include actual exact, Good and Miss outcomes.");
+                    core.ForceStopInfiniteRunForTest();
+                    core.RestartPractice(clock);
+                    Require(last.PracticeMode && last.Score == 0 && last.SuccessCount == 0
+                        && last.GoodCount == 0 && last.MissCount == 0,
+                        "Fresh compact HUD must retain the actual zeroed practice state.");
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    typeof(GreedLastRunCore).GetField("score", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, int.MaxValue);
+                    core.Tick(clock += 0.001f);
+                    Check(last);
+                    CultureInfo mutable = (CultureInfo)culture.Clone();
+                    CultureInfo.CurrentCulture = mutable;
+                    mutable.NumberFormat.NumberGroupSeparator = "_";
+                    mutable.NumberFormat.NumberDecimalSeparator = "~";
+                    Check(last);
+                    mutable.NumberFormat.NumberGroupSeparator = "|";
+                    mutable.NumberFormat.NumberDecimalSeparator = ":";
+                    Check(last);
+                    core.SnapshotChanged -= Check;
+                    core.Exit();
+                }
+                Require(checks > 3000 && reused > 300,
+                    $"Compact HUD checks require changing snapshots and unchanged display reuse: checks={checks}, reused={reused}.");
+                Debug.Log($"Greed compact HUD cache passed: {checks} fresh-formatter comparisons, {reused} unchanged text reuses,"
+                    + " three read-only cultures, same-object mutable number formats, exact/Good/Miss, pause/resume, F11, terminal, fresh practice and score upper bound. Synthetic core/UI only; personal settings and slots unchanged.");
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+            }
+
+            void Check(GreedLastRunSnapshot value)
+            {
+                last = value;
+                string expected = build(value), actual = cached(value);
+                Require(actual == expected, "Cached compact HUD must retain the exact original formatting.");
+                bool immutable = CultureInfo.CurrentCulture.IsReadOnly && CultureInfo.CurrentCulture.NumberFormat.IsReadOnly;
+                if (immutable)
+                {
+                    Require(ReferenceEquals(actual, cached(value)), "Unchanged compact HUD must reuse its string.");
+                    if (ReferenceEquals(previousCulture, CultureInfo.CurrentCulture) && expected == previousText)
+                    {
+                        Require(ReferenceEquals(previousCached, actual), "Equal displayed distance and totals must reuse the whole HUD.");
+                        reused++;
+                    }
+                }
+                ui.RenderRun(value);
+                if (!value.Stopped)
+                    Require(Read<UnityEngine.UI.Text>(ui, "runHudText").text == expected,
+                        "Actual clean RenderRun must use the same compact HUD text, including F11 recovery.");
+                previousText = expected;
+                previousCached = actual;
+                previousCulture = CultureInfo.CurrentCulture;
+                checks++;
+            }
+        }
+
         private static void MeasureCompactLiveHud(GreedLastRuntimeUi ui)
         {
             GreedLastRunSnapshot snapshot = Read<GreedLastRunSnapshot>(ui, "latestRunSnapshot");
             var build = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
                 typeof(Func<GreedLastRunSnapshot, string>), typeof(GreedLastRuntimeUi)
                     .GetMethod("BuildCompactLiveRunHud", BindingFlags.Static | BindingFlags.NonPublic));
-            for (int warm = 0; warm < 10; warm++) build(snapshot);
-            string expected = build(snapshot), last = null;
-            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
-                1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
-            for (int call = 0; call < 500; call++) last = build(snapshot);
-            allocations.Stop();
-            Require(allocations.Valid && allocations.Count < allocations.Capacity && last == expected,
-                "Compact HUD measurements must keep valid instrumentation and the exact current text.");
-            Debug.Log($"Greed compact HUD measurement: fresh formatter, calls=500, gcAllocEvents={allocations.Count},"
-                + $" readOnlyCulture={System.Globalization.CultureInfo.CurrentCulture.IsReadOnly}."
-                + " Frozen real snapshot, warmed delegate calls only; not advancing frames, allocation byte sizes or device performance.");
+            var cached = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), ui, typeof(GreedLastRuntimeUi)
+                    .GetMethod("GetCompactLiveRunHud", BindingFlags.Instance | BindingFlags.NonPublic));
+            foreach (var sample in new[] { (Name: "fresh formatter", Build: build), (Name: "cached formatter", Build: cached) })
+            {
+                for (int warm = 0; warm < 10; warm++) sample.Build(snapshot);
+                string expected = build(snapshot), last = null;
+                using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                    1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+                for (int call = 0; call < 500; call++) last = sample.Build(snapshot);
+                allocations.Stop();
+                Require(allocations.Valid && allocations.Count < allocations.Capacity && last == expected,
+                    "Compact HUD measurements must keep valid instrumentation and the exact current text.");
+                if (sample.Name == "cached formatter" && CultureInfo.CurrentCulture.IsReadOnly)
+                    Require(allocations.Count == 0, "A warmed unchanged compact HUD must not allocate redundant text.");
+                Debug.Log($"Greed compact HUD measurement: {sample.Name}, calls=500, gcAllocEvents={allocations.Count},"
+                    + $" readOnlyCulture={CultureInfo.CurrentCulture.IsReadOnly}."
+                    + " Frozen real snapshot, warmed delegate calls only; not advancing frames, allocation byte sizes or device performance.");
+            }
         }
 
         private static void VerifyUnchangedTimingProfileAllocation()
