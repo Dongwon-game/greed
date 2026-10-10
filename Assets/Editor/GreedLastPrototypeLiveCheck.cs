@@ -230,6 +230,7 @@ namespace GreedLast.Editor
                 Sample(null);
                 Sample(ui);
                 Sample(ui, updatePresentation: true);
+                MeasureCompactLiveHud(ui);
                 MeasurePresentationHelpers(ui);
                 MeasureGaugePresentation(ui);
                 MeasureTimingProfileReuse();
@@ -332,7 +333,17 @@ namespace GreedLast.Editor
 
         private static void MeasureGaugePresentation(GreedLastRuntimeUi ui)
         {
-            GreedLastRunSnapshot snapshot = Read<GreedLastRunSnapshot>(ui, "latestRunSnapshot");
+            // Do not depend on the preceding long sample ending with focus still active.
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot snapshot = default;
+            core.SnapshotChanged += value => snapshot = value;
+            core.EnterInfiniteRun();
+            float clock = Time.realtimeSinceStartup;
+            core.Tick(clock += 2f);
+            core.Tick(clock += 1f);
+            core.FillFocusForTest();
+            core.Tick(clock += 0.2f);
+            ui.RenderRun(snapshot);
             Require(snapshot.FocusStateActive, "Gauge measurement must include a live focus timer.");
             var gauges = (Action<GreedLastRunSnapshot>)Delegate.CreateDelegate(
                 typeof(Action<GreedLastRunSnapshot>), ui, typeof(GreedLastRuntimeUi)
@@ -412,6 +423,25 @@ namespace GreedLast.Editor
                 Debug.Log($"Greed visible action cue measurement: case={context}, calls=500, gcAllocEvents={allocations.Count}."
                     + " Frozen real live trap, basic visible label, warmed delegate calls only; not advancing frames or device performance.");
             }
+        }
+
+        private static void MeasureCompactLiveHud(GreedLastRuntimeUi ui)
+        {
+            GreedLastRunSnapshot snapshot = Read<GreedLastRunSnapshot>(ui, "latestRunSnapshot");
+            var build = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildCompactLiveRunHud", BindingFlags.Static | BindingFlags.NonPublic));
+            for (int warm = 0; warm < 10; warm++) build(snapshot);
+            string expected = build(snapshot), last = null;
+            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                1000000, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            for (int call = 0; call < 500; call++) last = build(snapshot);
+            allocations.Stop();
+            Require(allocations.Valid && allocations.Count < allocations.Capacity && last == expected,
+                "Compact HUD measurements must keep valid instrumentation and the exact current text.");
+            Debug.Log($"Greed compact HUD measurement: fresh formatter, calls=500, gcAllocEvents={allocations.Count},"
+                + $" readOnlyCulture={System.Globalization.CultureInfo.CurrentCulture.IsReadOnly}."
+                + " Frozen real snapshot, warmed delegate calls only; not advancing frames, allocation byte sizes or device performance.");
         }
 
         private static void VerifyUnchangedTimingProfileAllocation()

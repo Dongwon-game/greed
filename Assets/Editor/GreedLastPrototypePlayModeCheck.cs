@@ -200,10 +200,13 @@ namespace GreedLast.Editor
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
                         && cycle.multiTouchConfirmationCases == 3 && cycle.multiTouchConfirmationsConsumedOnce
-                        && cycle.liveBackPauseResume && cycle.heldPauseCommandsPreservedRun && cycle.heldNormalClearPreservedResult
+                        && cycle.liveBackPauseResume && cycle.heldPauseCommandCases == 2
+                        && cycle.heldPauseCommandsPreservedRun && cycle.heldNormalClearPreservedResult
+                        && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
-                        && cycle.heldRunResultCases == 3 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
+                        && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
+                        && cycle.registeredHeldCommandPresses == 21
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -274,13 +277,15 @@ namespace GreedLast.Editor
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public bool liveBackPauseResume;
             public bool heldPauseCommandsPreservedRun;
-            public bool heldNormalClearPreservedResult;
+            public int heldPauseCommandCases;
+            public bool heldNormalClearPreservedResult, heldClearDetailedControls;
             public int heldSlotChangeCases;
             public bool heldSlotChangesPreservedData, heldSlotChangeFreshTapRecovered;
             public int heldRunResultCases;
             public bool heldRunResultsPreservedData, heldRunResultFreshTapRecovered;
             public int heldPreparationStartCases;
             public bool heldPreparationStartsPreservedUses;
+            public int registeredHeldCommandPresses;
             public int frames, publications, judgements, lifecycleJudgements, pauseCycles;
             public float elapsedSeconds;
             public bool sceneReloadPreservedApp, restartAfterDestroy, uiDisabledHidesCanvas;
@@ -429,6 +434,7 @@ namespace GreedLast.Editor
                 while (Time.realtimeSinceStartup < until) yield return null;
                 Require(run.ElapsedSeconds > before, "The actual app Update must advance the practice clock.");
                 yield return VerifyHeldPauseCommands();
+                yield return VerifyHeldPauseCommands(detailedControls: true);
                 Call(app, "TryHandlePauseOrBackKeyboardInput", false, true);
                 GreedLastRunSnapshot frozen = run;
                 until = Time.realtimeSinceStartup + 0.4f;
@@ -550,7 +556,8 @@ namespace GreedLast.Editor
                 Require(focusedPause && !run.Paused && report.judgements >= 5,
                     "Engine progression must cover focus pause/resume and multiple real-time judgements.");
                 Require(report.engineMouseClicks >= 3 && report.engineTouchTaps >= 2
-                    && report.canceledEngineCommands == 4 + report.heldRunResultCases * 2 && report.growthEntryHeldTapCanceled,
+                    && report.canceledEngineCommands == 2 + report.heldPauseCommandCases * 2
+                        + report.heldRunResultCases * 2 && report.growthEntryHeldTapCanceled,
                     "The real engine input module must cover mouse, touch, canceled growth entry and interrupted command release.");
                 report.pauseCycles++;
                 report.lifecycleJudgements = report.judgements;
@@ -1324,21 +1331,30 @@ namespace GreedLast.Editor
                 }
             }
 
-            private IEnumerator VerifyHeldPauseCommands()
+            private IEnumerator VerifyHeldPauseCommands(bool detailedControls = false)
             {
+                if (ui.UsePlayerRunControls == detailedControls) ui.ToggleDevCleanView();
                 Button primary = Read<Button>(ui, "nextPatternButton");
                 Button back = Read<Button>(ui, "returnLobbyButton");
                 Button pause = Read<Button>(ui, "pauseButton");
-                Vector2 primaryPoint = ScreenPoint(primary), backPoint = ScreenPoint(back);
+                Vector2 primaryPoint = ScreenPoint(primary, detailedControls ? 0f : -0.25f);
+                Vector2 backPoint = ScreenPoint(detailedControls ? back : primary, detailedControls ? 0f : 0.25f);
                 Vector2 pausePoint = ScreenPoint(pause);
-                Require(!run.Paused && primary.IsInteractable() && back.IsInteractable() && pause.IsInteractable(),
+                Require(!run.Paused && primary.isActiveAndEnabled && primary.IsInteractable()
+                    && pause.isActiveAndEnabled && pause.IsInteractable(),
                     "Held pause commands must begin at real live controls.");
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Began), TouchAt(102, backPoint, TouchPhase.Began));
+                PointerEventData[] primaryPresses = detailedControls
+                    ? RequireRegisteredCommandPresses(primary, 101) : RequireRegisteredCommandPresses(primary, 101, 102);
+                PointerEventData[] backPresses = detailedControls
+                    ? RequireRegisteredCommandPresses(back, 102) : Array.Empty<PointerEventData>();
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
                     TouchAt(103, pausePoint, TouchPhase.Began));
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
                     TouchAt(103, pausePoint, TouchPhase.Ended));
                 Require(run.Paused && !run.ResumeCountdownActive, "A fresh third-finger pause must open only the pause menu.");
+                RequireCanceledCommandPresses(primary, primaryPresses);
+                if (detailedControls) RequireCanceledCommandPresses(back, backPresses);
                 GreedLastRunSnapshot frozen = run;
                 primaryPoint = ScreenPoint(primary);
                 backPoint = ScreenPoint(back);
@@ -1361,8 +1377,12 @@ namespace GreedLast.Editor
                 }
                 report.canceledEngineCommands += 2;
                 report.pauseCycles++;
-                report.heldPauseCommandsPreservedRun = true;
-                Debug.Log("Greed engine held pause commands passed: two live command fingers, third-finger pause, moved old releases canceled, fresh resume/countdown recovered without changing run values.");
+                report.heldPauseCommandCases++;
+                report.heldPauseCommandsPreservedRun = report.heldPauseCommandCases == 2;
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                Debug.Log("Greed engine held pause commands passed: two registered visible command fingers in "
+                    + (detailedControls ? "detailed primary/back" : "clean primary/primary")
+                    + ", third-finger pause, old press eligibility cleared before moved releases, fresh resume/countdown recovered without changing run values.");
             }
 
             private IEnumerator VerifyHeldRunResults()
@@ -1371,8 +1391,11 @@ namespace GreedLast.Editor
                 FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
                 try
                 {
-                    for (int mode = 0; mode < 3; mode++)
+                    for (int scenario = 0; scenario < 6; scenario++)
                     {
+                        int mode = scenario % 3;
+                        bool detailedControls = scenario >= 3;
+                        if (ui.UsePlayerRunControls == detailedControls) ui.ToggleDevCleanView();
                         var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                         backendField.SetValue(app, backend);
                         core.ConfigureGrowth(0, 0, 0);
@@ -1400,16 +1423,23 @@ namespace GreedLast.Editor
                         }
                         Button primary = Read<Button>(ui, "nextPatternButton");
                         Button back = Read<Button>(ui, "returnLobbyButton");
-                        Require(primary.IsInteractable() && back.IsInteractable(), "Both held result commands must begin while live.");
-                        Vector2 primaryPoint = ScreenPoint(primary), backPoint = ScreenPoint(back);
+                        Require(primary.isActiveAndEnabled && primary.IsInteractable(), "Held result fingers must begin on the visible live command.");
+                        Vector2 primaryPoint = ScreenPoint(primary, detailedControls ? 0f : -0.25f);
+                        Vector2 backPoint = ScreenPoint(detailedControls ? back : primary, detailedControls ? 0f : 0.25f);
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Began), TouchAt(96, backPoint, TouchPhase.Began));
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Stationary), TouchAt(96, backPoint, TouchPhase.Stationary));
+                        PointerEventData[] primaryPresses = detailedControls
+                            ? RequireRegisteredCommandPresses(primary, 95) : RequireRegisteredCommandPresses(primary, 95, 96);
+                        PointerEventData[] backPresses = detailedControls
+                            ? RequireRegisteredCommandPresses(back, 96) : Array.Empty<PointerEventData>();
                         while (!run.Stopped)
                         {
                             Require(Time.realtimeSinceStartup < deadline, "The held result fixture must fail through actual Update.");
                             yield return null;
                         }
                         GreedLastRunSnapshot terminal = run;
+                        RequireCanceledCommandPresses(primary, primaryPresses);
+                        if (detailedControls) RequireCanceledCommandPresses(back, backPresses);
                         yield return WaitSeconds(0.45f);
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Ended), TouchAt(96, backPoint, TouchPhase.Ended));
                         yield return TouchFrame();
@@ -1433,14 +1463,15 @@ namespace GreedLast.Editor
                         report.heldRunResultCases++;
                         report.canceledEngineCommands += 2;
                     }
-                    report.heldRunResultsPreservedData = report.heldRunResultCases == 3;
+                    report.heldRunResultsPreservedData = report.heldRunResultCases == 6;
                     report.heldRunResultFreshTapRecovered = report.heldRunResultsPreservedData;
-                    Debug.Log("Greed engine held run results passed: three natural failures with actual held primary/back touches, delayed old releases canceled, fresh settlement recovered. In-memory progress only.");
+                    Debug.Log("Greed engine held run results passed: three natural failures in clean primary/primary and detailed primary/back views; both pointer identities registered, old press eligibility cleared before delayed releases, fresh back settlement recovered. In-memory progress only.");
                 }
                 finally
                 {
                     input.Touches = Array.Empty<Touch>();
                     core.Exit();
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                     backendField.SetValue(app, originalBackend);
                     state.SetLobbyReady(originalBackend.LoadLobby());
                 }
@@ -1570,6 +1601,7 @@ namespace GreedLast.Editor
                 float deadline = Time.realtimeSinceStartup + 120f;
                 bool heldForClear = false;
                 Vector2 heldPrimaryPoint = default, heldBackPoint = default;
+                PointerEventData[] heldClearPrimary = null, heldClearBack = null;
                 int clearsBefore = Read<int>(backend, "normalClearCount");
                 while (!run.Stopped)
                 {
@@ -1577,12 +1609,19 @@ namespace GreedLast.Editor
                     if (!heldForClear && run.ActivePattern && !run.CountdownActive && !run.Paused
                         && run.Phase == GreedLastRunPhase.EscapeRunning && run.ChapterProgress == 2)
                     {
+                        report.heldClearDetailedControls = report.domainReloadDisabled;
+                        if (ui.UsePlayerRunControls == report.heldClearDetailedControls) ui.ToggleDevCleanView();
                         Button primary = Read<Button>(ui, "nextPatternButton"), back = Read<Button>(ui, "returnLobbyButton");
-                        Require(primary.IsInteractable() && back.IsInteractable(), "Clear commands must be held while the last trap is still live.");
-                        heldPrimaryPoint = ScreenPoint(primary);
-                        heldBackPoint = ScreenPoint(back);
+                        Require(primary.isActiveAndEnabled && primary.IsInteractable(), "Clear fingers must be held on a visible command while the last trap is still live.");
+                        heldPrimaryPoint = ScreenPoint(primary, report.heldClearDetailedControls ? 0f : -0.25f);
+                        heldBackPoint = ScreenPoint(report.heldClearDetailedControls ? back : primary,
+                            report.heldClearDetailedControls ? 0f : 0.25f);
                         yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Began), TouchAt(119, heldBackPoint, TouchPhase.Began));
                         yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary), TouchAt(119, heldBackPoint, TouchPhase.Stationary));
+                        heldClearPrimary = report.heldClearDetailedControls
+                            ? RequireRegisteredCommandPresses(primary, 118) : RequireRegisteredCommandPresses(primary, 118, 119);
+                        heldClearBack = report.heldClearDetailedControls
+                            ? RequireRegisteredCommandPresses(back, 119) : Array.Empty<PointerEventData>();
                         heldForClear = true;
                     }
                     if (run.ChoiceActive && Time.realtimeSinceStartup >= nextChoiceAt)
@@ -1620,6 +1659,9 @@ namespace GreedLast.Editor
                     "The real-time normal loop must recover the core, pass the exit and retain one saveable result.");
                 Require(heldForClear, "The full clear must include commands held across its final trap.");
                 GreedLastRunSnapshot cleared = run;
+                RequireCanceledCommandPresses(Read<Button>(ui, "nextPatternButton"), heldClearPrimary);
+                if (report.heldClearDetailedControls)
+                    RequireCanceledCommandPresses(Read<Button>(ui, "returnLobbyButton"), heldClearBack);
                 heldPrimaryPoint = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
                 heldBackPoint = ScreenPoint(Read<Button>(ui, "returnLobbyButton"));
                 yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Moved), TouchAt(119, heldBackPoint, TouchPhase.Moved));
@@ -1634,7 +1676,10 @@ namespace GreedLast.Editor
                     "Old live commands must preserve the clear result without settlement, saving or discard.");
                 report.heldNormalClearPreservedResult = true;
                 report.canceledEngineCommands += 2;
-                Debug.Log("Greed engine held normal clear passed: two commands held through the last natural success, moved old releases preserve the result and save opportunity; no settlement before fresh input.");
+                Debug.Log("Greed engine held normal clear passed: two registered fingers in "
+                    + (report.heldClearDetailedControls ? "detailed primary/back" : "clean primary/primary")
+                    + " through the last natural success, old eligibility cleared before moved releases, result/save opportunity preserved; no settlement before fresh input.");
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                 report.fullNormalClear = true;
                 report.fullNormalJudgements = report.judgements;
                 Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
@@ -1789,13 +1834,23 @@ namespace GreedLast.Editor
                 Vector2 first = ScreenPoint(lanes[chosenLane]);
                 Vector2 second = ScreenPoint(lanes[(chosenLane + 1) % 3]);
                 bool holdStart = expectedStep == 2 && Read<int>(app, "infinitePreparationStep") == 1;
-                Vector2 start = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
+                Button primary = Read<Button>(ui, "nextPatternButton");
+                Vector2 start = ScreenPoint(primary);
+                PointerEventData[] heldStart = null;
+                if (holdStart)
+                {
+                    // Establish the held start before the accepted relic choice cancels it.
+                    yield return TouchFrame(TouchAt(98, start, TouchPhase.Began));
+                    yield return TouchFrame(TouchAt(98, start, TouchPhase.Stationary));
+                    heldStart = RequireRegisteredCommandPresses(primary, 98);
+                }
                 yield return TouchFrame(holdStart
-                    ? new[] { TouchAt(98, start, TouchPhase.Began), TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began) }
+                    ? new[] { TouchAt(98, start, TouchPhase.Stationary), TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began) }
                     : new[] { TouchAt(73, first, TouchPhase.Began), TouchAt(74, second, TouchPhase.Began) });
                 yield return TouchFrame(holdStart
                     ? new[] { TouchAt(98, start, TouchPhase.Stationary), TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary) }
                     : new[] { TouchAt(73, first, TouchPhase.Stationary), TouchAt(74, second, TouchPhase.Stationary) });
+                if (holdStart) RequireCanceledCommandPresses(primary, heldStart);
                 yield return WaitSeconds(0.4f);
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
                     && Read<int>(app, "infinitePreparationStep") == expectedStep
@@ -1979,13 +2034,41 @@ namespace GreedLast.Editor
                 report.engineTouchContacts++;
             }
 
-            private static Vector2 ScreenPoint(Button button)
+            private PointerEventData[] RequireRegisteredCommandPresses(Button button, params int[] pointerIds)
+            {
+                var pending = Read<HashSet<PointerEventData>>(button, "pendingPresses");
+                Require(button.isActiveAndEnabled && button.IsInteractable() && pending.Count == pointerIds.Length,
+                    "Held command fingers must be registered on an active control: " + button.name
+                        + $" active={button.isActiveAndEnabled}, pending={pending.Count}, expected={pointerIds.Length}");
+                foreach (int pointerId in pointerIds)
+                {
+                    bool registered = false;
+                    foreach (PointerEventData pointer in pending)
+                        registered |= pointer.pointerId == pointerId && pointer.eligibleForClick;
+                    Require(registered,
+                        "The actual EventSystem must register the held command finger: " + pointerId);
+                }
+                report.registeredHeldCommandPresses += pointerIds.Length;
+                var presses = new PointerEventData[pending.Count];
+                pending.CopyTo(presses);
+                return presses;
+            }
+
+            private static void RequireCanceledCommandPresses(Button button, PointerEventData[] presses)
+            {
+                Require(presses != null && presses.Length > 0
+                    && Read<HashSet<PointerEventData>>(button, "pendingPresses").Count == 0
+                    && Array.TrueForAll(presses, pointer => !pointer.eligibleForClick),
+                    "The transition must cancel registered press eligibility before release: " + button.name);
+            }
+
+            private static Vector2 ScreenPoint(Button button, float horizontalFraction = 0f)
             {
                 Canvas canvas = button.GetComponentInParent<Canvas>();
                 RectTransform rect = button.GetComponent<RectTransform>();
                 return RectTransformUtility.WorldToScreenPoint(
                     canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
-                    rect.TransformPoint(rect.rect.center));
+                    rect.TransformPoint(rect.rect.center + new Vector2(rect.rect.width * horizontalFraction, 0f)));
             }
 
             private void AssertFrozen(GreedLastRunSnapshot anchor) => Require(

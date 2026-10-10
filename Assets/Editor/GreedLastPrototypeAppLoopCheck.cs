@@ -670,14 +670,35 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void RequireRegisteredPresses(GreedLastCommandButton button, params PointerEventData[] pointers)
+        {
+            var pending = Read<HashSet<PointerEventData>>(button, "pendingPresses");
+            Require(button.isActiveAndEnabled && button.IsInteractable() && pending.Count == pointers.Length,
+                "Held callback checks require registered presses on a visible command: " + button.name);
+            foreach (PointerEventData pointer in pointers)
+                Require(pending.Contains(pointer) && pointer.eligibleForClick,
+                    "The held callback press must be registered before the transition: " + pointer.pointerId);
+        }
+
+        private static void RequireCanceledPresses(GreedLastCommandButton button, params PointerEventData[] pointers)
+        {
+            Require(Read<HashSet<PointerEventData>>(button, "pendingPresses").Count == 0
+                && Array.TrueForAll(pointers, pointer => !pointer.eligibleForClick),
+                "The transition must cancel registered callback presses before release: " + button.name);
+        }
+
         private static void VerifyHeldPauseCommands(GreedLastApp app, GreedLastRuntimeUi ui,
             GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
             Func<GreedLastRunSnapshot> latest)
         {
+            bool playerControls = ui.UsePlayerRunControls;
             try
             {
-                for (int mode = 0; mode < 3; mode++)
+                for (int scenario = 0; scenario < 6; scenario++)
                 {
+                    int mode = scenario % 3;
+                    bool detailedControls = scenario >= 3;
+                    if (ui.UsePlayerRunControls == detailedControls) ui.ToggleDevCleanView();
                     var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                     Write(app, "backend", backend);
                     core.ConfigureGrowth(0, 0, 0);
@@ -702,19 +723,28 @@ namespace GreedLast.Editor
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
                     var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
-                    var back = (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton");
+                    var secondary = detailedControls
+                        ? (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton") : primary;
                     Require(latest().ActivePattern && !latest().CountdownActive && primary.IsInteractable(),
                         "Held pause checks require live controls before the pause menu. Mode " + mode
                             + ", active=" + latest().ActivePattern + ", countdown=" + latest().CountdownActive
                             + ", stopped=" + latest().Stopped + ", primary=" + primary.IsInteractable());
                     var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 101, eligibleForClick = true };
-                    var backPointer = new PointerEventData(EventSystem.current) { pointerId = 102, eligibleForClick = true };
+                    var secondaryPointer = new PointerEventData(EventSystem.current) { pointerId = 102, eligibleForClick = true };
                     primary.OnPointerDown(primaryPointer);
-                    back.OnPointerDown(backPointer);
+                    secondary.OnPointerDown(secondaryPointer);
+                    if (detailedControls)
+                    {
+                        RequireRegisteredPresses(primary, primaryPointer);
+                        RequireRegisteredPresses(secondary, secondaryPointer);
+                    }
+                    else RequireRegisteredPresses(primary, primaryPointer, secondaryPointer);
                     Method(app, "RequestToggleRunPause").Invoke(app, null);
                     GreedLastRunSnapshot paused = latest();
                     Require(paused.Paused && !paused.ResumeCountdownActive, "The actual pause callback must open only the pause menu.");
-                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: back, Pointer: backPointer) })
+                    RequireCanceledPresses(primary, primaryPointer, secondaryPointer);
+                    if (detailedControls) RequireCanceledPresses(secondary, secondaryPointer);
+                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
                     {
                         pair.Button.OnPointerUp(pair.Pointer);
                         if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
@@ -733,11 +763,12 @@ namespace GreedLast.Editor
                         "A fresh pause-menu resume must start the existing frozen countdown.");
                     core.Exit();
                 }
-                Debug.Log("Greed held pause commands passed: three live modes, old primary/back releases cannot resume or abandon, fresh resume retains the original countdown. Isolated data and pointer callbacks only.");
+                Debug.Log("Greed held pause commands passed: three live modes in clean primary/primary and detailed primary/back views, actual registration/cancellation checked before releases, fresh resume retains the original countdown. Isolated data and pointer callbacks only.");
             }
             finally
             {
                 core.Exit();
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 Write(app, "backend", originalBackend);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
@@ -767,8 +798,10 @@ namespace GreedLast.Editor
                         var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
                         var held = new PointerEventData(EventSystem.current) { pointerId = 98, eligibleForClick = true };
                         primary.OnPointerDown(held);
+                        RequireRegisteredPresses(primary, held);
                         Method(app, "HandleRunChannelInput").Invoke(app, new object[] { (GreedLastRunChannel)(relic + 1) });
                         Require(Read<int>(app, "infinitePreparationStep") == 2, "The new relic selection must complete preparation normally.");
+                        RequireCanceledPresses(primary, held);
                         string gift = Read<string>(app, "infinitePreparationGift"), chosenRelic = Read<string>(app, "infinitePreparationRelic");
                         FinishPreparationTransition(app);
                         primary.OnPointerUp(held);
@@ -808,11 +841,16 @@ namespace GreedLast.Editor
         {
             bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
             int practice = PlayerPrefs.GetInt(PracticeKey);
+            bool playerControls = ui.UsePlayerRunControls;
             try
             {
                 PlayerPrefs.SetInt(PracticeKey, 0);
-                for (int mode = 0; mode < 5; mode++)
+                for (int scenario = 0; scenario < 10; scenario++)
                 {
+                    int mode = scenario % 5;
+                    bool detailedControls = scenario >= 5;
+                    if (ui.UsePlayerRunControls == detailedControls) ui.ToggleDevCleanView();
+                    PlayerPrefs.SetInt(PracticeKey, 0);
                     var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                     Write(app, "backend", backend);
                     core.ConfigureGrowth(0, 0, 0);
@@ -829,15 +867,20 @@ namespace GreedLast.Editor
                     }
                     var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
                     var back = (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton");
+                    GreedLastCommandButton secondary = detailedControls ? back : primary;
                     var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 95, eligibleForClick = true };
-                    var backPointer = new PointerEventData(EventSystem.current) { pointerId = 96, eligibleForClick = true };
+                    var secondaryPointer = new PointerEventData(EventSystem.current) { pointerId = 96, eligibleForClick = true };
                     bool pressed = false;
                     Action pressLiveCommands = () =>
                     {
-                        Require(primary.IsInteractable() && back.IsInteractable(),
-                            "The old result commands must start as usable live-run controls.");
                         primary.OnPointerDown(primaryPointer);
-                        back.OnPointerDown(backPointer);
+                        secondary.OnPointerDown(secondaryPointer);
+                        if (detailedControls)
+                        {
+                            RequireRegisteredPresses(primary, primaryPointer);
+                            RequireRegisteredPresses(secondary, secondaryPointer);
+                        }
+                        else RequireRegisteredPresses(primary, primaryPointer, secondaryPointer);
                         pressed = true;
                     };
                     if (mode < 3) RunToFailure(core, latest, pressLiveCommands);
@@ -845,7 +888,9 @@ namespace GreedLast.Editor
                     Require(pressed && latest().Stopped && !latest().Paused,
                         "Held result checks require an actual terminal result after the pointer press.");
                     GreedLastRunSnapshot terminal = latest();
-                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: back, Pointer: backPointer) })
+                    RequireCanceledPresses(primary, primaryPointer, secondaryPointer);
+                    if (detailedControls) RequireCanceledPresses(secondary, secondaryPointer);
+                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
                     {
                         pair.Button.OnPointerUp(pair.Pointer);
                         if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
@@ -874,11 +919,12 @@ namespace GreedLast.Editor
                             && Read<int>(backend, "infiniteRunCount") == (mode == 2 ? 1 : 0),
                             "A fresh result command must settle exactly once and return normally. Mode " + mode);
                 }
-                Debug.Log("Greed held run results passed: three natural failures, completed practice and escaped normal run; old live primary/back releases blocked; fresh settlement/onboarding/explicit save recovered. Isolated progress and synthetic pointer callbacks only.");
+                Debug.Log("Greed held run results passed: five terminal paths in clean primary/primary and detailed primary/back views; actual registration/cancellation checked before releases, fresh settlement/onboarding/explicit save recovered. Isolated progress and synthetic pointer callbacks only.");
             }
             finally
             {
                 core.Exit();
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practice);
                 else PlayerPrefs.DeleteKey(PracticeKey);
                 foreach (string field in new[] { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
