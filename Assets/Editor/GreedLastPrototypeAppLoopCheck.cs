@@ -981,6 +981,7 @@ namespace GreedLast.Editor
                     PointerEventData held = Pointer(92);
                     command.OnPointerDown(first);
                     command.OnPointerDown(held);
+                    RequireRegisteredPresses(command, first, held);
                     Release(first);
                     Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
                         "The first finger must open, not commit, the pending confirmation: " + scenario.Flag);
@@ -1010,6 +1011,7 @@ namespace GreedLast.Editor
                         Require(!backend.HasSaveLoadoutCandidate,
                             "Fresh overwrite/discard must consume its candidate exactly once.");
                 }
+                VerifyHeldConfirmationResolutions(app, ui, state);
                 Debug.Log("Greed held save confirmations passed: overwrite, two delete views, two rename views and discard; first release opens, old delayed release cannot confirm, fresh release confirms once. Direct pointer events and isolated progress; no personal slot changes.");
             }
             finally
@@ -1018,6 +1020,99 @@ namespace GreedLast.Editor
                 foreach (string field in pendingFields) Write(app, field, false);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
+        }
+
+        private static void VerifyHeldConfirmationResolutions(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastStateMachine state)
+        {
+            foreach (var scenario in new[] {
+                (Infinite: false, Command: "saveSlotDeleteButton", Held: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending", Commit: false),
+                (Infinite: true, Command: "saveSlotDeleteButton", Held: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending", Commit: false),
+                (Infinite: false, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: false),
+                (Infinite: true, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: false),
+                (Infinite: false, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: true),
+                (Infinite: true, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: true),
+                (Infinite: false, Command: "saveSlotDeleteButton", Held: "returnLobbyButton", Flag: "saveSlotDeleteConfirmPending", Commit: true),
+                (Infinite: true, Command: "saveSlotDeleteButton", Held: "returnLobbyButton", Flag: "saveSlotDeleteConfirmPending", Commit: true),
+                (Infinite: false, Command: "returnLobbyButton", Held: "returnLobbyButton", Flag: "saveDraftSkipConfirmPending", Commit: false) })
+            {
+                var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                backend.SelectSaveLoadoutSlot(1);
+                backend.RenameSelectedSaveLoadoutSlot();
+                backend.AddSampleClearCandidateForTest(out _);
+                backend.SelectSaveLoadoutSlot(0);
+                Write(app, "backend", backend);
+                foreach (string field in new[] { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                    "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                    "saveSlotDetailViewActive", "saveDraftFromRefillRun" }) Write(app, field, false);
+                if (scenario.Infinite)
+                    state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                else state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                    saveLoadoutCandidateAvailable: true);
+                var command = (GreedLastCommandButton)Read<Button>(ui, scenario.Command);
+                void Tap(GreedLastCommandButton target, int id)
+                {
+                    var pointer = new PointerEventData(EventSystem.current) { pointerId = id, eligibleForClick = true };
+                    target.OnPointerDown(pointer);
+                    target.OnPointerUp(pointer);
+                    if (pointer.eligibleForClick) target.OnPointerClick(pointer);
+                }
+                Tap(command, 95);
+                Require(Read<bool>(app, scenario.Flag), "The resolution fixture must first open confirmation: " + scenario.Flag);
+                FinishSaveConfirmation(app);
+                var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                Require(records[1].IsValid && uses[1] == 2 && names[1] == 1,
+                    "The resolution fixture must retain an occupied renamed neighbor, not just empty slots.");
+                var heldCommand = (GreedLastCommandButton)Read<Button>(ui, scenario.Held);
+                var held = new PointerEventData(EventSystem.current) { pointerId = 96, eligibleForClick = true };
+                heldCommand.OnPointerDown(held);
+                RequireRegisteredPresses(heldCommand, held);
+                Tap(scenario.Commit ? command : (GreedLastCommandButton)Read<Button>(ui, "saveSlotDetailButton"), 97);
+                Require(!Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                    "Cancel or rename confirmation must resolve once and retain the candidate: " + scenario.Flag);
+                bool deleted = scenario.Commit && scenario.Command == "saveSlotDeleteButton";
+                for (int slot = 0; slot < records.Length; slot++)
+                {
+                    bool deletedSlot = deleted && slot == 0;
+                    bool renamedSlot = scenario.Commit && !deleted && slot == 0;
+                    Require(Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == (deletedSlot ? 0 : uses[slot])
+                        && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == (deletedSlot ? 0 : names[slot] + (renamedSlot ? 1 : 0))
+                        && (deletedSlot ? !backend.LoadSelectedSaveSlotView().SaveSlotOccupied[slot]
+                            : renamedSlot ? Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].LoadoutName != records[slot].LoadoutName
+                            : Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])),
+                        "Resolution must only apply the requested rename/delete, without consuming or changing another slot.");
+                }
+                var resolved = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                var resolvedUses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                bool canceledBeforeRelease = !held.eligibleForClick
+                    && Read<HashSet<PointerEventData>>(heldCommand, "pendingPresses").Count == 0;
+                heldCommand.OnPointerUp(held);
+                if (held.eligibleForClick) heldCommand.OnPointerClick(held);
+                Require(canceledBeforeRelease && !Read<bool>(app, scenario.Flag) && !Read<bool>(app, "saveDraftSkipConfirmPending")
+                    && state.CurrentState == (scenario.Infinite ? GreedLastScreenState.InfiniteLoadoutSelect : GreedLastScreenState.SaveLoadoutDraft)
+                    && backend.HasSaveLoadoutCandidate,
+                    "An old held release must not reopen a canceled or completed confirmation: " + scenario.Flag
+                        + "/infinite=" + scenario.Infinite + "/commit=" + scenario.Commit
+                        + "/reopened=" + Read<bool>(app, scenario.Flag) + "/canceled=" + canceledBeforeRelease);
+                for (int slot = 0; slot < resolved.Length; slot++)
+                    Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(resolved[slot])
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == resolvedUses[slot],
+                        "The delayed canceled release must preserve resolved records and uses.");
+                Tap(heldCommand, 96);
+                Require((deleted ? scenario.Infinite ? state.CurrentState == GreedLastScreenState.LobbyReady
+                            : Read<bool>(app, "saveDraftSkipConfirmPending") : Read<bool>(app, scenario.Flag))
+                    && backend.HasSaveLoadoutCandidate,
+                    "A fresh press must still open its own confirmation after resolution: " + scenario.Flag);
+                Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Equals(records[1])
+                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses[1]
+                    && Read<int[]>(backend, "saveLoadoutRenameSteps")[1] == names[1],
+                    "Cancel, confirm, delayed release and a fresh command must preserve the occupied neighbor.");
+            }
+            Debug.Log("Greed held confirmation resolutions passed: four delete/rename cancellations, two completed renames, two completed deletes and one discard cancellation; registered old presses cannot reopen or exit, occupied renamed neighbors/uses/candidates survive and fresh presses recover. Isolated direct pointer callbacks only.");
         }
 
         private static void VerifyHeldSlotChanges(GreedLastApp app, GreedLastRuntimeUi ui,

@@ -188,6 +188,8 @@ namespace GreedLast.Editor
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
                     && cycle.growthEntryHeldTapCanceled && cycle.heldSaveConfirmationCases == 6
                     && cycle.heldSaveConfirmationsPreservedData && cycle.heldSaveConfirmationFreshTapRecovered
+                    && cycle.heldConfirmationResolutionCases == 9 && cycle.heldConfirmationResolutionsPreservedData
+                    && cycle.heldConfirmationResolutionFreshTapRecovered && cycle.heldConfirmationOccupiedNeighborPreserved
                     && cycle.heldSlotChangeCases == 6 && cycle.heldSlotChangesPreservedData && cycle.heldSlotChangeFreshTapRecovered);
                 if (!results.succeeded) results.error = "Required engine input protection coverage did not complete.";
             }
@@ -206,7 +208,7 @@ namespace GreedLast.Editor
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
-                        && cycle.registeredHeldCommandPresses == 21
+                        && cycle.registeredHeldCommandPresses == 42
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -275,6 +277,9 @@ namespace GreedLast.Editor
             public bool growthEntryHeldTapCanceled;
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
+            public int heldConfirmationResolutionCases;
+            public bool heldConfirmationResolutionsPreservedData, heldConfirmationResolutionFreshTapRecovered;
+            public bool heldConfirmationOccupiedNeighborPreserved;
             public bool liveBackPauseResume;
             public bool heldPauseCommandsPreservedRun;
             public int heldPauseCommandCases;
@@ -1196,14 +1201,17 @@ namespace GreedLast.Editor
                         var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
                         var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
                         var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
-                        Vector2 point = ScreenPoint(command);
-                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Began), TouchAt(92, point, TouchPhase.Began));
-                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Ended), TouchAt(92, point, TouchPhase.Stationary));
+                        Vector2 point = ScreenPoint(command, -0.25f);
+                        Vector2 heldPoint = ScreenPoint(command, 0.25f);
+                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Began), TouchAt(92, heldPoint, TouchPhase.Began));
+                        PointerEventData[] registered = RequireRegisteredCommandPresses(command, 91, 92);
+                        yield return TouchFrame(TouchAt(91, point, TouchPhase.Ended), TouchAt(92, heldPoint, TouchPhase.Stationary));
                         Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
                             "The first engine release must open only the confirmation: " + scenario.Flag);
-                        yield return TouchFrame(TouchAt(92, point, TouchPhase.Stationary));
+                        RequireCanceledCommandPresses(command, Array.FindAll(registered, pointer => pointer.pointerId == 92));
+                        yield return TouchFrame(TouchAt(92, heldPoint, TouchPhase.Stationary));
                         yield return WaitSeconds(0.45f);
-                        yield return TouchFrame(TouchAt(92, point, TouchPhase.Ended));
+                        yield return TouchFrame(TouchAt(92, heldPoint, TouchPhase.Ended));
                         yield return TouchFrame();
                         Require(Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
                             "The old engine finger released after the guard must not confirm: " + scenario.Flag);
@@ -1228,6 +1236,7 @@ namespace GreedLast.Editor
                     }
                     report.heldSaveConfirmationsPreservedData = report.heldSaveConfirmationCases == 6;
                     report.heldSaveConfirmationFreshTapRecovered = report.heldSaveConfirmationsPreservedData;
+                    yield return VerifyHeldConfirmationResolutions();
                     Debug.Log("Greed engine held save confirmations passed: six actual EventSystem two-finger openings, delayed old releases blocked, all records/uses/names preserved and fresh taps accepted. In-memory progress only.");
                 }
                 finally
@@ -1237,6 +1246,99 @@ namespace GreedLast.Editor
                     backendField.SetValue(app, originalBackend);
                     state.SetLobbyReady(originalBackend.LoadLobby());
                 }
+            }
+
+            private IEnumerator VerifyHeldConfirmationResolutions()
+            {
+                foreach (var scenario in new[] {
+                    (Infinite: false, Command: "saveSlotDeleteButton", Held: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending", Commit: false),
+                    (Infinite: true, Command: "saveSlotDeleteButton", Held: "saveSlotDeleteButton", Flag: "saveSlotDeleteConfirmPending", Commit: false),
+                    (Infinite: false, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: false),
+                    (Infinite: true, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: false),
+                    (Infinite: false, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: true),
+                    (Infinite: true, Command: "saveSlotRenameButton", Held: "saveSlotRenameButton", Flag: "saveSlotRenameConfirmPending", Commit: true),
+                    (Infinite: false, Command: "saveSlotDeleteButton", Held: "returnLobbyButton", Flag: "saveSlotDeleteConfirmPending", Commit: true),
+                    (Infinite: true, Command: "saveSlotDeleteButton", Held: "returnLobbyButton", Flag: "saveSlotDeleteConfirmPending", Commit: true),
+                    (Infinite: false, Command: "returnLobbyButton", Held: "returnLobbyButton", Flag: "saveDraftSkipConfirmPending", Commit: false) })
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.SelectSaveLoadoutSlot(1);
+                    backend.RenameSelectedSaveLoadoutSlot();
+                    backend.AddSampleClearCandidateForTest(out _);
+                    backend.SelectSaveLoadoutSlot(0);
+                    typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, backend);
+                    foreach (string field in new[] { "saveDraftRequiresExplicitSlotChoice", "saveDraftOverwriteConfirmPending",
+                        "saveDraftSkipConfirmPending", "saveSlotDeleteConfirmPending", "saveSlotRenameConfirmPending",
+                        "saveSlotDetailViewActive", "saveDraftFromRefillRun" })
+                        typeof(GreedLastApp).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, false);
+                    if (scenario.Infinite)
+                        state.SetInfiniteLoadoutSelect(backend.LoadSelectedSaveSlotView(), backend.BuildInfiniteLoadoutSelectText());
+                    else state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                        saveLoadoutCandidateAvailable: true);
+                    yield return null;
+                    Button command = Read<Button>(ui, scenario.Command);
+                    yield return TapTouch(command);
+                    Require(Read<bool>(app, scenario.Flag), "The engine resolution fixture must first open confirmation.");
+                    yield return WaitSeconds(0.45f);
+                    var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                    var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                    var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                    Require(records[1].IsValid && uses[1] == 2 && names[1] == 1,
+                        "The engine resolution fixture must retain an occupied renamed neighbor.");
+                    Button heldCommand = Read<Button>(ui, scenario.Held);
+                    Vector2 heldPoint = ScreenPoint(heldCommand, -0.25f);
+                    Button resolver = scenario.Commit ? command : Read<Button>(ui, "saveSlotDetailButton");
+                    Vector2 resolvePoint = ScreenPoint(resolver, 0.25f);
+                    yield return TouchFrame(TouchAt(96, heldPoint, TouchPhase.Began));
+                    PointerEventData[] held = RequireRegisteredCommandPresses(heldCommand, 96);
+                    yield return TouchFrame(TouchAt(96, heldPoint, TouchPhase.Stationary), TouchAt(97, resolvePoint, TouchPhase.Began));
+                    yield return TouchFrame(TouchAt(96, heldPoint, TouchPhase.Stationary), TouchAt(97, resolvePoint, TouchPhase.Ended));
+                    RequireCanceledCommandPresses(heldCommand, held);
+                    Require(!Read<bool>(app, scenario.Flag) && backend.HasSaveLoadoutCandidate,
+                        "The fresh engine cancel/confirm must resolve once and retain its candidate.");
+                    bool deleted = scenario.Commit && scenario.Command == "saveSlotDeleteButton";
+                    for (int slot = 0; slot < records.Length; slot++)
+                    {
+                        bool deletedSlot = deleted && slot == 0;
+                        bool renamedSlot = scenario.Commit && !deleted && slot == 0;
+                        Require(Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == (deletedSlot ? 0 : uses[slot])
+                            && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == (deletedSlot ? 0 : names[slot] + (renamedSlot ? 1 : 0))
+                            && (deletedSlot ? !backend.LoadSelectedSaveSlotView().SaveSlotOccupied[slot]
+                                : renamedSlot ? Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].LoadoutName != records[slot].LoadoutName
+                                : Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])),
+                            "The engine resolution must apply only its requested rename/delete and preserve other slots and uses.");
+                    }
+                    var resolved = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                    var resolvedUses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                    yield return TouchFrame(TouchAt(96, heldPoint, TouchPhase.Stationary));
+                    yield return WaitSeconds(0.45f);
+                    yield return TouchFrame(TouchAt(96, heldPoint, TouchPhase.Ended));
+                    yield return TouchFrame();
+                    Require(!Read<bool>(app, scenario.Flag) && !Read<bool>(app, "saveDraftSkipConfirmPending")
+                        && state.CurrentState == (scenario.Infinite ? GreedLastScreenState.InfiniteLoadoutSelect : GreedLastScreenState.SaveLoadoutDraft)
+                        && backend.HasSaveLoadoutCandidate,
+                        "The delayed engine release must not reopen a resolved confirmation or leave its screen.");
+                    for (int slot = 0; slot < resolved.Length; slot++)
+                        Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(resolved[slot])
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == resolvedUses[slot],
+                            "The canceled delayed engine release must preserve all resolved records and uses.");
+                    yield return TapTouch(heldCommand);
+                    Require((deleted ? scenario.Infinite ? state.CurrentState == GreedLastScreenState.LobbyReady
+                                : Read<bool>(app, "saveDraftSkipConfirmPending") : Read<bool>(app, scenario.Flag))
+                        && backend.HasSaveLoadoutCandidate,
+                        "A fresh engine press must still perform its own command after resolution.");
+                    Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Equals(records[1])
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == uses[1]
+                        && Read<int[]>(backend, "saveLoadoutRenameSteps")[1] == names[1],
+                        "Engine resolution, delayed release and fresh commands must preserve the occupied neighbor.");
+                    report.heldConfirmationResolutionCases++;
+                }
+                report.heldConfirmationResolutionsPreservedData = report.heldConfirmationResolutionCases == 9;
+                report.heldConfirmationResolutionFreshTapRecovered = report.heldConfirmationResolutionsPreservedData;
+                report.heldConfirmationOccupiedNeighborPreserved = report.heldConfirmationResolutionsPreservedData;
+                Debug.Log("Greed engine held confirmation resolutions passed: nine actual EventSystem cancel/confirm pairs; registered delayed releases cannot reopen or exit, requested changes apply once, occupied renamed neighbors/uses/candidates survive and fresh taps recover. In-memory progress only.");
             }
 
             private IEnumerator VerifyHeldSlotChanges()

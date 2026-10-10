@@ -13913,6 +13913,12 @@ namespace GreedLast
 
         private void RequestShowSaveLoadoutDetail()
         {
+            if ((stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                    || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
+                && (saveSlotDeleteConfirmPending || saveSlotRenameConfirmPending
+                    || (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft && saveDraftSkipConfirmPending)))
+                runtimeUi.CancelPendingUiInput();
+
             if (stateMachine.CurrentState == GreedLastScreenState.ProfileBoard)
             {
                 MoveProfileBoardPage(-1);
@@ -14038,6 +14044,7 @@ namespace GreedLast
                     return;
                 }
 
+                runtimeUi.CancelPendingUiInput();
                 string infiniteNotice = backend.RenameSelectedSaveLoadoutSlot();
                 saveSlotRenameConfirmPending = false;
                 RefreshInfiniteLoadoutSelect(infiniteNotice);
@@ -14070,6 +14077,7 @@ namespace GreedLast
                 return;
             }
 
+            runtimeUi.CancelPendingUiInput();
             string notice = backend.RenameSelectedSaveLoadoutSlot();
             saveSlotRenameConfirmPending = false;
             RefreshSaveLoadoutDraft(notice);
@@ -14095,6 +14103,7 @@ namespace GreedLast
                     return;
                 }
 
+                runtimeUi.CancelPendingUiInput();
                 string infiniteNotice = backend.DeleteSelectedSaveLoadoutSlot();
                 saveSlotDeleteConfirmPending = false;
                 RefreshInfiniteLoadoutSelect(infiniteNotice);
@@ -14127,6 +14136,7 @@ namespace GreedLast
                 return;
             }
 
+            runtimeUi.CancelPendingUiInput();
             string notice = backend.DeleteSelectedSaveLoadoutSlot();
             saveSlotDeleteConfirmPending = false;
             RefreshSaveLoadoutDraft(notice);
