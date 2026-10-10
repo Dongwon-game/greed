@@ -190,6 +190,8 @@ namespace GreedLast.Editor
                     && cycle.heldSaveConfirmationsPreservedData && cycle.heldSaveConfirmationFreshTapRecovered
                     && cycle.heldConfirmationResolutionCases == 9 && cycle.heldConfirmationResolutionsPreservedData
                     && cycle.heldConfirmationResolutionFreshTapRecovered && cycle.heldConfirmationOccupiedNeighborPreserved
+                    && cycle.heldSaveExitConfirmationCases == 2 && cycle.heldSaveExitsPreservedData
+                    && cycle.heldSaveExitFreshTapRecovered
                     && cycle.heldSlotChangeCases == 6 && cycle.heldSlotChangesPreservedData && cycle.heldSlotChangeFreshTapRecovered);
                 if (!results.succeeded) results.error = "Required engine input protection coverage did not complete.";
             }
@@ -208,7 +210,7 @@ namespace GreedLast.Editor
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
-                        && cycle.registeredHeldCommandPresses == 42
+                        && cycle.registeredHeldCommandPresses == 44
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -280,6 +282,8 @@ namespace GreedLast.Editor
             public int heldConfirmationResolutionCases;
             public bool heldConfirmationResolutionsPreservedData, heldConfirmationResolutionFreshTapRecovered;
             public bool heldConfirmationOccupiedNeighborPreserved;
+            public int heldSaveExitConfirmationCases;
+            public bool heldSaveExitsPreservedData, heldSaveExitFreshTapRecovered;
             public bool liveBackPauseResume;
             public bool heldPauseCommandsPreservedRun;
             public int heldPauseCommandCases;
@@ -1237,6 +1241,7 @@ namespace GreedLast.Editor
                     report.heldSaveConfirmationsPreservedData = report.heldSaveConfirmationCases == 6;
                     report.heldSaveConfirmationFreshTapRecovered = report.heldSaveConfirmationsPreservedData;
                     yield return VerifyHeldConfirmationResolutions();
+                    yield return VerifyHeldSaveExitConfirmations(pendingFields);
                     Debug.Log("Greed engine held save confirmations passed: six actual EventSystem two-finger openings, delayed old releases blocked, all records/uses/names preserved and fresh taps accepted. In-memory progress only.");
                 }
                 finally
@@ -1339,6 +1344,73 @@ namespace GreedLast.Editor
                 report.heldConfirmationResolutionFreshTapRecovered = report.heldConfirmationResolutionsPreservedData;
                 report.heldConfirmationOccupiedNeighborPreserved = report.heldConfirmationResolutionsPreservedData;
                 Debug.Log("Greed engine held confirmation resolutions passed: nine actual EventSystem cancel/confirm pairs; registered delayed releases cannot reopen or exit, requested changes apply once, occupied renamed neighbors/uses/candidates survive and fresh taps recover. In-memory progress only.");
+            }
+
+            private IEnumerator VerifyHeldSaveExitConfirmations(string[] pendingFields)
+            {
+                foreach (bool overwrite in new[] { true, false })
+                {
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    backend.AddSampleSaveLoadoutForTest(out _);
+                    for (int slot = 0; slot < 2; slot++)
+                    {
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.RenameSelectedSaveLoadoutSlot();
+                    }
+                    Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] = 1;
+                    backend.AddSampleClearCandidateForTest(out _);
+                    backend.SelectSaveLoadoutSlot(0);
+                    typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, backend);
+                    foreach (string field in pendingFields)
+                        typeof(GreedLastApp).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, false);
+                    state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                        saveLoadoutCandidateAvailable: true);
+                    yield return null;
+                    Button command = Read<Button>(ui, overwrite ? "nextPatternButton" : "returnLobbyButton");
+                    yield return TapTouch(command);
+                    string flag = overwrite ? "saveDraftOverwriteConfirmPending" : "saveDraftSkipConfirmPending";
+                    Require(Read<bool>(app, flag) && backend.HasSaveLoadoutCandidate,
+                        "Engine exit confirmation must first open without consuming its candidate.");
+                    yield return WaitSeconds(0.45f);
+                    var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                    var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                    var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                    var expectedSave = (GreedLastRunRecord)typeof(GreedLastMockBackend)
+                        .GetMethod("BuildSaveLoadoutRecord", BindingFlags.Static | BindingFlags.NonPublic)
+                        .Invoke(null, new object[] { Read<GreedLastRunRecord>(backend, "lastRunRecord") });
+                    Vector2 heldPoint = ScreenPoint(command, -0.25f);
+                    Vector2 confirmPoint = ScreenPoint(command, 0.25f);
+                    yield return TouchFrame(TouchAt(99, heldPoint, TouchPhase.Began));
+                    PointerEventData[] held = RequireRegisteredCommandPresses(command, 99);
+                    yield return TouchFrame(TouchAt(99, heldPoint, TouchPhase.Stationary), TouchAt(100, confirmPoint, TouchPhase.Began));
+                    yield return TouchFrame(TouchAt(99, heldPoint, TouchPhase.Stationary), TouchAt(100, confirmPoint, TouchPhase.Ended));
+                    RequireCanceledCommandPresses(command, held);
+                    Require(state.CurrentState == GreedLastScreenState.LobbyReady && !Read<bool>(app, flag)
+                        && !backend.HasSaveLoadoutCandidate,
+                        "Engine overwrite/discard must consume once and return to lobby.");
+                    yield return TouchFrame(TouchAt(99, heldPoint, TouchPhase.Stationary));
+                    yield return WaitSeconds(0.45f);
+                    yield return TouchFrame(TouchAt(99, heldPoint, TouchPhase.Ended));
+                    yield return TouchFrame();
+                    Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                        "The delayed engine release must not perform a new lobby command.");
+                    yield return TapTouch(Read<Button>(ui, "saveLoadoutButton"));
+                    Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && !backend.HasSaveLoadoutCandidate,
+                        "Fresh engine management taps must recover without recreating the candidate.");
+                    for (int slot = 0; slot < records.Length; slot++)
+                    {
+                        bool replaced = overwrite && slot == 0;
+                        Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(replaced ? expectedSave : records[slot])
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == (replaced ? 2 : uses[slot])
+                            && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == (replaced ? 0 : names[slot]),
+                            "Engine overwrite must replace only S1; discard and delayed releases must preserve other slots, uses and names.");
+                    }
+                    report.heldSaveExitConfirmationCases++;
+                }
+                report.heldSaveExitsPreservedData = report.heldSaveExitConfirmationCases == 2;
+                report.heldSaveExitFreshTapRecovered = report.heldSaveExitsPreservedData;
+                Debug.Log("Greed engine held save exits passed: two confirmed overwrite/discard exits consume once, delayed registered fingers cannot run lobby commands, named neighbors survive and fresh management taps recover. In-memory progress only.");
             }
 
             private IEnumerator VerifyHeldSlotChanges()

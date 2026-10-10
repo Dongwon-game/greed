@@ -1012,6 +1012,7 @@ namespace GreedLast.Editor
                             "Fresh overwrite/discard must consume its candidate exactly once.");
                 }
                 VerifyHeldConfirmationResolutions(app, ui, state);
+                VerifyHeldSaveExitConfirmations(app, ui, state, pendingFields);
                 Debug.Log("Greed held save confirmations passed: overwrite, two delete views, two rename views and discard; first release opens, old delayed release cannot confirm, fresh release confirms once. Direct pointer events and isolated progress; no personal slot changes.");
             }
             finally
@@ -1113,6 +1114,72 @@ namespace GreedLast.Editor
                     "Cancel, confirm, delayed release and a fresh command must preserve the occupied neighbor.");
             }
             Debug.Log("Greed held confirmation resolutions passed: four delete/rename cancellations, two completed renames, two completed deletes and one discard cancellation; registered old presses cannot reopen or exit, occupied renamed neighbors/uses/candidates survive and fresh presses recover. Isolated direct pointer callbacks only.");
+        }
+
+        private static void VerifyHeldSaveExitConfirmations(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastStateMachine state, string[] pendingFields)
+        {
+            foreach (bool overwrite in new[] { true, false })
+            {
+                var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                backend.AddSampleSaveLoadoutForTest(out _);
+                for (int slot = 0; slot < 2; slot++)
+                {
+                    backend.SelectSaveLoadoutSlot(slot);
+                    backend.RenameSelectedSaveLoadoutSlot();
+                }
+                Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] = 1;
+                backend.AddSampleClearCandidateForTest(out _);
+                backend.SelectSaveLoadoutSlot(0);
+                Write(app, "backend", backend);
+                foreach (string field in pendingFields) Write(app, field, false);
+                state.SetSaveLoadoutDraft(backend.LoadSelectedSaveSlotView(), backend.BuildSaveLoadoutDraftText(true),
+                    saveLoadoutCandidateAvailable: true);
+                var command = (GreedLastCommandButton)Read<Button>(ui, overwrite ? "nextPatternButton" : "returnLobbyButton");
+                void Tap(GreedLastCommandButton target, int id)
+                {
+                    var pointer = new PointerEventData(EventSystem.current) { pointerId = id, eligibleForClick = true };
+                    target.OnPointerDown(pointer);
+                    target.OnPointerUp(pointer);
+                    if (pointer.eligibleForClick) target.OnPointerClick(pointer);
+                }
+                Tap(command, 98);
+                string flag = overwrite ? "saveDraftOverwriteConfirmPending" : "saveDraftSkipConfirmPending";
+                Require(Read<bool>(app, flag) && backend.HasSaveLoadoutCandidate,
+                    "Exit confirmation must open without consuming its candidate: " + flag);
+                FinishSaveConfirmation(app);
+                var records = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                var names = (int[])Read<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                var expectedSave = (GreedLastRunRecord)typeof(GreedLastMockBackend)
+                    .GetMethod("BuildSaveLoadoutRecord", BindingFlags.Static | BindingFlags.NonPublic)
+                    .Invoke(null, new object[] { Read<GreedLastRunRecord>(backend, "lastRunRecord") });
+                var held = new PointerEventData(EventSystem.current) { pointerId = 99, eligibleForClick = true };
+                command.OnPointerDown(held);
+                RequireRegisteredPresses(command, held);
+                Tap(command, 100);
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !Read<bool>(app, flag)
+                    && !backend.HasSaveLoadoutCandidate && !held.eligibleForClick
+                    && Read<HashSet<PointerEventData>>(command, "pendingPresses").Count == 0,
+                    "Confirmed overwrite/discard must consume once, return to lobby and cancel the old press: " + flag);
+                command.OnPointerUp(held);
+                if (held.eligibleForClick) command.OnPointerClick(held);
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate,
+                    "Delayed confirmation release must not start another lobby command: " + flag);
+                Tap((GreedLastCommandButton)Read<Button>(ui, "saveLoadoutButton"), 99);
+                Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && !backend.HasSaveLoadoutCandidate,
+                    "A new management tap must recover without recreating a consumed candidate: " + flag);
+                for (int slot = 0; slot < records.Length; slot++)
+                {
+                    bool replaced = overwrite && slot == 0;
+                    Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(replaced ? expectedSave : records[slot])
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == (replaced ? 2 : uses[slot])
+                        && Read<int[]>(backend, "saveLoadoutRenameSteps")[slot] == (replaced ? 0 : names[slot]),
+                        "Overwrite must replace only S1; discard must preserve all records, uses and names.");
+                }
+            }
+            Debug.Log("Greed held save exits passed: confirmed overwrite/discard consume once, delayed registered releases cannot run lobby commands, named neighbors survive and fresh management taps recover. Isolated direct pointer callbacks only.");
         }
 
         private static void VerifyHeldSlotChanges(GreedLastApp app, GreedLastRuntimeUi ui,
