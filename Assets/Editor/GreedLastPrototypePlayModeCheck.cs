@@ -221,7 +221,8 @@ namespace GreedLast.Editor
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
                     && cycle.orphanTouchCommandCases == 6 && cycle.orphanTouchLaneCases == 6
-                    && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered && cycle.presentationSettingsRestored);
+                    && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered && cycle.presentationSettingsRestored
+                    && cycle.keyboardTransitionCases == 10 && cycle.keyboardTransitionFreshInputRecovered);
                 if (!results.succeeded) results.error = "Required fresh-command, touch-boundary and presentation restoration coverage did not complete.";
             }
             try
@@ -324,6 +325,8 @@ namespace GreedLast.Editor
             public bool transitionFrameCommandsPreservedRun, transitionFrameFreshTapRecovered;
             public int orphanTouchCommandCases, orphanTouchLaneCases;
             public bool orphanTouchesIgnored, orphanTouchFreshTapRecovered;
+            public int keyboardTransitionCases;
+            public bool keyboardTransitionFreshInputRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
@@ -422,6 +425,7 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
+                if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyKeyboardTransitionFrames();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -1963,6 +1967,72 @@ namespace GreedLast.Editor
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
             }
 
+            private IEnumerator VerifyKeyboardTransitionFrames()
+            {
+                foreach (bool detailed in new[] { false, true })
+                {
+                    if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                    yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                    Require((bool)Call(app, "TryHandlePauseOrBackKeyboardInput", false, true) && run.Paused,
+                        "A fresh pause key must pause the actual practice opening.");
+                    GreedLastRunSnapshot paused = run;
+                    Require(!(bool)Call(app, "TryHandlePauseOrBackKeyboardInput", false, false)
+                        && !(bool)Call(app, "TryHandlePrimaryKeyboardCommand", false),
+                        "No key must not be consumed as a transition command.");
+                    foreach (int command in new[] { 0, 1, 2 })
+                    {
+                        bool handled = command == 2
+                            ? (bool)Call(app, "TryHandlePrimaryKeyboardCommand", true)
+                            : (bool)Call(app, "TryHandlePauseOrBackKeyboardInput", command == 0, command == 1);
+                        Require(handled && run.Paused && !run.ResumeCountdownActive
+                            && run.Score == paused.Score && run.Health == paused.Health,
+                            "A same-frame Escape/P/Enter must not resume an unseen pause menu: " + command);
+                        report.keyboardTransitionCases++;
+                    }
+                    yield return null;
+                    Require((bool)Call(app, "TryHandlePrimaryKeyboardCommand", true) && run.ResumeCountdownActive,
+                        "A fresh next-frame Enter must resume through the existing lead-in.");
+
+                    bool terminalObserved = false;
+                    Action<GreedLastRunSnapshot> terminal = snapshot =>
+                    {
+                        if (!snapshot.Stopped || terminalObserved) return;
+                        terminalObserved = true;
+                        Require((bool)Call(app, "TryHandlePauseOrBackKeyboardInput", true, false)
+                            && run.Stopped && state.CurrentState == GreedLastScreenState.RunCoreTest
+                            && run.Score == snapshot.Score && run.Health == snapshot.Health,
+                            "Escape in the actual terminal publication frame must not dismiss an unseen result.");
+                        report.keyboardTransitionCases++;
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardCommand", true)
+                            && run.Stopped && state.CurrentState == GreedLastScreenState.RunCoreTest
+                            && run.Score == snapshot.Score && run.Health == snapshot.Health,
+                            "Enter in the actual terminal publication frame must not restart an unseen result.");
+                        report.keyboardTransitionCases++;
+                    };
+                    core.SnapshotChanged += terminal;
+                    try
+                    {
+                        float deadline = Time.realtimeSinceStartup + 25f;
+                        while (!terminalObserved)
+                        { Require(Time.realtimeSinceStartup < deadline, "Practice must naturally fail without synthetic clock edits."); yield return null; }
+                    }
+                    finally { core.SnapshotChanged -= terminal; }
+                    yield return null;
+                    if (detailed)
+                    {
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardCommand", true) && !run.Stopped && run.PracticeMode,
+                            "Fresh next-frame Enter must still restart a failed practice.");
+                        Call(app, "RequestReturnToLobby");
+                    }
+                    else Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
+                    Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                        "Fresh result navigation must return to the lobby normally.");
+                }
+                if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                report.keyboardTransitionFreshInputRecovered = report.keyboardTransitionCases == 10;
+                Debug.Log("Greed engine keyboard transition protection passed: clean/detailed pause Escape/P/Enter and natural failure Escape/Enter; next-frame resume, back and restart recovered. Router callbacks, no OS key injection or clock edits.");
+            }
+
             private IEnumerator WaitForTouchablePattern()
             {
                 float deadline = Time.realtimeSinceStartup + 8f;
@@ -2142,6 +2212,7 @@ namespace GreedLast.Editor
                     Require(inputOnce && run.Health == 0 && !run.DevInvincible && !backend.HasSaveLoadoutCandidate,
                         "A consumed source must support its live run until actual natural failure, without a new normal-save opportunity.");
                     int settledBefore = Read<int>(backend, "infiniteRunCount");
+                    yield return null;
                     Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
                     yield return null;
                     Require(state.CurrentState == GreedLastScreenState.LobbyReady,
@@ -2506,7 +2577,7 @@ namespace GreedLast.Editor
 
         private static T Read<T>(object target, string name) => (T)target.GetType()
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(target);
-        private static void Call(object target, string name, params object[] args) => target.GetType()
+        private static object Call(object target, string name, params object[] args) => target.GetType()
             .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, args);
         private static void InvokeStatic(Type type, string name) => type
             .GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);

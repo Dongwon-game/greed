@@ -10793,8 +10793,11 @@ namespace GreedLast
         private string pendingRefillRunReviewContext = string.Empty;
         private GreedLastRunSnapshot latestAppRunSnapshot;
         private bool hasLatestAppRunSnapshot;
+        private int runCommandTransitionFrame = -1;
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
+        private bool HasUnpresentedRunCommandTransition => Application.isPlaying && IsRunState()
+            && runCommandTransitionFrame == Time.frameCount;
 
 #if UNITY_EDITOR
         public const string EditorPlayModeCheckKey = "GreedLast.EditorTests.PlayModeCheck";
@@ -10983,7 +10986,10 @@ namespace GreedLast
             // A live press must not become a newly opened pause or result command.
             if ((snapshot.Stopped && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Stopped))
                 || (snapshot.Paused && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Paused)))
+            {
+                runCommandTransitionFrame = Time.frameCount;
                 runtimeUi?.CancelPendingUiInput();
+            }
             bool leavingRotation = hasLatestAppRunSnapshot
                 && IsLiveRotationInputWindow(latestAppRunSnapshot)
                 && GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern)
@@ -11137,10 +11143,16 @@ namespace GreedLast
 
         private bool TryHandlePrimaryKeyboardInput()
         {
-            if (!Input.GetKeyDown(KeyCode.Return) && !Input.GetKeyDown(KeyCode.KeypadEnter))
+            return TryHandlePrimaryKeyboardCommand(Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter));
+        }
+
+        private bool TryHandlePrimaryKeyboardCommand(bool primaryPressed)
+        {
+            if (!primaryPressed)
             {
                 return false;
             }
+            if (HasUnpresentedRunCommandTransition) return true;
 
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
@@ -12551,6 +12563,8 @@ namespace GreedLast
         private bool TryHandlePauseOrBackKeyboardInput(bool backPressed, bool pausePressed)
         {
             if (!backPressed && !pausePressed) return false;
+            // A gameplay key sampled before the new pause/result is visible cannot act on that screen.
+            if (HasUnpresentedRunCommandTransition) return true;
             if (backPressed && TryHandleBackKeyboardInput()) return true;
             if (!IsRunState()) return false;
             runtimeUi?.CancelPendingUiInput();
