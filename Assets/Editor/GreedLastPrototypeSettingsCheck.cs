@@ -21,6 +21,127 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Settings Recovery Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Presentation Settings Ownership Check")]
+        public static void VerifyPresentationLifetime()
+        {
+            Require(CanRun(), "Presentation ownership checks require Edit mode.");
+            int originalQuality = QualitySettings.GetQualityLevel();
+            int originalVSync = QualitySettings.vSyncCount;
+            int originalFrameRate = Application.targetFrameRate;
+            int originalSleep = Screen.sleepTimeout;
+            bool originalIsolation = SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
+            string preferences = CapturePreferences();
+            GameObject cameraBefore = GameObject.Find("GreedLastCamera");
+            GameObject eventsBefore = GameObject.Find("GreedLastEventSystem");
+            GameObject host = null, canvas = null;
+            int alternateQuality = originalQuality == 0 ? 1 : 0;
+            int alternateVSync = 0;
+            bool alternateCaptured = false;
+            try
+            {
+                Require(QualitySettings.names.Length > 1, "Quality ownership checks need two configured levels.");
+                QualitySettings.SetQualityLevel(alternateQuality, false);
+                alternateVSync = QualitySettings.vSyncCount;
+                alternateCaptured = true;
+                QualitySettings.SetQualityLevel(originalQuality, false);
+                SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
+                for (int scenario = 0; scenario < 6; scenario++)
+                {
+                    QualitySettings.SetQualityLevel(originalQuality, false);
+                    QualitySettings.vSyncCount = 1;
+                    Application.targetFrameRate = 37;
+                    Screen.sleepTimeout = SleepTimeout.SystemSetting;
+                    int priorSleep = Screen.sleepTimeout;
+                    host = new GameObject("GreedPresentationOwnershipCheck");
+                    GreedLastApp app = host.AddComponent<GreedLastApp>();
+                    Require(Read<GreedLastMockBackend>(app, "backend") == null,
+                        "The Edit-mode fixture must not start a personal backend automatically.");
+                    Call(app, "Awake");
+                    var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                    canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
+                    Require(!Read<bool>(Read<GreedLastMockBackend>(app, "backend"), "persistData")
+                        && QualitySettings.vSyncCount == 0 && Application.targetFrameRate == 60,
+                        "Actual isolated Awake must apply the existing prototype pacing without persistent data.");
+                    bool changedVSync = scenario == 1 || scenario == 2;
+                    bool changedFrameRate = scenario == 1 || scenario == 3;
+                    if (changedVSync) QualitySettings.vSyncCount = 2;
+                    if (changedFrameRate) Application.targetFrameRate = 41;
+                    if (scenario == 1) Screen.sleepTimeout = SleepTimeout.SystemSetting;
+                    bool changedQuality = scenario >= 4;
+                    if (changedQuality)
+                    {
+                        QualitySettings.SetQualityLevel(alternateQuality, false);
+                        QualitySettings.vSyncCount = scenario == 4 ? 0 : 2;
+                    }
+                    int expectedQuality = changedQuality ? alternateQuality : originalQuality;
+                    int expectedVSync = changedQuality ? (scenario == 4 ? 0 : 2) : (changedVSync ? 2 : 1);
+                    Call(app, "OnDestroy");
+                    for (int repeat = 0; repeat < 2; repeat++)
+                    {
+                        Require(QualitySettings.GetQualityLevel() == expectedQuality
+                            && QualitySettings.vSyncCount == expectedVSync
+                            && Application.targetFrameRate == (changedFrameRate ? 41 : 37)
+                            && Screen.sleepTimeout == priorSleep,
+                            "App removal must restore owned pacing and preserve independently changed values: "
+                                + $"case={scenario}, quality={QualitySettings.GetQualityLevel()}, vSync={QualitySettings.vSyncCount}, target={Application.targetFrameRate}.");
+                        Call(app, "OnDestroy");
+                    }
+                    GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                    UnityEngine.Object.DestroyImmediate(host);
+                    host = null;
+                    UnityEngine.Object.DestroyImmediate(canvas);
+                    canvas = null;
+                    DestroyCreated("GreedLastCamera", cameraBefore);
+                    DestroyCreated("GreedLastEventSystem", eventsBefore);
+                }
+                host = new GameObject("GreedUninitializedPresentationCheck");
+                GreedLastApp uninitialized = host.AddComponent<GreedLastApp>();
+                int beforeVSync = QualitySettings.vSyncCount, beforeFrameRate = Application.targetFrameRate;
+                Call(uninitialized, "OnDestroy");
+                Require(QualitySettings.vSyncCount == beforeVSync && Application.targetFrameRate == beforeFrameRate,
+                    "An uninitialized app must not restore settings it never captured.");
+            }
+            finally
+            {
+                if (host != null)
+                {
+                    GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                    UnityEngine.Object.DestroyImmediate(host);
+                }
+                if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas);
+                DestroyCreated("GreedLastCamera", cameraBefore);
+                DestroyCreated("GreedLastEventSystem", eventsBefore);
+                if (alternateCaptured)
+                {
+                    QualitySettings.SetQualityLevel(alternateQuality, false);
+                    QualitySettings.vSyncCount = alternateVSync;
+                }
+                QualitySettings.SetQualityLevel(originalQuality, false);
+                QualitySettings.vSyncCount = originalVSync;
+                Application.targetFrameRate = originalFrameRate;
+                Screen.sleepTimeout = originalSleep;
+                SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, originalIsolation);
+            }
+            Require(QualitySettings.GetQualityLevel() == originalQuality && QualitySettings.vSyncCount == originalVSync
+                && Application.targetFrameRate == originalFrameRate && Screen.sleepTimeout == originalSleep,
+                "Presentation checks must restore the original selected quality and global settings.");
+            Require(CapturePreferences() == preferences, "Presentation ownership must not change personal preferences.");
+            Debug.Log("Greed presentation ownership passed: six actual isolated Awake/OnDestroy paths, mixed external "
+                + "pacing changes, quality-level changes, repeated release and uninitialized removal. Original quality levels, global settings and personal values preserved; no device FPS measurement.");
+        }
+
+        [MenuItem("Greed Last/Run Presentation Settings Ownership Check", true)]
+        private static bool CanRunPresentationLifetime() => CanRun();
+
+        private static string CapturePreferences() => JsonUtility.ToJson(typeof(GreedLastPrototypePlayModeCheck)
+            .GetMethod("CapturePreferences", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null));
+
+        private static void DestroyCreated(string name, GameObject previous)
+        {
+            GameObject created = GameObject.Find(name);
+            if (previous == null && created != null) UnityEngine.Object.DestroyImmediate(created);
+        }
+
         public static void VerifyTiming()
         {
             Require(CanRun(), "Settings checks require Edit mode.");

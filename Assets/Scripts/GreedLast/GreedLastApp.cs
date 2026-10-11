@@ -10745,6 +10745,8 @@ namespace GreedLast
         private GreedLastStateMachine stateMachine;
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
+        private bool presentationSettingsCaptured;
+        private int previousQualityLevel, previousVSyncCount, previousTargetFrameRate, previousSleepTimeout;
         private bool applicationPaused;
         private bool applicationHasFocus = true;
         private bool appStarted;
@@ -10826,9 +10828,7 @@ namespace GreedLast
                 activeApp = this;
                 DontDestroyOnLoad(gameObject);
             }
-            QualitySettings.vSyncCount = PrototypeVSyncCount;
-            Application.targetFrameRate = PrototypeTargetFrameRate;
-            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            ConfigurePresentationSettings();
             ConfigurePrototypeMobileOrientation();
 
             requestGate = new GreedLastRequestGate();
@@ -10874,6 +10874,32 @@ namespace GreedLast
 
             stateMachine.StateChanged += runtimeUi.Render;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
+        }
+
+        private void ConfigurePresentationSettings()
+        {
+            if (!presentationSettingsCaptured)
+            {
+                previousQualityLevel = QualitySettings.GetQualityLevel();
+                previousVSyncCount = QualitySettings.vSyncCount;
+                previousTargetFrameRate = Application.targetFrameRate;
+                previousSleepTimeout = Screen.sleepTimeout;
+                presentationSettingsCaptured = true;
+            }
+            QualitySettings.vSyncCount = PrototypeVSyncCount;
+            Application.targetFrameRate = PrototypeTargetFrameRate;
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+        }
+
+        private void RestorePresentationSettings()
+        {
+            if (!presentationSettingsCaptured) return;
+            presentationSettingsCaptured = false;
+            // Restore only values still matching this app's settings, not another owner's new choices.
+            if (QualitySettings.GetQualityLevel() == previousQualityLevel
+                && QualitySettings.vSyncCount == PrototypeVSyncCount) QualitySettings.vSyncCount = previousVSyncCount;
+            if (Application.targetFrameRate == PrototypeTargetFrameRate) Application.targetFrameRate = previousTargetFrameRate;
+            if (Screen.sleepTimeout == SleepTimeout.NeverSleep) Screen.sleepTimeout = previousSleepTimeout;
         }
 
         private static void ConfigurePrototypeMobileOrientation()
@@ -10931,6 +10957,7 @@ namespace GreedLast
         private void OnDestroy()
         {
             if (activeApp == this) activeApp = null;
+            RestorePresentationSettings();
             if (stateMachine != null && runtimeUi != null)
             {
                 stateMachine.StateChanged -= runtimeUi.Render;

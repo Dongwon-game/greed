@@ -47,6 +47,7 @@ namespace GreedLast.Editor
                 GreedLastApp.PrototypeVSyncCount == 0
                     && GreedLastApp.PrototypeTargetFrameRate == 60,
                 "The mobile rhythm prototype must keep a deterministic 60 fps target without quality-level vSync overriding frame pacing.");
+            GreedLastPrototypeSettingsCheck.VerifyPresentationLifetime();
             Require(
                 InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.BootInit)
                     == "리듬으로 피하고, 정확하게 돌파하라"

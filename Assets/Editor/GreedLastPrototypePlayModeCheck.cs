@@ -221,8 +221,8 @@ namespace GreedLast.Editor
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
                     && cycle.orphanTouchCommandCases == 6 && cycle.orphanTouchLaneCases == 6
-                    && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered);
-                if (!results.succeeded) results.error = "Required fresh-command and touch-boundary coverage did not complete.";
+                    && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered && cycle.presentationSettingsRestored);
+                if (!results.succeeded) results.error = "Required fresh-command, touch-boundary and presentation restoration coverage did not complete.";
             }
             try
             {
@@ -319,6 +319,7 @@ namespace GreedLast.Editor
             public bool audioResetInterruptedCountdown, disabledAudioResetRecovered;
             public int simulatedAudioConfigurationCallbacks;
             public bool blockedEngineFramePreservedRun;
+            public bool presentationSettingsRestored;
             public int transitionFrameCommandCases;
             public bool transitionFrameCommandsPreservedRun, transitionFrameFreshTapRecovered;
             public int orphanTouchCommandCases, orphanTouchLaneCases;
@@ -600,6 +601,10 @@ namespace GreedLast.Editor
                 GameObject formerHost = app.gameObject;
                 AudioSource unrelatedSource = formerHost.AddComponent<AudioSource>();
                 unrelatedSource.playOnAwake = false;
+                int priorQuality = Read<int>(app, "previousQualityLevel");
+                int priorVSync = Read<int>(app, "previousVSyncCount");
+                int priorFrameRate = Read<int>(app, "previousTargetFrameRate");
+                int priorSleep = Read<int>(app, "previousSleepTimeout");
                 UnityEngine.Object.Destroy(app);
                 yield return null;
                 yield return null;
@@ -611,6 +616,11 @@ namespace GreedLast.Editor
                     "Removing just the app component must also release its owned UI, camera, event system and audio.");
                 Require(formerHost != null && formerHost.GetComponent<GreedLastRuntimeUi>() == null,
                     "Removing an app component must not destroy its host or leave a live orphaned UI component.");
+                Require(QualitySettings.GetQualityLevel() == priorQuality && QualitySettings.vSyncCount == priorVSync
+                    && Application.targetFrameRate == priorFrameRate
+                    && Screen.sleepTimeout == priorSleep,
+                    "Actual app removal must restore the presentation settings captured before its Awake.");
+                report.presentationSettingsRestored = true;
                 report.componentRemovalReleasedUi = true;
                 report.audioSourcesAfterComponentRemoval = formerHost.GetComponents<AudioSource>().Length;
                 report.generatedAudioSourceReleased = ownedSource == null && report.audioSourcesAfterComponentRemoval == 1;
