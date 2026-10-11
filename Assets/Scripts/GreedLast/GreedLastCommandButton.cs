@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -7,10 +8,12 @@ namespace GreedLast
     public sealed class GreedLastCommandButton : Button
     {
         private readonly HashSet<PointerEventData> pendingPresses = new HashSet<PointerEventData>();
+        private int canceledFrame = -1;
 
         public override void OnPointerDown(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || !IsActive() || !IsInteractable())
+            if (eventData.button != PointerEventData.InputButton.Left || !IsActive() || !IsInteractable()
+                || (Application.isPlaying && canceledFrame == Time.frameCount))
             {
                 eventData.eligibleForClick = false;
                 return;
@@ -27,6 +30,8 @@ namespace GreedLast
 
         public void CancelPendingPresses()
         {
+            // A transition can precede this frame's input raycast; its new screen is not presented yet.
+            if (Application.isPlaying) canceledFrame = Time.frameCount;
             PointerEventData lastPointer = null;
             foreach (PointerEventData pointer in pendingPresses)
             {

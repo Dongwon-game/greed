@@ -192,9 +192,10 @@ try {
     $types = @(Get-AllTypes $assembly.MainModule.Types)
     $editorRefs = @($assembly.MainModule.AssemblyReferences | Where-Object { $_.Name -like 'UnityEditor*' })
     $editorTypes = @($types | Where-Object { $_.Namespace -eq 'GreedLast.Editor' -or $_.FullName -match 'GreedLast\.Editor\.' })
+    $inputFixtureTypes = @($types | Where-Object { $_.FullName -eq 'GreedLast.GreedLastPrototypeKeyboardInput' })
     $resetApis = @($types.Methods | Where-Object { $_.Name -in @('CreatePersistenceTestBackendForEditor', 'ClearPersistedProgressForEditor', 'ResetPrototypeProgressForEditor') })
     $connectionMethods = @($types.Methods | Where-Object { $_.Name -eq 'ToggleOfflineForEditorCheck' })
-    if ($editorRefs.Count -ne 0 -or $editorTypes.Count -ne 0 -or $resetApis.Count -ne 0 -or $connectionMethods.Count -ne 2) { throw 'Unexpected release assembly surface.' }
+    if ($editorRefs.Count -ne 0 -or $editorTypes.Count -ne 0 -or $inputFixtureTypes.Count -ne 0 -or $resetApis.Count -ne 0 -or $connectionMethods.Count -ne 2) { throw 'Unexpected release assembly surface.' }
     $policies = @($types.Methods | Where-Object { $_.DeclaringType.FullName -eq 'GreedLast.GreedLastDevToolPolicy' -and $_.Name -eq 'ShouldEnable' })
     $modeGetters = @($types.Methods | Where-Object { $_.DeclaringType.FullName -in @('GreedLast.GreedLastApp', 'GreedLast.GreedLastRuntimeUi') -and $_.Name -eq 'get_DevToolsEnabled' })
     if ($policies.Count -ne 1 -or $modeGetters.Count -ne 2) { throw 'Development policy/getter surface changed; update its explicit verification contract.' }
@@ -265,6 +266,7 @@ if ($PackagePath) {
     RuntimeAssemblySha256 = $info.runtimeAssemblySha256
     EditorReferences = $editorRefs.Count
     EditorTestTypes = $editorTypes.Count
+    InputFixtureTypes = $inputFixtureTypes.Count
     EditorResetApis = $resetApis.Count
     VerifiedDevelopmentPolicies = $policies.Count
     VerifiedDevelopmentModeGetters = $modeGetters.Count

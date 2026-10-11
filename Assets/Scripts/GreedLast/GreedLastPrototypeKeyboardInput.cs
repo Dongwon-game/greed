@@ -18,11 +18,28 @@ namespace GreedLast
         public Vector2 MousePosition { get; set; }
         public Vector2 ScrollDelta { get; set; }
         public Touch[] Touches { get; set; } = System.Array.Empty<Touch>();
+        public System.Action BeforeTouchRead { get; set; }
+        public System.Action BeforeMouseRead { get; set; }
         public override bool mousePresent => MouseEnabled;
         public override bool touchSupported => Touches.Length > 0;
         public override int touchCount => Touches.Length;
-        public override Touch GetTouch(int index) => Touches[index];
-        public override Vector2 mousePosition => MousePosition;
+        public override Touch GetTouch(int index)
+        {
+            System.Action callback = BeforeTouchRead;
+            BeforeTouchRead = null;
+            callback?.Invoke();
+            return Touches[index];
+        }
+        public override Vector2 mousePosition
+        {
+            get
+            {
+                System.Action callback = BeforeMouseRead;
+                BeforeMouseRead = null;
+                callback?.Invoke();
+                return MousePosition;
+            }
+        }
         public override Vector2 mouseScrollDelta => ScrollDelta;
         public override bool GetMouseButtonDown(int button) => button == 0 && MouseDown;
         public override bool GetMouseButtonUp(int button) => button == 0 && MouseUp;

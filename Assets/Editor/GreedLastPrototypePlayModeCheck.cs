@@ -105,8 +105,10 @@ namespace GreedLast.Editor
                 ? EnterPlayModeOptions.DisableDomainReload : EnterPlayModeOptions.None;
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
-            SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(
-                SessionState.GetBool(Prefix + "fullLoop", false) ? 300 : 100).ToString("O"));
+            // Lifecycle includes save resolutions and eight real resume lead-ins; local wait bounds stay unchanged.
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 300
+                : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 180;
+            SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
         }
 
@@ -214,6 +216,12 @@ namespace GreedLast.Editor
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
+            if (results.succeeded && !results.multiTouchOnly)
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
+                    && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered);
+                if (!results.succeeded) results.error = "Required transition-frame command coverage did not complete.";
+            }
             try
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
@@ -309,6 +317,8 @@ namespace GreedLast.Editor
             public bool audioResetInterruptedCountdown, disabledAudioResetRecovered;
             public int simulatedAudioConfigurationCallbacks;
             public bool blockedEngineFramePreservedRun;
+            public int transitionFrameCommandCases;
+            public bool transitionFrameCommandsPreservedRun, transitionFrameFreshTapRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
@@ -572,6 +582,7 @@ namespace GreedLast.Editor
                 report.lifecycleJudgements = report.judgements;
                 yield return VerifyCalibratedTouchAndAudioRecovery();
                 yield return VerifyBlockedEngineFrame();
+                yield return VerifyTransitionFrameCommands();
                 yield return VerifyAudioBackgroundOrders();
                 yield return VerifySuspendedFreshInput();
                 if (SessionState.GetBool(Prefix + "fullLoop", false))
@@ -777,6 +788,114 @@ namespace GreedLast.Editor
                     && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
                     "A frame interruption must preserve the same trap and ordinary resume lead-in.");
                 report.blockedEngineFramePreservedRun = true;
+            }
+
+            private IEnumerator VerifyTransitionFrameCommands()
+            {
+                bool originalCleanView = Read<bool>(ui, "devCleanViewEnabled");
+                try
+                {
+                    for (int controls = 0; controls < 2; controls++)
+                    {
+                        if (Read<bool>(ui, "devCleanViewEnabled") != (controls == 0))
+                            ui.ToggleDevCleanView();
+                        for (int device = 0; device < 2; device++)
+                        {
+                            Require(run.ActivePattern && !run.Paused && !run.Stopped,
+                                "Transition-frame input must start on a live, presented trap.");
+                            Call(app, "HandlePresentationSuspended");
+                            yield return null;
+                            Button command = Read<Button>(ui, "nextPatternButton");
+                            Vector2 point = ScreenPoint(command);
+                            yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                            float deadline = Time.realtimeSinceStartup + 8f;
+                            while (run.Paused)
+                            { Require(Time.realtimeSinceStartup < deadline, "Fixture resume did not finish."); yield return null; }
+                            yield return WaitSeconds(0.15f);
+                            Canvas.ForceUpdateCanvases();
+                            Require(RaycastButton(point) is not GreedLastCommandButton,
+                                "The new menu target must cover previously non-command playfield, not a visible old menu command.");
+                            int callbacks = 0;
+                            GreedLastRunSnapshot frozen = default;
+                            // Interrupt at the actual module's input read, before its new-screen raycast/Down.
+                            Action interrupt = () =>
+                            {
+                                callbacks++;
+                                Call(app, "HandlePresentationSuspended");
+                                Canvas.ForceUpdateCanvases();
+                                frozen = run;
+                                Require(RaycastButton(point) == command && command.isActiveAndEnabled
+                                    && command.IsInteractable() && run.Paused && !run.ResumeCountdownActive,
+                                    "The interruption must expose the intended menu target in the input-read frame: "
+                                        + $"controls={controls}, device={device}, "
+                                        + $"hit={RaycastButton(point)?.name}, expected={command.name}, "
+                                        + $"paused={run.Paused}, countdown={run.ResumeCountdownActive}, stopped={run.Stopped}.");
+                            };
+                            if (device == 0)
+                            {
+                                input.BeforeTouchRead = interrupt;
+                                yield return TouchFrame(TouchAt(120, point, TouchPhase.Began));
+                                yield return TouchFrame(TouchAt(120, point, TouchPhase.Stationary));
+                            }
+                            else
+                            {
+                                input.Touches = Array.Empty<Touch>();
+                                input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                                input.MouseUp = false;
+                                input.MousePosition = point;
+                                input.BeforeMouseRead = interrupt;
+                                yield return null;
+                                input.MouseDown = false;
+                                yield return null;
+                            }
+                            Require(callbacks == 1, "The input-read interruption must happen exactly once.");
+                            int pending = Read<HashSet<PointerEventData>>(command, "pendingPresses").Count;
+                            yield return WaitSeconds(0.45f);
+                            if (device == 0)
+                            {
+                                yield return TouchFrame(TouchAt(120, point, TouchPhase.Ended));
+                                yield return TouchFrame();
+                            }
+                            else yield return ReleaseMouse();
+                            Require(pending == 0 && state.CurrentState == GreedLastScreenState.RunCoreTest
+                                && run.Paused && !run.ResumeCountdownActive && !run.Stopped
+                                && run.Pattern.PatternId == frozen.Pattern.PatternId
+                                && Mathf.Abs(run.ElapsedSeconds - frozen.ElapsedSeconds) < 0.0001f
+                                && run.MissCount == frozen.MissCount,
+                                "An input begun before the new pause menu was presented must not resume or abandon on release: "
+                                    + $"controls={controls}, device={device}, pending={pending}, "
+                                    + $"state={state.CurrentState}, paused={run.Paused}, countdown={run.ResumeCountdownActive}");
+                            AssertFrozen(frozen);
+                            report.transitionFrameCommandCases++;
+                            if (device == 0) yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                            else yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                            Require(run.ResumeCountdownActive,
+                                "A fresh input after the transition frame must still start the ordinary resume lead-in.");
+                            deadline = Time.realtimeSinceStartup + 8f;
+                            while (run.Paused)
+                            { AssertFrozen(frozen); Require(Time.realtimeSinceStartup < deadline, "Fresh transition input did not resume."); yield return null; }
+                            Require(run.ActivePattern && run.Pattern.PatternId == frozen.Pattern.PatternId
+                                && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
+                                "Fresh input recovery must retain the same trap without charging a miss.");
+                        }
+                    }
+                    report.transitionFrameCommandsPreservedRun = report.transitionFrameCommandCases == 4;
+                    report.transitionFrameFreshTapRecovered = report.transitionFrameCommandsPreservedRun;
+                    Debug.Log("Greed engine transition-frame protection passed: touch/mouse resume, clean/detailed "
+                        + "controls; unseen menu presses canceled, same trap preserved and fresh resume recovered.");
+                }
+                finally
+                {
+                    input.BeforeTouchRead = input.BeforeMouseRead = null;
+                    if (Read<bool>(ui, "devCleanViewEnabled") != originalCleanView) ui.ToggleDevCleanView();
+                }
+            }
+
+            private static Button RaycastButton(Vector2 point)
+            {
+                var hits = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = point }, hits);
+                return hits.Count == 0 ? null : hits[0].gameObject.GetComponentInParent<Button>();
             }
 
             private IEnumerator VerifyAudioBackgroundOrders()
