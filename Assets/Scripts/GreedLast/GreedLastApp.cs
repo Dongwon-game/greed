@@ -28116,6 +28116,12 @@ namespace GreedLast
                     return;
                 }
 
+                if (!GreedLastPointerInput.IsFreshPress(pointer))
+                {
+                    pointer.eligibleForClick = false;
+                    return;
+                }
+
                 if (!laneHeldPointers[laneIndex].Add(pointer.pointerId))
                 {
                     return;

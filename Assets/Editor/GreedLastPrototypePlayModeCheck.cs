@@ -105,8 +105,8 @@ namespace GreedLast.Editor
                 ? EnterPlayModeOptions.DisableDomainReload : EnterPlayModeOptions.None;
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
-            // Lifecycle includes save resolutions and eight real resume lead-ins; local wait bounds stay unchanged.
-            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 300
+            // Added input boundaries include real resume lead-ins; individual state/wait bounds stay unchanged.
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 330
                 : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 180;
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
@@ -219,8 +219,10 @@ namespace GreedLast.Editor
             if (results.succeeded && !results.multiTouchOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
-                    && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered);
-                if (!results.succeeded) results.error = "Required transition-frame command coverage did not complete.";
+                    && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
+                    && cycle.orphanTouchCommandCases == 6 && cycle.orphanTouchLaneCases == 6
+                    && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered);
+                if (!results.succeeded) results.error = "Required fresh-command and touch-boundary coverage did not complete.";
             }
             try
             {
@@ -319,6 +321,8 @@ namespace GreedLast.Editor
             public bool blockedEngineFramePreservedRun;
             public int transitionFrameCommandCases;
             public bool transitionFrameCommandsPreservedRun, transitionFrameFreshTapRecovered;
+            public int orphanTouchCommandCases, orphanTouchLaneCases;
+            public bool orphanTouchesIgnored, orphanTouchFreshTapRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
@@ -582,6 +586,7 @@ namespace GreedLast.Editor
                 report.lifecycleJudgements = report.judgements;
                 yield return VerifyCalibratedTouchAndAudioRecovery();
                 yield return VerifyBlockedEngineFrame();
+                yield return VerifyOrphanTouchInput();
                 yield return VerifyTransitionFrameCommands();
                 yield return VerifyAudioBackgroundOrders();
                 yield return VerifySuspendedFreshInput();
@@ -788,6 +793,101 @@ namespace GreedLast.Editor
                     && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
                     "A frame interruption must preserve the same trap and ordinary resume lead-in.");
                 report.blockedEngineFramePreservedRun = true;
+            }
+
+            private IEnumerator VerifyOrphanTouchInput()
+            {
+                bool originalCleanView = Read<bool>(ui, "devCleanViewEnabled");
+                TouchPhase[] firstPhases = { TouchPhase.Ended, TouchPhase.Stationary, TouchPhase.Moved };
+                try
+                {
+                    for (int controls = 0; controls < 2; controls++)
+                    {
+                        if (Read<bool>(ui, "devCleanViewEnabled") != (controls == 0)) ui.ToggleDevCleanView();
+                        Require(run.ActivePattern && !run.Paused && !run.Stopped,
+                            "Orphan touch input must start on a live trap.");
+                        Call(app, "HandlePresentationSuspended");
+                        yield return null;
+                        yield return null;
+                        Button resume = Read<Button>(ui, "nextPatternButton");
+                        Vector2 point = ScreenPoint(resume);
+                        Require(resume.isActiveAndEnabled && resume.IsInteractable() && RaycastButton(point) == resume,
+                            "Orphan command touches must target the already presented, active resume command.");
+                        GreedLastRunSnapshot frozen = run;
+                        for (int phase = 0; phase < firstPhases.Length; phase++)
+                        {
+                            yield return TouchFrame(TouchAt(121 + phase, point, firstPhases[phase]));
+                            int pending = Read<HashSet<PointerEventData>>(resume, "pendingPresses").Count;
+                            if (firstPhases[phase] != TouchPhase.Ended)
+                                yield return TouchFrame(TouchAt(121 + phase, point, TouchPhase.Ended));
+                            yield return TouchFrame();
+                            Require(pending == 0 && run.Paused && !run.ResumeCountdownActive
+                                && state.CurrentState == GreedLastScreenState.RunCoreTest
+                                && run.Pattern.PatternId == frozen.Pattern.PatternId
+                                && Mathf.Abs(run.ElapsedSeconds - frozen.ElapsedSeconds) < 0.0001f
+                                && run.MissCount == frozen.MissCount,
+                                "A touch first reported without Began must not register or execute resume: "
+                                    + $"controls={controls}, phase={firstPhases[phase]}, pending={pending}, "
+                                    + $"paused={run.Paused}, countdown={run.ResumeCountdownActive}.");
+                            AssertFrozen(frozen);
+                            report.orphanTouchCommandCases++;
+                        }
+                        yield return TapTouch(resume, 121);
+                        Require(run.ResumeCountdownActive, "A fresh Began/Ended tap must still resume after orphan contacts.");
+                        float deadline = Time.realtimeSinceStartup + 8f;
+                        while (run.Paused)
+                        { AssertFrozen(frozen); Require(Time.realtimeSinceStartup < deadline, "Orphan touch recovery did not resume."); yield return null; }
+                        Require(run.ActivePattern && run.Pattern.PatternId == frozen.Pattern.PatternId
+                            && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
+                            "Orphan contact recovery must preserve the same trap with the normal lead-in.");
+
+                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1];
+                        point = ScreenPoint(lane);
+                        Require(lane.isActiveAndEnabled && lane.IsInteractable() && RaycastButton(point) == lane,
+                            "Orphan lane contacts must target the active lane through the actual raycast.");
+                        int judgements = report.judgements;
+                        int score = run.Score, health = run.Health, misses = run.MissCount;
+                        for (int phase = 0; phase < firstPhases.Length; phase++)
+                        {
+                            yield return TouchFrame(TouchAt(121 + phase, point, firstPhases[phase]));
+                            Require(report.judgements == judgements
+                                && Read<HashSet<int>[]>(ui, "laneHeldPointers")[(int)run.Pattern.Channel - 1].Count == 0,
+                                "A lane touch first reported without Began must not judge or register a hold: "
+                                    + $"controls={controls}, phase={firstPhases[phase]}, judgements={report.judgements}/{judgements}.");
+                            if (firstPhases[phase] != TouchPhase.Ended)
+                                yield return TouchFrame(TouchAt(121 + phase, point, TouchPhase.Ended));
+                            yield return TouchFrame();
+                            Require(report.judgements == judgements && run.Score == score && run.Health == health
+                                && run.MissCount == misses && run.ActivePattern,
+                                "Orphan lane contacts must not consume the trap or create score/damage.");
+                            report.orphanTouchLaneCases++;
+                        }
+                        yield return WaitForTouchablePattern();
+                        yield return TapTouch(lane, 121);
+                        Require(report.judgements == judgements + 1 && run.MissCount == misses
+                            && (run.LastResult == GreedLastJudgementResult.Success || run.LastResult == GreedLastJudgementResult.Good),
+                            "The same finger ID with a fresh Began must judge exactly once after orphan contacts.");
+                        if (run.Stopped)
+                        {
+                            Require(run.PracticeMode && core.CanExitAfterPractice,
+                                "A successful fresh practice touch may finish practice, not fail the run.");
+                            yield return null;
+                            yield return ClickMouse(Read<Button>(ui, "returnLobbyButton"));
+                            yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                        }
+                        deadline = Time.realtimeSinceStartup + 8f;
+                        while (!run.ActivePattern || run.CountdownActive)
+                        { Require(!run.Stopped && Time.realtimeSinceStartup < deadline, "Fresh orphan recovery did not reach the next trap."); yield return null; }
+                    }
+                    report.orphanTouchesIgnored = report.orphanTouchCommandCases == 6 && report.orphanTouchLaneCases == 6;
+                    report.orphanTouchFreshTapRecovered = report.orphanTouchesIgnored;
+                    Debug.Log("Greed engine orphan touch protection passed: Ended/Stationary/Moved without Began "
+                        + "ignored on commands and lanes in clean/detailed controls; fresh taps recovered.");
+                }
+                finally
+                {
+                    if (Read<bool>(ui, "devCleanViewEnabled") != originalCleanView) ui.ToggleDevCleanView();
+                }
             }
 
             private IEnumerator VerifyTransitionFrameCommands()
@@ -2309,17 +2409,17 @@ namespace GreedLast.Editor
                 report.engineMouseClicks++;
             }
 
-            private IEnumerator TapTouch(Button button)
+            private IEnumerator TapTouch(Button button, int fingerId = 71)
             {
                 Require(button.isActiveAndEnabled && button.IsInteractable(),
                     "The engine touch target must be visible and interactable: " + button.name);
                 input.MouseEnabled = false;
                 Vector2 point = ScreenPoint(button);
-                input.Touches = new[] { new Touch { fingerId = 71, position = point, phase = TouchPhase.Began } };
+                input.Touches = new[] { new Touch { fingerId = fingerId, position = point, phase = TouchPhase.Began } };
                 yield return null;
-                input.Touches = new[] { new Touch { fingerId = 71, position = point, phase = TouchPhase.Stationary } };
+                input.Touches = new[] { new Touch { fingerId = fingerId, position = point, phase = TouchPhase.Stationary } };
                 yield return null;
-                input.Touches = new[] { new Touch { fingerId = 71, position = point, phase = TouchPhase.Ended } };
+                input.Touches = new[] { new Touch { fingerId = fingerId, position = point, phase = TouchPhase.Ended } };
                 yield return null;
                 input.Touches = Array.Empty<Touch>();
                 yield return null;

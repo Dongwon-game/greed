@@ -13,7 +13,8 @@ namespace GreedLast
         public override void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || !IsActive() || !IsInteractable()
-                || (Application.isPlaying && canceledFrame == Time.frameCount))
+                || (Application.isPlaying && canceledFrame == Time.frameCount)
+                || !GreedLastPointerInput.IsFreshPress(eventData))
             {
                 eventData.eligibleForClick = false;
                 return;

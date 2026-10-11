@@ -122,6 +122,53 @@ function Assert-AppToolGuard {
     else { throw 'App development tool branch missing.' }
 }
 
+function Assert-FreshTouchPolicy {
+    param($Method)
+    if (!$Method.IsStatic -or $Method.ReturnType.FullName -ne 'System.Boolean' -or $Method.Parameters.Count -ne 1 -or
+        $Method.Parameters[0].ParameterType.FullName -ne 'UnityEngine.EventSystems.PointerEventData') {
+        throw 'Fresh touch policy surface changed.'
+    }
+    $instructions = @($Method.Body.Instructions)
+    $calls = @($instructions | Where-Object { $_.OpCode.Code.ToString() -in @('Call', 'Callvirt') })
+    foreach ($signature in @(
+        'UnityEngine.EventSystems.BaseInput UnityEngine.EventSystems.BaseInputModule::get_input()',
+        'UnityEngine.Touch UnityEngine.EventSystems.BaseInput::GetTouch(System.Int32)',
+        'System.Int32 UnityEngine.Touch::get_fingerId()',
+        'UnityEngine.TouchPhase UnityEngine.Touch::get_phase()',
+        'System.Int32 UnityEngine.EventSystems.BaseInput::get_touchCount()')) {
+        if (@($calls | Where-Object { $_.Operand.FullName -ceq $signature }).Count -ne 1) {
+            throw ('Fresh touch policy must read the active module/finger phase: ' + $signature)
+        }
+    }
+    $phase = @($calls | Where-Object { $_.Operand.FullName -ceq 'UnityEngine.TouchPhase UnityEngine.Touch::get_phase()' })[0]
+    $index = [Array]::IndexOf($instructions, $phase)
+    $phaseReturn = @($instructions[($index + 1)..($index + 3)] | ForEach-Object { $_.OpCode.Code.ToString() })
+    if (($phaseReturn -join ',') -cne 'Ldc_I4_0,Ceq,Ret' -or
+        $instructions[-2].OpCode.Code.ToString() -ne 'Ldc_I4_0' -or $instructions[-1].OpCode.Code.ToString() -ne 'Ret') {
+        throw 'A matching legacy finger must require Began (0), and a missing finger must return false.'
+    }
+}
+
+function Assert-FreshTouchGate {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $gates = @($instructions | Where-Object {
+        $_.OpCode.Code.ToString() -eq 'Call' -and $_.Operand.FullName -ceq
+            'System.Boolean GreedLast.GreedLastPointerInput::IsFreshPress(UnityEngine.EventSystems.PointerEventData)'
+    })
+    if ($gates.Count -ne 1) { throw ('Fresh touch gate missing or repeated: ' + $Method.FullName) }
+    $index = [Array]::IndexOf($instructions, $gates[0])
+    $branch = $instructions[$index + 1]
+    if ($branch.OpCode.Code.ToString() -notin @('Brtrue', 'Brtrue_S')) { throw 'Fresh touch rejection branch changed.' }
+    $rejected = @($instructions | Where-Object { $_.Offset -gt $branch.Offset -and $_.Offset -lt $branch.Operand.Offset })
+    if ($rejected.Count -ne 4 -or $rejected[0].OpCode.Code.ToString() -notin @('Ldarg_1', 'Ldloc_0') -or
+        $rejected[1].OpCode.Code.ToString() -ne 'Ldc_I4_0' -or $rejected[2].OpCode.Code.ToString() -ne 'Callvirt' -or
+        $rejected[2].Operand.FullName -cne 'System.Void UnityEngine.EventSystems.PointerEventData::set_eligibleForClick(System.Boolean)' -or
+        $rejected[3].OpCode.Code.ToString() -ne 'Ret') {
+        throw ('A rejected touch must clear click eligibility and return before input registration: ' + $Method.FullName)
+    }
+}
+
 function Assert-SaveResolutionGuards {
     param($Method, [string]$MutationName)
     $instructions = @($Method.Body.Instructions)
@@ -217,6 +264,23 @@ try {
         $mutationName = if ($method.Name -eq 'RequestRenameSaveLoadoutSlot') { 'RenameSelectedSaveLoadoutSlot' } else { 'DeleteSelectedSaveLoadoutSlot' }
         Assert-SaveResolutionGuards $method $mutationName
     }
+    $freshTouchPolicies = @($types.Methods | Where-Object {
+        $_.DeclaringType.FullName -eq 'GreedLast.GreedLastPointerInput' -and $_.Name -eq 'IsFreshPress'
+    })
+    if ($freshTouchPolicies.Count -ne 1) { throw 'Release fresh touch policy missing.' }
+    Assert-FreshTouchPolicy $freshTouchPolicies[0]
+    $freshTouchCallers = @($types.Methods | Where-Object {
+        $_.HasBody -and @($_.Body.Instructions | Where-Object {
+            $_.OpCode.Code.ToString() -eq 'Call' -and $_.Operand.FullName -ceq
+                'System.Boolean GreedLast.GreedLastPointerInput::IsFreshPress(UnityEngine.EventSystems.PointerEventData)'
+        }).Count -gt 0
+    })
+    if ($freshTouchCallers.Count -ne 2 -or @($freshTouchCallers | Where-Object {
+        $_.DeclaringType.FullName -eq 'GreedLast.GreedLastCommandButton' -and $_.Name -eq 'OnPointerDown'
+    }).Count -ne 1 -or @($freshTouchCallers | Where-Object {
+        $_.DeclaringType.FullName.StartsWith('GreedLast.GreedLastRuntimeUi/') -and $_.Name -eq '<AddLanePointerDown>b__0'
+    }).Count -ne 1) { throw 'Release fresh touch command/lane callers changed.' }
+    foreach ($method in $freshTouchCallers) { Assert-FreshTouchGate $method }
 }
 finally { $assembly.Dispose() }
 
@@ -274,6 +338,8 @@ if ($PackagePath) {
     GuardedDevelopmentSnapshotTools = $snapshotTools.Count
     GuardedDevelopmentRunCommands = $appTools.Count
     GuardedSaveConfirmationMutations = $saveResolutions.Count * 2
+    FreshTouchPolicies = $freshTouchPolicies.Count
+    GuardedFreshTouchCallers = $freshTouchCallers.Count
     Package = $package
     Scope = 'Read-only artifact/IL checks. Does not run the player, modify progress, upload files or measure hardware performance.'
 } | ConvertTo-Json -Depth 4
