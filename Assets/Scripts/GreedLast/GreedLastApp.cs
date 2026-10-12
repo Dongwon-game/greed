@@ -11109,22 +11109,13 @@ namespace GreedLast
                 runCore.Tick(now);
             }
 
-            if (TryHandlePauseOrBackKeyboardInput(Input.GetKeyDown(KeyCode.Escape), Input.GetKeyDown(KeyCode.P)))
-            {
-                return;
-            }
-
-            if (TryHandleDevKeyboardInput())
-            {
-                return;
-            }
-
-            if (TryHandlePrimaryKeyboardInput())
-            {
-                return;
-            }
-
-            if (TryHandleRotationKeyboardInput())
+            bool keyboardAllowed = ShouldAllowPrototypeKeyboardInput(
+                Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl),
+                Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) || Input.GetKey(KeyCode.AltGr),
+                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand)
+                    || Input.GetKey(KeyCode.LeftWindows) || Input.GetKey(KeyCode.RightWindows));
+            if (keyboardAllowed && (TryHandlePauseOrBackKeyboardInput(Input.GetKeyDown(KeyCode.Escape), Input.GetKeyDown(KeyCode.P))
+                || TryHandleDevKeyboardInput() || TryHandlePrimaryKeyboardInput() || TryHandleRotationKeyboardInput()))
             {
                 return;
             }
@@ -11139,11 +11130,14 @@ namespace GreedLast
                 return;
             }
 
-            if (TryHandleLaneKeyboardInput())
+            if (keyboardAllowed && TryHandleLaneKeyboardInput())
             {
                 return;
             }
         }
+
+        private static bool ShouldAllowPrototypeKeyboardInput(bool controlHeld, bool altHeld, bool systemHeld)
+            => !controlHeld && !altHeld && !systemHeld;
 
         private bool TryHandlePrimaryKeyboardInput()
         {

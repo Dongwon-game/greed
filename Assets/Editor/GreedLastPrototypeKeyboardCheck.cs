@@ -8,6 +8,17 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeKeyboardCheck
     {
+        public static void VerifyShortcutModifiers()
+        {
+            MethodInfo policy = typeof(GreedLastApp).GetMethod("ShouldAllowPrototypeKeyboardInput", BindingFlags.Static | BindingFlags.NonPublic);
+            for (int mask = 0; mask < 8; mask++)
+            {
+                bool allowed = (bool)policy.Invoke(null, new object[] { (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0 });
+                Require(allowed == (mask == 0), "Control/Alt/system shortcut modifiers must not route gameplay keys: mask=" + mask);
+            }
+            Debug.Log("Greed shortcut modifier policy passed: eight Control/Alt/system combinations; plain/Shift-compatible keys remain enabled. Boolean policy, not OS shortcut input testing.");
+        }
+
         public static void Run(GreedLastRuntimeUi ui)
         {
             EventSystem system = UnityEngine.Object.FindAnyObjectByType<EventSystem>();

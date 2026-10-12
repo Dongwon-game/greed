@@ -38,7 +38,7 @@ function Read-PersonalPreferences {
     if (Test-Path -LiteralPath $prefsPath) {
         $key = Get-Item -LiteralPath $prefsPath
         foreach ($name in @($key.GetValueNames() | Sort-Object)) {
-            if ($name.StartsWith('GreedLast.', [StringComparison]::Ordinal)) {
+            if ($name.StartsWith('GreedLast.', [StringComparison]::OrdinalIgnoreCase)) {
                 $values[$name] = @{Kind=$key.GetValueKind($name).ToString(); Value=$key.GetValue($name)}
             }
         }
@@ -47,7 +47,7 @@ function Read-PersonalPreferences {
 }
 
 $before = Read-PersonalPreferences
-$running = @(Get-Process -Name 'GreedLastPrototype' -ErrorAction SilentlyContinue)
+$running = @(Get-Process -ErrorAction Stop | Where-Object { $_.ProcessName -eq 'GreedLastPrototype' })
 if ($before.Count -gt 0 -or $running.Count -gt 0) {
     [ordered]@{Skipped=$true; Reason='Existing personal Greed values or player process; left untouched.';
         PersonalValues=$before.Count; ExistingPlayers=$running.Count} | ConvertTo-Json
