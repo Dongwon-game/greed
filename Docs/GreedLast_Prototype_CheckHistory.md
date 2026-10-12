@@ -1,5 +1,29 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-12 15:25 현재 실행 보존
+
+- 게임 `9be7a20`은 새 화면/칸·선택·정지/결과의 전환 프레임 입력, 동시 방향+Enter, 시스템 키와 수신기 중복/누락 소유권을 보완했다. UI 배치·판정·보상·개인 데이터·한 번 저장/실제 두 번 시작은 유지한다.
+- **15:21 최종 엔진**: `prototype-screen-input-final-full-loop-20261012.log`, `report-full-loop-20261012-062137-2925495.json`, SHA-256 `F9ADF53F785780CCC3EEF4418F866A093150950D93106C4BB58D1C9D71095988`. 두 방식 약 325초에 키 10·초기 선택 2·화면/칸 4·수신기 구성 4/씬 인계 2와 일반 15판정/8선택→S2/S3 한 번 저장→취소 무소모→무한 실제 두 번/자동 비움·자연 실패·기록·보충, 입력 보정 포함 일곱 개인 키 불변을 통과했다.
+- 앞선 단계 전체 엔진: 14:01 `report-full-loop-20261012-050132-3473026.json` SHA `1759B83341C133E3BCF38E6CCF453285F4CE4869F3516101C411888100D154F1`, 14:22 `report-full-loop-20261012-052251-2968610.json` SHA `DCB56F4D47A76A9FF2CEE79D084AF35189A2C6DAB9359A0B90499252A10F194A`, 14:44 `report-full-loop-20261012-054414-0613451.json` SHA `9B6747D003F48A7C89E89D0C96A553A9701B8C22E5B9A37007B8EAB5CE3E3308`. 최종 화면 보호 전의 근거로 보존한다.
+- **15:25 전체 스모크/비개발 Windows**: `prototype-screen-input-verified-build-20261012.log`, UTC `2026-10-12T06:25:19.6115000Z`, 총 125,492,050바이트. 동시 키 열 경로·시스템 키 여덟 불리언 조합과 기존 전체 회귀를 포함한다.
+- DLL SHA `6D9042B737F2878B32F0D0B3A53A84845D993B7A28FDD57FC7AD329774C5EA16`, EXE `5BE81B3FA7DF7C08CADEE6F79D6FF3FE95481420F166BA8127390EA669C8B12C`. 새 ZIP `GreedLastPrototype-verified-20261012-screen-input.zip`, 58,427,225바이트/154파일, SHA `B17C4AB788F7410AF2FD9E24E274303743B3F5769C2937D7B3A8BD50F0FA8E27`.
+- 모든 ZIP 파일/다섯 해시·14개 비개발 잠금·네 저장 확인 보호·터치 정책/두 호출부·화면 정책/세 명령·세 연결/해제 경로와 편집기 참조/검사/초기화 API·입력 대역 제외를 확인했다. 현재 화면 계약은 전날 DLL의 보호 누락을 거부했다. 새 DLL은 통과하며 메모리 결함 일곱 경우도 거부했다. DLL을 쓰지 않았고 전후 SHA가 같다.
+- **15:29 초기 실행**: `report-startup-20261012-062859-4722266.json`, SHA `A785EA006F70AEDF71ED417E89331518FBCA264D829291D535F6D87CBEB870D5`. 헤드리스 20초 생존/예외 0·개인 Greed 값 0→0·시작한 PID 20260만 종료 통과. 새 도구는 기존 개인 값/플레이어·읽기 실패를 보호하며 레지스트리는 읽기만 한다. 대소문자 키·기존 프로세스·목록 실패의 모의 조건과 WhatIf도 확인했다.
+- 수신기 baseline 두 로그는 별도 수신기 활성 2개/카메라만 있는 경우 0개를 재현했고 후속 네 구성/두 씬 인계는 통과했다.
+- `prototype-initial-choice-baseline-20261012.log`의 정확 입력 코스는 기존 연타 보호로 통과했다. `prototype-initial-choice-omission-baseline-20261012.log`는 자연 미입력 뒤 같은 프레임의 키가 루트를 선택함을 재현했다. 최종 두 표시/두 방식의 새 선택 복구는 통과했다.
+- `prototype-compound-keyboard-baseline-20261012.log`는 방향+Enter가 이전 S1을 저장함을 재현했다. 후속 열 경로는 S3 단일 저장·정비 재선택 무소모·새 Enter 시작 1회를 확인했다. 불리언 라우터 검사이며 OS 키 프레임 검사가 아니다.
+- `prototype-preference-coverage-baseline-20261012.log`는 보정 키의 비교 목록 누락을 읽기 확인했다. 최신 보고서의 일곱 키와 앞선 여섯 키 범위를 구분하며 값 변경이 있었다고 단정하지 않는다.
+- `prototype-shortcut-modifier-baseline-20261012.log`는 수정 키를 구분하지 않던 정책을 불리언으로 확인했다. 최종 여덟 조합은 Control/Alt/시스템 키를 제외하고 기본/Shift 호환을 유지한다. 실제 OS 창 동작은 검사하지 않았다.
+- `prototype-screen-keyboard-baseline-20261012.log`는 슬롯 발행 프레임 Enter 확정을 재현했다. fixed/diagnostic/presented-frame의 복구 실패는 검사에서 `LoadLobby`가 추천 칸을 다시 고르던 준비 오류다. 선택 유지 조회로 바꾼 selected-view 로그와 최종 전체 엔진은 네 경계/새 입력을 통과했다. 게임의 로비 추천은 유지했다.
+- 이번 변경은 새 PNG/휴대폰 센서·입력·소리 지연/FPS 검사가 아니다. 이전 599장 배치 근거와 직접 확인을 분리한다.
+
+## 2026-10-11 16:39 최종 키보드 보존
+
+- `46008ae`: 기본/상세 정지·자연 실패 전환 Esc/P/Enter 열 경우와 새 프레임 복구를 두 방식에서 통과했다. 16:27 수명 주기 `report-lifecycle-20261011-072717-0305355.json`, SHA `EA35E8B5BFD8CEA367F0C4DBA2360405ADA9B31EBE68C90D091F96EEB7FA1BF9`. 16:38 전체 `report-full-loop-20261011-073815-3122286.json`, SHA `021A6D02A57910B9873619FF9B52CE3F149E635BBE74EA65D5CB8CE7305C18A5`.
+- 16:39 스모크/비개발 Windows `prototype-keyboard-transition-verified-build-20261011.log`, DLL `145EC741D79C818C5B337D7E4868DE9742D66170076E3114ECBD0398C29DD8BC`. 이 빌드의 10월 12일 보존 ZIP `GreedLastPrototype-verified-20261011-keyboard-transition.zip`: 58,426,572바이트/154파일, SHA `E0CB3732027B691D68B5842641591E2E02EFE4BFB2885CF5D747CEB7F5BBA810`. 당시 파일/기존 계약을 대조했고 최신 화면 계약의 근거로 쓰지 않는다.
+- 첫 keyboard-transition-baseline 로그는 검사 반환 형식의 컴파일 오류다. 보완 후 repro 로그에서 같은 프레임 Esc의 즉시 재개를 재현했다. 컴파일 오류와 실제 문제를 구분한다.
+- 이 시기 개인 비교는 보정 키를 제외한 여섯 키이며 최신 일곱 키와 구분한다. 아래는 앞선 보존 이력이다.
+
 ## 2026-10-11 15:51 새 실행 보존
 
 - **16:02 KST 최종 전체 엔진**: `prototype-fresh-touch-lifetime-final-full-loop-20261011.log`, `report-full-loop-20261011-070218-2922499.json`, SHA-256 `FCE3D3BEADEB9B93B908DB1E44DD2227AA27F0AB61E06C315FF4D184B80085CE`. `1890933`의 최종 런타임/빌드와 같은 소스에서 두 재생 방식 각각 약 287초에 시작 없는 재개/레인 여섯 경우씩·새 시작 복구·전환 네 경우, 일반 15판정/8선택→S2/S3 후보 한 번→준비 취소 무소모→실제 두 번 시작/자동 비움·자연 실패·기록·보충과 실제 앱 제거 후 같은 품질 선택/세 표시 값 복원을 통과했다. 각 유지 명령 44개/마우스 91회·새 터치 탭 83회·접점 210개·다중 터치 48묶음 및 개인 설정 불변이다. 다른 품질 단계 두 경우는 격리 스모크 근거이며 휴대폰 OS/손 입력·소리 지연/FPS 검사가 아니다.

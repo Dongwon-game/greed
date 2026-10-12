@@ -169,6 +169,71 @@ function Assert-FreshTouchGate {
     }
 }
 
+function Assert-ScreenFramePolicy {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $codes = @($instructions | ForEach-Object { $_.OpCode.Code.ToString() })
+    if ($Method.IsStatic -or $Method.Parameters.Count -ne 0 -or $Method.ReturnType.FullName -ne 'System.Boolean' -or
+        $instructions.Count -ne 9 -or $codes[0] -ne 'Call' -or
+        $instructions[0].Operand.FullName -cne 'System.Boolean UnityEngine.Application::get_isPlaying()' -or
+        $codes[1] -notin @('Brfalse', 'Brfalse_S') -or $instructions[1].Operand -ne $instructions[7] -or
+        ($codes[2..8] -join ',') -cne 'Ldarg_0,Ldfld,Call,Ceq,Ret,Ldc_I4_0,Ret' -or
+        $instructions[3].Operand.FullName -cne 'System.Int32 GreedLast.GreedLastApp::screenInputTransitionFrame' -or
+        $instructions[4].Operand.FullName -cne 'System.Int32 UnityEngine.Time::get_frameCount()') {
+        throw 'Screen transition policy must compare its captured engine frame only during Play mode.'
+    }
+}
+
+function Assert-ScreenFrameGate {
+    param($Method)
+    $instructions = @($Method.Body.Instructions)
+    $gates = @($instructions | Where-Object { $_.OpCode.Code.ToString() -eq 'Call' -and
+        $_.Operand.FullName -ceq 'System.Boolean GreedLast.GreedLastApp::get_HasUnpresentedScreenTransition()' })
+    if ($gates.Count -ne 1) { throw ('Screen frame gate missing or repeated: ' + $Method.Name) }
+    $index = [Array]::IndexOf($instructions, $gates[0])
+    $branch = $instructions[$index + 1]
+    if ($Method.ReturnType.FullName -eq 'System.Boolean') {
+        $target = [Array]::IndexOf($instructions, $branch.Operand)
+        if ($branch.OpCode.Code.ToString() -notin @('Brtrue', 'Brtrue_S') -or $target -lt 0 -or
+            $instructions[$target].OpCode.Code.ToString() -ne 'Ldc_I4_1' -or
+            $instructions[$target + 1].OpCode.Code.ToString() -ne 'Ret') {
+            throw ('An unseen screen keyboard command must be consumed without action: ' + $Method.Name)
+        }
+    }
+    elseif ($branch.OpCode.Code.ToString() -notin @('Brfalse', 'Brfalse_S') -or
+        $instructions[$index + 2].OpCode.Code.ToString() -ne 'Ret') {
+        throw ('An unseen screen lane command must return before selection: ' + $Method.Name)
+    }
+}
+
+function Assert-ScreenHandlerLifetime {
+    param($Methods)
+    foreach ($name in @('Awake', 'OnDestroy', 'HandlePresentationReleased')) {
+        $method = @($Methods | Where-Object { $_.Name -ceq $name })
+        if ($method.Count -ne 1) { throw 'Screen handler lifetime method missing.' }
+        $instructions = @($method[0].Body.Instructions)
+        $event = if ($name -eq 'Awake') { 'add_StateChanged' } else { 'remove_StateChanged' }
+        if (@($instructions | Where-Object { $_.OpCode.Code.ToString() -eq 'Ldftn' -and
+            $_.Operand.FullName -ceq 'System.Void GreedLast.GreedLastApp::HandleScreenStateChanged(GreedLast.GreedLastStateSnapshot)' }).Count -ne 1 -or
+            @($instructions | Where-Object { $_.OpCode.Code.ToString() -in @('Call', 'Callvirt') -and
+                $_.Operand.DeclaringType.FullName -ceq 'GreedLast.GreedLastStateMachine' -and $_.Operand.Name -ceq $event }).Count -ne 1) {
+            throw ('Screen handler must be connected/released by its app: ' + $name)
+        }
+    }
+    $handler = @($Methods | Where-Object { $_.Name -ceq 'HandleScreenStateChanged' })
+    if ($handler.Count -ne 1) { throw 'Screen publication handler missing.' }
+    $instructions = @($handler[0].Body.Instructions)
+    $stores = @($instructions | Where-Object { $_.OpCode.Code.ToString() -eq 'Stfld' -and
+        $_.Operand.FullName -ceq 'System.Int32 GreedLast.GreedLastApp::screenInputTransitionFrame' })
+    $renders = @($instructions | Where-Object { $_.OpCode.Code.ToString() -in @('Call', 'Callvirt') -and
+        $_.Operand.FullName -ceq 'System.Void GreedLast.GreedLastRuntimeUi::Render(GreedLast.GreedLastStateSnapshot)' })
+    if ($stores.Count -ne 1 -or $renders.Count -ne 1 -or $stores[0].Offset -ge $renders[0].Offset -or
+        $stores[0].Previous.OpCode.Code.ToString() -ne 'Call' -or
+        $stores[0].Previous.Operand.FullName -cne 'System.Int32 UnityEngine.Time::get_frameCount()') {
+        throw 'Screen publication must capture the current frame before rendering the new view.'
+    }
+}
+
 function Assert-SaveResolutionGuards {
     param($Method, [string]$MutationName)
     $instructions = @($Method.Body.Instructions)
@@ -281,6 +346,14 @@ try {
         $_.DeclaringType.FullName.StartsWith('GreedLast.GreedLastRuntimeUi/') -and $_.Name -eq '<AddLanePointerDown>b__0'
     }).Count -ne 1) { throw 'Release fresh touch command/lane callers changed.' }
     foreach ($method in $freshTouchCallers) { Assert-FreshTouchGate $method }
+    $appMethods = @($types.Methods | Where-Object { $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastApp' })
+    $screenPolicies = @($appMethods | Where-Object { $_.Name -ceq 'get_HasUnpresentedScreenTransition' })
+    if ($screenPolicies.Count -ne 1) { throw 'Release screen transition policy missing; this is not the current input-protected build.' }
+    Assert-ScreenFramePolicy $screenPolicies[0]
+    $screenCallers = @($appMethods | Where-Object { $_.Name -in @('TryHandlePrimaryKeyboardCommand', 'TryHandlePauseOrBackKeyboardInput', 'HandleRunChannelInput') })
+    if ($screenCallers.Count -ne 3) { throw 'Screen transition command surface changed.' }
+    foreach ($method in $screenCallers) { Assert-ScreenFrameGate $method }
+    Assert-ScreenHandlerLifetime $appMethods
 }
 finally { $assembly.Dispose() }
 
@@ -340,6 +413,9 @@ if ($PackagePath) {
     GuardedSaveConfirmationMutations = $saveResolutions.Count * 2
     FreshTouchPolicies = $freshTouchPolicies.Count
     GuardedFreshTouchCallers = $freshTouchCallers.Count
+    ScreenFramePolicies = $screenPolicies.Count
+    GuardedScreenFrameCallers = $screenCallers.Count
+    ScreenHandlerLifetimeMethods = 3
     Package = $package
     Scope = 'Read-only artifact/IL checks. Does not run the player, modify progress, upload files or measure hardware performance.'
 } | ConvertTo-Json -Depth 4
