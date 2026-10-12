@@ -11147,7 +11147,18 @@ namespace GreedLast
 
         private bool TryHandlePrimaryKeyboardInput()
         {
-            return TryHandlePrimaryKeyboardCommand(Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter));
+            bool primaryPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+            return TryHandlePrimaryKeyboardFrame(primaryPressed,
+                primaryPressed && ReadPressedLaneKeyboardChannel() != GreedLastRunChannel.None);
+        }
+
+        private bool TryHandlePrimaryKeyboardFrame(bool primaryPressed, bool lanePressed)
+        {
+            // In selection screens the direction must win; confirmation requires a separate fresh Enter.
+            if (primaryPressed && lanePressed && (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)) return false;
+            return TryHandlePrimaryKeyboardCommand(primaryPressed);
         }
 
         private bool TryHandlePrimaryKeyboardCommand(bool primaryPressed)
@@ -12428,14 +12439,21 @@ namespace GreedLast
 
         private bool TryHandleLaneKeyboardInput()
         {
+            GreedLastRunChannel channel = ReadPressedLaneKeyboardChannel();
+            if (channel == GreedLastRunChannel.None) return false;
+            HandleRunChannelInput(channel);
+            return true;
+        }
+
+        private static GreedLastRunChannel ReadPressedLaneKeyboardChannel()
+        {
             if (Input.GetKeyDown(KeyCode.A)
                 || Input.GetKeyDown(KeyCode.J)
                 || Input.GetKeyDown(KeyCode.Alpha1)
                 || Input.GetKeyDown(KeyCode.Keypad1)
                 || Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                HandleRunChannelInput(GreedLastRunChannel.Left);
-                return true;
+                return GreedLastRunChannel.Left;
             }
             else if (Input.GetKeyDown(KeyCode.S)
                 || Input.GetKeyDown(KeyCode.K)
@@ -12446,8 +12464,7 @@ namespace GreedLast
                 || Input.GetKeyDown(KeyCode.UpArrow)
                 || Input.GetKeyDown(KeyCode.DownArrow))
             {
-                HandleRunChannelInput(GreedLastRunChannel.Center);
-                return true;
+                return GreedLastRunChannel.Center;
             }
             else if (Input.GetKeyDown(KeyCode.D)
                 || Input.GetKeyDown(KeyCode.L)
@@ -12455,11 +12472,10 @@ namespace GreedLast
                 || Input.GetKeyDown(KeyCode.Keypad3)
                 || Input.GetKeyDown(KeyCode.RightArrow))
             {
-                HandleRunChannelInput(GreedLastRunChannel.Right);
-                return true;
+                return GreedLastRunChannel.Right;
             }
 
-            return false;
+            return GreedLastRunChannel.None;
         }
 
         private bool TryHandleDevKeyboardInput()

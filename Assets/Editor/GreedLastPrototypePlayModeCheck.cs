@@ -60,6 +60,7 @@ namespace GreedLast.Editor
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
                 "The engine lifecycle check requires an idle Edit-mode editor.");
             RequireAsyncBatchLifetime();
+            VerifyPreferenceCaptureCoverage();
             var scene = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootScene);
             Require(scene != null, "The existing prototype boot scene is required.");
             VerifyCanceledGate();
@@ -107,6 +108,12 @@ namespace GreedLast.Editor
             Require(HasImmediateBatchQuit(true, new[] { "-batchmode", "-quit" })
                 && HasImmediateBatchQuit(true, new[] { "-QUIT" }),
                 "An immediate batch quit must be rejected before creating test resources or changing play settings.");
+        }
+
+        public static void VerifyPreferenceCaptureCoverage()
+        {
+            Require(CapturePreferences().values.Exists(value => value.key == GreedLastRunCore.InputTimingOffsetPrefsKey),
+                "Personal preference comparisons must include the production input timing correction key.");
         }
 
         private static void BeginCycle()
@@ -193,6 +200,7 @@ namespace GreedLast.Editor
                 results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice publication boundaries and fresh touch selection in two domain-reload modes. Application lane-router callbacks in the transition frame and synthetic EventSystem taps afterward. No manual core Tick, private clock edits, hardware keyboard/touch or audio latency testing; isolated non-persisting progress.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
+            results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
             if (!results.personalPreferencesUnchanged) results.error += " Personal PlayerPrefs changed during the check.";
             EditorSettings.enterPlayModeOptions = (EnterPlayModeOptions)SessionState.GetInt(Prefix + "previousOptions", 0);
@@ -285,6 +293,7 @@ namespace GreedLast.Editor
             string backendKey = (string)typeof(GreedLastMockBackend).GetField("PlayerPrefsKey",
                 BindingFlags.Static | BindingFlags.NonPublic).GetRawConstantValue();
             keys.Add(backendKey);
+            keys.Add(GreedLastRunCore.InputTimingOffsetPrefsKey);
             foreach (FieldInfo field in typeof(GreedLastRuntimeUi).GetFields(BindingFlags.Static | BindingFlags.NonPublic))
                 if (field.IsLiteral && field.FieldType == typeof(string) && field.Name.EndsWith("PrefsKey", StringComparison.Ordinal))
                     keys.Add((string)field.GetRawConstantValue());
@@ -314,6 +323,7 @@ namespace GreedLast.Editor
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
             public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly;
             public List<Cycle> cycles = new List<Cycle>();
+            public List<string> personalPreferenceKeys = new List<string>();
         }
         [Serializable] private sealed class Cycle
         {

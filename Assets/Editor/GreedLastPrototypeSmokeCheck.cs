@@ -32,6 +32,7 @@ namespace GreedLast.Editor
         private static void RunChecks()
         {
             GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
+            GreedLastPrototypePlayModeCheck.VerifyPreferenceCaptureCoverage();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
             Require(

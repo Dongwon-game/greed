@@ -21,6 +21,7 @@ namespace GreedLast.Editor
         private static bool heldRunResultsOnly;
         private static bool heldPreparationStartsOnly;
         private static bool heldPauseCommandsOnly;
+        private static bool compoundKeyboardOnly;
         private static bool useTouch;
         private static int pointerClicks;
         private static int canceledCommandPresses;
@@ -165,6 +166,16 @@ namespace GreedLast.Editor
             finally { heldPauseCommandsOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Compound Menu Keyboard Check")]
+        public static void RunCompoundMenuKeyboardCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !compoundKeyboardOnly,
+                "Compound keyboard checks require an isolated Edit-mode fixture.");
+            compoundKeyboardOnly = true;
+            try { Run(); }
+            finally { compoundKeyboardOnly = false; }
+        }
+
         public static void Run()
         {
             Require(!Application.isPlaying, "App-loop checks require Edit mode.");
@@ -221,6 +232,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (compoundKeyboardOnly)
+                {
+                    VerifyCompoundMenuKeyboard(app, ui, backend, state, core);
+                    return;
+                }
                 if (heldPauseCommandsOnly)
                 {
                     VerifyHeldPauseCommands(app, ui, backend, state, core, () => run);
@@ -252,6 +268,7 @@ namespace GreedLast.Editor
                     return;
                 }
                 VerifyMenuInputRippleCleanup(ui, backend, state);
+                VerifyCompoundMenuKeyboard(app, ui, backend, state, core);
                 VerifyGrowthCommandProtection(app, ui, backend, state);
                 if (growthCommandsOnly) return;
                 VerifyResultBackNavigation(app, backend, state, core, () => run);
@@ -461,6 +478,87 @@ namespace GreedLast.Editor
                 if (canvasRoot != null) UnityEngine.Object.DestroyImmediate(canvasRoot);
                 DestroyCreated("GreedLastCamera", existingCamera);
                 DestroyCreated("GreedLastEventSystem", existingEvents);
+            }
+        }
+
+        private static void VerifyCompoundMenuKeyboard(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core)
+        {
+            bool originalClean = ui.UsePlayerRunControls;
+            bool Frame(bool primary, bool lane) => (bool)Method(app, "TryHandlePrimaryKeyboardFrame")
+                .Invoke(app, new object[] { primary, lane });
+            void Lane(GreedLastRunChannel channel) => Method(app, "HandleRunChannelInput")
+                .Invoke(app, new object[] { channel });
+            int cases = 0;
+            try
+            {
+                foreach (bool detailed in new[] { false, true })
+                {
+                    if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                    var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                    Write(app, "backend", backend);
+                    backend.AddSampleClearCandidateForTest(out _);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    Method(app, "RequestSaveLoadout").Invoke(app, null);
+                    Lane(GreedLastRunChannel.Left);
+                    Require(!Frame(true, true) && backend.HasSaveLoadoutCandidate
+                        && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                        && Array.TrueForAll(backend.LoadLobby().SaveSlotOccupied, occupied => !occupied),
+                        "Direction+Enter must not save the previously selected slot before the direction is routed.");
+                    cases++;
+                    Lane(GreedLastRunChannel.Right);
+                    Require(Frame(true, false) && !backend.HasSaveLoadoutCandidate
+                        && backend.LoadLobby().SaveSlotOccupied[2] && !backend.LoadLobby().SaveSlotOccupied[0],
+                        "A fresh Enter must save the explicitly changed S3 once, not the previous S1.");
+                    state.SetInfiniteLoadoutSelect(backend.LoadLobby(), "Compound keyboard fixture");
+                    Require(!Frame(true, true) && state.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect,
+                        "Direction+Enter must keep slot selection ahead of preparation entry.");
+                    cases++;
+                    Lane(GreedLastRunChannel.Right);
+                    Require(Frame(true, false) && state.CurrentState == GreedLastScreenState.InfiniteStartReady,
+                        "Fresh Enter must still open preparation normally.");
+                    FinishPreparationTransition(app);
+                    for (int step = 0; step < 2; step++)
+                    {
+                        Require(!Frame(true, true) && Read<int>(app, "infinitePreparationStep") == step,
+                            "Direction+Enter must not suppress the preparation direction: step=" + step);
+                        cases++;
+                        Lane(GreedLastRunChannel.Center);
+                        FinishPreparationTransition(app);
+                    }
+                    int uses = Read<int[]>(backend, "saveLoadoutUsesRemaining")[2];
+                    Require(!Frame(true, true) && state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == uses,
+                        "Direction+Enter must not start and spend a use before a ready-state reselection.");
+                    cases++;
+                    Lane(GreedLastRunChannel.Left);
+                    Require(Read<int>(app, "infinitePreparationStep") == 0
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 2,
+                        "The compound frame's left direction must reopen gifts without consuming a start.");
+                    FinishPreparationTransition(app);
+                    Lane(GreedLastRunChannel.Center);
+                    FinishPreparationTransition(app);
+                    Lane(GreedLastRunChannel.Center);
+                    FinishPreparationTransition(app);
+                    Require(Frame(true, false) && state.CurrentState == GreedLastScreenState.InfiniteRun
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 1,
+                        "A later Enter alone must start once and consume exactly one use.");
+                    Require(!Frame(false, false) && !Frame(false, true) && Frame(true, true),
+                        "No primary key stays unhandled; live run Enter must retain its existing command priority.");
+                    core.Exit();
+                    state.SetLobbyReady(backend.LoadLobby());
+                }
+                Require(cases == 10, "All clean/detailed compound keyboard paths must complete.");
+                Debug.Log("Greed compound menu keyboard passed: ten clean/detailed save, slot and preparation paths; explicit S3 single save, no compound-frame start consumption, fresh Enter start and live command priority. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+                if (ui.UsePlayerRunControls != originalClean) ui.ToggleDevCleanView();
             }
         }
 

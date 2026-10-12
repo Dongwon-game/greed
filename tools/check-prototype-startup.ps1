@@ -62,7 +62,7 @@ $log = Join-Path $directory ('startup-' + $stamp + '.log')
 $reportPath = Join-Path $directory ('report-startup-' + $stamp + '.json')
 $report = [ordered]@{Scope='Headless Windows startup only, not rendered frames, audible output, hardware input or latency. GreedLast-namespaced registry values are read only.';
     StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc=''; Succeeded=$false; Skipped=$false;
-    VerifiedBuildUtc=[string]$info.verifiedAtUtc; RuntimeAssemblySha256=$info.runtimeAssemblySha256;
+    VerifiedBuildUtc=([DateTimeOffset]$info.verifiedAtUtc).ToUniversalTime().ToString('O'); RuntimeAssemblySha256=$info.runtimeAssemblySha256;
     Log=$log; ProcessId=0; AliveFor20Seconds=$false; OwnProcessStopped=$false;
     PersonalValuesBefore=$before.Count; PersonalValuesAfter=-1; PersonalPreferencesUnchanged=$false;
     ExceptionLines=0; Error=''}
