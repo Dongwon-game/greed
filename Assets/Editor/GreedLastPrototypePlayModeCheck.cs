@@ -197,7 +197,7 @@ namespace GreedLast.Editor
             if (results.audioListenerOnly)
                 results.scope = "Actual engine listener/camera ownership and scene reload in two domain-reload modes: independent enabled/disabled external listeners, borrowed camera without listener, owned fallback, external handoff and cleanup. Isolated non-persisting backend. No audible output, device reset, audio latency or hardware performance measurement.";
             if (results.initialChoiceOnly)
-                results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice publication boundaries and fresh touch selection in two domain-reload modes. Application lane-router callbacks in the transition frame and synthetic EventSystem taps afterward. No manual core Tick, private clock edits, hardware keyboard/touch or audio latency testing; isolated non-persisting progress.";
+                results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice boundaries, four changed-slot/save-to-lobby publication boundaries and fresh touch/keyboard-router recovery in two domain-reload modes. Synthetic EventSystem taps and boolean keyboard callbacks, not OS keyboard input. No manual core Tick, private clock edits, rendered-image or audio latency testing; isolated non-persisting progress.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
@@ -218,7 +218,8 @@ namespace GreedLast.Editor
             if (results.succeeded && results.initialChoiceOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.initialChoiceBoundaryCases == 2
-                    && cycle.initialChoiceFreshInputRecovered);
+                    && cycle.initialChoiceFreshInputRecovered && cycle.screenKeyboardTransitionCases == 4
+                    && cycle.screenKeyboardFreshInputRecovered);
                 if (!results.succeeded) results.error = "Required initial-choice boundary coverage did not complete.";
             }
             if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly)
@@ -262,7 +263,8 @@ namespace GreedLast.Editor
                     && cycle.keyboardTransitionCases == 10 && cycle.keyboardTransitionFreshInputRecovered
                     && cycle.audioListenerOwnershipCases == 4 && cycle.audioListenerSceneHandoffs == 2
                     && cycle.audioListenerOwnershipPreserved && cycle.initialChoiceBoundaryCases == 2
-                    && cycle.initialChoiceFreshInputRecovered);
+                    && cycle.initialChoiceFreshInputRecovered && cycle.screenKeyboardTransitionCases == 4
+                    && cycle.screenKeyboardFreshInputRecovered);
                 if (!results.succeeded) results.error = "Required fresh-command, touch-boundary and presentation restoration coverage did not complete.";
             }
             try
@@ -374,6 +376,8 @@ namespace GreedLast.Editor
             public bool audioListenerOwnershipPreserved;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
+            public int screenKeyboardTransitionCases;
+            public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
@@ -483,6 +487,7 @@ namespace GreedLast.Editor
                 if (SessionState.GetBool(Prefix + "initialChoiceOnly", false))
                 {
                     yield return VerifyInitialRunChoiceBoundary();
+                    yield return VerifyScreenKeyboardTransitions();
                     UnityEngine.Object.Destroy(app.gameObject);
                     yield return null;
                     yield return null;
@@ -490,6 +495,7 @@ namespace GreedLast.Editor
                 }
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyKeyboardTransitionFrames();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
+                if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -2099,6 +2105,64 @@ namespace GreedLast.Editor
                 report.heldChoiceCannotAdvance = report.multiTouchChoiceCases == 2;
                 report.multiTouchFreshTapRecovered = report.multiTouchFirstInputOnly && report.heldChoiceCannotAdvance;
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
+            }
+
+            private IEnumerator VerifyScreenKeyboardTransitions()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backendField.SetValue(app, backend);
+                        backend.AddSampleClearCandidateForTest(out _);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        Call(app, "RequestSaveLoadout");
+                        yield return null;
+                        Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
+                        Require(backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == 2 && !Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
+                            "The screen fixture must select S3 before testing its confirmation boundary: frame=" + Time.frameCount
+                                + ", transition=" + Read<int>(app, "screenInputTransitionFrame")
+                                + ", input=" + ui.AcceptsPlayerInput + ", state=" + state.CurrentState);
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, false)
+                            && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                            && backend.HasSaveLoadoutCandidate
+                            && Array.TrueForAll(backend.LoadSelectedSaveSlotView().SaveSlotOccupied, occupied => !occupied),
+                            "A fresh Enter in the slot-change publication frame must not confirm an unseen changed slot.");
+                        report.screenKeyboardTransitionCases++;
+                        yield return null;
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, false)
+                            && state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
+                            && backend.LoadLobby().SaveSlotOccupied[2],
+                            "The next-frame Enter must still save the displayed S3 candidate once: frame=" + Time.frameCount
+                                + ", transition=" + Read<int>(app, "screenInputTransitionFrame")
+                                + ", explicit=" + Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                + ", state=" + state.CurrentState);
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, false)
+                            && state.CurrentState == GreedLastScreenState.LobbyReady
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 2,
+                            "Enter in the new lobby publication frame must not skip its save summary into preparation.");
+                        report.screenKeyboardTransitionCases++;
+                        yield return null;
+                        Require((bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, false)
+                            && state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 2,
+                            "A later fresh Enter must open preparation without spending a start.");
+                        Call(app, "RequestReturnToLobby");
+                    }
+                }
+                finally
+                {
+                    core.Exit();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
+                report.screenKeyboardFreshInputRecovered = report.screenKeyboardTransitionCases == 4;
+                Debug.Log("Greed engine screen keyboard transitions passed: four clean/detailed changed-slot and save-to-lobby publication cases; displayed S3 single save and next-frame preparation recovered. Router boolean callbacks in actual frames, not OS keyboard input; personal data unchanged.");
             }
 
             private IEnumerator VerifyInitialRunChoiceBoundary()

@@ -224,7 +224,8 @@ namespace GreedLast.Editor
                 Write(ui, "timingOffsetRequested", Method(app, "RequestTimingOffsetAdjust").CreateDelegate(typeof(Action<int>), app));
                 ui.ViewportChanged += (Action)Method(app, "HandleViewportChanged").CreateDelegate(typeof(Action), app);
                 ui.RotationTiltPreferenceChanged += (Action<bool>)Method(app, "HandleRotationTiltPreferenceChanged").CreateDelegate(typeof(Action<bool>), app);
-                state.StateChanged += ui.Render;
+                state.StateChanged += (Action<GreedLastStateSnapshot>)Method(app, "HandleScreenStateChanged")
+                    .CreateDelegate(typeof(Action<GreedLastStateSnapshot>), app);
                 core.SnapshotChanged += (Action<GreedLastRunSnapshot>)Method(app, "HandleRunSnapshotChanged")
                     .CreateDelegate(typeof(Action<GreedLastRunSnapshot>), app);
                 GreedLastRunSnapshot run = default;

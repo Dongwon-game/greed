@@ -10795,10 +10795,12 @@ namespace GreedLast
         private bool hasLatestAppRunSnapshot;
         private int runCommandTransitionFrame = -1;
         private int runChoiceTransitionFrame = -1;
+        private int screenInputTransitionFrame = -1;
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
         private bool HasUnpresentedRunCommandTransition => Application.isPlaying && IsRunState()
             && runCommandTransitionFrame == Time.frameCount;
+        private bool HasUnpresentedScreenTransition => Application.isPlaying && screenInputTransitionFrame == Time.frameCount;
 
 #if UNITY_EDITOR
         public const string EditorPlayModeCheckKey = "GreedLast.EditorTests.PlayModeCheck";
@@ -10876,7 +10878,7 @@ namespace GreedLast
             runtimeUi.PresentationSuspended += HandlePresentationSuspended;
             runtimeUi.PresentationReleased += HandlePresentationReleased;
 
-            stateMachine.StateChanged += runtimeUi.Render;
+            stateMachine.StateChanged += HandleScreenStateChanged;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
         }
 
@@ -10964,7 +10966,7 @@ namespace GreedLast
             RestorePresentationSettings();
             if (stateMachine != null && runtimeUi != null)
             {
-                stateMachine.StateChanged -= runtimeUi.Render;
+                stateMachine.StateChanged -= HandleScreenStateChanged;
                 runtimeUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
                 runtimeUi.ViewportChanged -= HandleViewportChanged;
                 runtimeUi.PresentationSuspended -= HandlePresentationSuspended;
@@ -10980,6 +10982,12 @@ namespace GreedLast
                 runtimeUi.enabled = false;
                 Destroy(runtimeUi);
             }
+        }
+
+        private void HandleScreenStateChanged(GreedLastStateSnapshot snapshot)
+        {
+            screenInputTransitionFrame = Time.frameCount;
+            runtimeUi?.Render(snapshot);
         }
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
@@ -11035,7 +11043,7 @@ namespace GreedLast
         private void HandlePresentationReleased(GreedLastRuntimeUi releasedUi)
         {
             if (!ReferenceEquals(runtimeUi, releasedUi)) return;
-            stateMachine.StateChanged -= releasedUi.Render;
+            stateMachine.StateChanged -= HandleScreenStateChanged;
             releasedUi.RotationTiltPreferenceChanged -= HandleRotationTiltPreferenceChanged;
             releasedUi.ViewportChanged -= HandleViewportChanged;
             releasedUi.PresentationSuspended -= HandlePresentationSuspended;
@@ -11161,7 +11169,7 @@ namespace GreedLast
             {
                 return false;
             }
-            if (HasUnpresentedRunCommandTransition) return true;
+            if (HasUnpresentedScreenTransition || HasUnpresentedRunCommandTransition) return true;
 
             if (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
@@ -12578,7 +12586,7 @@ namespace GreedLast
         {
             if (!backPressed && !pausePressed) return false;
             // A gameplay key sampled before the new pause/result is visible cannot act on that screen.
-            if (HasUnpresentedRunCommandTransition) return true;
+            if (HasUnpresentedScreenTransition || HasUnpresentedRunCommandTransition) return true;
             if (backPressed && TryHandleBackKeyboardInput()) return true;
             if (!IsRunState()) return false;
             runtimeUi?.CancelPendingUiInput();
@@ -13493,6 +13501,7 @@ namespace GreedLast
         {
             if (!CanAcceptPlayerInput()) return;
             if (channel < GreedLastRunChannel.Left || channel > GreedLastRunChannel.Right) return;
+            if (HasUnpresentedScreenTransition) return;
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
