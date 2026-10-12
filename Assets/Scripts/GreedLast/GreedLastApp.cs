@@ -11117,11 +11117,7 @@ namespace GreedLast
                 runCore.Tick(now);
             }
 
-            bool keyboardAllowed = ShouldAllowPrototypeKeyboardInput(
-                Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl),
-                Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) || Input.GetKey(KeyCode.AltGr),
-                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand)
-                    || Input.GetKey(KeyCode.LeftWindows) || Input.GetKey(KeyCode.RightWindows));
+            bool keyboardAllowed = CanUsePrototypeKeyboardInput();
             if (keyboardAllowed && (TryHandlePauseOrBackKeyboardInput(Input.GetKeyDown(KeyCode.Escape), Input.GetKeyDown(KeyCode.P))
                 || TryHandleDevKeyboardInput() || TryHandlePrimaryKeyboardInput() || TryHandleRotationKeyboardInput()))
             {
@@ -11142,6 +11138,15 @@ namespace GreedLast
             {
                 return;
             }
+        }
+
+        internal static bool CanUsePrototypeKeyboardInput()
+        {
+            return ShouldAllowPrototypeKeyboardInput(
+                Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl),
+                Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) || Input.GetKey(KeyCode.AltGr),
+                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand)
+                    || Input.GetKey(KeyCode.LeftWindows) || Input.GetKey(KeyCode.RightWindows));
         }
 
         private static bool ShouldAllowPrototypeKeyboardInput(bool controlHeld, bool altHeld, bool systemHeld)
@@ -28314,7 +28319,13 @@ namespace GreedLast
         {
             sensoryComponentEnabled = true;
             RefreshPlayerInputGroup();
-            if (Application.isPlaying && ownedCanvas != null) ownedCanvas.SetActive(true);
+            if (Application.isPlaying && ownedCanvas != null)
+            {
+                ownedCanvas.SetActive(true);
+                EnsureCamera();
+                EnsureAudioListener();
+                EnsureEventSystem();
+            }
             RecoverAudioConfiguration();
             RefreshAudioPlaybackState();
         }
@@ -28345,11 +28356,11 @@ namespace GreedLast
                 else DestroyImmediate(ownedAudioSource);
             }
             RestoreBorrowedNavigation();
+            ReleaseOwnedEventSystem();
             if (Application.isPlaying)
             {
                 if (ownedCanvas != null) Destroy(ownedCanvas);
                 if (ownedCamera != null) Destroy(ownedCamera);
-                if (ownedEventSystem != null) Destroy(ownedEventSystem);
             }
         }
 
@@ -28497,23 +28508,64 @@ namespace GreedLast
 
         private void EnsureEventSystem()
         {
-            EventSystem existing = FindAnyObjectByType<EventSystem>();
+            EventSystem existing = EventSystem.current;
+            if (!CanBorrowEventSystem(existing) || (ownedEventSystem != null && existing.gameObject == ownedEventSystem))
+            {
+                existing = null;
+                foreach (EventSystem candidate in FindObjectsByType<EventSystem>(FindObjectsSortMode.InstanceID))
+                {
+                    if ((ownedEventSystem == null || candidate.gameObject != ownedEventSystem) && CanBorrowEventSystem(candidate))
+                    {
+                        existing = candidate;
+                        break;
+                    }
+                }
+            }
             if (existing != null)
             {
-                if (existing == borrowedEventSystem
-                    || (ownedEventSystem != null && existing.gameObject == ownedEventSystem)) return;
-                RestoreBorrowedNavigation();
-                borrowedEventSystem = existing;
-                borrowedNavigationEvents = existing.sendNavigationEvents;
-                existing.sendNavigationEvents = false;
+                if (existing != borrowedEventSystem)
+                {
+                    RestoreBorrowedNavigation();
+                    borrowedEventSystem = existing;
+                    borrowedNavigationEvents = existing.sendNavigationEvents;
+                    existing.sendNavigationEvents = false;
+                }
+                if (ownedEventSystem != null) CancelPendingUiInput();
+                ReleaseOwnedEventSystem();
+                if (Application.isPlaying) EventSystem.current = existing;
                 return;
             }
 
-            GameObject eventSystem = new GameObject("GreedLastEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            ownedEventSystem = eventSystem;
+            RestoreBorrowedNavigation();
+            borrowedEventSystem = null;
+            if (ownedEventSystem == null)
+            {
+                ownedEventSystem = new GameObject("GreedLastEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+                PreserveDuringPlay(ownedEventSystem);
+            }
             // GreedLastApp owns keyboard commands; Submit/Move would also activate the last clicked button.
-            eventSystem.GetComponent<EventSystem>().sendNavigationEvents = false;
-            PreserveDuringPlay(eventSystem);
+            EventSystem fallback = ownedEventSystem.GetComponent<EventSystem>();
+            fallback.sendNavigationEvents = false;
+            if (Application.isPlaying) EventSystem.current = fallback;
+        }
+
+        private static bool CanBorrowEventSystem(EventSystem events)
+        {
+            if (events == null || !events.isActiveAndEnabled) return false;
+            foreach (BaseInputModule module in events.GetComponents<BaseInputModule>())
+                if (module.IsActive() && module.IsModuleSupported()) return true;
+            return false;
+        }
+
+        private void ReleaseOwnedEventSystem()
+        {
+            if (ownedEventSystem == null) return;
+            GameObject events = ownedEventSystem;
+            ownedEventSystem = null;
+            // Remove it from Unity's current-system list before deferred destruction.
+            events.GetComponent<EventSystem>().enabled = false;
+            if (Application.isPlaying) Destroy(events);
+            else DestroyImmediate(events);
         }
 
         private void RestoreSceneResources(Scene scene, LoadSceneMode mode)
@@ -28716,9 +28768,15 @@ namespace GreedLast
                 return;
             }
 
-            laneKeyboardHoldActive[0] = IsLeftLaneKeyHeld();
-            laneKeyboardHoldActive[1] = IsCenterLaneKeyHeld();
-            laneKeyboardHoldActive[2] = IsRightLaneKeyHeld();
+            ApplyKeyboardLaneHoldInput(GreedLastApp.CanUsePrototypeKeyboardInput(),
+                IsLeftLaneKeyHeld(), IsCenterLaneKeyHeld(), IsRightLaneKeyHeld());
+        }
+
+        private void ApplyKeyboardLaneHoldInput(bool keyboardAllowed, bool leftHeld, bool centerHeld, bool rightHeld)
+        {
+            laneKeyboardHoldActive[0] = keyboardAllowed && leftHeld;
+            laneKeyboardHoldActive[1] = keyboardAllowed && centerHeld;
+            laneKeyboardHoldActive[2] = keyboardAllowed && rightHeld;
         }
 
         private void ClearKeyboardLaneHoldVisuals()

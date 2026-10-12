@@ -53,8 +53,11 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check")]
         public static void RunInitialChoiceBoundary() => BeginCheck(false, false, false, true);
 
+        [MenuItem("Greed Last/Run Engine Input System Ownership Check")]
+        public static void RunInputSystemOwnership() => BeginCheck(false, false, false, false, true);
+
         private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false, bool audioListenerOnly = false,
-            bool initialChoiceOnly = false)
+            bool initialChoiceOnly = false, bool inputSystemOnly = false)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
@@ -76,6 +79,7 @@ namespace GreedLast.Editor
             SessionState.SetBool(Prefix + "multiTouchOnly", multiTouchOnly);
             SessionState.SetBool(Prefix + "audioListenerOnly", audioListenerOnly);
             SessionState.SetBool(Prefix + "initialChoiceOnly", initialChoiceOnly);
+            SessionState.SetBool(Prefix + "inputSystemOnly", inputSystemOnly);
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
             EditorSceneManager.playModeStartScene = scene;
             BeginCycle();
@@ -86,6 +90,7 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Multi Touch Check", true)]
         [MenuItem("Greed Last/Run Engine Audio Listener Ownership Check", true)]
         [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check", true)]
+        [MenuItem("Greed Last/Run Engine Input System Ownership Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
 
@@ -124,8 +129,8 @@ namespace GreedLast.Editor
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
             // Added natural choice courses and resume lead-ins retain their individual state/wait bounds.
-            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 360
-                : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 210;
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 390
+                : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 240;
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
         }
@@ -191,6 +196,7 @@ namespace GreedLast.Editor
             results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
             results.audioListenerOnly = SessionState.GetBool(Prefix + "audioListenerOnly", false);
             results.initialChoiceOnly = SessionState.GetBool(Prefix + "initialChoiceOnly", false);
+            results.inputSystemOnly = SessionState.GetBool(Prefix + "inputSystemOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
                 results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, six held-command slot-change paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
@@ -198,6 +204,8 @@ namespace GreedLast.Editor
                 results.scope = "Actual engine listener/camera ownership and scene reload in two domain-reload modes: independent enabled/disabled external listeners, borrowed camera without listener, owned fallback, external handoff and cleanup. Isolated non-persisting backend. No audible output, device reset, audio latency or hardware performance measurement.";
             if (results.initialChoiceOnly)
                 results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice boundaries, four changed-slot/save-to-lobby publication boundaries and fresh touch/keyboard-router recovery in two domain-reload modes. Synthetic EventSystem taps and boolean keyboard callbacks, not OS keyboard input. No manual core Tick, private clock edits, rendered-image or audio latency testing; isolated non-persisting progress.";
+            if (results.inputSystemOnly)
+                results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
@@ -222,7 +230,14 @@ namespace GreedLast.Editor
                     && cycle.screenKeyboardFreshInputRecovered);
                 if (!results.succeeded) results.error = "Required initial-choice boundary coverage did not complete.";
             }
-            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly)
+            if (results.succeeded && (results.inputSystemOnly || results.fullLoopIncluded))
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.inputSystemOwnershipCases == 4
+                    && cycle.inputSystemSceneHandoffs == 2 && cycle.inputSystemOwnershipPreserved
+                    && cycle.inputSystemReenableRecovered);
+                if (!results.succeeded) results.error = "Required input-system ownership coverage did not complete.";
+            }
+            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
@@ -254,7 +269,7 @@ namespace GreedLast.Editor
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
-            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly)
+            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
@@ -271,7 +286,7 @@ namespace GreedLast.Editor
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                results.archivedReport = "report-" + (results.audioListenerOnly ? "audio-listener-"
+                results.archivedReport = "report-" + (results.inputSystemOnly ? "input-system-" : results.audioListenerOnly ? "audio-listener-"
                     : results.initialChoiceOnly ? "initial-choice-" : results.multiTouchOnly ? "multi-touch-"
                     : results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
                     + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
@@ -323,7 +338,7 @@ namespace GreedLast.Editor
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
-            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly;
+            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly;
             public List<Cycle> cycles = new List<Cycle>();
             public List<string> personalPreferenceKeys = new List<string>();
         }
@@ -374,6 +389,9 @@ namespace GreedLast.Editor
             public bool keyboardTransitionFreshInputRecovered;
             public int audioListenerOwnershipCases, audioListenerSceneHandoffs;
             public bool audioListenerOwnershipPreserved;
+            public int inputSystemOwnershipCases, inputSystemSceneHandoffs;
+            public bool inputSystemOwnershipPreserved;
+            public bool inputSystemReenableRecovered;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
             public int screenKeyboardTransitionCases;
@@ -460,6 +478,14 @@ namespace GreedLast.Editor
                     yield return null;
                     yield return null;
                     yield return VerifyAudioListenerOwnership();
+                    yield break;
+                }
+                if (SessionState.GetBool(Prefix + "inputSystemOnly", false))
+                {
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    yield return VerifyInputSystemOwnership();
                     yield break;
                 }
                 GameObject canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
@@ -766,6 +792,7 @@ namespace GreedLast.Editor
                         + ", external navigation restored=" + report.externalNavigationRestored);
                 yield return VerifyBorrowedSceneReload();
                 yield return VerifyAudioListenerOwnership();
+                yield return VerifyInputSystemOwnership();
             }
 
             private IEnumerator VerifyCalibratedTouchAndAudioRecovery()
@@ -1318,6 +1345,134 @@ namespace GreedLast.Editor
                 input.MouseUp = false;
                 yield return null;
                 report.canceledEngineCommands++;
+            }
+
+            private IEnumerator VerifyInputSystemOwnership()
+            {
+                for (int scenario = 0; scenario < 4; scenario++)
+                {
+                    var external = new GameObject("GreedLastInputOwnerCheck", typeof(EventSystem));
+                    EventSystem externalEvents = external.GetComponent<EventSystem>();
+                    StandaloneInputModule externalModule = scenario == 2 ? null : external.AddComponent<StandaloneInputModule>();
+                    externalEvents.enabled = scenario != 0;
+                    if (externalModule != null) externalModule.enabled = scenario != 1;
+                    externalEvents.sendNavigationEvents = true;
+                    UnityEngine.Object.DontDestroyOnLoad(external);
+                    InvokeStatic(typeof(GreedLastApp), "Create");
+                    Attach(FindApp());
+                    float deadline = Time.realtimeSinceStartup + 10f;
+                    while (state.CurrentState != GreedLastScreenState.LobbyReady)
+                    { Require(Time.realtimeSinceStartup < deadline, "Input ownership app did not reach its lobby."); yield return null; }
+                    EventSystem events = EventSystem.current;
+                    Require(events != null && events.isActiveAndEnabled
+                        && events.GetComponent<StandaloneInputModule>() != null
+                        && events.GetComponent<StandaloneInputModule>().isActiveAndEnabled,
+                        "The visible UI must have an enabled current pointer input module: scenario=" + scenario);
+                    Require((events == externalEvents) == (scenario == 3)
+                        && externalEvents.enabled == (scenario != 0)
+                        && (externalModule == null || externalModule.enabled == (scenario != 1))
+                        && externalEvents.sendNavigationEvents == (scenario != 3),
+                        "Input recovery must borrow only usable systems without changing external enabled state.");
+                    BindEnginePointer(events);
+                    yield return null;
+                    yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                    Require(run.PracticeMode && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                        "A recovered current input module must dispatch a real engine mouse command.");
+                    yield return TapTouch(Read<Button>(ui, "pauseButton"));
+                    Require(run.Paused, "A recovered current input module must dispatch a real engine touch command.");
+                    if (scenario == 0)
+                    {
+                        GreedLastRunSnapshot frozen = run;
+                        GameObject owned = Read<GameObject>(ui, "ownedEventSystem");
+                        yield return PressMouse(Read<Button>(ui, "nextPatternButton"));
+                        externalEvents.enabled = true;
+                        yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                        yield return null;
+                        yield return null;
+                        Require(owned == null && Read<GameObject>(ui, "ownedEventSystem") == null
+                            && EventSystem.current == externalEvents && !externalEvents.sendNavigationEvents,
+                            "A usable external scene input system must replace only the owned fallback.");
+                        BindEnginePointer(externalEvents);
+                        input.MouseUp = true;
+                        yield return null;
+                        input.MouseUp = false;
+                        yield return null;
+                        AssertFrozen(frozen);
+                        Require(run.Paused && !run.ResumeCountdownActive,
+                            "A release from the old input system must not resume the paused run.");
+                        report.inputSystemSceneHandoffs++;
+                        yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                            "Fresh touch must remain usable after input-system handoff.");
+                        UnityEngine.Object.Destroy(external);
+                        yield return null;
+                        yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                        yield return null;
+                        EventSystem fallback = EventSystem.current;
+                        Require(fallback != null && fallback.gameObject == Read<GameObject>(ui, "ownedEventSystem")
+                            && !fallback.sendNavigationEvents && Count<EventSystem>() == 1,
+                            "After borrowed scene input unloads, the UI must recover one owned fallback.");
+                        BindEnginePointer(fallback);
+                        yield return null;
+                        yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                        Require(run.PracticeMode, "Fresh mouse must work after the external input unloads.");
+                        yield return TapTouch(Read<Button>(ui, "pauseButton"));
+                        Require(run.Paused, "The newly recovered fallback must also open the pause menu.");
+                        report.inputSystemSceneHandoffs++;
+                    }
+                    if (scenario == 3)
+                    {
+                        GreedLastRunSnapshot frozen = run;
+                        ui.enabled = false;
+                        yield return null;
+                        externalModule.enabled = false;
+                        yield return null;
+                        ui.enabled = true;
+                        yield return null;
+                        EventSystem recovered = EventSystem.current;
+                        Require(recovered != null && recovered.gameObject == Read<GameObject>(ui, "ownedEventSystem")
+                            && !externalModule.enabled && externalEvents.enabled && externalEvents.sendNavigationEvents,
+                            "Re-enabling the UI must recover unavailable borrowed input without changing external settings.");
+                        AssertFrozen(frozen);
+                        Require(run.Paused && !run.ResumeCountdownActive,
+                            "Input-system recovery on UI enable must leave the run explicitly paused.");
+                        BindEnginePointer(recovered);
+                        yield return null;
+                        yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                            "Fresh touch must work after re-enabling an unavailable borrowed input system.");
+                        externalModule.enabled = true;
+                        report.inputSystemReenableRecovered = true;
+                    }
+                    else
+                    {
+                        yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                    }
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    Require(CountNamed<EventSystem>("GreedLastEventSystem") == 0
+                        && (external == null || (externalEvents.enabled == (scenario != 0)
+                            && externalEvents.sendNavigationEvents
+                            && (externalModule == null || externalModule.enabled == (scenario != 1)))),
+                        "App teardown must release owned input and restore only borrowed navigation.");
+                    if (external != null) UnityEngine.Object.Destroy(external);
+                    yield return null;
+                    Require(Count<EventSystem>() == 0, "The isolated input case must leave no test event systems.");
+                    report.inputSystemOwnershipCases++;
+                }
+                report.inputSystemOwnershipPreserved = report.inputSystemOwnershipCases == 4
+                    && report.inputSystemSceneHandoffs == 2;
+                Debug.Log("Greed engine input-system ownership passed: four external enabled/module cases, two scene handoffs, UI re-enable recovery, actual synthetic mouse/touch commands, stale release cancellation and external settings preserved.");
+            }
+
+            private void BindEnginePointer(EventSystem events)
+            {
+                StandaloneInputModule module = events.GetComponent<StandaloneInputModule>();
+                input = events.gameObject.AddComponent<GreedLastPrototypeKeyboardInput>();
+                input.MouseEnabled = true;
+                input.MousePosition = new Vector2(-1000f, -1000f);
+                module.inputOverride = input;
             }
 
             private IEnumerator VerifyAudioListenerOwnership()

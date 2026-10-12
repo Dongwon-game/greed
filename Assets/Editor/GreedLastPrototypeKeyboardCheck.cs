@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -17,6 +18,40 @@ namespace GreedLast.Editor
                 Require(allowed == (mask == 0), "Control/Alt/system shortcut modifiers must not route gameplay keys: mask=" + mask);
             }
             Debug.Log("Greed shortcut modifier policy passed: eight Control/Alt/system combinations; plain/Shift-compatible keys remain enabled. Boolean policy, not OS shortcut input testing.");
+        }
+
+        [MenuItem("Greed Last/Run Shortcut Hold Visual Check")]
+        public static void VerifyShortcutHoldVisuals()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Shortcut hold checks require an idle Edit-mode editor.");
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var host = new GameObject("GreedLastShortcutHoldProbe");
+            try
+            {
+                var ui = host.AddComponent<GreedLastRuntimeUi>();
+                var keyboard = new bool[3];
+                var touch = new[] { false, true, false };
+                typeof(GreedLastRuntimeUi).GetField("laneKeyboardHoldActive", flags).SetValue(ui, keyboard);
+                typeof(GreedLastRuntimeUi).GetField("laneHoldActive", flags).SetValue(ui, touch);
+                MethodInfo apply = typeof(GreedLastRuntimeUi).GetMethod("ApplyKeyboardLaneHoldInput", flags);
+                MethodInfo amount = typeof(GreedLastRuntimeUi).GetMethod("BuildLaneHoldAmount", flags);
+                MethodInfo policy = typeof(GreedLastApp).GetMethod("ShouldAllowPrototypeKeyboardInput", BindingFlags.Static | BindingFlags.NonPublic);
+                for (int mask = 0; mask < 8; mask++)
+                {
+                    bool allowed = (bool)policy.Invoke(null, new object[] { (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0 });
+                    apply.Invoke(ui, new object[] { allowed, true, true, true });
+                    Require(keyboard[0] == allowed && keyboard[1] == allowed && keyboard[2] == allowed,
+                        "Shortcut modifiers must also suppress all keyboard hold visuals: mask=" + mask);
+                    Require((float)amount.Invoke(ui, new object[] { 0 }) == (allowed ? 0.86f : 0f)
+                        && (float)amount.Invoke(ui, new object[] { 1 }) == 1f
+                        && touch[1], "Blocked keyboard hints must not clear a real touch hold.");
+                    apply.Invoke(ui, new object[] { true, false, false, true });
+                    Require(!keyboard[0] && !keyboard[1] && keyboard[2],
+                        "A fresh unmodified lane hold must recover without stale shortcut highlights.");
+                }
+                Debug.Log("Greed shortcut hold visuals passed: eight modifier combinations, touch hold preservation and fresh unmodified recovery. Isolated production hold-state callback, not OS input or rendered-image testing.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(host); }
         }
 
         public static void Run(GreedLastRuntimeUi ui)
