@@ -10794,6 +10794,7 @@ namespace GreedLast
         private GreedLastRunSnapshot latestAppRunSnapshot;
         private bool hasLatestAppRunSnapshot;
         private int runCommandTransitionFrame = -1;
+        private int runChoiceTransitionFrame = -1;
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
         private bool HasUnpresentedRunCommandTransition => Application.isPlaying && IsRunState()
@@ -10983,6 +10984,9 @@ namespace GreedLast
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.ChoiceActive && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.ChoiceActive
+                || snapshot.ChoiceKind != latestAppRunSnapshot.ChoiceKind))
+                runChoiceTransitionFrame = Time.frameCount;
             // A live press must not become a newly opened pause or result command.
             if ((snapshot.Stopped && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Stopped))
                 || (snapshot.Paused && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.Paused)))
@@ -13518,6 +13522,10 @@ namespace GreedLast
                     return;
                 }
 
+                // A lane key sampled during play cannot select a choice that has not been presented yet.
+                if (Application.isPlaying && hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive
+                    && runChoiceTransitionFrame == Time.frameCount) return;
+
                 float now = Time.realtimeSinceStartup;
                 // EventSystem can process a queued tap before this app's Update after a stall.
                 if (runCore.PauseForInterruptedFrame(now))
@@ -15553,6 +15561,7 @@ namespace GreedLast
         private GameObject rootPanel;
         private GameObject ownedCanvas;
         private GameObject ownedCamera;
+        private AudioListener ownedAudioListener;
         private GameObject ownedEventSystem;
         private AudioSource ownedAudioSource;
         private EventSystem borrowedEventSystem;
@@ -26614,6 +26623,7 @@ namespace GreedLast
             devCleanViewGroups.Clear();
             liveSettingCleanViewGroups.Clear();
             EnsureCamera();
+            EnsureAudioListener();
             EnsureEventSystem();
             if (Application.isPlaying) SceneManager.sceneLoaded += RestoreSceneResources;
 
@@ -28309,6 +28319,7 @@ namespace GreedLast
             audioConfigurationSubscribed = false;
             audioConfigurationPending = false;
             ReleaseOwnedAudioClips();
+            ReleaseOwnedAudioListener();
             if (ownedAudioSource != null)
             {
                 if (Application.isPlaying) Destroy(ownedAudioSource);
@@ -28426,7 +28437,7 @@ namespace GreedLast
                 return;
             }
 
-            GameObject cameraObject = new GameObject("GreedLastCamera", typeof(Camera), typeof(AudioListener));
+            GameObject cameraObject = new GameObject("GreedLastCamera", typeof(Camera));
             ownedCamera = cameraObject;
             PreserveDuringPlay(cameraObject);
 
@@ -28436,6 +28447,33 @@ namespace GreedLast
             camera.orthographic = true;
             camera.orthographicSize = 5f;
             camera.transform.position = new Vector3(0f, 0f, -10f);
+        }
+
+        private void EnsureAudioListener()
+        {
+            // A scene can keep its listener on a player or other object, independently of its camera.
+            foreach (AudioListener listener in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
+            {
+                if (listener != ownedAudioListener && listener.isActiveAndEnabled)
+                {
+                    ReleaseOwnedAudioListener();
+                    return;
+                }
+            }
+            if (ownedAudioListener != null) return;
+            GameObject listenerObject = new GameObject("GreedLastAudioListener", typeof(AudioListener));
+            ownedAudioListener = listenerObject.GetComponent<AudioListener>();
+            PreserveDuringPlay(listenerObject);
+        }
+
+        private void ReleaseOwnedAudioListener()
+        {
+            if (ownedAudioListener == null) return;
+            AudioListener listener = ownedAudioListener;
+            ownedAudioListener = null;
+            listener.enabled = false;
+            if (Application.isPlaying) Destroy(listener.gameObject);
+            else DestroyImmediate(listener.gameObject);
         }
 
         private void EnsureEventSystem()
@@ -28464,6 +28502,7 @@ namespace GreedLast
             if (rootPanel == null) return;
             // The persistent canvas can outlive a camera or input system borrowed from its former scene.
             EnsureCamera();
+            EnsureAudioListener();
             EnsureEventSystem();
         }
 

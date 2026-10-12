@@ -47,7 +47,14 @@ namespace GreedLast.Editor
             BeginCheck(false, true);
         }
 
-        private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false)
+        [MenuItem("Greed Last/Run Engine Audio Listener Ownership Check")]
+        public static void RunAudioListenerOwnership() => BeginCheck(false, false, true);
+
+        [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check")]
+        public static void RunInitialChoiceBoundary() => BeginCheck(false, false, false, true);
+
+        private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false, bool audioListenerOnly = false,
+            bool initialChoiceOnly = false)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
@@ -66,6 +73,8 @@ namespace GreedLast.Editor
             SessionState.SetString(Prefix + "reports", JsonUtility.ToJson(new Results()));
             SessionState.SetBool(Prefix + "fullLoop", fullLoop);
             SessionState.SetBool(Prefix + "multiTouchOnly", multiTouchOnly);
+            SessionState.SetBool(Prefix + "audioListenerOnly", audioListenerOnly);
+            SessionState.SetBool(Prefix + "initialChoiceOnly", initialChoiceOnly);
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
             EditorSceneManager.playModeStartScene = scene;
             BeginCycle();
@@ -74,6 +83,8 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Play Mode Lifecycle Check", true)]
         [MenuItem("Greed Last/Run Engine Play Mode Full Loop Check", true)]
         [MenuItem("Greed Last/Run Engine Multi Touch Check", true)]
+        [MenuItem("Greed Last/Run Engine Audio Listener Ownership Check", true)]
+        [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
 
@@ -105,9 +116,9 @@ namespace GreedLast.Editor
                 ? EnterPlayModeOptions.DisableDomainReload : EnterPlayModeOptions.None;
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
-            // Added input boundaries include real resume lead-ins; individual state/wait bounds stay unchanged.
-            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 330
-                : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 180;
+            // Added natural choice courses and resume lead-ins retain their individual state/wait bounds.
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 360
+                : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 210;
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
         }
@@ -171,9 +182,15 @@ namespace GreedLast.Editor
             results.unityVersion = Application.unityVersion;
             results.fullLoopIncluded = SessionState.GetBool(Prefix + "fullLoop", false);
             results.multiTouchOnly = SessionState.GetBool(Prefix + "multiTouchOnly", false);
+            results.audioListenerOnly = SessionState.GetBool(Prefix + "audioListenerOnly", false);
+            results.initialChoiceOnly = SessionState.GetBool(Prefix + "initialChoiceOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
                 results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, six held-command slot-change paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
+            if (results.audioListenerOnly)
+                results.scope = "Actual engine listener/camera ownership and scene reload in two domain-reload modes: independent enabled/disabled external listeners, borrowed camera without listener, owned fallback, external handoff and cleanup. Isolated non-persisting backend. No audible output, device reset, audio latency or hardware performance measurement.";
+            if (results.initialChoiceOnly)
+                results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice publication boundaries and fresh touch selection in two domain-reload modes. Application lane-router callbacks in the transition frame and synthetic EventSystem taps afterward. No manual core Tick, private clock edits, hardware keyboard/touch or audio latency testing; isolated non-persisting progress.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
@@ -184,7 +201,19 @@ namespace GreedLast.Editor
                 SessionState.GetString(Prefix + "previousScene", string.Empty));
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, false);
             results.succeeded = string.IsNullOrEmpty(results.error) && results.cycles.Count == 2;
-            if (results.succeeded)
+            if (results.succeeded && results.audioListenerOnly)
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.audioListenerOwnershipCases == 4
+                    && cycle.audioListenerSceneHandoffs == 2 && cycle.audioListenerOwnershipPreserved);
+                if (!results.succeeded) results.error = "Required audio listener ownership coverage did not complete.";
+            }
+            if (results.succeeded && results.initialChoiceOnly)
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.initialChoiceBoundaryCases == 2
+                    && cycle.initialChoiceFreshInputRecovered);
+                if (!results.succeeded) results.error = "Required initial-choice boundary coverage did not complete.";
+            }
+            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
@@ -216,20 +245,24 @@ namespace GreedLast.Editor
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
-            if (results.succeeded && !results.multiTouchOnly)
+            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
                     && cycle.orphanTouchCommandCases == 6 && cycle.orphanTouchLaneCases == 6
                     && cycle.orphanTouchesIgnored && cycle.orphanTouchFreshTapRecovered && cycle.presentationSettingsRestored
-                    && cycle.keyboardTransitionCases == 10 && cycle.keyboardTransitionFreshInputRecovered);
+                    && cycle.keyboardTransitionCases == 10 && cycle.keyboardTransitionFreshInputRecovered
+                    && cycle.audioListenerOwnershipCases == 4 && cycle.audioListenerSceneHandoffs == 2
+                    && cycle.audioListenerOwnershipPreserved && cycle.initialChoiceBoundaryCases == 2
+                    && cycle.initialChoiceFreshInputRecovered);
                 if (!results.succeeded) results.error = "Required fresh-command, touch-boundary and presentation restoration coverage did not complete.";
             }
             try
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                results.archivedReport = "report-" + (results.multiTouchOnly ? "multi-touch-"
+                results.archivedReport = "report-" + (results.audioListenerOnly ? "audio-listener-"
+                    : results.initialChoiceOnly ? "initial-choice-" : results.multiTouchOnly ? "multi-touch-"
                     : results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
                     + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
                 string json = JsonUtility.ToJson(results, true);
@@ -279,7 +312,7 @@ namespace GreedLast.Editor
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
-            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly;
+            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly;
             public List<Cycle> cycles = new List<Cycle>();
         }
         [Serializable] private sealed class Cycle
@@ -327,6 +360,10 @@ namespace GreedLast.Editor
             public bool orphanTouchesIgnored, orphanTouchFreshTapRecovered;
             public int keyboardTransitionCases;
             public bool keyboardTransitionFreshInputRecovered;
+            public int audioListenerOwnershipCases, audioListenerSceneHandoffs;
+            public bool audioListenerOwnershipPreserved;
+            public int initialChoiceBoundaryCases;
+            public bool initialChoiceFreshInputRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
             public int suspendedFreshInputCases, partialForegroundInputCases;
@@ -403,6 +440,14 @@ namespace GreedLast.Editor
                 { Require(Time.realtimeSinceStartup < deadline, "Real Start coroutine did not reach the lobby."); yield return null; }
                 Require(!Read<bool>(Read<GreedLastMockBackend>(app, "backend"), "persistData"),
                     "The engine check must use a non-persisting backend before any commands.");
+                if (SessionState.GetBool(Prefix + "audioListenerOnly", false))
+                {
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    yield return VerifyAudioListenerOwnership();
+                    yield break;
+                }
                 GameObject canvas = Read<GameObject>(ui, "rootPanel").GetComponentInParent<Canvas>().gameObject;
                 InvokeStatic(typeof(GreedLastApp), "Create");
                 yield return null;
@@ -425,7 +470,16 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
+                if (SessionState.GetBool(Prefix + "initialChoiceOnly", false))
+                {
+                    yield return VerifyInitialRunChoiceBoundary();
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    yield break;
+                }
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyKeyboardTransitionFrames();
+                if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -695,6 +749,7 @@ namespace GreedLast.Editor
                         + ", unrelated host audio preserved=" + report.externalAudioSourcePreserved
                         + ", external navigation restored=" + report.externalNavigationRestored);
                 yield return VerifyBorrowedSceneReload();
+                yield return VerifyAudioListenerOwnership();
             }
 
             private IEnumerator VerifyCalibratedTouchAndAudioRecovery()
@@ -1247,6 +1302,75 @@ namespace GreedLast.Editor
                 input.MouseUp = false;
                 yield return null;
                 report.canceledEngineCommands++;
+            }
+
+            private IEnumerator VerifyAudioListenerOwnership()
+            {
+                foreach (int scenario in new[] { 1, 0, 2, 3 })
+                {
+                    GameObject externalCamera = scenario == 0 ? null
+                        : new GameObject("GreedLastListenerCameraCheck", typeof(Camera));
+                    GameObject externalHost = scenario == 1 ? null
+                        : new GameObject("GreedLastIndependentListenerCheck", typeof(AudioListener));
+                    AudioListener externalListener = externalHost == null ? null : externalHost.GetComponent<AudioListener>();
+                    bool externalEnabled = scenario == 0 || scenario == 3;
+                    if (externalListener != null) externalListener.enabled = externalEnabled;
+                    if (externalCamera != null) UnityEngine.Object.DontDestroyOnLoad(externalCamera);
+                    if (externalHost != null) UnityEngine.Object.DontDestroyOnLoad(externalHost);
+                    InvokeStatic(typeof(GreedLastApp), "Create");
+                    Attach(FindApp());
+                    yield return null;
+                    Require(ActiveListenerCount() == 1,
+                        "An independent listener and camera must provide exactly one enabled listener: scenario=" + scenario
+                            + ", active=" + ActiveListenerCount());
+                    Require(externalListener == null || externalListener.enabled == externalEnabled,
+                        "Initializing the UI must not enable or disable an external listener.");
+                    Require(Count<Camera>() == 1, "Camera recovery must not create a second borrowed camera.");
+                    report.audioListenerOwnershipCases++;
+                    if (scenario == 1)
+                    {
+                        externalHost = new GameObject("GreedLastListenerHandoffCheck", typeof(AudioListener));
+                        externalListener = externalHost.GetComponent<AudioListener>();
+                        externalEnabled = true;
+                        UnityEngine.Object.DontDestroyOnLoad(externalHost);
+                        yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                        yield return null;
+                        Require(ActiveListenerCount() == 1 && externalListener.isActiveAndEnabled,
+                            "A scene reload must release the owned fallback when an external listener is available.");
+                        report.audioListenerSceneHandoffs++;
+                        UnityEngine.Object.Destroy(externalHost);
+                        yield return null;
+                        yield return SceneManager.LoadSceneAsync(BootScene, LoadSceneMode.Single);
+                        yield return null;
+                        Require(ActiveListenerCount() == 1 && externalCamera != null,
+                            "After the external listener unloads, a borrowed camera must receive one owned fallback.");
+                        externalListener = null;
+                        report.audioListenerSceneHandoffs++;
+                    }
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    Require(ActiveListenerCount() == (externalListener != null && externalEnabled ? 1 : 0)
+                        && (externalCamera == null ? Count<Camera>() == 0 : externalCamera != null && Count<Camera>() == 1)
+                        && (externalListener == null || externalListener.enabled == externalEnabled),
+                        "App removal must release only its camera/listener and preserve external enabled/disabled state.");
+                    if (externalCamera != null) UnityEngine.Object.Destroy(externalCamera);
+                    if (externalHost != null) UnityEngine.Object.Destroy(externalHost);
+                    yield return null;
+                    Require(Count<AudioListener>() == 0 && Count<Camera>() == 0,
+                        "The isolated listener case must leave no owned or test resources.");
+                }
+                report.audioListenerOwnershipPreserved = report.audioListenerOwnershipCases == 4
+                    && report.audioListenerSceneHandoffs == 2;
+                Debug.Log("Greed engine audio listener ownership passed: four separate camera/listener cases, two real scene handoffs, one active listener, external settings preserved and owned resources released. Audible output is not measured.");
+            }
+
+            private static int ActiveListenerCount()
+            {
+                int count = 0;
+                foreach (AudioListener listener in UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
+                    if (listener.isActiveAndEnabled) count++;
+                return count;
             }
 
             private IEnumerator VerifyBorrowedSceneReload()
@@ -1965,6 +2089,72 @@ namespace GreedLast.Editor
                 report.heldChoiceCannotAdvance = report.multiTouchChoiceCases == 2;
                 report.multiTouchFreshTapRecovered = report.multiTouchFirstInputOnly && report.heldChoiceCannotAdvance;
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
+            }
+
+            private IEnumerator VerifyInitialRunChoiceBoundary()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        backendField.SetValue(app, new GreedLastMockBackend(loadPersistedData: false, persistData: false));
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        yield return ClickMouse(Read<Button>(ui, "normalRunButton"));
+                        Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.StartGift,
+                            "The initial-node fixture must begin at the actual normal opening choice.");
+                        yield return WaitSeconds(0.4f);
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                        bool observed = false;
+                        Action<GreedLastRunSnapshot> onChoice = snapshot =>
+                        {
+                            if (!snapshot.ChoiceActive || snapshot.ChoiceKind != GreedLastChoiceKind.Node || observed) return;
+                            observed = true;
+                            Require(snapshot.MissCount > 0, "The choice boundary must follow a natural input omission.");
+                            int history = Read<int>(core, "choiceHistoryCount");
+                            Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                            Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Node
+                                && Read<int>(core, "choiceHistoryCount") == history
+                                && run.Score == snapshot.Score && run.Health == snapshot.Health,
+                                "A gameplay lane key in the initial node publication frame must not choose an unseen route.");
+                            report.initialChoiceBoundaryCases++;
+                        };
+                        core.SnapshotChanged += onChoice;
+                        try
+                        {
+                            float deadline = Time.realtimeSinceStartup + 30f;
+                            while (!observed)
+                            {
+                                Require(!run.Stopped && Time.realtimeSinceStartup < deadline,
+                                    "The real first chapter must reach its node choice without clock edits or shortcuts.");
+                                if (run.SuccessCount + run.GoodCount < 2 && run.ActivePattern && !run.CountdownActive
+                                    && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
+                                    yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                                yield return null;
+                            }
+                        }
+                        finally { core.SnapshotChanged -= onChoice; }
+                        yield return null;
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
+                        Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Gift,
+                            "A fresh next-frame node tap must choose the route exactly once.");
+                        yield return WaitSeconds(0.2f);
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                        Require(!run.ChoiceActive && !run.Stopped,
+                            "The following gift must remain selectable through its ordinary transition guard.");
+                        Call(app, "RequestReturnToLobby");
+                    }
+                }
+                finally
+                {
+                    core.Exit();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
+                report.initialChoiceFreshInputRecovered = report.initialChoiceBoundaryCases == 2;
+                Debug.Log("Greed engine initial choice protection passed: two real clean/detailed first-chapter node boundaries after natural input omission, unseen lane keys ignored, fresh route/gift selection recovered. Personal progress and choice rewards unchanged.");
             }
 
             private IEnumerator VerifyKeyboardTransitionFrames()
