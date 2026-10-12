@@ -82,6 +82,8 @@ Play 중지 뒤 `Run Engine Input System Ownership Check`는 외부 입력 네 �
 - **보존 ZIP**: `GreedLastPrototype-verified-20261012-input-ownership.zip`, 58,427,660바이트/154파일, SHA-256 `7B2E998DE71ADA9C9492A206CD0DCB2CE23B2446E52A88C98D06140B71D7817B`. 모든 파일/다섯 해시·14개 개발 잠금·저장 확인 네 보호·터치/화면 정책과 편집기 참조/검사/초기화 API 제외의 읽기 대조를 통과했다.
 - **17:08 KST 초기 실행**: `report-startup-20261012-080757-1527437.json`, SHA-256 `94DC5905C35719E50F447E58B8652A96BAC9F5F8F93C5C3F09C8F226B0D677BD`. 헤드리스 20초 생존/예외 0·개인 Greed 값 0→0·우리가 시작한 PID 8616만 종료했다. 기존 개인 값/플레이어·읽기 실패는 실행을 막으며 레지스트리는 읽기만 한다.
 
+후속 `Run Input Borrowing Policy Check`는 모듈 없음·가상 지원 거부/복구·비활성 시스템/모듈과 두 내비게이션 값의 보존을 편집기에서 확인한다. 실제 Legacy 모듈은 양성 대조다. 엔진 입력 네 경우/최종 빌드와 별도이며 게임 코드·실행본은 바꾸지 않았다.
+
 선택적 대조: `.\tools\verify-prototype-build.ps1 -PackagePath ".\Builds\GreedLastPrototype-verified-20261012-input-ownership.zip"`는 파일/IL을 읽기만 한다. OS가 막으면 정책을 바꾸지 않고 직접 플레이 순서를 따른다.
 
 이번 아트/배치는 그대로이며 이전 599장 검사는 앞선 근거다. 정상 부트에는 입력 시스템 하나를 사용하지만 잘못 구성한 외부 시스템을 보존하는 격리 씬에는 복수 시스템 경고가 남을 수 있다. 중간 실패와 앞선 확인은 [확인 이력](GreedLast_Prototype_CheckHistory.md)에 보존한다.

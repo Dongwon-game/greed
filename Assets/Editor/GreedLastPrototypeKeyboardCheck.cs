@@ -54,6 +54,59 @@ namespace GreedLast.Editor
             finally { UnityEngine.Object.DestroyImmediate(host); }
         }
 
+        [MenuItem("Greed Last/Run Input Borrowing Policy Check")]
+        public static void VerifyInputBorrowingPolicy()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Input borrowing policy requires an idle Edit-mode editor.");
+            MethodInfo policy = typeof(GreedLastRuntimeUi).GetMethod("CanBorrowEventSystem", BindingFlags.Static | BindingFlags.NonPublic);
+            var host = new GameObject("GreedLastInputBorrowingProbe", typeof(EventSystem), typeof(BorrowingInputModule));
+            var noModuleHost = new GameObject("GreedLastMissingModuleProbe", typeof(EventSystem));
+            var legacyHost = new GameObject("GreedLastLegacyBorrowingProbe", typeof(EventSystem), typeof(StandaloneInputModule));
+            try
+            {
+                EventSystem events = host.GetComponent<EventSystem>();
+                BorrowingInputModule module = host.GetComponent<BorrowingInputModule>();
+                bool CanBorrow(EventSystem value) => (bool)policy.Invoke(null, new object[] { value });
+                Require(!CanBorrow(null) && !CanBorrow(noModuleHost.GetComponent<EventSystem>()),
+                    "Missing systems and input modules must not be borrowed.");
+                Require(CanBorrow(legacyHost.GetComponent<EventSystem>()), "The actual legacy module must remain usable.");
+                foreach (bool navigation in new[] { false, true })
+                {
+                    events.sendNavigationEvents = navigation;
+                    module.enabled = events.enabled = true;
+                    module.Supported = false;
+                    Require(!module.IsModuleSupported() && !CanBorrow(events),
+                        "An enabled but unsupported input module must not be borrowed.");
+                    module.Supported = true;
+                    Require(module.IsModuleSupported() && CanBorrow(events),
+                        "A usable pointer module must recover without creating a false borrowing lock.");
+                    module.enabled = false;
+                    Require(!CanBorrow(events), "A disabled input module must not be borrowed.");
+                    module.enabled = true;
+                    events.enabled = false;
+                    Require(!CanBorrow(events) && events.sendNavigationEvents == navigation,
+                        "The read-only policy must preserve disabled state and navigation settings.");
+                    events.enabled = true;
+                    Require(CanBorrow(events) && events.sendNavigationEvents == navigation,
+                        "The read-only policy must preserve a usable system's settings.");
+                }
+                Debug.Log("Greed input borrowing policy passed: missing system/module, virtual unsupported/usable module, disabled-module/system and recovery at both navigation values; actual legacy module positive control. Edit-mode production policy with a BaseInputModule test double, not hardware or engine-frame dispatch.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+                UnityEngine.Object.DestroyImmediate(noModuleHost);
+                UnityEngine.Object.DestroyImmediate(legacyHost);
+            }
+        }
+
+        public sealed class BorrowingInputModule : BaseInputModule
+        {
+            public bool Supported { get; set; }
+            public override bool IsModuleSupported() => Supported;
+            public override void Process() { }
+        }
+
         public static void Run(GreedLastRuntimeUi ui)
         {
             EventSystem system = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
