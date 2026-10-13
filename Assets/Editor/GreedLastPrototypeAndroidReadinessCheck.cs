@@ -8,7 +8,7 @@ namespace GreedLast.Editor
 {
     public static class GreedLastPrototypeAndroidReadinessCheck
     {
-        // Bundled Windows tool paths from the installed 6000.4.3f1 module manifest.
+        // Bundled Windows probes pinned to the installed 6000.4.3f1 toolchain.
         private static readonly string[] RequiredFiles =
         {
             "OpenJDK/bin/java.exe",
