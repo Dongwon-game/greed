@@ -16919,6 +16919,15 @@ namespace GreedLast
                 ResetRunPresentation(snapshot);
                 hadPreviousSnapshot = false;
             }
+            // Publications can cross a trap boundary before the UI receives another Update.
+            if (!hadPreviousSnapshot || !ShouldShowActivePatternVisuals(snapshot)
+                || !ShouldShowActivePatternVisuals(previousSnapshot)
+                || !string.Equals(snapshot.Pattern.PatternId, previousSnapshot.Pattern.PatternId, StringComparison.Ordinal)
+                || snapshot.ElapsedSeconds < previousSnapshot.ElapsedSeconds)
+            {
+                lastActivePatternVisual = false;
+                targetCuePlayed = false;
+            }
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
             judgementLine.enabled = !snapshot.ChoiceActive && !snapshot.Stopped;

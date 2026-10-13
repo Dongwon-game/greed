@@ -254,6 +254,7 @@ namespace GreedLast.Editor
                 VerifyOpeningCountdown(ui);
                 VerifySynchronizedPulseCurve();
                 VerifyInfiniteBeatTempos(ui);
+                VerifyTrapCuePublications(ui);
                 VerifyAudioConfigurationRecovery();
                 Debug.Log("Greed Last audio state checks passed: master gain once, immediate mute, independent haptics, focus/pause callback order, disable/re-enable and blocked background feedback. No device audio capture was performed.");
             }
@@ -475,6 +476,93 @@ namespace GreedLast.Editor
             }
             Require(At(-0.1f, 0.5f) == 0f && At(0f, 0f) == 0f, "Future or missing beats must not light the HUD.");
             Debug.Log("Greed Last synchronized beat visuals passed: shared event peak, same-frame marker update, independent ambient motion, muted visuals, no phantom pulses, pause/resume reset and five tempos.");
+        }
+
+        [MenuItem("Greed Last/Run Trap Cue Publication Check")]
+        public static void RunTrapCuePublications()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Trap cue checks require an idle Edit-mode editor.");
+            var host = new GameObject("GreedLastTrapCuePublicationCheck");
+            GreedLastRuntimeUi ui = null;
+            GameObject canvas = null, camera = null;
+            try
+            {
+                ui = host.AddComponent<GreedLastRuntimeUi>();
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
+                canvas = Read<GameObject>(ui, "ownedCanvas");
+                camera = Read<GameObject>(ui, "ownedCamera");
+                VerifyTrapCuePublications(ui);
+            }
+            finally
+            {
+                if (ui != null) ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+                if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas);
+                if (camera != null) UnityEngine.Object.DestroyImmediate(camera);
+            }
+        }
+
+        private static void VerifyTrapCuePublications(GreedLastRuntimeUi ui)
+        {
+            float volume = Read<float>(ui, "sfxVolume");
+            bool playerControls = ui.UsePlayerRunControls;
+            try
+            {
+                SetTransientVolume(ui, 0f);
+                for (int mode = 0; mode < 2; mode++)
+                {
+                    if (ui.UsePlayerRunControls != (mode == 0)) ui.ToggleDevCleanView();
+                    var core = new GreedLastRunCore();
+                    typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, 0f);
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    float clock = 20f;
+                    core.RestartPractice(clock);
+                    core.Tick(clock += 2f);
+                    core.RequestNextPattern(clock += 1f);
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Cue fixture", string.Empty, 0));
+                    ui.RenderRun(run);
+                    Call(ui, "UpdateRunTimingVisuals");
+                    Require(Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "A fresh first trap must present its entry before its timing cue.");
+                    core.Tick(clock += run.Pattern.CoreSeconds);
+                    ui.RenderRun(run);
+                    Call(ui, "UpdateRunTimingVisuals");
+                    Require(Read<bool>(ui, "targetCuePlayed"), "The first timing cue must reach its played state.");
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    ui.RenderRun(run);
+                    Require(!run.ActivePattern && run.SuccessCount == 1,
+                        "The publication fixture must resolve one real core judgement.");
+                    Require(!Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "An inactive trap publication must rearm entry and target cues before another UI Update.");
+                    core.RequestNextPattern(clock += 0.21f);
+                    ui.RenderRun(run);
+                    Require(run.ActivePattern && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "The next trap must not inherit already-played cues when no UI Update occurred in the gap.");
+                    Call(ui, "UpdateRunTimingVisuals");
+                    Require(Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "The next displayed trap must recover its entry cue.");
+                    core.Tick(clock += run.Pattern.CoreSeconds);
+                    ui.RenderRun(run);
+                    Call(ui, "UpdateRunTimingVisuals");
+                    Require(Read<bool>(ui, "targetCuePlayed"), "The next trap must recover its target cue.");
+                    for (int repeat = 0; repeat < 3; repeat++) ui.RenderRun(run);
+                    Require(Read<bool>(ui, "lastActivePatternVisual") && Read<bool>(ui, "targetCuePlayed"),
+                        "An unchanged active snapshot must not rearm and replay either cue.");
+                    core.TogglePause(clock);
+                    ui.RenderRun(run);
+                    Require(!Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "Pause publication must rearm cues even without a paused UI Update.");
+                }
+                Debug.Log("Greed trap cue publications passed: clean/detailed real-core exact judgement, inactive-to-next-trap without UI Update, recovered entry/target states, unchanged redraw deduplication and pause publication. Synthetic ticks and private in-memory calibration only; no preferences, audible output, engine FPS or hardware testing.");
+            }
+            finally
+            {
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                SetTransientVolume(ui, volume);
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", string.Empty, 0));
+            }
         }
 
         private static void RequireBlocked(GreedLastRuntimeUi ui, AudioSource source, string context)

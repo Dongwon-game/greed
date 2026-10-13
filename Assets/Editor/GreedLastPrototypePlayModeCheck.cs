@@ -56,8 +56,11 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Input System Ownership Check")]
         public static void RunInputSystemOwnership() => BeginCheck(false, false, false, false, true);
 
+        [MenuItem("Greed Last/Run Engine Trap Cue Boundary Check")]
+        public static void RunTrapCueBoundary() => BeginCheck(false, false, false, false, false, true);
+
         private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false, bool audioListenerOnly = false,
-            bool initialChoiceOnly = false, bool inputSystemOnly = false)
+            bool initialChoiceOnly = false, bool inputSystemOnly = false, bool trapCueOnly = false)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
@@ -80,6 +83,7 @@ namespace GreedLast.Editor
             SessionState.SetBool(Prefix + "audioListenerOnly", audioListenerOnly);
             SessionState.SetBool(Prefix + "initialChoiceOnly", initialChoiceOnly);
             SessionState.SetBool(Prefix + "inputSystemOnly", inputSystemOnly);
+            SessionState.SetBool(Prefix + "trapCueOnly", trapCueOnly);
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
             EditorSceneManager.playModeStartScene = scene;
             BeginCycle();
@@ -91,6 +95,7 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Audio Listener Ownership Check", true)]
         [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check", true)]
         [MenuItem("Greed Last/Run Engine Input System Ownership Check", true)]
+        [MenuItem("Greed Last/Run Engine Trap Cue Boundary Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
 
@@ -197,6 +202,7 @@ namespace GreedLast.Editor
             results.audioListenerOnly = SessionState.GetBool(Prefix + "audioListenerOnly", false);
             results.initialChoiceOnly = SessionState.GetBool(Prefix + "initialChoiceOnly", false);
             results.inputSystemOnly = SessionState.GetBool(Prefix + "inputSystemOnly", false);
+            results.trapCueOnly = SessionState.GetBool(Prefix + "trapCueOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
                 results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, six held-command slot-change paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
@@ -206,6 +212,8 @@ namespace GreedLast.Editor
                 results.scope = "Actual engine first chapter courses with natural final input omission, two clean/detailed initial node-choice boundaries, four changed-slot/save-to-lobby publication boundaries and fresh touch/keyboard-router recovery in two domain-reload modes. Synthetic EventSystem taps and boolean keyboard callbacks, not OS keyboard input. No manual core Tick, private clock edits, rendered-image or audio latency testing; isolated non-persisting progress.";
             if (results.inputSystemOnly)
                 results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
+            if (results.trapCueOnly)
+                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, real-time public core input followed by a same-frame next-pattern command after UI Update, entry/target cue-state recovery, unchanged redraw deduplication and pause publication. Synthetic pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
@@ -237,7 +245,13 @@ namespace GreedLast.Editor
                     && cycle.inputSystemReenableRecovered);
                 if (!results.succeeded) results.error = "Required input-system ownership coverage did not complete.";
             }
-            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly)
+            if (results.succeeded && (results.trapCueOnly || results.fullLoopIncluded))
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.trapCueEngineCases == 2
+                    && cycle.trapCueEngineRecovery);
+                if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
+            }
+            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
@@ -269,7 +283,7 @@ namespace GreedLast.Editor
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
-            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly)
+            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
@@ -286,7 +300,7 @@ namespace GreedLast.Editor
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                results.archivedReport = "report-" + (results.inputSystemOnly ? "input-system-" : results.audioListenerOnly ? "audio-listener-"
+                results.archivedReport = "report-" + (results.trapCueOnly ? "trap-cue-" : results.inputSystemOnly ? "input-system-" : results.audioListenerOnly ? "audio-listener-"
                     : results.initialChoiceOnly ? "initial-choice-" : results.multiTouchOnly ? "multi-touch-"
                     : results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
                     + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
@@ -338,7 +352,7 @@ namespace GreedLast.Editor
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
-            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly;
+            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly, trapCueOnly;
             public List<Cycle> cycles = new List<Cycle>();
             public List<string> personalPreferenceKeys = new List<string>();
         }
@@ -392,6 +406,8 @@ namespace GreedLast.Editor
             public int inputSystemOwnershipCases, inputSystemSceneHandoffs;
             public bool inputSystemOwnershipPreserved;
             public bool inputSystemReenableRecovered;
+            public int trapCueEngineCases;
+            public bool trapCueEngineRecovery;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
             public int screenKeyboardTransitionCases;
@@ -428,6 +444,7 @@ namespace GreedLast.Editor
             private GreedLastRunSnapshot run;
             private bool completed;
             private GreedLastPrototypeKeyboardInput input;
+            private Action lateCueAction;
 
             private void Start()
             {
@@ -438,6 +455,15 @@ namespace GreedLast.Editor
             }
 
             private void Update() { report.frames++; }
+
+            private void LateUpdate()
+            {
+                Action action = lateCueAction;
+                lateCueAction = null;
+                if (action == null) return;
+                try { action(); }
+                catch (Exception error) { loggedError = error.ToString(); }
+            }
 
             private IEnumerator Guard(IEnumerator routine)
             {
@@ -519,6 +545,15 @@ namespace GreedLast.Editor
                     yield return null;
                     yield break;
                 }
+                if (SessionState.GetBool(Prefix + "trapCueOnly", false))
+                {
+                    yield return VerifyEngineTrapCueBoundaries();
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    yield break;
+                }
+                if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyEngineTrapCueBoundaries();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyKeyboardTransitionFrames();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
@@ -1345,6 +1380,64 @@ namespace GreedLast.Editor
                 input.MouseUp = false;
                 yield return null;
                 report.canceledEngineCommands++;
+            }
+
+            private IEnumerator VerifyEngineTrapCueBoundaries()
+            {
+                bool playerControls = ui.UsePlayerRunControls;
+                for (int mode = 0; mode < 2; mode++)
+                {
+                    Require(state.CurrentState == GreedLastScreenState.LobbyReady, "Engine cue boundary must begin in the lobby.");
+                    if (ui.UsePlayerRunControls != (mode == 0)) ui.ToggleDevCleanView();
+                    typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, 0f);
+                    yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                    float deadline = Time.realtimeSinceStartup + 10f;
+                    while (!run.ActivePattern || !Read<bool>(ui, "targetCuePlayed") || run.CoreDeltaSeconds < -0.025f)
+                    {
+                        Require(!run.Paused && !run.Stopped && Time.realtimeSinceStartup < deadline,
+                            "Engine cue fixture must reach its first live target without a clock rewrite.");
+                        yield return null;
+                    }
+                    bool observed = false;
+                    lateCueAction = () =>
+                    {
+                        int frame = Time.frameCount;
+                        Require(Read<bool>(ui, "lastActivePatternVisual") && Read<bool>(ui, "targetCuePlayed"),
+                            "The first engine trap must have presented both cue states before LateUpdate.");
+                        core.HandleInput(run.Pattern.Channel, Time.realtimeSinceStartup);
+                        Require(!run.ActivePattern && run.SuccessCount == 1 && !run.Stopped,
+                            "Real-time engine input must resolve the first exact judgement.");
+                        Require(!Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                            "The inactive engine publication must rearm cues before another UI Update.");
+                        core.RequestNextPattern(Time.realtimeSinceStartup);
+                        Require(Time.frameCount == frame && run.ActivePattern
+                            && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                            "Same-frame next-pattern command must not inherit the previous trap's cue state.");
+                        observed = true;
+                    };
+                    yield return null;
+                    Require(observed, "The cue boundary must execute in the real engine LateUpdate phase.");
+                    deadline = Time.realtimeSinceStartup + 5f;
+                    while (!Read<bool>(ui, "targetCuePlayed"))
+                    {
+                        Require(run.ActivePattern && !run.Paused && !run.Stopped && Time.realtimeSinceStartup < deadline,
+                            "The next engine trap must recover its entry and target cue states.");
+                        yield return null;
+                    }
+                    Require(Read<bool>(ui, "lastActivePatternVisual"), "The next engine entry must also recover.");
+                    for (int repeat = 0; repeat < 3; repeat++) ui.RenderRun(run);
+                    Require(Read<bool>(ui, "lastActivePatternVisual") && Read<bool>(ui, "targetCuePlayed"),
+                        "Unchanged engine redraws must not rearm or replay cues.");
+                    Call(app, "RequestToggleRunPause");
+                    Require(run.Paused && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
+                        "Engine pause publication must rearm cues before a paused UI Update.");
+                    yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                    report.trapCueEngineCases++;
+                }
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                report.trapCueEngineRecovery = report.trapCueEngineCases == 2;
+                Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, no intermediate UI Update, recovered entry/target states, unchanged redraw deduplication and pause rearm. Real time with synthetic public core/pointer commands, not hardware audio or FPS measurement.");
             }
 
             private IEnumerator VerifyInputSystemOwnership()
