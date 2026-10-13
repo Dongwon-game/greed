@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -79,6 +80,15 @@ namespace GreedLast.Editor
             public bool forcedLaneOverlap;
             public int brightSamples;
             public int detailSamples;
+        }
+
+        [Serializable]
+        private sealed class PublicationCheckReport
+        {
+            public string startedUtc, completedUtc, unityVersion, error;
+            public bool succeeded;
+            public string scope = "Real filesystem operations in an isolated evidence directory. Not disk-full, power-loss, actual scene cleanup, gameplay or hardware testing.";
+            public List<string> cases = new List<string>();
         }
 
         private sealed class Frame
@@ -347,6 +357,7 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Capture Text Clipping Rejection Check", true)]
         [MenuItem("Greed Last/Capture Low Health Input Checks", true)]
         [MenuItem("Greed Last/Run Capture Finish Policy Check", true)]
+        [MenuItem("Greed Last/Run Capture Publication Check", true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
         private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null, Vector4? safeInsets = null, bool retainedScreen = false)
@@ -2037,7 +2048,7 @@ namespace GreedLast.Editor
                 if (brightSamples < minimumBrightSamples || detailSamples < minimumDetailSamples)
                 {
                     report.failedFrameFile = Path.Combine(report.captureDirectory, currentFrame.Name + ".failed.png").Replace('\\', '/');
-                    WriteNewPng(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
+                    WriteNewEvidence(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
                     throw new InvalidOperationException("Blank or incomplete visual capture: " + currentFrame.Name
                         + " / bright " + brightSamples + " / detail " + detailSamples
                         + " / canvas " + canvas.GetComponent<RectTransform>().rect
@@ -2048,7 +2059,7 @@ namespace GreedLast.Editor
                 }
                 string relativeFile = Path.Combine(report.captureDirectory, currentFrame.Name + ".png").Replace('\\', '/');
                 string path = Path.Combine(CaptureRoot, relativeFile);
-                WriteNewPng(path, image.EncodeToPNG());
+                WriteNewEvidence(path, image.EncodeToPNG());
                 capturedFrameCount++;
                 report.frames.Add(new CaptureResult
                 {
@@ -2550,8 +2561,37 @@ namespace GreedLast.Editor
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
             string json = JsonUtility.ToJson(report, true);
-            File.WriteAllText(Path.Combine(CaptureRoot, report.archivedReport), json);
-            File.WriteAllText(Path.Combine(CaptureRoot, "latest-report.json"), json);
+            PublishReportFiles(CaptureRoot, report.archivedReport, json);
+        }
+
+        private static void PublishReportFiles(string directory, string archiveName, string json)
+        {
+            byte[] bytes = new UTF8Encoding(false).GetBytes(json);
+            WriteNewEvidence(Path.Combine(directory, archiveName), bytes);
+            ReplaceLatestReport(Path.Combine(directory, "latest-report.json"), bytes);
+        }
+
+        private static void ReplaceLatestReport(string path, byte[] bytes)
+        {
+            if (bytes == null) throw new ArgumentNullException(nameof(bytes));
+            string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            bool temporaryOwned = false;
+            try
+            {
+                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    temporaryOwned = true;
+                    stream.Write(bytes, 0, bytes.Length);
+                }
+                // Never truncate the old index before the replacement is fully written and closed.
+                if (File.Exists(path)) File.Replace(temporary, path, null);
+                else File.Move(temporary, path);
+                temporaryOwned = false;
+            }
+            finally
+            {
+                if (temporaryOwned) File.Delete(temporary);
+            }
         }
 
         private static void FinishCapture(bool succeeded, string error)
@@ -2598,7 +2638,99 @@ namespace GreedLast.Editor
             Debug.Log("Greed capture finish policy passed: four in-memory report/cleanup combinations, cleanup always attempted and either failure retained. No filesystem failure, actual scene teardown or hardware test was simulated by this policy check.");
         }
 
-        private static void WriteNewPng(string path, byte[] bytes)
+        [MenuItem("Greed Last/Run Capture Publication Check")]
+        public static void VerifyCapturePublication()
+        {
+            Require(CanRun(), "Capture publication checks require idle Edit mode.");
+            string directory = Path.Combine(CaptureRoot, "publication-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff",
+                System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(directory);
+            var check = new PublicationCheckReport { startedUtc = DateTime.UtcNow.ToString("O"), unityVersion = Application.unityVersion };
+            string latest = Path.Combine(directory, "latest-report.json");
+            const string first = "{\"case\":\"first\",\"caption\":\"확인\"}";
+            const string second = "{\"case\":\"second\",\"caption\":\"보존\"}";
+            const string third = "{\"case\":\"third\",\"caption\":\"복구\"}";
+            bool IsIoRejected(Action operation)
+            {
+                try { operation(); return false; }
+                catch (IOException) { return true; }
+                catch (UnauthorizedAccessException) { return true; }
+            }
+            void RequireLatest(string expected)
+            {
+                Require(File.ReadAllText(latest) == expected, "Capture publication must retain the complete expected index.");
+                Require(Directory.GetFiles(directory, "*.tmp-*", SearchOption.AllDirectories).Length == 0,
+                    "Capture publication must remove only its owned temporary file after failure.");
+            }
+            try
+            {
+                PublishReportFiles(directory, "report-first.json", first);
+                RequireLatest(first);
+                Require(File.ReadAllText(Path.Combine(directory, "report-first.json")) == first, "Fresh archive must contain complete UTF-8 text.");
+                check.cases.Add("first-publication");
+
+                Require(IsIoRejected(() => PublishReportFiles(directory, "report-first.json", second)), "Duplicate archives must be rejected.");
+                RequireLatest(first);
+                Require(File.ReadAllText(Path.Combine(directory, "report-first.json")) == first, "Duplicate publication must not overwrite evidence.");
+                check.cases.Add("archive-collision");
+
+                PublishReportFiles(directory, "report-second.json", second);
+                RequireLatest(second);
+                Require(File.ReadAllText(Path.Combine(directory, "report-first.json")) == first, "Replacing the index must preserve earlier archives.");
+                check.cases.Add("index-replacement");
+
+                string payload = Path.Combine(directory, "payload.bin");
+                WriteNewEvidence(payload, new byte[] { 1, 2, 3 });
+                Require(IsIoRejected(() => WriteNewEvidence(payload, new byte[] { 4, 5 }))
+                    && Convert.ToBase64String(File.ReadAllBytes(payload)) == "AQID", "Payload collision must retain its original bytes.");
+                check.cases.Add("payload-collision");
+
+                bool preparationRejected = false;
+                try { ReplaceLatestReport(latest, null); }
+                catch (ArgumentNullException) { preparationRejected = true; }
+                Require(preparationRejected, "Invalid payload must fail before replacing the previous index.");
+                RequireLatest(second);
+                check.cases.Add("invalid-payload-preparation");
+
+                if (Application.platform == RuntimePlatform.WindowsEditor)
+                {
+                    using (var held = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.None))
+                        Require(IsIoRejected(() => PublishReportFiles(directory, "report-locked.json", third)), "A Windows exclusive reader must reject index replacement.");
+                    RequireLatest(second);
+                    Require(File.ReadAllText(Path.Combine(directory, "report-locked.json")) == third, "A failed index update must retain its completed new archive.");
+                    check.cases.Add("windows-locked-index");
+                }
+
+                string blocked = Path.Combine(directory, "blocked");
+                string obstruction = Path.Combine(blocked, "latest-report.json");
+                Directory.CreateDirectory(obstruction);
+                string marker = Path.Combine(obstruction, "marker.bin");
+                WriteNewEvidence(marker, new byte[] { 7 });
+                Require(IsIoRejected(() => PublishReportFiles(blocked, "report-blocked.json", third))
+                    && Directory.Exists(obstruction) && File.ReadAllBytes(marker)[0] == 7
+                    && File.ReadAllText(Path.Combine(blocked, "report-blocked.json")) == third,
+                    "A directory obstruction must be preserved while the completed archive remains available.");
+                RequireLatest(second);
+                check.cases.Add("directory-obstruction");
+
+                PublishReportFiles(directory, "report-recovered.json", third);
+                RequireLatest(third);
+                Require(File.ReadAllText(Path.Combine(directory, "report-first.json")) == first
+                    && File.ReadAllText(Path.Combine(directory, "report-second.json")) == second, "Recovery must preserve all previous archives.");
+                check.cases.Add("fresh-publication-recovery");
+                Require(check.cases.Count == (Application.platform == RuntimePlatform.WindowsEditor ? 8 : 7), "All capture publication cases must run.");
+                check.succeeded = true;
+            }
+            catch (Exception error) { check.error = error.ToString(); throw; }
+            finally
+            {
+                check.completedUtc = DateTime.UtcNow.ToString("O");
+                WriteNewEvidence(Path.Combine(directory, "publication-check.json"), new UTF8Encoding(false).GetBytes(JsonUtility.ToJson(check, true)));
+            }
+            Debug.Log("Greed capture publication passed: " + check.cases.Count + " real isolated filesystem cases, preserved archives/index and removed owned temporaries. Evidence: " + directory);
+        }
+
+        private static void WriteNewEvidence(string path, byte[] bytes)
         {
             using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 stream.Write(bytes, 0, bytes.Length);
@@ -2618,7 +2750,7 @@ namespace GreedLast.Editor
                     RenderTexture.active = target;
                     image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                     image.Apply();
-                    WriteNewPng(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
+                    WriteNewEvidence(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
                 }
                 finally
                 {
