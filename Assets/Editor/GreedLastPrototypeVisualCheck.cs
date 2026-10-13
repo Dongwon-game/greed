@@ -25,7 +25,11 @@ namespace GreedLast.Editor
         private static double frameStartedAt;
         private static bool running;
         private static int capturedFrameCount;
+        private static int textCompletenessCalls;
+        private static string captureDirectory;
+        private static bool currentFrameRendered;
         private static CaptureReport report;
+        private static string CaptureRoot => Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "VisualChecks");
 
         [Serializable]
         private sealed class CaptureReport
@@ -36,10 +40,14 @@ namespace GreedLast.Editor
             public bool succeeded;
             public string error;
             public string archivedReport;
+            public string captureDirectory, failedFrameFile, failureCaptureError, expectedRejectionMessage;
+            public string scope = "Isolated preview-camera canvas rendering with synthetic core snapshots, manual UI Update and per-frame synthetic pointer probes, including possible held-input redraws. Not native screen capture, actual engine gameplay, hardware input, audible output, device FPS or latency testing.";
             public bool pointerLoopPassed;
             public bool pointerLoopIncluded;
             public bool scoreBoundaryOnly;
             public bool progressBoundaryOnly;
+            public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
+            public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
             public int pointerLoopClicks;
             public int pointerLoopCanceledCommands;
@@ -57,6 +65,7 @@ namespace GreedLast.Editor
             public int checkedButtons;
             public int checkedModuleClicks;
             public int checkedModuleLaneInputs;
+            public int checkedModuleMarginInputs, checkedSameChannelOverlapInputs;
             public int checkedModuleScrolls;
             public int checkedSuspendedScrolls;
             public int checkedControlPoints;
@@ -65,7 +74,9 @@ namespace GreedLast.Editor
             public int checkedFeedbackAreas;
             public int checkedProgressAreas;
             public int checkedRunnerCueClearances;
+            public int checkedTextCompletenessCalls;
             public bool retainedScreen;
+            public bool forcedLaneOverlap;
             public int brightSamples;
             public int detailSamples;
         }
@@ -80,6 +91,8 @@ namespace GreedLast.Editor
             public double SettleSeconds = 0.5;
             public Action Show;
             public Action BeforeUpdate;
+            public Action BeforeCapture;
+            public bool ForcedLaneOverlap;
             public bool RetainedScreen;
         }
 
@@ -107,7 +120,20 @@ namespace GreedLast.Editor
             Begin(false, progressBoundaryOnly: true);
         }
 
-        private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false)
+        [MenuItem("Greed Last/Capture Text Clipping Rejection Check")]
+        public static void RunTextClippingRejection()
+        {
+            Begin(false, textClippingRejectionOnly: true);
+        }
+
+        [MenuItem("Greed Last/Capture Low Health Input Checks")]
+        public static void RunLowHealthInput()
+        {
+            Begin(false, lowHealthInputOnly: true);
+        }
+
+        private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
+            bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -130,9 +156,16 @@ namespace GreedLast.Editor
                 pointerLoopIncluded = includePointerLoop,
                 scoreBoundaryOnly = scoreBoundaryOnly,
                 progressBoundaryOnly = progressBoundaryOnly,
+                textClippingRejectionOnly = textClippingRejectionOnly,
+                lowHealthInputOnly = lowHealthInputOnly,
             };
             try
             {
+                report.captureDirectory = "capture-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff",
+                    System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                captureDirectory = Path.Combine(CaptureRoot, report.captureDirectory);
+                Require(!Directory.Exists(captureDirectory), "Visual captures require a new evidence directory.");
+                Directory.CreateDirectory(captureDirectory);
                 if (includePointerLoop)
                 {
                     GreedLastPrototypeAppLoopCheck.RunPointerLoop();
@@ -253,20 +286,67 @@ namespace GreedLast.Editor
                     Require(Frames.Count == 12,
                         "The focused numeric capture must include only its assigned boundary frames.");
                 }
-                Directory.CreateDirectory("Logs/VisualChecks");
+                if (textClippingRejectionOnly)
+                {
+                    Frames.Clear();
+                    Add("94-text-rejection-valid", 1280, 720,
+                        () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"));
+                    Add("94-text-rejection-clipped", 1280, 720,
+                        () => ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구"), beforeUpdate: () =>
+                        {
+                            Text label = Read<Button>("practiceRunButton").GetComponentInChildren<Text>();
+                            label.text = "SAVE\nAGAIN\nEXIT";
+                            label.fontSize = 44;
+                            label.resizeTextForBestFit = false;
+                            label.verticalOverflow = VerticalWrapMode.Truncate;
+                            label.alignment = TextAnchor.UpperLeft;
+                            label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                            label.rectTransform.sizeDelta = new Vector2(420f, 65f);
+                        });
+                }
+                if (lowHealthInputOnly)
+                {
+                    Frame[] candidates = Frames.ToArray();
+                    Frames.Clear();
+                    foreach (Frame frame in candidates)
+                    {
+                        if (!frame.Name.StartsWith("46-", StringComparison.Ordinal)
+                            && !frame.Name.StartsWith("47-", StringComparison.Ordinal)
+                            && !frame.Name.StartsWith("48-", StringComparison.Ordinal)
+                            && !frame.Name.StartsWith("49-", StringComparison.Ordinal)) continue;
+                        int phase = 0;
+                        foreach (double settle in new[] { 0.03, 0.12, 0.22 })
+                        {
+                            Frames.Enqueue(new Frame { Name = frame.Name + "-phase-" + phase++, Width = frame.Width,
+                                Height = frame.Height, SafeInset = frame.SafeInset, SafeInsets = frame.SafeInsets,
+                                Show = frame.Show, BeforeUpdate = frame.BeforeUpdate, SettleSeconds = settle });
+                        }
+                        Frames.Enqueue(new Frame { Name = frame.Name + "-forced-overlap", Width = frame.Width,
+                            Height = frame.Height, SafeInset = frame.SafeInset, SafeInsets = frame.SafeInsets,
+                            Show = frame.Show, SettleSeconds = 0.12, ForcedLaneOverlap = true,
+                            BeforeCapture = () =>
+                            {
+                                foreach (Button lane in Read<Button[]>("laneButtons"))
+                                    lane.transform.localScale = new Vector3(1.2f, 1f, 1f);
+                            } });
+                    }
+                    Require(Frames.Count == 16, "Low-health input capture must cover four views at three feedback phases and a forced overlap each.");
+                }
                 BeginNextFrame();
                 EditorApplication.update += Tick;
                 AssemblyReloadEvents.beforeAssemblyReload += Cleanup;
             }
             catch (Exception exception)
             {
-                WriteCaptureReport(false, exception.Message);
-                Cleanup();
+                FinishCapture(false, exception.Message);
                 throw;
             }
         }
 
         [MenuItem(MenuPath, true)]
+        [MenuItem("Greed Last/Capture Text Clipping Rejection Check", true)]
+        [MenuItem("Greed Last/Capture Low Health Input Checks", true)]
+        [MenuItem("Greed Last/Run Capture Finish Policy Check", true)]
         private static bool CanRun() => !running && !EditorApplication.isPlayingOrWillChangePlaymode;
 
         private static void Add(string name, int width, int height, Action show, float safeInset = 0f, double settleSeconds = 0.5, Action beforeUpdate = null, Vector4? safeInsets = null, bool retainedScreen = false)
@@ -1808,6 +1888,7 @@ namespace GreedLast.Editor
 
         private static void BeginNextFrame()
         {
+            currentFrameRendered = false;
             currentFrame = Frames.Dequeue();
             ReleaseTarget();
             target = new RenderTexture(currentFrame.Width, currentFrame.Height, 24, RenderTextureFormat.ARGB32);
@@ -1835,6 +1916,7 @@ namespace GreedLast.Editor
                 {
                     return;
                 }
+                currentFrame.BeforeCapture?.Invoke();
                 CaptureFrame();
                 if (Frames.Count > 0)
                 {
@@ -1842,22 +1924,40 @@ namespace GreedLast.Editor
                     return;
                 }
                 Debug.Log("Greed Last visual checks captured: " + capturedFrameCount + " nonblank frames in Logs/VisualChecks. These are isolated UI fixtures, not real-device input tests.");
-                WriteCaptureReport(true, string.Empty);
-                Cleanup();
-                if (Application.isBatchMode)
+                Require(!report.textClippingRejectionOnly, "The clipped text fixture must be rejected, not captured as valid.");
+                if (report.lowHealthInputOnly)
                 {
-                    EditorApplication.Exit(0);
+                    int forced = 0, overlaps = 0, margins = 0;
+                    foreach (CaptureResult frame in report.frames)
+                    {
+                        if (frame.forcedLaneOverlap) forced++;
+                        overlaps += frame.checkedSameChannelOverlapInputs;
+                        margins += frame.checkedModuleMarginInputs;
+                        Require(frame.checkedModuleLaneInputs == 9 && frame.checkedTextCompletenessCalls > 0,
+                            "Every low-health view must actually exercise all channel points and text checks.");
+                    }
+                    Require(report.frames.Count == 16 && forced == 4 && report.wrongChannelAlternatesRejected == 16
+                        && overlaps >= 24 && margins > 0, "Low-health coverage must include real same-channel overlaps and wrong-channel rejection.");
                 }
+                FinishCapture(true, string.Empty);
             }
             catch (Exception exception)
             {
-                Debug.LogException(exception);
-                WriteCaptureReport(false, exception.Message);
-                Cleanup();
-                if (Application.isBatchMode)
+                PreserveFailedFrame();
+                bool expected = report.textClippingRejectionOnly && currentFrame.Name == "94-text-rejection-clipped"
+                    && exception.Message.Contains("text is vertically truncated", StringComparison.Ordinal)
+                    && !string.IsNullOrEmpty(report.failedFrameFile) && string.IsNullOrEmpty(report.failureCaptureError)
+                    && File.Exists(Path.Combine(CaptureRoot, report.failedFrameFile)) && capturedFrameCount == 1;
+                if (expected)
                 {
-                    EditorApplication.Exit(1);
+                    report.expectedClippingRejected = true;
+                    report.expectedRejectionMessage = exception.Message;
+                    Debug.Log("Greed visual clipping rejection passed: valid positive control, clipped button rejected and failed preview preserved in its immutable run directory.");
+                    FinishCapture(true, string.Empty);
+                    return;
                 }
+                Debug.LogException(exception);
+                FinishCapture(false, exception.Message);
             }
         }
 
@@ -1875,6 +1975,8 @@ namespace GreedLast.Editor
 
         private static void CaptureFrame()
         {
+            textCompletenessCalls = 0;
+            currentFrameRendered = false;
             RectTransform root = Read<RectTransform>("rootPanelRect");
             ApplyCaptureSafeArea();
             Canvas.ForceUpdateCanvases();
@@ -1884,6 +1986,7 @@ namespace GreedLast.Editor
                 graphic.Rebuild(CanvasUpdate.PreRender);
             }
             camera.Render();
+            currentFrameRendered = true;
             int checkedProgressAreas = 0;
             if (currentFrame.Name.StartsWith("93-progress-", StringComparison.Ordinal))
             {
@@ -1907,7 +2010,8 @@ namespace GreedLast.Editor
             int checkedRunnerCueClearances = VerifyRunnerCueClearance();
             int checkedLaneLabels = VerifyLanePresentation();
             int checkedModuleClicks = VerifyActionModuleClick();
-            int checkedModuleLaneInputs = VerifyLaneModuleInputs();
+            int checkedModuleLaneInputs = VerifyLaneModuleInputs(out int checkedModuleMarginInputs,
+                out int checkedSameChannelOverlapInputs);
             int checkedModuleScrolls = VerifyMenuModuleScroll();
             RenderTexture previous = RenderTexture.active;
             var image = new Texture2D(currentFrame.Width, currentFrame.Height, TextureFormat.RGB24, false);
@@ -1932,7 +2036,8 @@ namespace GreedLast.Editor
                 int minimumDetailSamples = Mathf.Max(30, Mathf.CeilToInt(100f * sampleAreaScale));
                 if (brightSamples < minimumBrightSamples || detailSamples < minimumDetailSamples)
                 {
-                    File.WriteAllBytes("Logs/VisualChecks/" + currentFrame.Name + ".failed.png", image.EncodeToPNG());
+                    report.failedFrameFile = Path.Combine(report.captureDirectory, currentFrame.Name + ".failed.png").Replace('\\', '/');
+                    WriteNewPng(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
                     throw new InvalidOperationException("Blank or incomplete visual capture: " + currentFrame.Name
                         + " / bright " + brightSamples + " / detail " + detailSamples
                         + " / canvas " + canvas.GetComponent<RectTransform>().rect
@@ -1941,12 +2046,13 @@ namespace GreedLast.Editor
                         + " / title culled " + Read<Text>("titleText").canvasRenderer.cull
                         + " / camera rect " + camera.pixelRect);
                 }
-                string path = "Logs/VisualChecks/" + currentFrame.Name + ".png";
-                File.WriteAllBytes(path, image.EncodeToPNG());
+                string relativeFile = Path.Combine(report.captureDirectory, currentFrame.Name + ".png").Replace('\\', '/');
+                string path = Path.Combine(CaptureRoot, relativeFile);
+                WriteNewPng(path, image.EncodeToPNG());
                 capturedFrameCount++;
                 report.frames.Add(new CaptureResult
                 {
-                    file = currentFrame.Name + ".png",
+                    file = relativeFile,
                     width = target.width,
                     height = target.height,
                     safeInset = currentFrame.SafeInset,
@@ -1954,6 +2060,8 @@ namespace GreedLast.Editor
                     checkedButtons = checkedButtons,
                     checkedModuleClicks = checkedModuleClicks,
                     checkedModuleLaneInputs = checkedModuleLaneInputs,
+                    checkedModuleMarginInputs = checkedModuleMarginInputs,
+                    checkedSameChannelOverlapInputs = checkedSameChannelOverlapInputs,
                     checkedModuleScrolls = checkedModuleScrolls,
                     checkedSuspendedScrolls = checkedModuleScrolls * 8,
                     checkedControlPoints = checkedControlPoints,
@@ -1962,7 +2070,9 @@ namespace GreedLast.Editor
                     checkedFeedbackAreas = checkedFeedbackAreas,
                     checkedProgressAreas = checkedProgressAreas,
                     checkedRunnerCueClearances = checkedRunnerCueClearances,
+                    checkedTextCompletenessCalls = textCompletenessCalls,
                     retainedScreen = currentFrame.RetainedScreen,
+                    forcedLaneOverlap = currentFrame.ForcedLaneOverlap,
                     brightSamples = brightSamples,
                     detailSamples = detailSamples,
                 });
@@ -2116,8 +2226,9 @@ namespace GreedLast.Editor
             return bounds;
         }
 
-        private static int VerifyLaneModuleInputs()
+        private static int VerifyLaneModuleInputs(out int marginInputs, out int overlapInputs)
         {
+            marginInputs = overlapInputs = 0;
             if (!Read<bool>("runModeActive") || !Read<bool>("hasRunSnapshot")
                 || Read<GameObject>("pauseMenuOverlay").activeInHierarchy) return 0;
             GreedLastRunSnapshot run = Read<GreedLastRunSnapshot>("latestRunSnapshot");
@@ -2132,6 +2243,24 @@ namespace GreedLast.Editor
             }
             Button[] lanes = Read<Button[]>("laneButtons");
             Button[] margins = Read<Button[]>("laneHitButtons");
+            if (report.lowHealthInputOnly)
+            {
+                object callback = typeof(GreedLastRuntimeUi).GetField("runChannelRequested", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                bool rejected = false;
+                try
+                {
+                    GreedLastPrototypeKeyboardCheck.VerifyLaneInput(ui, eventSystem, margins[0],
+                        camera.WorldToScreenPoint(margins[0].transform.position), 0, alternateSurface: lanes[1]);
+                }
+                catch (InvalidOperationException error)
+                {
+                    rejected = error.Message == "An expanded lane probe may accept only its own visible channel as an alternate surface.";
+                }
+                Require(rejected && ReferenceEquals(callback,
+                    typeof(GreedLastRuntimeUi).GetField("runChannelRequested", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui)),
+                    "Wrong-channel alternate surfaces must be rejected before mutating the input callback.");
+                report.wrongChannelAlternatesRejected++;
+            }
             int count = 0;
             for (int i = 0; i < lanes.Length; i++)
             {
@@ -2146,8 +2275,12 @@ namespace GreedLast.Editor
                 foreach (float edge in new[] { 0.06f, 0.94f })
                 {
                     Vector2 local = rect.rect.min + rect.rect.size * edge;
-                    GreedLastPrototypeKeyboardCheck.VerifyLaneInput(ui, eventSystem, margin,
-                        camera.WorldToScreenPoint(rect.TransformPoint(local)), i);
+                    Vector2 point = camera.WorldToScreenPoint(rect.TransformPoint(local));
+                    // The visible lane can grow over its own transparent margin during feedback.
+                    bool overlap = GreedLastPrototypeKeyboardCheck.VerifyLaneInput(ui, eventSystem, margin, point, i,
+                        alternateSurface: lane);
+                    if (overlap) overlapInputs++;
+                    else marginInputs++;
                     count++;
                 }
             }
@@ -2387,6 +2520,10 @@ namespace GreedLast.Editor
 
         private static void VerifyTextBounds(Text label)
         {
+            Require(GreedLastPrototypeFontCheck.IsTextComplete(label, out int visible, out int full, out int fontSize),
+                currentFrame.Name + ": text is vertically truncated: " + label.name + " / visible " + visible
+                    + " / full " + full + " / fitted font " + fontSize + " / text " + label.text.Replace('\n', '|'));
+            textCompletenessCalls++;
             IList<UIVertex> vertices = label.cachedTextGenerator.verts;
             Require(vertices.Count > 0, currentFrame.Name + ": missing text: " + label.name);
             Rect rect = label.rectTransform.rect;
@@ -2404,16 +2541,92 @@ namespace GreedLast.Editor
 
         private static void WriteCaptureReport(bool succeeded, string error)
         {
-            Directory.CreateDirectory("Logs/VisualChecks");
+            Directory.CreateDirectory(CaptureRoot);
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
-                + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
+                + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
+                + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
             string json = JsonUtility.ToJson(report, true);
-            File.WriteAllText(Path.Combine("Logs/VisualChecks", report.archivedReport), json);
-            File.WriteAllText("Logs/VisualChecks/latest-report.json", json);
+            File.WriteAllText(Path.Combine(CaptureRoot, report.archivedReport), json);
+            File.WriteAllText(Path.Combine(CaptureRoot, "latest-report.json"), json);
+        }
+
+        private static void FinishCapture(bool succeeded, string error)
+        {
+            bool completed = TryWriteAndCleanup(() => WriteCaptureReport(succeeded, error), Cleanup, Debug.LogException);
+            if (Application.isBatchMode) EditorApplication.Exit(succeeded && completed ? 0 : 1);
+        }
+
+        private static bool TryWriteAndCleanup(Action write, Action cleanup, Action<Exception> reportError)
+        {
+            bool completed = true;
+            try { write(); }
+            catch (Exception error) { completed = false; reportError(error); }
+            finally
+            {
+                try { cleanup(); }
+                catch (Exception error) { completed = false; reportError(error); }
+            }
+            return completed;
+        }
+
+        [MenuItem("Greed Last/Run Capture Finish Policy Check")]
+        public static void VerifyCaptureFinishPolicy()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Capture finish checks require Edit mode.");
+            foreach (bool writeFails in new[] { false, true })
+            foreach (bool cleanupFails in new[] { false, true })
+            {
+                var order = new List<string>();
+                int failures = 0;
+                bool result = TryWriteAndCleanup(() =>
+                {
+                    order.Add("write");
+                    if (writeFails) throw new IOException("Synthetic report-write failure.");
+                }, () =>
+                {
+                    order.Add("cleanup");
+                    if (cleanupFails) throw new InvalidOperationException("Synthetic cleanup failure.");
+                }, _ => failures++);
+                Require(string.Join(",", order) == "write,cleanup" && result == (!writeFails && !cleanupFails)
+                    && failures == (writeFails ? 1 : 0) + (cleanupFails ? 1 : 0),
+                    "Capture finish must always attempt cleanup and retain failed status for either failure.");
+            }
+            Debug.Log("Greed capture finish policy passed: four in-memory report/cleanup combinations, cleanup always attempted and either failure retained. No filesystem failure, actual scene teardown or hardware test was simulated by this policy check.");
+        }
+
+        private static void WriteNewPng(string path, byte[] bytes)
+        {
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                stream.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void PreserveFailedFrame()
+        {
+            if (!currentFrameRendered || currentFrame == null || target == null) return;
+            try
+            {
+                if (!string.IsNullOrEmpty(report.failedFrameFile)) return;
+                report.failedFrameFile = Path.Combine(report.captureDirectory, currentFrame.Name + ".failed.png").Replace('\\', '/');
+                RenderTexture previous = RenderTexture.active;
+                var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+                try
+                {
+                    RenderTexture.active = target;
+                    image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                    image.Apply();
+                    WriteNewPng(Path.Combine(CaptureRoot, report.failedFrameFile), image.EncodeToPNG());
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                    UnityEngine.Object.DestroyImmediate(image);
+                }
+            }
+            catch (Exception error) { report.failureCaptureError = error.Message; }
         }
 
         private static T Read<T>(string name)

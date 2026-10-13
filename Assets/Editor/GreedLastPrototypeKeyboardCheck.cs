@@ -389,9 +389,18 @@ namespace GreedLast.Editor
             }
         }
 
-        internal static void VerifyLaneInput(GreedLastRuntimeUi ui, EventSystem system, Button button,
-            Vector2 screenPoint, int laneIndex)
+        internal static bool VerifyLaneInput(GreedLastRuntimeUi ui, EventSystem system, Button button,
+            Vector2 screenPoint, int laneIndex, Button alternateSurface = null)
         {
+            bool usedAlternate = false;
+            if (alternateSurface != null)
+            {
+                var visibleLanes = (Button[])typeof(GreedLastRuntimeUi).GetField("laneButtons", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                var expandedLanes = (Button[])typeof(GreedLastRuntimeUi).GetField("laneHitButtons", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
+                Require(laneIndex >= 0 && laneIndex < visibleLanes.Length && button == expandedLanes[laneIndex]
+                    && alternateSurface == visibleLanes[laneIndex],
+                    "An expanded lane probe may accept only its own visible channel as an alternate surface.");
+            }
             FieldInfo callback = typeof(GreedLastRuntimeUi).GetField("runChannelRequested", BindingFlags.Instance | BindingFlags.NonPublic);
             object originalCallback = callback.GetValue(ui);
             var held = (bool[])typeof(GreedLastRuntimeUi).GetField("laneHoldActive", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(ui);
@@ -474,12 +483,15 @@ namespace GreedLast.Editor
                     TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Began));
                     TouchFrame(input, module, TouchAt(83, screenPoint, TouchPhase.Ended));
                     Require(calls == 8 && !held[laneIndex], "A fresh press after a cross-lane drag must work normally.");
-                });
+                }, alternateSurface == null ? null : alternateSurface.gameObject,
+                    hit => usedAlternate = alternateSurface != null && (hit == alternateSurface.gameObject
+                        || hit.transform.IsChildOf(alternateSurface.transform)));
             }
             finally
             {
                 callback.SetValue(ui, originalCallback);
             }
+            return usedAlternate;
         }
 
         internal static void VerifyScrollInput(GreedLastRuntimeUi ui, EventSystem system, ScrollRect scroll,
@@ -612,7 +624,8 @@ namespace GreedLast.Editor
         }
 
         private static void WithPointerInput(EventSystem system, GameObject control, Vector2 screenPoint,
-            Action<GreedLastPrototypeKeyboardInput, StandaloneInputModule> check)
+            Action<GreedLastPrototypeKeyboardInput, StandaloneInputModule> check,
+            GameObject alternateControl = null, Action<GameObject> observedHit = null)
         {
             Require(!system.sendNavigationEvents, "Visual clicks must use the production keyboard-isolation setting.");
             StandaloneInputModule module = system.GetComponent<StandaloneInputModule>();
@@ -645,9 +658,12 @@ namespace GreedLast.Editor
                 var hits = new System.Collections.Generic.List<RaycastResult>();
                 system.RaycastAll(new PointerEventData(system) { position = screenPoint }, hits);
                 Require(hits.Count > 0 && (hits[0].gameObject == control
-                    || hits[0].gameObject.transform.IsChildOf(control.transform)),
+                    || hits[0].gameObject.transform.IsChildOf(control.transform)
+                    || (alternateControl != null && (hits[0].gameObject == alternateControl
+                        || hits[0].gameObject.transform.IsChildOf(alternateControl.transform)))),
                     "The input module's raycast must reach its control: " + control.name
                     + " at " + screenPoint + " / first hit " + (hits.Count == 0 ? "none" : hits[0].gameObject.name));
+                observedHit?.Invoke(hits[0].gameObject);
                 check(input, module);
             }
             finally

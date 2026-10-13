@@ -39,6 +39,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeAndroidReadinessCheck.VerifyPolicy();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
+            GreedLastPrototypeVisualCheck.VerifyCaptureFinishPolicy();
             Require(
                 GreedLastDevToolPolicy.ShouldEnable(isEditor: true, isDebugBuild: false)
                     && GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: true)

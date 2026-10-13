@@ -82,12 +82,103 @@ namespace GreedLast.Editor
                 }
             }
             finally { UnityEngine.Object.DestroyImmediate(host); }
+            VerifyTextCompleteness();
             Debug.Log("Greed bundled Korean fonts passed: both weights, " + characters.Count
                 + " source characters including all 11,172 Hangul syllables, four sample sizes, included font data and original license.");
         }
 
         [MenuItem("Greed Last/Check Bundled Korean Fonts", true)]
+        [MenuItem("Greed Last/Run Text Completeness Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        internal static bool IsTextComplete(Text label, out int visibleCount, out int completeCount, out int fontSize)
+        {
+            visibleCount = completeCount = fontSize = 0;
+            if (label == null || label.font == null) return false;
+            TextGenerationSettings settings = label.GetGenerationSettings(label.rectTransform.rect.size);
+            using (var visible = new TextGenerator())
+            using (var complete = new TextGenerator())
+            {
+                if (!visible.Populate(label.text, settings)) return false;
+                fontSize = label.resizeTextForBestFit ? visible.fontSizeUsedForBestFit : label.fontSize;
+                if (fontSize <= 0) return false;
+                visibleCount = visible.characterCountVisible;
+                // Keep the rendered best-fit size; only remove vertical truncation for the comparison.
+                settings.resizeTextForBestFit = false;
+                settings.fontSize = fontSize;
+                settings.verticalOverflow = VerticalWrapMode.Overflow;
+                if (!complete.Populate(label.text, settings)) return false;
+                completeCount = complete.characterCountVisible;
+                return visibleCount == completeCount;
+            }
+        }
+
+        [MenuItem("Greed Last/Run Text Completeness Check")]
+        public static void VerifyTextCompleteness()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Text completeness checks require Edit mode.");
+            var host = new GameObject("GreedTextCompletenessCheck", typeof(RectTransform), typeof(Canvas));
+            int completeCases = 0, clippedCases = 0;
+            try
+            {
+                Canvas canvas = host.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                var label = new GameObject("TextCompletenessFixture", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+                label.transform.SetParent(host.transform, false);
+                label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                label.alignment = TextAnchor.UpperLeft;
+                label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
+                label.supportRichText = true;
+                foreach (string weight in new[] { "Regular", "Bold" })
+                foreach (float scale in new[] { 1f, 2f })
+                {
+                    canvas.scaleFactor = scale;
+                    label.font = Resources.Load<Font>("GreedLast/Fonts/NotoSansKR-" + weight);
+                    Require(label.font != null, "Text completeness fixtures need the included Korean font.");
+                    foreach (string sample in new[] { "저장 슬롯 선택", "일반 런\n저장 조합\n무한 시작",
+                        "<color=#FFD569>저장 조합</color>\n<b>선택 확인</b>", "저장 슬롯을 선택하세요" })
+                    {
+                        label.text = sample;
+                        label.fontSize = 44;
+                        label.resizeTextForBestFit = sample == "저장 슬롯을 선택하세요";
+                        label.resizeTextMinSize = 17;
+                        label.resizeTextMaxSize = 44;
+                        label.rectTransform.sizeDelta = label.resizeTextForBestFit
+                            ? new Vector2(220f, 70f) : new Vector2(420f, 240f);
+                        Require(IsTextComplete(label, out int visible, out int full, out int size)
+                            && visible > 0 && full == visible && size > 0,
+                            "Complete Korean, multiline, rich-text and best-fit labels must not be rejected: " + weight + "/" + scale + "/" + sample);
+                        completeCases++;
+                    }
+                    foreach (bool bestFit in new[] { false, true })
+                    {
+                        label.text = "SAVE\nAGAIN\nEXIT";
+                        label.fontSize = 44;
+                        label.resizeTextForBestFit = bestFit;
+                        label.resizeTextMinSize = 40;
+                        label.resizeTextMaxSize = 44;
+                        label.rectTransform.sizeDelta = new Vector2(420f, 65f);
+                        Require(!IsTextComplete(label, out int visible, out int full, out int size)
+                            && visible > 0 && visible < full && size > 0,
+                            "A vertically truncated fixed/bounded-best-fit label must be rejected: " + weight + "/" + scale);
+                        label.cachedTextGenerator.Populate(label.text, label.GetGenerationSettings(label.rectTransform.rect.size));
+                        Rect rect = label.rectTransform.rect;
+                        foreach (UIVertex vertex in label.cachedTextGenerator.verts)
+                        {
+                            Vector3 point = vertex.position / label.pixelsPerUnit;
+                            Require(point.x >= rect.xMin - 3f && point.x <= rect.xMax + 3f
+                                && point.y >= rect.yMin - 3f && point.y <= rect.yMax + 3f,
+                                "The clipped fixture must reproduce the old in-bounds-only false positive.");
+                        }
+                        clippedCases++;
+                    }
+                }
+                Require(completeCases == 16 && clippedCases == 8, "Text completeness must cover both weights and pixel scales.");
+                Debug.Log("Greed text completeness passed: 16 Korean/multiline/rich-text/best-fit positive controls and 8 clipped fixed/bounded-best-fit labels whose remaining geometry still fits. Native text generators at both weights and two canvas pixel scales; no screenshot, hardware input or performance claim.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(host); }
+        }
 
         private static void VerifyOriginalAssets()
         {
