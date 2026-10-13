@@ -213,7 +213,7 @@ namespace GreedLast.Editor
             if (results.inputSystemOnly)
                 results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
             if (results.trapCueOnly)
-                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, real-time public core input followed by a same-frame next-pattern command after UI Update, entry/target cue-state recovery, unchanged redraw deduplication and pause publication. Synthetic pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
+                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, real-time public core input followed by a same-frame next-pattern command after UI Update, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
@@ -248,7 +248,7 @@ namespace GreedLast.Editor
             if (results.succeeded && (results.trapCueOnly || results.fullLoopIncluded))
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.trapCueEngineCases == 2
-                    && cycle.trapCueEngineRecovery);
+                    && cycle.trapCueEngineRecovery && cycle.trapCueResumeCases == 2);
                 if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
             }
             if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
@@ -407,6 +407,7 @@ namespace GreedLast.Editor
             public bool inputSystemOwnershipPreserved;
             public bool inputSystemReenableRecovered;
             public int trapCueEngineCases;
+            public int trapCueResumeCases;
             public bool trapCueEngineRecovery;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
@@ -1432,12 +1433,40 @@ namespace GreedLast.Editor
                     Call(app, "RequestToggleRunPause");
                     Require(run.Paused && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
                         "Engine pause publication must rearm cues before a paused UI Update.");
+                    GreedLastRunSnapshot pausedRun = run;
+                    yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                    Require(run.ResumeCountdownActive, "A fresh engine resume must start its countdown.");
+                    deadline = Time.realtimeSinceStartup + 6f;
+                    while (run.Paused || run.CountdownActive)
+                    {
+                        Require(run.ActivePattern && run.Pattern.PatternId == pausedRun.Pattern.PatternId
+                            && run.Score == pausedRun.Score && run.Health == pausedRun.Health
+                            && run.SuccessCount == pausedRun.SuccessCount && run.Distance == pausedRun.Distance
+                            && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed")
+                            && Time.realtimeSinceStartup < deadline,
+                            "Resume countdown must preserve the same trap and run values without consuming trap cues.");
+                        yield return null;
+                    }
+                    Require(run.ActivePattern && run.Pattern.PatternId == pausedRun.Pattern.PatternId
+                        && run.CoreDeltaSeconds < -0.1f && run.Score == pausedRun.Score && run.Health == pausedRun.Health,
+                        "Fresh resume must keep the trap and grant its existing timing buffer.");
+                    deadline = Time.realtimeSinceStartup + 5f;
+                    while (!Read<bool>(ui, "targetCuePlayed"))
+                    {
+                        Require(run.ActivePattern && !run.Paused && !run.Stopped && Time.realtimeSinceStartup < deadline,
+                            "The resumed engine trap must recover its entry and target cue states.");
+                        yield return null;
+                    }
+                    Require(Read<bool>(ui, "lastActivePatternVisual") && run.Pattern.PatternId == pausedRun.Pattern.PatternId,
+                        "The same resumed trap must present its entry and target again.");
+                    report.trapCueResumeCases++;
+                    Call(app, "RequestToggleRunPause");
                     yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
                     report.trapCueEngineCases++;
                 }
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 report.trapCueEngineRecovery = report.trapCueEngineCases == 2;
-                Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, no intermediate UI Update, recovered entry/target states, unchanged redraw deduplication and pause rearm. Real time with synthetic public core/pointer commands, not hardware audio or FPS measurement.");
+                Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, no intermediate UI Update, recovered entry/target states, unchanged redraw deduplication and same-trap pause/countdown/resume recovery with preserved values and timing buffer. Real time with synthetic public core/pointer commands, not hardware audio or FPS measurement.");
             }
 
             private IEnumerator VerifyInputSystemOwnership()

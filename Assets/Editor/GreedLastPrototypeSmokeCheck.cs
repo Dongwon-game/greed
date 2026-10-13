@@ -36,6 +36,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeKeyboardCheck.VerifyShortcutModifiers();
             GreedLastPrototypeKeyboardCheck.VerifyShortcutHoldVisuals();
             GreedLastPrototypeKeyboardCheck.VerifyInputBorrowingPolicy();
+            GreedLastPrototypeAndroidReadinessCheck.VerifyPolicy();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
             Require(
