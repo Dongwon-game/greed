@@ -42,6 +42,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeVisualCheck.VerifyCaptureFinishPolicy();
             GreedLastPrototypeVisualCheck.VerifyCapturePublication();
             GreedLastPrototypeCandidateCheck.Run();
+            GreedLastPrototypePreparationCheck.Run();
             Require(
                 GreedLastDevToolPolicy.ShouldEnable(isEditor: true, isDebugBuild: false)
                     && GreedLastDevToolPolicy.ShouldEnable(isEditor: false, isDebugBuild: true)

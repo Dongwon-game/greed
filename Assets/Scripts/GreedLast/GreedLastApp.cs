@@ -1231,7 +1231,7 @@ namespace GreedLast
                 + BuildSaveSlotListText(showSelectedSlot: true, compact: true);
         }
 
-        public string BuildActiveLoadoutText()
+        public string BuildActiveLoadoutText(string preparationGift = null, string preparationRelic = null)
         {
             GreedLastRunRecord record = saveLoadoutSlots[selectedSaveSlotIndex];
             if (!record.IsValid || saveLoadoutUsesRemaining[selectedSaveSlotIndex] <= 0)
@@ -1239,13 +1239,15 @@ namespace GreedLast
                 return "저장 조합을 다시 선택해야 합니다.";
             }
 
+            GreedLastRunRecord preview = BuildInfinitePreviewLoadout(record, preparationGift, preparationRelic);
+
             return "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
                 + "\n성향: " + BuildLoadoutAndRouteProfile(record)
                 + "\n기프트 누적: " + BuildStoredGiftStackSummary(record)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
-                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
-                + "\n" + BuildInfiniteLoadoutStartStatePreview(record)
+                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview)
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(preview)
                 + "\n사용 상태: " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[selectedSaveSlotIndex], includeAutoClearHint: true)
                 + "\n" + BuildSaveLoadoutUsePreviewLine(saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n" + BuildInfiniteEntryCheckLine(
@@ -1273,7 +1275,7 @@ namespace GreedLast
                 : "입장 체크: 위협 폭·보상 / 시작 전 확인";
         }
 
-        public string BuildInfiniteStartReadyText()
+        public string BuildInfiniteStartReadyText(string preparationGift = null, string preparationRelic = null)
         {
             if (!IsSaveSlotUsable(selectedSaveSlotIndex))
             {
@@ -1296,7 +1298,7 @@ namespace GreedLast
 
             int selectedUses = saveLoadoutUsesRemaining[selectedSaveSlotIndex];
             bool lastUse = selectedUses <= 1;
-            return BuildActiveLoadoutText()
+            return BuildActiveLoadoutText(preparationGift, preparationRelic)
                 + "\n" + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[selectedSaveSlotIndex])
                 + "\n" + BuildSelectedSaveLoadoutQualityPositionText(selectedSaveSlotIndex)
                 + "\n\n무한 시작을 누르면 사용 횟수 1회가 차감됩니다."
@@ -1390,7 +1392,9 @@ namespace GreedLast
         public bool TryConsumeSelectedSaveLoadout(
             out GreedLastRunRecord selectedRecord,
             out string detail,
-            out string errorMessage)
+            out string errorMessage,
+            string preparationGift = null,
+            string preparationRelic = null)
         {
             if (!TryConsumeSelectedSaveLoadoutUseCore(
                     out GreedLastRunRecord record,
@@ -1407,13 +1411,14 @@ namespace GreedLast
             }
 
             bool autoClearedSlot = remainingAfterUse <= 0;
+            GreedLastRunRecord preview = BuildInfinitePreviewLoadout(record, preparationGift, preparationRelic);
             detail = "슬롯 " + (usedSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
                 + "\n성향: " + BuildLoadoutAndRouteProfile(record)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + BuildSaveLoadoutQualitySummary(record)
-                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(record)
-                + "\n" + BuildInfiniteLoadoutStartStatePreview(record)
+                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview)
+                + "\n" + BuildInfiniteLoadoutStartStatePreview(preview)
                 + "\n이번 입장으로 1회 사용"
                 + "\n" + BuildSaveLoadoutUseConsumptionLine(remainingBeforeUse, remainingAfterUse)
                 + (autoClearedSlot
@@ -1422,6 +1427,14 @@ namespace GreedLast
             selectedRecord = record;
             errorMessage = string.Empty;
             return true;
+        }
+
+        private static GreedLastRunRecord BuildInfinitePreviewLoadout(
+            GreedLastRunRecord record, string preparationGift, string preparationRelic)
+        {
+            return string.IsNullOrEmpty(preparationGift) && string.IsNullOrEmpty(preparationRelic)
+                ? record
+                : GreedLastRunCore.CreatePreparedInfiniteLoadout(record, preparationGift, preparationRelic);
         }
 
         private bool TryConsumeSelectedSaveLoadoutUseCore(
@@ -12990,7 +13003,7 @@ namespace GreedLast
                     : string.Empty;
             }
 
-            string detail = backend.BuildInfiniteStartReadyText();
+            string detail = backend.BuildInfiniteStartReadyText(infinitePreparationGift, infinitePreparationRelic);
             string entryNotice = pendingInfinitePreparationEntryNotice;
             if (!string.IsNullOrEmpty(entryNotice))
             {
@@ -13116,7 +13129,8 @@ namespace GreedLast
 
         private void StartInfiniteRunFromSelectedLoadout(string failedNotice = null)
         {
-            if (!backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord selectedLoadout, out string runDetail, out string errorMessage))
+            if (!backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord selectedLoadout, out string runDetail,
+                    out string errorMessage, infinitePreparationGift, infinitePreparationRelic))
             {
                 runCore.Exit();
                 string detail = errorMessage;

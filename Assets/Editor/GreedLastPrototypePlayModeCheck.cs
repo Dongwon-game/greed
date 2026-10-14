@@ -282,6 +282,7 @@ namespace GreedLast.Editor
                         && cycle.registeredHeldCommandPresses == 44
                         && cycle.recoveredCandidateSlotChoiceCases == 9 && cycle.recoveredCandidateSlotsPreserved
                         && cycle.legacyRenamedCandidateRepairCases == 3
+                        && cycle.preparedInfinitePreviewCases == 8
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -416,6 +417,7 @@ namespace GreedLast.Editor
             public int screenKeyboardTransitionCases;
             public int recoveredCandidateSlotChoiceCases;
             public int legacyRenamedCandidateRepairCases;
+            public int preparedInfinitePreviewCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -2837,11 +2839,15 @@ namespace GreedLast.Editor
                 for (int use = 0; use < 2; use++)
                 {
                     yield return PrepareInfinite();
+                    GreedLastRunRecord prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(
+                        Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[report.savedSlotIndex],
+                        Read<string>(app, "infinitePreparationGift"), Read<string>(app, "infinitePreparationRelic"));
                     yield return ConfirmWithTwoFingers(Read<Button>(ui, "nextPatternButton"), use != 0);
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRun && run.InfiniteMode && !run.Stopped
                         && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 1 - use
                         && backend.LoadLobby().SaveSlotOccupied[report.savedSlotIndex] == (use == 0),
                         "Only actual infinite start may consume a use, with immediate source auto-clear on its second start.");
+                    VerifyPreparedInfinitePreview(prepared);
                     report.multiTouchConfirmationCases++;
                     report.actualInfiniteStarts++;
                     if (run.DevInvincible) core.ToggleDevInvincible();
@@ -2900,14 +2906,31 @@ namespace GreedLast.Editor
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(0, 1, uses);
                 Require(Read<int>(app, "infinitePreparationStep") == 1, "The engine gift tap must resolve just one preparation step.");
+                GreedLastRunRecord stored = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[report.savedSlotIndex];
+                VerifyPreparedInfinitePreview(GreedLastRunCore.CreatePreparedInfiniteLoadout(stored,
+                    Read<string>(app, "infinitePreparationGift"), Read<string>(app, "infinitePreparationRelic")));
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(1, 2, uses);
                 Require(Read<int>(app, "infinitePreparationStep") == 2
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == uses,
                     "Gift/relic preparation must remain separate from actual start consumption.");
+                VerifyPreparedInfinitePreview(GreedLastRunCore.CreatePreparedInfiniteLoadout(stored,
+                    Read<string>(app, "infinitePreparationGift"), Read<string>(app, "infinitePreparationRelic")));
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(2, 2, uses);
                 report.multiTouchPreparationPreservedUses = true;
+            }
+
+            private void VerifyPreparedInfinitePreview(GreedLastRunRecord prepared)
+            {
+                GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
+                string bonus = GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(prepared);
+                string start = GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(prepared,
+                    backend.GrowthSurvivalLevel, backend.GrowthFocusLevel, backend.GrowthTimingLevel);
+                Require(state.CurrentDetail.Contains(bonus, StringComparison.Ordinal)
+                    && state.CurrentDetail.Contains(start, StringComparison.Ordinal),
+                    "Real engine gift/relic preparation and both start notices must describe the applied loadout, not its unprepared source.");
+                report.preparedInfinitePreviewCases++;
             }
 
             private IEnumerator ConfirmWithTwoFingers(Button button, bool releaseSecondFirst)

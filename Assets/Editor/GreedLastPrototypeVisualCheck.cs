@@ -47,6 +47,7 @@ namespace GreedLast.Editor
             public bool pointerLoopIncluded;
             public bool scoreBoundaryOnly;
             public bool progressBoundaryOnly;
+            public bool preparationPreviewOnly;
             public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
@@ -130,6 +131,12 @@ namespace GreedLast.Editor
             Begin(false, progressBoundaryOnly: true);
         }
 
+        [MenuItem("Greed Last/Capture Infinite Preparation Previews")]
+        public static void RunPreparationPreviewOnly()
+        {
+            Begin(false, preparationPreviewOnly: true);
+        }
+
         [MenuItem("Greed Last/Capture Text Clipping Rejection Check")]
         public static void RunTextClippingRejection()
         {
@@ -143,7 +150,7 @@ namespace GreedLast.Editor
         }
 
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
-            bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false)
+            bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -166,6 +173,7 @@ namespace GreedLast.Editor
                 pointerLoopIncluded = includePointerLoop,
                 scoreBoundaryOnly = scoreBoundaryOnly,
                 progressBoundaryOnly = progressBoundaryOnly,
+                preparationPreviewOnly = preparationPreviewOnly,
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
             };
@@ -270,6 +278,7 @@ namespace GreedLast.Editor
                 AddLongRunCounterFrames();
                 AddScoreBoundaryFrames();
                 AddProgressBoundaryFrames();
+                AddPreparationPreviewFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -284,17 +293,18 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
-                if (scoreBoundaryOnly || progressBoundaryOnly)
+                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly)
                 {
-                    string prefix = progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
+                    string prefix = preparationPreviewOnly ? "96-preparation-"
+                        : progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
                     int count = Frames.Count;
                     for (int i = 0; i < count; i++)
                     {
                         Frame frame = Frames.Dequeue();
                         if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)) Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (progressBoundaryOnly ? 12 : 24),
-                        "The focused numeric capture must include only its assigned boundary frames.");
+                    Require(Frames.Count == (preparationPreviewOnly ? 9 : progressBoundaryOnly ? 12 : 24),
+                        "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
                 {
@@ -1143,6 +1153,56 @@ namespace GreedLast.Editor
             Add("83-long-infinite-small", 960, 540, Show, settleSeconds: 0.16);
             Add("83-long-infinite-tablet", 1024, 768, Show, settleSeconds: 0.16);
             Add("83-long-infinite-wide", 2340, 1080, Show, 96f, 0.16);
+        }
+
+        private static void AddPreparationPreviewFrames()
+        {
+            string[] gifts = { "집중 축", "연쇄 축", "생존 축" };
+            string[] relics = { string.Empty, "황금 박동", "사막의 잔상" };
+            for (int slot = 0; slot < 3; slot++)
+            {
+                var backend = new GreedLastMockBackend(false, false);
+                var record = new GreedLastRunRecord(true, 800, 3, 0, 1, 2, 2, 2, 1, 80f,
+                    "기프트 방향", "박자 감각", "생존 축", string.Empty, "안정 루트 / 생존 축", string.Empty);
+                backend.RegisterClear(record);
+                backend.SelectSaveLoadoutSlot(slot);
+                backend.ConfirmSaveLoadout();
+                var gate = new GreedLastRequestGate();
+                var state = new GreedLastStateMachine(gate);
+                GreedLastStateSnapshot screen = default;
+                state.StateChanged += value => screen = value;
+                state.SetLobbyReady(backend.LoadLobby());
+                GreedLastApp app = CreateIsolatedCaptureApp(backend, state, gate);
+                try
+                {
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    typeof(GreedLastApp).GetField("infinitePreparationStep", flags).SetValue(app, slot == 0 ? 1 : 2);
+                    typeof(GreedLastApp).GetField("infinitePreparationGift", flags).SetValue(app, gifts[slot]);
+                    typeof(GreedLastApp).GetField("infinitePreparationRelic", flags).SetValue(app, relics[slot]);
+                    typeof(GreedLastApp).GetMethod("OpenInfinitePreparation", flags)
+                        .Invoke(app, new object[] { null, false });
+                }
+                finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
+                var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(record, gifts[slot], relics[slot]);
+                string expectedBonus = GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(prepared);
+                string expectedStart = GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(prepared, 0, 0, 0);
+                Require(screen.State == GreedLastScreenState.InfiniteStartReady
+                    && screen.Detail.Contains(expectedBonus, StringComparison.Ordinal)
+                    && screen.Detail.Contains(expectedStart, StringComparison.Ordinal),
+                    "Preparation captures must use the actual app's current prepared preview.");
+                void Show()
+                {
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ui.Render(screen);
+                    Require(Read<Text>("detailText").text.Contains(expectedBonus, StringComparison.Ordinal)
+                        && Read<Text>("detailText").text.Contains(expectedStart, StringComparison.Ordinal),
+                        "The visible preparation body must retain its applied bonus and starting state.");
+                }
+                string name = "96-preparation-S" + (slot + 1) + (slot == 0 ? "-gift" : "-complete");
+                Add(name + "-small", 960, 540, Show);
+                Add(name + "-tablet", 1024, 768, Show);
+                Add(name + "-wide", 2340, 1080, Show, 96f);
+            }
         }
 
         private static void AddScoreBoundaryFrames()
@@ -2605,7 +2665,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
