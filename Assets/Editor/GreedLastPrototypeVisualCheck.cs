@@ -293,7 +293,7 @@ namespace GreedLast.Editor
                         Frame frame = Frames.Dequeue();
                         if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)) Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (progressBoundaryOnly ? 12 : 21),
+                    Require(Frames.Count == (progressBoundaryOnly ? 12 : 24),
                         "The focused numeric capture must include only its assigned boundary frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1194,10 +1194,15 @@ namespace GreedLast.Editor
                 90f, "quality-boundary", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
             var qualityBackend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
             qualityBackend.RegisterClear(high);
-            qualityBackend.SelectSaveLoadoutSlot(2);
             double quality = Convert.ToDouble(typeof(GreedLastMockBackend).GetMethod("BuildSaveLoadoutQualityScore",
                 BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { high }));
             Require(quality > int.MaxValue, "The quality capture must cover a sum above the stored score ceiling.");
+            machine.SetSaveLoadoutDraft(qualityBackend.LoadLobby(),
+                qualityBackend.BuildSaveLoadoutDraftText(showSelectedSlot: false)
+                    + "\n선택 전 저장 잠김 / 저장 포기는 후보 소모",
+                saveSlotChoiceRequired: true, saveLoadoutCandidateAvailable: true);
+            AddQualityState("choice", board, "선택 전 저장 잠김");
+            qualityBackend.SelectSaveLoadoutSlot(2);
             machine.SetSaveLoadoutDraft(qualityBackend.LoadSelectedSaveSlotView(), qualityBackend.BuildSaveLoadoutDraftText(),
                 saveLoadoutCandidateAvailable: true);
             AddQualityState("selected", board, "품질 " + quality);
@@ -1225,6 +1230,9 @@ namespace GreedLast.Editor
                     ui.Render(state);
                     Require(Read<Text>("detailText").text.Contains(expected, StringComparison.Ordinal),
                         "The actual quality body must retain its wide amount/sign: " + expected);
+                    Require(state.State != GreedLastScreenState.SaveLoadoutDraft
+                        || Read<Button>("nextPatternButton").IsInteractable() == !state.SaveSlotChoiceRequired,
+                        "The captured candidate must retain its actual explicit-choice save lock.");
                 }
                 Add("92-score-ceiling-quality-" + name + "-small", 960, 540, Show, settleSeconds: 0.16);
                 Add("92-score-ceiling-quality-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
