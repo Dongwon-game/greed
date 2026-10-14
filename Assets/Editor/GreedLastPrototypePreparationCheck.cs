@@ -20,11 +20,56 @@ namespace GreedLast.Editor
                 for (int relic = 0; relic < relics.Length; relic++)
                     CheckCase(gift, relic, gifts[gift], relics[relic], ref mismatches);
             Require(mismatches == 0, "Prepared entry previews must match actual start bonuses. Mismatches=" + mismatches);
-            Debug.Log("Greed infinite preparation previews passed: nine isolated keys/gift-relic combinations, three selected slots, real UI callbacks/waits, partial and complete preview, cancel/reselect, two actual starts and auto-empty, named neighbor/original record preservation. No personal keys, private clock edits, full gameplay or physical input testing.");
+            RunGrowthStartPreview();
+            Debug.Log("Greed infinite preparation previews passed: nine isolated keys/gift-relic combinations, three selected slots, real UI callbacks/waits, partial/complete/rewound previews, distinct stored loadout switch/return, cancel/new preparation, two actual starts and auto-empty, named neighbor/original record preservation. No personal keys, private clock edits, full gameplay or physical input testing.");
         }
 
         [MenuItem("Greed Last/Run Infinite Preparation Preview Check", true)]
+        [MenuItem("Greed Last/Run Growth Infinite Start Preview Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        [MenuItem("Greed Last/Run Growth Infinite Start Preview Check")]
+        public static void RunGrowthStartPreview()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Growth preview checks require Edit mode.");
+            GreedLastRunRecord Record(int score, string gift = "", string summary = null) => new GreedLastRunRecord(
+                true, score, 3, 0, 0, 0, 0, 0, 0, 20f, "growth-preview", string.Empty,
+                gift, string.Empty, summary ?? gift, string.Empty);
+            GreedLastRunRecord[] records = { GreedLastRunRecord.Empty, Record(0), Record(100),
+                Record(0, "집중 축"), Record(0, "생존 축"), Record(0, "연쇄 축"),
+                GreedLastRunCore.CreatePreparedInfiniteLoadout(Record(100, "생존 축"), "집중 축", "황금 박동"),
+                Record(0, "생존 축", "생존 축 / 생존 축") };
+            int mismatches = 0;
+            for (int focusLevel = 0; focusLevel <= 3; focusLevel++)
+                for (int index = 0; index < records.Length; index++)
+                {
+                    int survivalLevel = focusLevel, timingLevel = (focusLevel + 1) % 4;
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.ConfigureGrowth(survivalLevel, focusLevel, timingLevel);
+                    core.EnterInfiniteRun(records[index]);
+                    Require(run.InfiniteMode && run.StartCountdownActive,
+                        "Growth previews must be compared with an actual fresh core start.");
+                    string preview = GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(
+                        records[index], survivalLevel, focusLevel, timingLevel);
+                    string focus = run.FocusStateActive
+                        ? " / 집중 상태 " + run.FocusStateRemainingSeconds.ToString("0.0") + "초"
+                        : " / 집중 " + run.Focus + "/" + run.MaxFocus;
+                    string health = "시작 상태: 체력 " + run.Health + "/" + run.MaxHealth;
+                    if (!preview.Contains(focus, StringComparison.Ordinal)
+                        || !preview.Contains(health, StringComparison.Ordinal)
+                        || !preview.Contains(" / 콤보 " + run.Combo + " / 점수 " + run.Score, StringComparison.Ordinal))
+                    {
+                        mismatches++;
+                        Debug.Log("Greed growth preview mismatch: level=" + focusLevel + ", record=" + index
+                            + ", actual=" + health + focus + ", preview=" + preview.Replace("\n", " / "));
+                    }
+                    core.Exit();
+                }
+            Require(mismatches == 0, "Growth start preview must describe actual health/focus/combo/score and duration. Mismatches=" + mismatches);
+            Debug.Log("Greed growth infinite start previews passed: 32 transient starts, growth 0-3, empty/zero/score/focus/survival/chain/prepared/full-bonus controls, actual starting health gauge, focus state/duration, combo and score. No persistence, clock edits, physical input or full gameplay testing.");
+        }
 
         private static void CheckCase(int giftIndex, int relicIndex, string gift, string relic, ref int mismatches)
         {
@@ -40,12 +85,15 @@ namespace GreedLast.Editor
                 var original = new GreedLastRunRecord(true, 800, 3, 0, 1, 2, 2, 2, 1, 80f,
                     "기프트 방향", "박자 감각", "생존 축", string.Empty, "안정 루트 / 생존 축", string.Empty);
                 var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
-                foreach (int target in new[] { slot, neighbor })
+                foreach (int target in new[] { neighbor, slot })
                 {
-                    backend.RegisterClear(original);
+                    backend.RegisterClear(target == slot ? original : new GreedLastRunRecord(
+                        true, 600, 2, 0, 0, 4, 3, 0, 0, 60f, "다른 기프트 방향", "생존 본능", "연쇄 축",
+                        string.Empty, "압박 루트 / 연쇄 축", string.Empty));
                     backend.SelectSaveLoadoutSlot(target);
                     backend.ConfirmSaveLoadout();
                 }
+                backend.SelectSaveLoadoutSlot(neighbor);
                 backend.RenameSelectedSaveLoadoutSlot();
                 backend.SelectSaveLoadoutSlot(slot);
                 var saved = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot];
@@ -82,13 +130,52 @@ namespace GreedLast.Editor
                 Click(Read<Button[]>(ui, "laneButtons")[giftIndex]);
                 var partial = GreedLastRunCore.CreatePreparedInfiniteLoadout(saved, gift, string.Empty);
                 CheckPreview(state.CurrentDetail, partial, backend, "gift", gift, relic, ref mismatches);
+                RequirePreparedPreviewFirst(state.CurrentDetail);
                 WaitForPreparation(app);
                 Click(Read<Button[]>(ui, "laneButtons")[relicIndex]);
                 var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(saved, gift, relic);
                 CheckPreview(state.CurrentDetail, prepared, backend, "complete", gift, relic, ref mismatches);
+                RequirePreparedPreviewFirst(state.CurrentDetail);
                 Require(Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2
                     && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(saved),
                     "Partial and complete preparation must not change the stored gift direction or uses.");
+                WaitForPreparation(app);
+                Click(Read<Button[]>(ui, "laneButtons")[1]);
+                Require(Read<int>(app, "infinitePreparationStep") == 1
+                    && Read<string>(app, "infinitePreparationGift") == gift
+                    && Read<string>(app, "infinitePreparationRelic") == string.Empty,
+                    "Relic reselect must keep the gift and remove only the run-local relic.");
+                CheckPreview(state.CurrentDetail, partial, backend, "relic-rewind", gift, relic, ref mismatches);
+                WaitForPreparation(app);
+                Click(Read<Button[]>(ui, "laneButtons")[(relicIndex + 1) % 3]);
+                WaitForPreparation(app);
+                Click(Read<Button[]>(ui, "laneButtons")[0]);
+                Require(Read<int>(app, "infinitePreparationStep") == 0
+                    && Read<string>(app, "infinitePreparationGift") == string.Empty
+                    && Read<string>(app, "infinitePreparationRelic") == string.Empty,
+                    "Gift reselect must clear both prepared choices and restore the stored preview.");
+                CheckPreview(state.CurrentDetail, saved, backend, "gift-rewind", gift, relic, ref mismatches);
+                WaitForPreparation(app);
+                Click(Read<Button[]>(ui, "laneButtons")[giftIndex]);
+                WaitForPreparation(app);
+                Click(Read<Button[]>(ui, "laneButtons")[relicIndex]);
+                foreach (int changedSlot in new[] { neighbor, slot })
+                {
+                    Click(Read<Button>(ui, "saveLoadoutButton"));
+                    Require(state.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect,
+                        "The real preparation change action must open saved-loadout selection.");
+                    Click(Read<Button[]>(ui, "laneButtons")[changedSlot]);
+                    Click(Read<Button>(ui, "nextPatternButton"));
+                    var changed = GreedLastRunCore.CreatePreparedInfiniteLoadout(
+                        changedSlot == slot ? saved : namedNeighbor, gift, relic);
+                    Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                        && backend.LoadLobby().SelectedSaveSlotIndex == changedSlot
+                        && state.CurrentDetail.Contains(changed.LoadoutName, StringComparison.Ordinal)
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2
+                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[neighbor] == 2,
+                        "Switching a prepared source must show the chosen identity without spending either slot.");
+                    CheckPreview(state.CurrentDetail, changed, backend, "switch-S" + changedSlot, gift, relic, ref mismatches);
+                }
                 Click(Read<Button>(ui, "returnLobbyButton"));
                 Require(state.CurrentState == GreedLastScreenState.LobbyReady
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2,
@@ -163,6 +250,13 @@ namespace GreedLast.Editor
             float deadline = Read<float>(app, "infinitePreparationInputBlockUntil");
             int milliseconds = Mathf.CeilToInt(Mathf.Max(0f, deadline - Time.realtimeSinceStartup) * 1000f) + 30;
             if (milliseconds > 0) System.Threading.Thread.Sleep(milliseconds);
+        }
+
+        private static void RequirePreparedPreviewFirst(string text)
+        {
+            Require(text.IndexOf("시작 상태:", StringComparison.Ordinal) < text.IndexOf("기록 기준", StringComparison.Ordinal)
+                && text.Contains("기프트 누적: 생존 x1", StringComparison.Ordinal),
+                "The prepared start must precede historical statistics, keeping the stored gift summary unchanged.");
         }
 
         private static void Click(Button button)

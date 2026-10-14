@@ -1240,14 +1240,16 @@ namespace GreedLast
             }
 
             GreedLastRunRecord preview = BuildInfinitePreviewLoadout(record, preparationGift, preparationRelic);
-
-            return "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입\n"
-                + record.LoadoutName
-                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
+            bool prepared = !string.IsNullOrEmpty(preparationGift) || !string.IsNullOrEmpty(preparationRelic);
+            string identity = "슬롯 " + (selectedSaveSlotIndex + 1) + " 조합으로 진입"
+                + (prepared ? " - " : "\n") + record.LoadoutName;
+            string bonus = GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview);
+            string start = BuildInfiniteLoadoutStartStatePreview(preview);
+            string storedDetail = "\n성향: " + BuildLoadoutAndRouteProfile(record)
                 + "\n기프트 누적: " + BuildStoredGiftStackSummary(record)
-                + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
-                + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview)
-                + "\n" + BuildInfiniteLoadoutStartStatePreview(preview)
+                + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m";
+            return identity
+                + (prepared ? "\n" + start + "\n" + bonus + storedDetail : storedDetail + "\n" + bonus + "\n" + start)
                 + "\n사용 상태: " + BuildSaveUseStatusText(saveLoadoutUsesRemaining[selectedSaveSlotIndex], includeAutoClearHint: true)
                 + "\n" + BuildSaveLoadoutUsePreviewLine(saveLoadoutUsesRemaining[selectedSaveSlotIndex])
                 + "\n" + BuildInfiniteEntryCheckLine(

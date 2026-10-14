@@ -301,9 +301,11 @@ namespace GreedLast.Editor
                     for (int i = 0; i < count; i++)
                     {
                         Frame frame = Frames.Dequeue();
-                        if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)) Frames.Enqueue(frame);
+                        if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)
+                            || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
+                            Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (preparationPreviewOnly ? 9 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1159,11 +1161,22 @@ namespace GreedLast.Editor
         {
             string[] gifts = { "집중 축", "연쇄 축", "생존 축" };
             string[] relics = { string.Empty, "황금 박동", "사막의 잔상" };
-            for (int slot = 0; slot < 3; slot++)
+            for (int sample = 0; sample < 4; sample++)
             {
+                int slot = sample % 3;
+                bool growth = sample == 3;
+                string preparationGift = gifts[slot];
+                string preparationRelic = growth ? "황금 박동" : relics[slot];
                 var backend = new GreedLastMockBackend(false, false);
                 var record = new GreedLastRunRecord(true, 800, 3, 0, 1, 2, 2, 2, 1, 80f,
-                    "기프트 방향", "박자 감각", "생존 축", string.Empty, "안정 루트 / 생존 축", string.Empty);
+                    "기프트 방향", growth ? string.Empty : "박자 감각", growth ? "연쇄 축" : "생존 축",
+                    string.Empty, growth ? "연쇄 축" : "안정 루트 / 생존 축", string.Empty);
+                if (growth)
+                {
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    foreach (string field in new[] { "growthSurvivalLevel", "growthFocusLevel", "growthTimingLevel" })
+                        typeof(GreedLastMockBackend).GetField(field, flags).SetValue(backend, 3);
+                }
                 backend.RegisterClear(record);
                 backend.SelectSaveLoadoutSlot(slot);
                 backend.ConfirmSaveLoadout();
@@ -1176,16 +1189,17 @@ namespace GreedLast.Editor
                 try
                 {
                     const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                    typeof(GreedLastApp).GetField("infinitePreparationStep", flags).SetValue(app, slot == 0 ? 1 : 2);
-                    typeof(GreedLastApp).GetField("infinitePreparationGift", flags).SetValue(app, gifts[slot]);
-                    typeof(GreedLastApp).GetField("infinitePreparationRelic", flags).SetValue(app, relics[slot]);
+                    typeof(GreedLastApp).GetField("infinitePreparationStep", flags).SetValue(app, sample == 0 ? 1 : 2);
+                    typeof(GreedLastApp).GetField("infinitePreparationGift", flags).SetValue(app, preparationGift);
+                    typeof(GreedLastApp).GetField("infinitePreparationRelic", flags).SetValue(app, preparationRelic);
                     typeof(GreedLastApp).GetMethod("OpenInfinitePreparation", flags)
                         .Invoke(app, new object[] { null, false });
                 }
                 finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
-                var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(record, gifts[slot], relics[slot]);
+                var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(record, preparationGift, preparationRelic);
                 string expectedBonus = GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(prepared);
-                string expectedStart = GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(prepared, 0, 0, 0);
+                string expectedStart = GreedLastRunCore.BuildInfiniteLoadoutStartStatePreview(prepared,
+                    backend.GrowthSurvivalLevel, backend.GrowthFocusLevel, backend.GrowthTimingLevel);
                 Require(screen.State == GreedLastScreenState.InfiniteStartReady
                     && screen.Detail.Contains(expectedBonus, StringComparison.Ordinal)
                     && screen.Detail.Contains(expectedStart, StringComparison.Ordinal),
@@ -1198,7 +1212,8 @@ namespace GreedLast.Editor
                         && Read<Text>("detailText").text.Contains(expectedStart, StringComparison.Ordinal),
                         "The visible preparation body must retain its applied bonus and starting state.");
                 }
-                string name = "96-preparation-S" + (slot + 1) + (slot == 0 ? "-gift" : "-complete");
+                string name = growth ? "97-growth-start-complete"
+                    : "96-preparation-S" + (slot + 1) + (slot == 0 ? "-gift" : "-complete");
                 Add(name + "-small", 960, 540, Show);
                 Add(name + "-tablet", 1024, 768, Show);
                 Add(name + "-wide", 2340, 1080, Show, 96f);
@@ -2107,6 +2122,15 @@ namespace GreedLast.Editor
             }
             camera.Render();
             currentFrameRendered = true;
+            bool growthPreview = currentFrame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal);
+            if (growthPreview || currentFrame.Name.StartsWith("96-preparation-", StringComparison.Ordinal))
+            {
+                Text body = Read<Text>("detailText");
+                Require(body.text.IndexOf("시작 상태:", StringComparison.Ordinal) >= 0
+                    && body.text.IndexOf("시작 상태:", StringComparison.Ordinal) < body.text.IndexOf("기록 기준", StringComparison.Ordinal)
+                    && body.text.Contains(growthPreview ? "기프트 누적: 연쇄 x1" : "기프트 누적: 생존 x1", StringComparison.Ordinal),
+                    "The rendered preparation must prioritize its applied start without replacing the stored gift summary.");
+            }
             int checkedProgressAreas = 0;
             if (currentFrame.Name.StartsWith("93-progress-", StringComparison.Ordinal))
             {

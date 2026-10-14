@@ -4384,13 +4384,17 @@ namespace GreedLast
             int baseHealth = MaxHealth + safeSurvivalLevel;
             int healthCap = baseHealth + 2;
             int startHealth = Mathf.Clamp(baseHealth + bonus.HealthBonus, 1, healthCap);
+            int startMaxHealth = Mathf.Max(baseHealth, startHealth);
             int totalStartFocus = Mathf.Clamp(safeFocusLevel, 0, MaxFocus) + bonus.FocusBonus;
             bool startsInFocusState = totalStartFocus >= MaxFocus;
             int startFocus = startsInFocusState ? 0 : Mathf.Clamp(totalStartFocus, 0, MaxFocus);
+            float startFocusDuration = safeFocusLevel >= MaxFocus && bonus.HasAnyBonus
+                ? Mathf.Min(FocusStateMaxDurationSeconds, FocusStateDurationSeconds + FocusStateSuccessExtensionSeconds)
+                : FocusStateDurationSeconds;
             int startCombo = Mathf.Clamp(bonus.ComboBonus, 0, 9);
-            string text = "시작 상태: 체력 " + startHealth + "/" + healthCap
+            string text = "시작 상태: 체력 " + startHealth + "/" + startMaxHealth
                 + (startsInFocusState
-                    ? " / 집중 상태 " + FocusStateDurationSeconds.ToString("0.0") + "초"
+                    ? " / 집중 상태 " + startFocusDuration.ToString("0.0") + "초"
                     : " / 집중 " + startFocus + "/" + MaxFocus)
                 + " / 콤보 " + startCombo
                 + " / 점수 " + bonus.ScoreBonus;
