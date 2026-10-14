@@ -357,6 +357,8 @@ namespace GreedLast
         private bool savedLoadoutConfirmed;
         private int lastSaveLoadoutConfirmSlotIndex = -1;
         private bool saveLoadoutCandidateAvailable;
+        private string saveLoadoutCandidateToken = string.Empty;
+        private string resolvedSaveLoadoutCandidateToken = string.Empty;
         private bool auxiliaryWarning;
         private int selectedSaveSlotIndex;
         private GreedLastRunRecord lastRunRecord = GreedLastRunRecord.Empty;
@@ -410,7 +412,9 @@ namespace GreedLast
 
         public int RecordBoardPages => RecordBoardPageCount;
         public int ProfileBoardPages => ProfileBoardPageCount;
-        public bool HasSaveLoadoutCandidate => saveLoadoutCandidateAvailable && lastRunRecord.IsValid;
+        public bool HasSaveLoadoutCandidate => saveLoadoutCandidateAvailable && lastRunRecord.IsValid
+            && (string.IsNullOrEmpty(saveLoadoutCandidateToken)
+                || saveLoadoutCandidateToken != resolvedSaveLoadoutCandidateToken);
         public int GrowthSurvivalLevel => growthSurvivalLevel;
         public int GrowthFocusLevel => growthFocusLevel;
         public int GrowthTimingLevel => growthTimingLevel;
@@ -551,7 +555,7 @@ namespace GreedLast
             return snapshot.SaveLoadoutUnlocked
                 && snapshot.PeriodId == CurrentPeriodId
                 && periodId == CurrentPeriodId
-                && saveLoadoutCandidateAvailable
+                && HasSaveLoadoutCandidate
                 && lastRunRecord.IsValid;
         }
 
@@ -561,9 +565,7 @@ namespace GreedLast
             {
                 firstSaveCompleted = true;
                 saveLoadoutUnlocked = true;
-                saveLoadoutCandidateAvailable = true;
-                lastSaveLoadoutConfirmSlotIndex = -1;
-                lastRunRecord = record;
+                BeginSaveLoadoutCandidate(record);
                 previousBestBeforeLastRun = bestRunRecord;
                 lastRunWasNewBest = !bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord);
                 if (lastRunWasNewBest)
@@ -800,14 +802,14 @@ namespace GreedLast
         public GreedLastLobbySnapshot ConfirmSaveLoadout()
         {
             lastSaveLoadoutConfirmSlotIndex = -1;
-            if (lastRunRecord.IsValid && saveLoadoutUnlocked && saveLoadoutCandidateAvailable)
+            if (saveLoadoutUnlocked && HasSaveLoadoutCandidate)
             {
                 saveLoadoutSlots[selectedSaveSlotIndex] = BuildSaveLoadoutRecord(lastRunRecord);
                 saveLoadoutUsesRemaining[selectedSaveSlotIndex] = MaxSaveLoadoutUses;
                 saveLoadoutRenameSteps[selectedSaveSlotIndex] = 0;
                 savedLoadoutConfirmed = true;
                 lastSaveLoadoutConfirmSlotIndex = selectedSaveSlotIndex;
-                saveLoadoutCandidateAvailable = false;
+                ResolveSaveLoadoutCandidate();
                 profileNoticePending = true;
                 SavePersistedData();
             }
@@ -822,7 +824,7 @@ namespace GreedLast
                 return;
             }
 
-            saveLoadoutCandidateAvailable = false;
+            ResolveSaveLoadoutCandidate();
             lastSaveLoadoutConfirmSlotIndex = -1;
             profileNoticePending = true;
             SavePersistedData();
@@ -1061,7 +1063,7 @@ namespace GreedLast
             firstSaveCompleted = true;
             saveLoadoutUnlocked = true;
             savedLoadoutConfirmed = true;
-            saveLoadoutCandidateAvailable = false;
+            ResolveSaveLoadoutCandidate();
             profileNoticePending = true;
             SavePersistedData();
 
@@ -1108,9 +1110,7 @@ namespace GreedLast
             sampleSaveLoadoutSequence = AddNonNegativeProgress(sampleSaveLoadoutSequence, 1);
             firstSaveCompleted = true;
             saveLoadoutUnlocked = true;
-            saveLoadoutCandidateAvailable = true;
-            lastSaveLoadoutConfirmSlotIndex = -1;
-            lastRunRecord = record;
+            BeginSaveLoadoutCandidate(record);
             if (!bestRunRecord.IsValid || IsBetterRunRecord(record, bestRunRecord))
             {
                 bestRunRecord = record;
@@ -9840,6 +9840,28 @@ namespace GreedLast
             return BuildSaveLoadoutNameForStep(safeSlotIndex, nextStep);
         }
 
+        private void BeginSaveLoadoutCandidate(GreedLastRunRecord record)
+        {
+            lastRunRecord = record;
+            saveLoadoutCandidateToken = Guid.NewGuid().ToString("N");
+            saveLoadoutCandidateAvailable = true;
+            lastSaveLoadoutConfirmSlotIndex = -1;
+        }
+
+        private void ResolveSaveLoadoutCandidate()
+        {
+            if (lastRunRecord.IsValid)
+            {
+                if (string.IsNullOrEmpty(saveLoadoutCandidateToken))
+                    saveLoadoutCandidateToken = Guid.NewGuid().ToString("N");
+                resolvedSaveLoadoutCandidateToken = saveLoadoutCandidateToken;
+            }
+            saveLoadoutCandidateAvailable = false;
+        }
+
+        private static string NormalizeSaveLoadoutCandidateToken(string token)
+            => Guid.TryParseExact(token, "N", out Guid value) ? value.ToString("N") : string.Empty;
+
         private void LoadPersistedData()
         {
             if (!PlayerPrefs.HasKey(persistenceKey))
@@ -9872,6 +9894,8 @@ namespace GreedLast
             saveLoadoutUnlocked = data.saveLoadoutUnlocked;
             savedLoadoutConfirmed = data.savedLoadoutConfirmed;
             saveLoadoutCandidateAvailable = data.saveLoadoutCandidateAvailable && data.lastRunRecord != null && data.lastRunRecord.isValid;
+            saveLoadoutCandidateToken = NormalizeSaveLoadoutCandidateToken(data.saveLoadoutCandidateToken);
+            resolvedSaveLoadoutCandidateToken = NormalizeSaveLoadoutCandidateToken(data.resolvedSaveLoadoutCandidateToken);
             selectedSaveSlotIndex = Mathf.Clamp(data.selectedSaveSlotIndex, 0, SaveSlotCount - 1);
             lastRunRecord = FromData(data.lastRunRecord);
             lastRunAttemptRecord = FromData(data.lastRunAttemptRecord);
@@ -9971,9 +9995,11 @@ namespace GreedLast
 
             bool prunedExhaustedSaveLoadouts = ClearExhaustedSaveLoadoutSlots();
             bool clearedDuplicateCandidate = false;
-            if (saveLoadoutCandidateAvailable && IsLastRunRecordAlreadySaved())
+            // Legacy files lack clear identity; only they retain the old statistics-based repair.
+            if (saveLoadoutCandidateAvailable && (!string.IsNullOrEmpty(saveLoadoutCandidateToken)
+                    ? saveLoadoutCandidateToken == resolvedSaveLoadoutCandidateToken : IsLastRunRecordAlreadySaved()))
             {
-                saveLoadoutCandidateAvailable = false;
+                ResolveSaveLoadoutCandidate();
                 clearedDuplicateCandidate = true;
             }
 
@@ -10069,6 +10095,8 @@ namespace GreedLast
                 saveLoadoutUnlocked = saveLoadoutUnlocked,
                 savedLoadoutConfirmed = savedLoadoutConfirmed,
                 saveLoadoutCandidateAvailable = saveLoadoutCandidateAvailable,
+                saveLoadoutCandidateToken = saveLoadoutCandidateToken,
+                resolvedSaveLoadoutCandidateToken = resolvedSaveLoadoutCandidateToken,
                 selectedSaveSlotIndex = Mathf.Clamp(selectedSaveSlotIndex, 0, SaveSlotCount - 1),
                 lastRunRecord = ToData(lastRunRecord),
                 lastRunAttemptRecord = ToData(lastRunAttemptRecord),
@@ -10290,6 +10318,8 @@ namespace GreedLast
             public bool saveLoadoutUnlocked;
             public bool savedLoadoutConfirmed;
             public bool saveLoadoutCandidateAvailable;
+            public string saveLoadoutCandidateToken;
+            public string resolvedSaveLoadoutCandidateToken;
             public int selectedSaveSlotIndex;
             public RunRecordSaveData lastRunRecord;
             public RunAttemptRecordSaveData lastRunAttemptRecord;
