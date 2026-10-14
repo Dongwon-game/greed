@@ -280,6 +280,7 @@ namespace GreedLast.Editor
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.registeredHeldCommandPresses == 44
+                        && cycle.recoveredCandidateSlotChoiceCases == 9 && cycle.recoveredCandidateSlotsPreserved
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -412,6 +413,8 @@ namespace GreedLast.Editor
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
             public int screenKeyboardTransitionCases;
+            public int recoveredCandidateSlotChoiceCases;
+            public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
             public bool audioBackgroundOrdersPreservedRun;
@@ -558,6 +561,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyKeyboardTransitionFrames();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -2382,6 +2386,96 @@ namespace GreedLast.Editor
                 report.heldChoiceCannotAdvance = report.multiTouchChoiceCases == 2;
                 report.multiTouchFreshTapRecovered = report.multiTouchFirstInputOnly && report.heldChoiceCannotAdvance;
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
+            }
+
+            private IEnumerator VerifyRecoveredCandidateSlotChoices()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    core.Exit();
+                    foreach (string entry in new[] { "saveLoadoutButton", "normalRunButton", "infiniteButton" })
+                    {
+                        for (int slot = 0; slot < 3; slot++)
+                        {
+                            string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "engine-recovered-choice-" + Guid.NewGuid().ToString("N");
+                            try
+                            {
+                                bool detailed = slot == 1;
+                                if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                                var record = new GreedLastRunRecord(true, 800, 3, 0, 1, 6, 15, 0, 0, 90f,
+                                    "engine-recovered-clear", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+                                var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                int priorSlot = (slot + 1) % 3;
+                                backend.RegisterClear(record);
+                                backend.SelectSaveLoadoutSlot(priorSlot);
+                                backend.ConfirmSaveLoadout();
+                                GreedLastRunRecord prior = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[priorSlot];
+                                backend.RegisterClear(record);
+                                backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                Require(backend.HasSaveLoadoutCandidate, "The engine UI must receive the reloaded new equal-stat clear.");
+                                backendField.SetValue(app, backend);
+                                state.SetLobbyReady(backend.LoadLobby());
+                                yield return null;
+                                Button entryButton = Read<Button>(ui, entry);
+                                if (slot == 1) yield return ClickMouse(entryButton);
+                                else yield return TapTouch(entryButton);
+                                Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                                    && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                    && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
+                                    "A real engine lobby entry must not accept its recommended slot as save consent: " + entry);
+                                yield return null;
+                                Call(app, "TryHandlePrimaryKeyboardFrame", true, false);
+                                Require(backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                    && !backend.LoadSelectedSaveSlotView().SaveSlotOccupied[slot],
+                                    "Fresh Enter before a slot choice must leave the recovered candidate and empty slot unchanged.");
+                                yield return null;
+                                Button lane = Read<Button[]>(ui, "laneButtons")[slot];
+                                if (slot == 1) yield return ClickMouse(lane);
+                                else yield return TapTouch(lane);
+                                Require(!Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                    && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == slot,
+                                    "A real engine lane press must explicitly choose the requested empty slot.");
+                                Button save = Read<Button>(ui, "nextPatternButton");
+                                if (slot == 1) yield return ClickMouse(save);
+                                else yield return TapTouch(save);
+                                Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
+                                    && backend.LoadLobby().SaveSlotOccupied[slot]
+                                    && !backend.LoadLobby().SaveSlotOccupied[(slot + 2) % 3]
+                                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[priorSlot].Equals(prior)
+                                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2
+                                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[priorSlot] == 2,
+                                    "Engine confirmation must save only the chosen slot once, retaining the older slot and both uses.");
+                                backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                backendField.SetValue(app, backend);
+                                state.SetLobbyReady(backend.LoadLobby());
+                                yield return null;
+                                yield return TapTouch(Read<Button>(ui, "saveLoadoutButton"));
+                                Require(!backend.HasSaveLoadoutCandidate && !Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                    && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
+                                    "The real engine management entry after reload must not offer a second save.");
+                                report.recoveredCandidateSlotChoiceCases++;
+                            }
+                            finally
+                            {
+                                backendField.SetValue(app, originalBackend);
+                                state.SetLobbyReady(originalBackend.LoadLobby());
+                                PlayerPrefs.DeleteKey(key);
+                                PlayerPrefs.Save();
+                            }
+                        }
+                    }
+                    report.recoveredCandidateSlotsPreserved = report.recoveredCandidateSlotChoiceCases == 9;
+                    Debug.Log("Greed engine recovered candidate choices passed: nine isolated persistence keys, three visible lobby entries x three chosen empty slots, real synthetic mouse/touch frame progression, pre-choice Enter blocked, same-stat new clear reload/one save, older slots and two uses retained, resolved management after reload. Not physical input or a full process restart.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
             }
 
             private IEnumerator VerifyScreenKeyboardTransitions()

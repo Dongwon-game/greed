@@ -12931,7 +12931,7 @@ namespace GreedLast
                     noCandidateNotice = pendingRefillRunReviewContext + "\n\n" + noCandidateNotice;
                 OpenSaveLoadoutDraft(
                     snapshot,
-                    requireExplicitSlotChoice: false,
+                    requireExplicitSlotChoice: backend.HasSaveLoadoutCandidate,
                     backend.HasSaveLoadoutCandidate
                         ? null
                         : noCandidateNotice,
