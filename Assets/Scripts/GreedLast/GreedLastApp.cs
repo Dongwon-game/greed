@@ -4484,7 +4484,7 @@ namespace GreedLast
                 return false;
             }
             string trimmed = part.Trim();
-            if (!ContainsSignedRewardDelta(trimmed, "정확") && !ContainsSignedRewardDelta(trimmed, "보정") && !ContainsSignedRewardDelta(trimmed, "충전") && !ContainsSignedRewardDelta(trimmed, "반격") && !ContainsSignedRewardDelta(trimmed, "연쇄") && !ContainsSignedRewardDelta(trimmed, "집중") && !ContainsSignedRewardDelta(trimmed, "체력") && !ContainsSignedRewardDelta(trimmed, "회복") && !ContainsSignedRewardDelta(trimmed, "복구"))
+            if (!ContainsSignedRewardDelta(trimmed, "정확") && !ContainsSignedRewardDelta(trimmed, "정박") && !ContainsSignedRewardDelta(trimmed, "보정") && !ContainsSignedRewardDelta(trimmed, "충전") && !ContainsSignedRewardDelta(trimmed, "반격") && !ContainsSignedRewardDelta(trimmed, "연쇄") && !ContainsSignedRewardDelta(trimmed, "집중") && !ContainsSignedRewardDelta(trimmed, "체력") && !ContainsSignedRewardDelta(trimmed, "회복") && !ContainsSignedRewardDelta(trimmed, "복구"))
             {
                 return ContainsSignedRewardDelta(trimmed, "상쇄");
             }
@@ -23414,7 +23414,7 @@ namespace GreedLast
                 return string.Empty;
             }
 
-            string exactPreview = BuildTrapResponseCueLabel(snapshot.Pattern) + " 정확 +" + exactScore;
+            string exactPreview = BuildTrapResponseCueLabel(snapshot.Pattern) + " 정박 +" + exactScore;
             string payoffGoal = BuildPrototypeFeelPayoffGoal(snapshot);
             if (!string.IsNullOrEmpty(payoffGoal))
             {
@@ -23426,119 +23426,12 @@ namespace GreedLast
 
         private static int BuildActiveExactScorePreview(GreedLastRunSnapshot snapshot)
         {
-            int comboGain = BuildActiveComboGainPreview(snapshot);
-            int nextCombo = Mathf.Max(0, snapshot.Combo + comboGain);
-            int score = 100 + nextCombo * 10;
-            if (snapshot.ActiveRelic == "황금 박동")
-            {
-                score += 40;
-            }
-            else if (snapshot.ActiveRelic == "파라오의 각인")
-            {
-                score += 30;
-            }
-
-            score += BuildThreatPrecisionBonusPreview(snapshot);
-            score += BuildPatternVariationPrecisionBonusPreview(snapshot.Pattern);
-            score += BuildActiveChoiceProfileSuccessBonusPreview(snapshot, nextCombo);
-            score += BuildActiveCenterHitScoreBonusPreview(snapshot);
-            if (IsRecoveryPattern(snapshot.Pattern))
-            {
-                score += GreedLastRunCore.RecoveryPrecisionScoreBonus;
-            }
-
-            if (snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
-            {
-                score += GreedLastRunCore.ClutchCounterScoreBonus;
-                if (PatternHasRoute(snapshot.Pattern, "압박"))
-                {
-                    score += GreedLastRunCore.PressureRouteClutchScoreBonus;
-                }
-            }
-
-            return Math.Min(Math.Max(0, ApplyFocusStateScorePreview(score, snapshot.FocusStateActive)),
-                int.MaxValue - Mathf.Max(0, snapshot.Score));
+            return snapshot.CenterHitScoreGainPreview;
         }
 
         private static int BuildActiveGoodScorePreview(GreedLastRunSnapshot snapshot)
         {
-            int score = 25 + BuildActiveChoiceProfileGoodBonusPreview(snapshot);
-            return Math.Min(Math.Max(0, ApplyFocusStateScorePreview(score, snapshot.FocusStateActive)),
-                int.MaxValue - Mathf.Max(0, snapshot.Score));
-        }
-
-        private static int BuildActiveComboGainPreview(GreedLastRunSnapshot snapshot)
-        {
-            int comboGain = 1 + Mathf.Min(2, snapshot.ChainGiftStacks);
-            if (snapshot.ChainGiftStacks > 0 && snapshot.ActiveRelic == "파라오의 각인")
-            {
-                comboGain += 1;
-            }
-
-            if (IsRecoveryPattern(snapshot.Pattern))
-            {
-                comboGain += GreedLastRunCore.RecoveryPrecisionComboBonus;
-            }
-
-            if (snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
-            {
-                comboGain += GreedLastRunCore.OffbeatFlowComboBonus;
-            }
-
-            return comboGain;
-        }
-
-        private static int BuildActiveCenterHitScoreBonusPreview(GreedLastRunSnapshot snapshot)
-        {
-            int nextPrecisionStreak = Mathf.Clamp(snapshot.PrecisionStreak + 1, 1, 9);
-            int threatBonus = snapshot.InfiniteMode ? Mathf.Max(1, snapshot.InfiniteThreatLevel) * 4 : 0;
-            return 25 + nextPrecisionStreak * 5 + threatBonus;
-        }
-
-        private static int BuildActiveChoiceProfileSuccessBonusPreview(GreedLastRunSnapshot snapshot, int nextCombo)
-        {
-            switch (snapshot.ActiveChoiceProfile)
-            {
-                case "안정형":
-                    return snapshot.Health >= Mathf.Max(2, snapshot.MaxHealth - 1) ? 12 : 8;
-                case "집중형":
-                    return 18;
-                case "연쇄형":
-                    return nextCombo >= 3 ? 20 : 10;
-                case "고점형":
-                    return 28;
-                case "균형형":
-                    return 10;
-                default:
-                    return 0;
-            }
-        }
-
-        private static int BuildActiveChoiceProfileGoodBonusPreview(GreedLastRunSnapshot snapshot)
-        {
-            switch (snapshot.ActiveChoiceProfile)
-            {
-                case "안정형":
-                    return 12;
-                case "집중형":
-                case "고점형":
-                case "균형형":
-                    return 8;
-                case "연쇄형":
-                    return 6;
-                default:
-                    return 0;
-            }
-        }
-
-        private static int ApplyFocusStateScorePreview(int score, bool focusStateActive)
-        {
-            if (!focusStateActive || score <= 0)
-            {
-                return score;
-            }
-
-            return score + Mathf.Max(1, Mathf.RoundToInt(score * 0.20f));
+            return snapshot.GoodScoreGainPreview;
         }
 
         private static bool IsVisibleChoiceProfile(string profile)
@@ -47473,7 +47366,7 @@ namespace GreedLast
             if (GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
                 action += " · " + BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable);
 
-            return action + "\n정확 +" + exactScore
+            return action + "\n정박 +" + exactScore
                 + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);
         }
 
@@ -47554,7 +47447,7 @@ namespace GreedLast
                 return string.Empty;
             }
 
-            string text = "정확+" + exactScore;
+            string text = "정박+" + exactScore;
             string goalPayoff = BuildActivePrototypeActionCueGoalTag(snapshot);
             if (!string.IsNullOrEmpty(goalPayoff))
             {

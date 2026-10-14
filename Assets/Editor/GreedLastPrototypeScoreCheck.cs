@@ -25,7 +25,229 @@ namespace GreedLast.Editor
             RunLoadoutQuality();
             VerifyRecordReload();
             VerifyLoadoutReload();
+            RunRewardPreviews();
             Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload, and all three isolated normal-save slots with one candidate and two starts. Numeric boundary values are injected in isolated editor cores/records; this is not a multi-hour play or device-performance test. Personal settings are preserved and personal slots are not accessed.");
+        }
+
+        [MenuItem("Greed Last/Run Live Reward Preview Check")]
+        public static void RunRewardPreviews()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Reward preview checks require Edit mode.");
+            Require(Invoke<string>(typeof(GreedLastMockBackend), "CompactRecordBoardLine",
+                "[S] 1500점 / 정박 +140점 / 정박+240→집중 / 보정 +25 / 콤12") == "[S] 1500점 / 콤12"
+                && Invoke<string>(typeof(GreedLastMockBackend), "CompactRecordBoardLine",
+                    "정박 +140점 / 정박+240→집중 / 보정 +25 / 콤4") == "기록 없음",
+                "Current center-score cues must not become record rows or contaminate a real score row.");
+            int comparisons = 0, mismatches = 0, healthComparisons = 0, healthMismatches = 0;
+            bool sawChain = false, sawFocus = false, sawRecovery = false, sawPressureBundle = false;
+            bool sawThreatRise = false, sawHighGift = false;
+            string[] summaries = { string.Empty, "안정 호흡 / 안정 루트 / 생존 축",
+                "박자 감각 / 변주 루트 / 집중 축", "고점 본능 / 압박 루트 / 연쇄 축",
+                "고점 본능 / 황금 박동", "고점 본능 / 압박 루트 / 연쇄 축 / 연쇄 축 / 파라오의 각인",
+                "고점 본능 / 안정 루트 / 압박 루트 / 연쇄 축 / 파라오의 각인",
+                "고점 본능 / 변주 루트 / 압박 루트 / 연쇄 축 / 파라오의 각인",
+                "고점 본능 / 안정 루트 / 변주 루트 / 압박 루트 / 연쇄 축 / 파라오의 각인" };
+            for (int loadout = 0; loadout < summaries.Length; loadout++)
+                foreach (int focusGrowth in new[] { 0, 3 })
+                    foreach (bool mixed in new[] { false, true })
+                        CheckRun(loadout, focusGrowth, mixed, normal: false);
+            for (int direction = 0; direction < 3; direction++)
+                CheckRun(direction, 0, mixed: false, normal: true);
+            Require(sawChain && sawFocus && sawRecovery && sawPressureBundle && sawThreatRise && sawHighGift,
+                "Preview checks must cover chain, focus, recovery, pressure bundles, threat rises and high-score start gifts.");
+            Require(mismatches == 0, "Live previews must equal the next actual center/Good judgement gain. Mismatches=" + mismatches);
+            Require(healthComparisons > 0 && healthMismatches == 0,
+                "Judgement health fractions must use the same maximum as the actual gauge. Mismatches=" + healthMismatches);
+            VerifyHealthFeedbackControls();
+            Require(BuildRewardPreviewSample(0).after.LastJudgementScoreGain == 188
+                && BuildRewardPreviewSample(0, peripheral: true).after.LastJudgementScoreGain == 148
+                && BuildRewardPreviewSample(0, good: true).after.LastJudgementScoreGain == 48,
+                "Existing high-gift center/outer Success/Good rewards must remain 188/148/48, not be raised to the central preview.");
+            Debug.Log($"Greed live reward previews passed: {comparisons} actual center/Good judgements,"
+                + $" {healthComparisons} health-feedback comparisons, three complete normal directions, nine infinite loadouts including mixed routes,"
+                + " focus growth 0/3, clean/mixed bundles, recovery and rising threat."
+                + " Transient cores with public timing/input APIs; no private state edits, persistence, physical input or device-performance claim.");
+
+            void CheckRun(int direction, int focusGrowth, bool mixed, bool normal)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.ConfigureGrowth(0, focusGrowth, 0);
+                if (normal) core.Enter();
+                else
+                {
+                    string summary = summaries[direction];
+                    string start = summary.Contains("고점 본능", StringComparison.Ordinal) ? "고점 본능"
+                        : summary.Contains("박자 감각", StringComparison.Ordinal) ? "박자 감각" : "안정 호흡";
+                    string gift = summary.Contains("연쇄 축", StringComparison.Ordinal) ? "연쇄 축"
+                        : summary.Contains("집중 축", StringComparison.Ordinal) ? "집중 축" : "생존 축";
+                    string relic = summary.Contains("황금 박동", StringComparison.Ordinal) ? "황금 박동"
+                        : summary.Contains("파라오의 각인", StringComparison.Ordinal) ? "파라오의 각인" : string.Empty;
+                    var record = direction == 0 ? GreedLastRunRecord.Empty : new GreedLastRunRecord(
+                        true, 800, 3, 0, 0, 0, 0, 0, 0, 20f, "reward-preview", start, gift, relic, summary, string.Empty);
+                    core.EnterInfiniteRun(record);
+                }
+                core.ToggleDevInvincible();
+                float clock = Time.realtimeSinceStartup;
+                int judged = 0, target = normal ? 15 : 18;
+                while (judged < target)
+                {
+                    if (run.ChoiceActive)
+                    {
+                        core.HandleInput((GreedLastRunChannel)(direction + 1), clock);
+                        continue;
+                    }
+                    for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 400; wait++) Advance(0.01f);
+                    Require(run.ActivePattern && !run.CountdownActive, "Preview checks need a real approaching trap.");
+                    int outcome = mixed ? judged % 6 : 0;
+                    bool good = outcome == 2 || outcome == 5, miss = outcome == 3;
+                    float delta = good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
+                    var before = run;
+                    int preview = Invoke<int>(typeof(GreedLastRuntimeUi), good ? "BuildActiveGoodScorePreview" : "BuildActiveExactScorePreview", before);
+                    var input = miss ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                        : run.Pattern.Channel;
+                    core.HandleInput(input, clock);
+                    Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success)
+                        && (miss || good || run.LastCenterHit), "Preview checks must use the intended actual judgement.");
+                    string healthLine = Array.Find(run.JudgementText.Split('\n'), line =>
+                        line.StartsWith("결과:", StringComparison.Ordinal) && line.Contains(" / 체력 ", StringComparison.Ordinal));
+                    if (healthLine != null)
+                    {
+                        healthComparisons++;
+                        if (!healthLine.Contains(" / 체력 " + run.Health + "/" + run.MaxHealth, StringComparison.Ordinal))
+                        {
+                            healthMismatches++;
+                            Debug.Log("Greed health feedback mismatch: gauge=" + run.Health + "/" + run.MaxHealth
+                                + ", text=" + run.JudgementText.Replace("\n", " / "));
+                        }
+                    }
+                    sawRecovery |= before.Pattern.Prompt.Contains("[복구]", StringComparison.Ordinal);
+                    sawThreatRise |= run.InfiniteThreatLevel > before.InfiniteThreatLevel;
+                    sawPressureBundle |= run.PressureRouteBundleCount > before.PressureRouteBundleCount;
+                    sawFocus |= before.FocusStateActive;
+                    sawChain |= run.Combo >= 3 && !miss && !good;
+                    sawHighGift |= direction >= 3 && !normal || normal && direction == 2;
+                    if (!miss)
+                    {
+                        comparisons++;
+                        if (preview != run.LastJudgementScoreGain)
+                        {
+                            mismatches++;
+                            Debug.Log($"Greed reward preview mismatch: normal={normal}, direction={direction}, growth={focusGrowth}, mixed={mixed},"
+                                + $" input={judged}, good={good}, combo={before.Combo}, bundle={before.ChapterProgress}, focus={before.FocusStateActive},"
+                                + $" preview={preview}, actual={run.LastJudgementScoreGain}.");
+                        }
+                        Require(run.Score - before.Score == run.LastJudgementScoreGain, "Comparisons must include actual chain and bundle rewards.");
+                    }
+                    judged++;
+                }
+                if (normal) Require(run.EscapeSucceeded && run.SaveEligible, "Normal checks must finish the authored escape.");
+                Require((run.CenterHitScoreGainPreview == 0 && run.GoodScoreGainPreview == 0) || run.ActivePattern,
+                    "No active trap must not retain a reward preview after its judgement.");
+                core.Exit();
+                Require(run.CenterHitScoreGainPreview == 0 && run.GoodScoreGainPreview == 0,
+                    "Leaving a run must clear its previous active score preview.");
+
+                void Advance(float seconds)
+                {
+                    Require(seconds >= -0.0002f, "Preview checks must not rewind a core clock.");
+                    while (seconds > 0.0001f)
+                    {
+                        float step = Mathf.Min(seconds, 0.01f);
+                        core.Tick(clock += step);
+                        seconds -= step;
+                    }
+                }
+            }
+        }
+
+        private static void VerifyHealthFeedbackControls()
+        {
+            foreach (int survivalGrowth in new[] { 0, 3 })
+                foreach (bool invincible in new[] { false, true })
+                    foreach (bool miss in new[] { false, true })
+                    {
+                        var core = new GreedLastRunCore();
+                        GreedLastRunSnapshot run = default;
+                        core.SnapshotChanged += value => run = value;
+                        core.ConfigureGrowth(survivalGrowth, 0, 0);
+                        core.EnterInfiniteRun();
+                        if (invincible) core.ToggleDevInvincible();
+                        float clock = Time.realtimeSinceStartup;
+                        for (int wait = 0; !run.ActivePattern && wait < 400; wait++) core.Tick(clock += 0.01f);
+                        Require(run.ActivePattern, "Health controls require a naturally arriving trap.");
+                        float delta = miss ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                        float remaining = run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds;
+                        while (remaining > 0.0001f)
+                        {
+                            float step = Mathf.Min(remaining, 0.01f);
+                            core.Tick(clock += step);
+                            remaining -= step;
+                        }
+                        core.HandleInput(miss ? (run.Pattern.Channel == GreedLastRunChannel.Left
+                            ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.Channel, clock);
+                        int max = 3 + survivalGrowth;
+                        Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good)
+                            && run.MaxHealth == max && run.Health == max - (miss && !invincible ? 1 : 0)
+                            && run.JudgementText.Contains(" / 체력 " + run.Health + "/" + run.MaxHealth, StringComparison.Ordinal),
+                            "Health feedback controls must preserve real damage, invincibility and current gauge maximum.");
+                        core.Exit();
+                    }
+            Debug.Log("Greed judgement health controls passed: eight transient growth 0/3 x real damage/invincibility x Good/Miss cases; unchanged health/damage and gauge-consistent feedback. No private state edits or personal persistence.");
+        }
+
+        internal static (GreedLastRunSnapshot before, GreedLastRunSnapshot after) BuildRewardPreviewSample(
+            int sample, bool peripheral = false, bool good = false)
+        {
+            Require(sample >= 0 && sample <= 2, "Reward samples must use a declared scenario.");
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default, before = default;
+            core.SnapshotChanged += value => run = value;
+            float clock = Time.realtimeSinceStartup;
+            if (sample == 0)
+            {
+                core.Enter();
+                core.HandleInput(GreedLastRunChannel.Right, clock);
+            }
+            else
+            {
+                core.ConfigureGrowth(0, sample == 1 ? 3 : 0, 0);
+                core.EnterInfiniteRun(new GreedLastRunRecord(true, 800, 3, 0, 0, 0, 0, 0, 0, 20f,
+                    "reward-preview", "고점 본능", "연쇄 축", "파라오의 각인",
+                    "고점 본능 / 압박 루트 / 연쇄 축 / 파라오의 각인", string.Empty));
+            }
+            int target = sample == 0 ? 1 : sample == 1 ? 3 : 6;
+            for (int input = 0; input < target; input++)
+            {
+                for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 400; wait++) Advance(0.01f);
+                Require(run.ActivePattern && !run.CountdownActive, "Reward render samples need a naturally arriving trap.");
+                bool isGood = (sample == 2 || good) && input == target - 1;
+                float delta = isGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f
+                    : peripheral ? run.Pattern.SuccessWindowSeconds * 0.75f : 0f;
+                Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
+                before = run;
+                core.HandleInput(run.Pattern.Channel, clock);
+                Require(run.LastResult == (isGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success)
+                    && (isGood || run.LastCenterHit == !peripheral), "Render reward samples must use their declared judgement.");
+                if (!peripheral) Require((isGood ? before.GoodScoreGainPreview : before.CenterHitScoreGainPreview)
+                    == run.LastJudgementScoreGain, "Rendered reward samples must pair a current preview with its actual gain.");
+            }
+            GreedLastRunSnapshot after = run;
+            core.Exit();
+            return (before, after);
+
+            void Advance(float seconds)
+            {
+                Require(seconds >= -0.0002f, "Reward samples must not rewind a core clock.");
+                while (seconds > 0.0001f)
+                {
+                    float step = Mathf.Min(seconds, 0.01f);
+                    core.Tick(clock += step);
+                    seconds -= step;
+                }
+            }
         }
 
         [MenuItem("Greed Last/Run Score Grade Boundary Check")]

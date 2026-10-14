@@ -73,7 +73,7 @@ namespace GreedLast.Editor
                     GreedLastScreenState.InfiniteRun, "Score ceiling", string.Empty, 0));
                 ui.RenderRun(capped.before);
                 Call(ui, "UpdateRunTimingVisuals");
-                Require(Read<Text>(ui, "activeActionCueText").text.Contains("정확 +5", StringComparison.Ordinal),
+                Require(Read<Text>(ui, "activeActionCueText").text.Contains("정박 +5", StringComparison.Ordinal),
                     "Player score-ceiling action guidance must preview its actual five available points.");
                 ui.RenderRun(capped.after);
                 Require(Read<Text>(ui, "judgementFeedbackText").text.Contains("+5점", StringComparison.Ordinal),

@@ -438,12 +438,12 @@ namespace GreedLast.Editor
             Require(
                 focusActionCue.Contains("고점", StringComparison.Ordinal)
                     && focusActionCue.Contains("→고점", StringComparison.Ordinal)
-                    && focusActionCue.Contains("정확+", StringComparison.Ordinal),
+                    && focusActionCue.Contains("정박+", StringComparison.Ordinal),
                 "A focus-state active action cue must show the high-score exact-input goal beside the payoff. Actual: "
                     + focusActionCue);
             string focusScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", snapshot);
             Require(
-                focusScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                focusScorePreview.Contains("정박 +", StringComparison.Ordinal)
                     && focusScorePreview.Contains("→고점", StringComparison.Ordinal),
                 "A focus-state score preview must keep the high-score exact-input goal beside the score. Actual: "
                     + focusScorePreview);
@@ -4435,7 +4435,7 @@ namespace GreedLast.Editor
                     + mobileActiveActionCue);
             RequireTextLayoutBudget(mobileActiveActionCue, 1, 72, "mobile active action cue payoff");
             Require(
-                activeActionCue.Contains("정확+", StringComparison.Ordinal)
+                activeActionCue.Contains("정박+", StringComparison.Ordinal)
                     && activeActionCue.Contains("→집중", StringComparison.Ordinal)
                     && activeActionCue.Contains("보정+", StringComparison.Ordinal)
                     && activeActionCue.Contains("집중+" + GreedLastRunCore.PerfectFocusChargeBonus, StringComparison.Ordinal),
@@ -6666,7 +6666,7 @@ namespace GreedLast.Editor
             Require(
                 activeInfiniteFeelStatus.Contains("체감 무한", StringComparison.Ordinal)
                     && activeInfiniteFeelStatus.Contains("→정확", StringComparison.Ordinal)
-                    && activeInfinitePressureStatus.Contains("정확 +", StringComparison.Ordinal)
+                    && activeInfinitePressureStatus.Contains("정박 +", StringComparison.Ordinal)
                     && activeInfinitePressureStatus.Contains("체감 무한", StringComparison.Ordinal),
                 "Infinite active status must keep the prototype feel goal visible beside threat pressure. Actual: "
                     + activeInfinitePressureStatus);
@@ -6715,8 +6715,8 @@ namespace GreedLast.Editor
                     && highThreatPipOffset > risingThreatPipOffset,
                 "Infinite threat pips must kick upward on threat rise, downward on threat drop, and only move the active threat step.");
             string activeRunGuide = InvokeRuntimeUiLabel("BuildRunGuideLine", goodSnapshot);
-            Require(activeRunGuide.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal), "The active run guide must bind the avoidance action to the exact payoff.");
-            Require(activeRunGuide.Contains("정확 +", StringComparison.Ordinal), "The active run guide must preview exact-score payoff.");
+            Require(activeRunGuide.Contains("바닥→↑점프 정박 +", StringComparison.Ordinal), "The active run guide must bind the avoidance action to the exact payoff.");
+            Require(activeRunGuide.Contains("정박 +", StringComparison.Ordinal), "The active run guide must preview exact-score payoff.");
             Require(activeRunGuide.Contains("보정 +", StringComparison.Ordinal), "The active run guide must preview Good-score fallback payoff.");
             float activeBeatCueUrgency = InvokeRuntimeUiFloat("BuildActiveBeatCueUrgency", goodSnapshot);
             Require(
@@ -6739,7 +6739,7 @@ namespace GreedLast.Editor
                 "Active beat cue urgency must brighten, scale, and subtly lift guide/cue/audio feedback and the target-lane glow only for live active patterns.");
             string activeScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", goodSnapshot);
             Require(
-                activeScorePreview.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal)
+                activeScorePreview.Contains("바닥→↑점프 정박 +", StringComparison.Ordinal)
                     && activeScorePreview.Contains("→집중", StringComparison.Ordinal)
                     && activeScorePreview.Contains("보정 +", StringComparison.Ordinal),
                 "The compact active score preview must keep the hazard-bound exact payoff. Actual: "
@@ -6752,7 +6752,7 @@ namespace GreedLast.Editor
                 activeFeelStatus.Contains("체감 일반", StringComparison.Ordinal)
                     && activeFeelStatus.Contains("바닥→↑점프→정확", StringComparison.Ordinal)
                     && activeFeelStatus.Contains("→집중", StringComparison.Ordinal)
-                    && activePressureStatus.Contains("바닥→↑점프 정확 +", StringComparison.Ordinal)
+                    && activePressureStatus.Contains("바닥→↑점프 정박 +", StringComparison.Ordinal)
                     && activePressureStatus.Contains("체감 일반", StringComparison.Ordinal),
                 "The active status line must keep the prototype feel goal visible without replacing the scoring preview. Actual: "
                     + activePressureStatus);
@@ -7271,11 +7271,11 @@ namespace GreedLast.Editor
                 "The run objective must preview the recovery precision payoff.");
             Require(
                 InvokeRuntimeUiLabel("BuildRunGuideLine", exactSnapshot)
-                    .Contains("정확 +", StringComparison.Ordinal),
+                    .Contains("정박 +", StringComparison.Ordinal),
                 "The recovery guide must keep its exact-score preview visible.");
             string recoveryScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", exactSnapshot);
             Require(
-                recoveryScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                recoveryScorePreview.Contains("정박 +", StringComparison.Ordinal)
                     && recoveryScorePreview.Contains("→회복", StringComparison.Ordinal),
                 "The recovery score preview must keep the recovery exact-input goal beside the score. Actual: "
                     + recoveryScorePreview);
@@ -7289,7 +7289,7 @@ namespace GreedLast.Editor
             Require(
                 recoveryActionCue.Contains("회복", StringComparison.Ordinal)
                     && recoveryActionCue.Contains("→회복", StringComparison.Ordinal)
-                    && recoveryActionCue.Contains("정확+", StringComparison.Ordinal),
+                    && recoveryActionCue.Contains("정박+", StringComparison.Ordinal),
                 "A recovery active action cue must show the recovery exact-input goal beside the payoff. Actual: "
                     + recoveryActionCue);
 
@@ -9301,13 +9301,13 @@ namespace GreedLast.Editor
             Require(
                 activeHealthCue.Contains("생존", StringComparison.Ordinal)
                     && activeHealthCue.Contains("→생존", StringComparison.Ordinal)
-                    && activeHealthCue.Contains("정확+", StringComparison.Ordinal)
+                    && activeHealthCue.Contains("정박+", StringComparison.Ordinal)
                     && activeHealthCue.Contains("보정+", StringComparison.Ordinal),
                 "Low-health active action cues must show that exact timing is now a survival payoff. Actual: "
                     + activeHealthCue);
             string activeHealthScorePreview = InvokeRuntimeUiLabel("BuildActiveScoringPreviewStatus", activeHealthSnapshot);
             Require(
-                activeHealthScorePreview.Contains("정확 +", StringComparison.Ordinal)
+                activeHealthScorePreview.Contains("정박 +", StringComparison.Ordinal)
                     && activeHealthScorePreview.Contains("→생존", StringComparison.Ordinal),
                 "Low-health score previews must keep survival beside the exact-score payoff. Actual: "
                     + activeHealthScorePreview);
@@ -10462,7 +10462,7 @@ namespace GreedLast.Editor
                 Require(run.ActivePattern, "Compact action checks require a live avoidance pattern.");
                 string cue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false);
                 Require(cue.Split('\n').Length == 2 && cue.Contains(responses[i], StringComparison.Ordinal)
-                    && cue.Contains("정확 +" + InvokeRuntimeUiInt("BuildActiveExactScorePreview", run), StringComparison.Ordinal),
+                    && cue.Contains("정박 +" + InvokeRuntimeUiInt("BuildActiveExactScorePreview", run), StringComparison.Ordinal),
                     "Every compact cue must retain its actual action and exact-score preview in two lines.");
                 Require(!cue.Contains("보정+", StringComparison.Ordinal) && !cue.Contains("위험 →", StringComparison.Ordinal),
                     "Clean gameplay must not repeat the long timing and comparison paragraph.");

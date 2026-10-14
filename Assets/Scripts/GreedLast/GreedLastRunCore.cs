@@ -493,7 +493,9 @@ namespace GreedLast
             int lastJudgementHealthChange,
             bool hasJudgedInputTiming,
             float lastInputTimingDeltaSeconds,
-            GreedLastRunChannel lastJudgedInputChannel)
+            GreedLastRunChannel lastJudgedInputChannel,
+            int centerHitScoreGainPreview = 0,
+            int goodScoreGainPreview = 0)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -599,6 +601,8 @@ namespace GreedLast
             HasJudgedInputTiming = hasJudgedInputTiming;
             LastInputTimingDeltaSeconds = lastInputTimingDeltaSeconds;
             LastJudgedInputChannel = lastJudgedInputChannel;
+            CenterHitScoreGainPreview = Mathf.Max(0, centerHitScoreGainPreview);
+            GoodScoreGainPreview = Mathf.Max(0, goodScoreGainPreview);
         }
 
         public GreedLastPatternModel Pattern { get; }
@@ -632,6 +636,8 @@ namespace GreedLast
         public int PressureRouteBundleCount { get; }
         public bool LastCenterHit { get; }
         public int LastJudgementScoreGain { get; }
+        public int CenterHitScoreGainPreview { get; }
+        public int GoodScoreGainPreview { get; }
         public int LastJudgementHealthChange { get; }
         public bool HasJudgedInputTiming { get; }
         public float LastInputTimingDeltaSeconds { get; }
@@ -2245,21 +2251,7 @@ namespace GreedLast
                     }
 
                     int chainGiftStacks = GetActiveGiftStackCount("연쇄 축");
-                    int comboGain = 1 + Mathf.Min(2, chainGiftStacks);
-                    if (chainGiftStacks > 0 && HasChoice(relic, "파라오의 각인"))
-                    {
-                        comboGain += 1;
-                    }
-
-                    if (recoveryPattern && outcome.CenterHit)
-                    {
-                        comboGain += RecoveryPrecisionComboBonus;
-                    }
-
-                    if (currentPattern.TimingType == GreedLastTimingType.Offbeat && outcome.CenterHit)
-                    {
-                        comboGain += OffbeatFlowComboBonus;
-                    }
+                    int comboGain = BuildSuccessComboGain(outcome.CenterHit);
 
                     combo += comboGain;
                     maxCombo = Mathf.Max(maxCombo, combo);
@@ -2579,7 +2571,7 @@ namespace GreedLast
                         AppendChoiceEffect("집중 상태 발동 " + FocusStateDurationSeconds.ToString("0.0") + "초");
                     }
 
-                    AppendRunStateResult("결과: 점수 +" + goodScore + " / 체력 " + health + "/" + BuildBonusHealthCap() + " / " + BuildFocusStateResultText());
+                    AppendRunStateResult("결과: 점수 +" + goodScore + " / 체력 " + health + "/" + maxHealthThisRun + " / " + BuildFocusStateResultText());
                     if (!focusChainSoftened)
                     {
                         AppendChainBreakText(comboBeforeResolve);
@@ -2601,7 +2593,7 @@ namespace GreedLast
                         health = Mathf.Max(1, health);
                         recoveryBreatherPatternPending = true;
                         judgementText += "\n테스트 무적 - 피해를 무시했습니다.";
-                        AppendRunStateResult("결과: 무적 보호 / 체력 " + health + "/" + BuildBonusHealthCap());
+                        AppendRunStateResult("결과: 무적 보호 / 체력 " + health + "/" + maxHealthThisRun);
                         break;
                     }
 
@@ -2626,7 +2618,7 @@ namespace GreedLast
                     else
                     {
                         recoveryBreatherPatternPending = true;
-                        AppendRunStateResult("결과: 피해 -1 / 체력 " + health + "/" + BuildBonusHealthCap());
+                        AppendRunStateResult("결과: 피해 -1 / 체력 " + health + "/" + maxHealthThisRun);
                     }
 
                     AppendChainBreakText(comboBeforeResolve);
@@ -2890,12 +2882,22 @@ namespace GreedLast
 
         private int BuildCenterHitScoreBonus()
         {
-            int streakBonus = Mathf.Clamp(precisionStreak, 1, 9) * 5;
+            return BuildCenterHitScoreBonus(precisionStreak);
+        }
+
+        private int BuildCenterHitScoreBonus(int streak)
+        {
+            int streakBonus = Mathf.Clamp(streak, 1, 9) * 5;
             int threatBonus = infiniteMode ? GetInfiniteThreatLevel() * 4 : 0;
             return 25 + streakBonus + threatBonus;
         }
 
         private int BuildChoiceProfileSuccessScoreBonus(out string label)
+        {
+            return BuildChoiceProfileSuccessScoreBonus(lastCenterHit, combo, out label);
+        }
+
+        private int BuildChoiceProfileSuccessScoreBonus(bool centerHit, int awardedCombo, out string label)
         {
             switch (BuildActiveChoiceProfile())
             {
@@ -2903,14 +2905,14 @@ namespace GreedLast
                     label = health >= Mathf.Max(2, maxHealthThisRun - 1) ? "안정형 유지" : "안정형 복구";
                     return health >= Mathf.Max(2, maxHealthThisRun - 1) ? 12 : 8;
                 case "집중형":
-                    label = lastCenterHit ? "집중형 정박" : "집중형 유지";
-                    return lastCenterHit ? 18 : 8;
+                    label = centerHit ? "집중형 정박" : "집중형 유지";
+                    return centerHit ? 18 : 8;
                 case "연쇄형":
-                    label = combo >= 3 ? "연쇄형 유지" : "연쇄형 시동";
-                    return combo >= 3 ? 20 : 10;
+                    label = awardedCombo >= 3 ? "연쇄형 유지" : "연쇄형 시동";
+                    return awardedCombo >= 3 ? 20 : 10;
                 case "고점형":
-                    label = lastCenterHit ? "고점형 정박" : "고점형 성공";
-                    return lastCenterHit ? 28 : 18;
+                    label = centerHit ? "고점형 정박" : "고점형 성공";
+                    return centerHit ? 28 : 18;
                 case "균형형":
                     label = "균형형 보너스";
                     return 10;
@@ -2948,6 +2950,57 @@ namespace GreedLast
         private static float BuildCenterHitWindow(GreedLastPatternModel pattern)
         {
             return Mathf.Max(0.018f, pattern.SuccessWindowSeconds * CenterHitWindowScale);
+        }
+
+        private int BuildSuccessComboGain(bool centerHit)
+        {
+            int stacks = GetActiveGiftStackCount("연쇄 축");
+            int gain = 1 + Mathf.Min(2, stacks);
+            if (stacks > 0 && HasChoice(relic, "파라오의 각인")) gain++;
+            if (centerHit && IsRecoveryPattern(currentPattern)) gain += RecoveryPrecisionComboBonus;
+            if (centerHit && currentPattern.TimingType == GreedLastTimingType.Offbeat) gain += OffbeatFlowComboBonus;
+            return gain;
+        }
+
+        private int BuildJudgementScoreGainPreview(bool centerHit)
+        {
+            if (!activePattern || !currentPattern.IsValid || stopped || resumeCountdownActive || startCountdownActive) return 0;
+            int gain;
+            if (centerHit)
+            {
+                int nextCombo = combo + BuildSuccessComboGain(true);
+                gain = 100 + nextCombo * 10;
+                if (HasChoice(startGift, "고점 본능")) gain += 20;
+                if (HasChoice(relic, "황금 박동")) gain += 40;
+                if (HasChoice(relic, "파라오의 각인")) gain += 30;
+                gain += BuildThreatPrecisionBonus(currentPattern.TimingType)
+                    + BuildPatternVariationPrecisionBonus(currentPattern)
+                    + BuildChoiceProfileSuccessScoreBonus(true, nextCombo, out _)
+                    + BuildCenterHitScoreBonus(precisionStreak + 1);
+                if (IsRecoveryPattern(currentPattern)) gain += RecoveryPrecisionScoreBonus;
+                if (currentPattern.TimingType == GreedLastTimingType.Clutch)
+                {
+                    gain += ClutchCounterScoreBonus;
+                    if (HasActiveRoute("압박 루트")) gain += PressureRouteClutchScoreBonus;
+                }
+                gain += BuildFocusStateScoreBonus(gain, IsFocusStateActive);
+                int chainLevel = GetRhythmChainLevel(nextCombo);
+                if (chainLevel > 0) gain += 30 * chainLevel + (infiniteMode ? 10 * GetInfiniteThreatLevel() : 0);
+                if (!practiceMode && chapterProgress + 1 >= ChapterTargetPatterns
+                    && patternBundleBreakCount <= 0 && HasActiveRoute("압박 루트"))
+                    gain += PressureRouteBundleScoreBonus;
+            }
+            else
+            {
+                gain = 25 + BuildChoiceProfileGoodScoreBonus(out _);
+                if (HasChoice(startGift, "고점 본능")) gain += 15;
+                gain += BuildFocusStateScoreBonus(gain, IsFocusStateActive);
+            }
+
+            // Chain/route/section awards are added after the focus multiplier by Resolve.
+            if (infiniteMode && chapterProgress + 1 >= ChapterTargetPatterns)
+                gain += 50 * GetInfiniteThreatLevelForSections(infiniteSectionsCleared + 1);
+            return Math.Min(Mathf.Max(0, gain), int.MaxValue - Mathf.Max(0, score));
         }
 
         private int BuildThreatPrecisionBonus(GreedLastTimingType timingType)
@@ -6193,7 +6246,12 @@ namespace GreedLast
                 return 1;
             }
 
-            int baseThreat = Mathf.Clamp(1 + infiniteSectionsCleared / 2, 1, InfiniteThreatMaxLevel);
+            return GetInfiniteThreatLevelForSections(infiniteSectionsCleared);
+        }
+
+        private int GetInfiniteThreatLevelForSections(int sectionsCleared)
+        {
+            int baseThreat = Mathf.Clamp(1 + sectionsCleared / 2, 1, InfiniteThreatMaxLevel);
             return Mathf.Clamp(baseThreat + infiniteThreatTestOffset, 1, InfiniteThreatMaxLevel);
         }
 
@@ -6714,7 +6772,9 @@ namespace GreedLast
                 lastJudgementHealthChange,
                 hasJudgedInputTiming,
                 lastInputTimingDeltaSeconds,
-                lastJudgedInputChannel));
+                lastJudgedInputChannel,
+                BuildJudgementScoreGainPreview(true),
+                BuildJudgementScoreGainPreview(false)));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)

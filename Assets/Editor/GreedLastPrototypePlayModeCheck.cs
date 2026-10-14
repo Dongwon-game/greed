@@ -283,6 +283,7 @@ namespace GreedLast.Editor
                         && cycle.recoveredCandidateSlotChoiceCases == 9 && cycle.recoveredCandidateSlotsPreserved
                         && cycle.legacyRenamedCandidateRepairCases == 3
                         && cycle.preparedInfinitePreviewCases == 8
+                        && cycle.liveRewardPreviewJudgements >= 17
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -418,6 +419,7 @@ namespace GreedLast.Editor
             public int recoveredCandidateSlotChoiceCases;
             public int legacyRenamedCandidateRepairCases;
             public int preparedInfinitePreviewCases;
+            public int liveRewardPreviewJudgements;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -3128,6 +3130,17 @@ namespace GreedLast.Editor
                 core = Read<GreedLastRunCore>(app, "runCore");
                 core.SnapshotChanged += snapshot =>
                 {
+                    if (run.ActivePattern && snapshot.LastJudgedPattern.PatternId == run.Pattern.PatternId
+                        && snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount
+                            == run.SuccessCount + run.GoodCount + run.MissCount + 1
+                        && (snapshot.LastCenterHit || snapshot.LastResult == GreedLastJudgementResult.Good))
+                    {
+                        int expected = snapshot.LastCenterHit ? run.CenterHitScoreGainPreview : run.GoodScoreGainPreview;
+                        Require(expected == snapshot.LastJudgementScoreGain,
+                            "Engine center/Good reward previews must include the actual next chain and bundle gain: expected="
+                                + expected + ", actual=" + snapshot.LastJudgementScoreGain);
+                        report.liveRewardPreviewJudgements++;
+                    }
                     run = snapshot;
                     report.publications++;
                     report.judgements = snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount;

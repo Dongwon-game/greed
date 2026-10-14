@@ -48,6 +48,7 @@ namespace GreedLast.Editor
             public bool scoreBoundaryOnly;
             public bool progressBoundaryOnly;
             public bool preparationPreviewOnly;
+            public bool rewardPreviewOnly;
             public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
@@ -137,6 +138,12 @@ namespace GreedLast.Editor
             Begin(false, preparationPreviewOnly: true);
         }
 
+        [MenuItem("Greed Last/Capture Live Reward Previews")]
+        public static void RunRewardPreviewOnly()
+        {
+            Begin(false, rewardPreviewOnly: true);
+        }
+
         [MenuItem("Greed Last/Capture Text Clipping Rejection Check")]
         public static void RunTextClippingRejection()
         {
@@ -150,7 +157,8 @@ namespace GreedLast.Editor
         }
 
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
-            bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false)
+            bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false,
+            bool rewardPreviewOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -174,6 +182,7 @@ namespace GreedLast.Editor
                 scoreBoundaryOnly = scoreBoundaryOnly,
                 progressBoundaryOnly = progressBoundaryOnly,
                 preparationPreviewOnly = preparationPreviewOnly,
+                rewardPreviewOnly = rewardPreviewOnly,
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
             };
@@ -279,6 +288,7 @@ namespace GreedLast.Editor
                 AddScoreBoundaryFrames();
                 AddProgressBoundaryFrames();
                 AddPreparationPreviewFrames();
+                AddRewardPreviewFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -293,9 +303,9 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
-                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly)
+                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly || rewardPreviewOnly)
                 {
-                    string prefix = preparationPreviewOnly ? "96-preparation-"
+                    string prefix = rewardPreviewOnly ? "98-live-reward-" : preparationPreviewOnly ? "96-preparation-"
                         : progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
                     int count = Frames.Count;
                     for (int i = 0; i < count; i++)
@@ -305,7 +315,7 @@ namespace GreedLast.Editor
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1220,6 +1230,47 @@ namespace GreedLast.Editor
             }
         }
 
+        private static void AddRewardPreviewFrames()
+        {
+            for (int sample = 0; sample < 3; sample++)
+            {
+                var pair = GreedLastPrototypeScoreCheck.BuildRewardPreviewSample(sample);
+                bool good = sample == 2;
+                string name = "98-live-reward-" + (sample == 0 ? "normal-high" : sample == 1 ? "pressure-bundle" : "good-section");
+                void ShowPreview()
+                {
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구");
+                    ShowRun(pair.before);
+                    typeof(GreedLastRuntimeUi).GetMethod("UpdateRunTimingVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(ui, null);
+                    string cue = Read<Text>("activeActionCueText").text;
+                    Require(cue.Contains("정박 +" + pair.before.CenterHitScoreGainPreview, StringComparison.Ordinal)
+                        && !cue.Contains("정확 +", StringComparison.Ordinal),
+                        "Reward captures must identify the central preview, not promise it for every outer Success.");
+                }
+                void ShowJudgement()
+                {
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구");
+                    ShowRun(pair.before);
+                    ui.RenderRun(pair.after);
+                    Require(Read<Text>("judgementFeedbackText").text.Contains("+" + pair.after.LastJudgementScoreGain + "점", StringComparison.Ordinal),
+                        "Reward captures must retain actual chain/bundle/section-inclusive feedback.");
+                    Require((good ? pair.before.GoodScoreGainPreview : pair.before.CenterHitScoreGainPreview)
+                        == pair.after.LastJudgementScoreGain, "Rendered preview and judgement gain must agree.");
+                }
+                foreach (bool before in new[] { true, false })
+                {
+                    Action show = before ? ShowPreview : ShowJudgement;
+                    string suffix = before ? "-preview" : "-judgement";
+                    Add(name + suffix + "-small", 960, 540, show, settleSeconds: 0.16);
+                    Add(name + suffix + "-tablet", 1024, 768, show, settleSeconds: 0.16);
+                    Add(name + suffix + "-wide", 2340, 1080, show, 96f, 0.16);
+                }
+            }
+        }
+
         private static void AddScoreBoundaryFrames()
         {
             var capped = GreedLastPrototypeScoreCheck.VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success);
@@ -1229,7 +1280,7 @@ namespace GreedLast.Editor
                 ShowRun(capped.before);
                 typeof(GreedLastRuntimeUi).GetMethod("UpdateRunTimingVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(ui, null);
-                Require(Read<Text>("activeActionCueText").text.Contains("정확 +5", StringComparison.Ordinal),
+                Require(Read<Text>("activeActionCueText").text.Contains("정박 +5", StringComparison.Ordinal),
                     "The visible action cue must preview only the five points still available at the score ceiling.");
             }
             Add("92-score-ceiling-preview-small", 960, 540, ShowPreview, settleSeconds: 0.16);
@@ -2689,7 +2740,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
