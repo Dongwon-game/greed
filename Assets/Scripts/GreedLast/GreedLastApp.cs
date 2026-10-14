@@ -9378,8 +9378,11 @@ namespace GreedLast
             for (int i = 0; i < saveLoadoutSlots.Length; i += 1)
             {
                 GreedLastRunRecord slotRecord = saveLoadoutSlots[i];
+                bool sameName = saveCandidate.LoadoutName == slotRecord.LoadoutName;
+                bool managedAlias = slotRecord.LoadoutName == BuildSaveLoadoutNameForStep(i, saveLoadoutRenameSteps[i])
+                    && saveCandidate.ChoiceSummary == slotRecord.ChoiceSummary;
                 if (IsSameRunRecord(saveCandidate, slotRecord)
-                    && saveCandidate.LoadoutName == slotRecord.LoadoutName
+                    && (sameName || managedAlias)
                     && saveCandidate.StartGift == slotRecord.StartGift
                     && saveCandidate.PrimaryGift == slotRecord.PrimaryGift
                     && saveCandidate.Relic == slotRecord.Relic)

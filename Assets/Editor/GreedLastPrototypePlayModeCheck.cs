@@ -281,6 +281,7 @@ namespace GreedLast.Editor
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.registeredHeldCommandPresses == 44
                         && cycle.recoveredCandidateSlotChoiceCases == 9 && cycle.recoveredCandidateSlotsPreserved
+                        && cycle.legacyRenamedCandidateRepairCases == 3
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -414,6 +415,7 @@ namespace GreedLast.Editor
             public bool initialChoiceFreshInputRecovered;
             public int screenKeyboardTransitionCases;
             public int recoveredCandidateSlotChoiceCases;
+            public int legacyRenamedCandidateRepairCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -2412,6 +2414,18 @@ namespace GreedLast.Editor
                                 backend.SelectSaveLoadoutSlot(priorSlot);
                                 backend.ConfirmSaveLoadout();
                                 GreedLastRunRecord prior = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[priorSlot];
+                                if (slot == 1)
+                                {
+                                    backend.RenameSelectedSaveLoadoutSlot();
+                                    prior = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[priorSlot];
+                                    GreedLastPrototypeCandidateCheck.RemoveCandidateIdentities(key);
+                                    backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                    Require(!backend.HasSaveLoadoutCandidate
+                                        && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[priorSlot].Equals(prior)
+                                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[priorSlot] == 2,
+                                        "Identity-less saved records must remain resolved after their managed rename, without changing the slot or uses.");
+                                    report.legacyRenamedCandidateRepairCases++;
+                                }
                                 backend.RegisterClear(record);
                                 backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                                 Require(backend.HasSaveLoadoutCandidate, "The engine UI must receive the reloaded new equal-stat clear.");
@@ -2467,7 +2481,7 @@ namespace GreedLast.Editor
                         }
                     }
                     report.recoveredCandidateSlotsPreserved = report.recoveredCandidateSlotChoiceCases == 9;
-                    Debug.Log("Greed engine recovered candidate choices passed: nine isolated persistence keys, three visible lobby entries x three chosen empty slots, real synthetic mouse/touch frame progression, pre-choice Enter blocked, same-stat new clear reload/one save, older slots and two uses retained, resolved management after reload. Not physical input or a full process restart.");
+                    Debug.Log("Greed engine recovered candidate choices passed: nine isolated persistence keys, three visible lobby entries x three chosen empty slots, real synthetic mouse/touch frame progression, pre-choice Enter blocked, same-stat new clear reload/one save, older slots and two uses retained, resolved management after reload. Includes three identity-less saved/managed-name repairs before distinct modern equal-stat clears. Not physical input or a full process restart.");
                 }
                 finally
                 {

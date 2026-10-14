@@ -28,6 +28,8 @@ namespace GreedLast.Editor
                     Require(Guid.TryParseExact(firstToken, "N", out _), "A fresh clear must persist its canonical identity.");
                     backend.SelectSaveLoadoutSlot(slot);
                     backend.ConfirmSaveLoadout();
+                    backend.RenameSelectedSaveLoadoutSlot();
+                    string firstSlotName = ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].LoadoutName;
                     backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                     Require(!backend.HasSaveLoadoutCandidate, "The first clear's saved candidate must remain consumed.");
                     backend.RegisterClear(record);
@@ -46,7 +48,9 @@ namespace GreedLast.Editor
                     backend.ConfirmSaveLoadout();
                     backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                     Require(!backend.HasSaveLoadoutCandidate && backend.LoadLobby().SaveSlotOccupied[slot]
-                        && backend.LoadLobby().SaveSlotOccupied[next], "Two distinct clears may each save once without deleting the prior slot.");
+                        && backend.LoadLobby().SaveSlotOccupied[next]
+                        && ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].LoadoutName == firstSlotName,
+                        "Two distinct clears may each save once without deleting or renaming the prior slot.");
                     backend.SelectSaveLoadoutSlot((slot + 2) % 3);
                     backend.ConfirmSaveLoadout();
                     Require(!backend.LoadLobby().SaveSlotOccupied[(slot + 2) % 3], "A consumed second clear must not produce a third copy.");
@@ -77,6 +81,7 @@ namespace GreedLast.Editor
             }
             Require(failures == 0, "Repeated clear candidates must survive reload independently of equal statistics. Failures=" + failures);
             VerifyCompatibility();
+            RunLegacyRenamedCandidates();
             RunRecoveredSlotChoice();
             RunRecoveredOverwrite();
             Debug.Log("Greed repeated clear saves passed: nine isolated keys, three slot rotations/new identities, equal-stat reload/one save, preserved prior slots, resolved flag replay after deletion/discard, six legacy/malformed/case controls. Personal save keys untouched; not full-play, security or hardware testing.");
@@ -333,6 +338,87 @@ namespace GreedLast.Editor
                 }
             }
         }
+
+        [MenuItem("Greed Last/Run Legacy Renamed Candidate Check")]
+        public static void RunLegacyRenamedCandidates()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Legacy candidate checks require Edit mode.");
+            int failures = 0;
+            int steps = ((string[])typeof(GreedLastMockBackend).GetField("SaveLoadoutNamePresets", BindingFlags.Static | BindingFlags.NonPublic)
+                .GetValue(null)).Length;
+            for (int slot = 0; slot < 3; slot++)
+            {
+                string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "legacy-renamed-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    backend.RegisterClear(LegacyRecord("original-clear", "박자 감각", "박자 감각 / 안정 루트 / 집중 축"));
+                    backend.SelectSaveLoadoutSlot(slot);
+                    backend.ConfirmSaveLoadout();
+                    for (int step = 0; step < steps; step++)
+                    {
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.RenameSelectedSaveLoadoutSlot();
+                        GreedLastRunRecord stored = ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot];
+                        int storedStep = ReadApp<int[]>(backend, "saveLoadoutRenameSteps")[slot];
+                        RemoveCandidateIdentities(key);
+                        backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        if (backend.HasSaveLoadoutCandidate)
+                        {
+                            Debug.Log("Greed legacy renamed candidate mismatch: resolved legacy candidate revived after managed slot rename; slot=" + slot + ", step=" + storedStep);
+                            failures++;
+                        }
+                        Require(ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(stored)
+                            && ReadApp<int[]>(backend, "saveLoadoutRenameSteps")[slot] == storedStep
+                            && ReadApp<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2,
+                            "Legacy duplicate repair must preserve the renamed record, its name step and both uses.");
+                    }
+                }
+                finally { PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+            }
+            foreach (string scenario in new[] { "unmanaged-name", "different-choice", "different-gift" })
+            {
+                string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "legacy-renamed-control-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    backend.RegisterClear(LegacyRecord("original-clear", "박자 감각", "박자 감각 / 안정 루트 / 집중 축"));
+                    backend.ConfirmSaveLoadout();
+                    if (scenario != "unmanaged-name") backend.RenameSelectedSaveLoadoutSlot();
+                    backend.RegisterClear(LegacyRecord(scenario == "unmanaged-name" ? "distinct-clear" : "original-clear",
+                        scenario == "different-gift" ? "체력 단련" : "박자 감각",
+                        scenario == "different-choice" ? "박자 감각 / 변주 루트 / 집중 축" : "박자 감각 / 안정 루트 / 집중 축"));
+                    RemoveCandidateIdentities(key);
+                    backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    Require(backend.HasSaveLoadoutCandidate && backend.LoadLobby().SaveSlotOccupied[0],
+                        scenario + ": different unmanaged identity or stored direction must not be erased by managed-name repair.");
+                }
+                finally { PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+            }
+            Require(failures == 0, "Managed slot names must not revive saved legacy candidates. Failures=" + failures);
+            Debug.Log("Greed legacy renamed candidates passed: six isolated keys, three slots x all " + steps
+                + " managed names including wrap (" + (3 * steps) + " cases), original records/name steps/two uses preserved, three unmanaged-name/different-choice/different-gift controls remain pending. Modern equal-stat new identities after a managed rename are covered separately. Not security, full-play or hardware testing.");
+        }
+
+        private static GreedLastRunRecord LegacyRecord(string name, string startGift, string choices)
+            => new GreedLastRunRecord(true, 800, 3, 0, 1, 6, 15, 0, 0, 90f, name,
+                startGift, "집중 축", string.Empty, choices, string.Empty);
+
+        internal static void RemoveCandidateIdentities(string key)
+        {
+            Require(!string.IsNullOrEmpty(key) && key.StartsWith(GreedLastMockBackend.PersistenceTestKeyPrefix, StringComparison.Ordinal)
+                && key.Length > GreedLastMockBackend.PersistenceTestKeyPrefix.Length,
+                "Legacy fixtures must use a dedicated editor-test key.");
+            MutateData(key, data =>
+            {
+                WriteField(data, "saveLoadoutCandidateAvailable", true);
+                WriteField(data, "saveLoadoutCandidateToken", string.Empty);
+                WriteField(data, "resolvedSaveLoadoutCandidateToken", string.Empty);
+            });
+        }
+
+        [MenuItem("Greed Last/Run Legacy Renamed Candidate Check", true)]
+        private static bool CanRunLegacyRenamedCandidates() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
         private static object ReadData(string key)
             => JsonUtility.FromJson(PlayerPrefs.GetString(key), typeof(GreedLastMockBackend).GetNestedType("BackendSaveData", BindingFlags.NonPublic));
