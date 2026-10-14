@@ -66,6 +66,8 @@ Play 중지 뒤 `Run Repeated Clear Save Check`는 9개 시험 키의 같은 성
 
 현재 Unity 6.4 설치의 `PlaybackEngines`에는 Windows 지원만 있다. Play 중지 뒤 `Greed Last > Check Android Prerequisites`는 모듈 로드 가능 여부와 포함 JDK·SDK/API 36·빌드 도구·NDK 파일을 읽기만 하고 `Logs/AndroidChecks`에 결과를 남긴다. 파일이 모두 있어도 APK 빌드·약관 동의·실제 도구 버전/실행·서명·기기 확인 통과라는 뜻은 아니다. 외부 사용자 지정 도구 설정은 바꾸거나 평가하지 않는다.
 
+10월 14일 14:01 KST 재확인도 지원 없음/아홉 포함 도구 파일 누락이다. 결과는 `prerequisites-20261014-050132-5305908.json`, SHA-256 `452E0DF27B6AAFF0A2DCC36F9F95A8EC2F941A7605D2C0FF7C5B83E64B88D732`이며 설치나 동의를 대신하지 않았다.
+
 Android 준비는 Unity Hub의 설치→Unity 6.4 `6000.4.3f1` 관리→모듈 추가에서 Android Build Support와 SDK & NDK Tools, OpenJDK를 함께 확인한다. [Unity 공식 의존성 안내](https://docs.unity3d.com/kr/current/Manual/android-install-dependencies.html)에 따라 필요한 SDK/NDK 약관은 사용자가 확인한다. 이번 작업에서 설치나 동의를 대신하지 않았으며 에디터를 교체하지 않았다. 현재 APK와 휴대폰 센서/오디오/FPS 검사는 없고 아래 항목은 실기기 확인 단계다.
 
 1. 가로 방향을 좌우로 바꿔도 기울임 방향이 뒤집히거나 떨리지 않아야 한다.
