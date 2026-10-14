@@ -852,7 +852,7 @@ namespace GreedLast
             }
 
             return "슬롯 " + (confirmedSlotIndex + 1) + " 저장 조합 저장 완료\n"
-                + lastRunRecord.LoadoutName
+                + saveLoadoutSlots[confirmedSlotIndex].LoadoutName
                 + "\n사용 가능 횟수 2회 / 모두 쓰면 자동 비움"
                 + "\n요약: " + FormatSaveSlotCompact(saveLoadoutSlots[confirmedSlotIndex], saveLoadoutUsesRemaining[confirmedSlotIndex])
                 + "\n" + BuildSaveLoadoutQualitySummary(saveLoadoutSlots[confirmedSlotIndex])

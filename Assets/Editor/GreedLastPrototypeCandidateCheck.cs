@@ -84,6 +84,7 @@ namespace GreedLast.Editor
             RunLegacyRenamedCandidates();
             RunRecoveredSlotChoice();
             RunRecoveredOverwrite();
+            RunStoredSaveNotice();
             Debug.Log("Greed repeated clear saves passed: nine isolated keys, three slot rotations/new identities, equal-stat reload/one save, preserved prior slots, resolved flag replay after deletion/discard, six legacy/malformed/case controls. Personal save keys untouched; not full-play, security or hardware testing.");
         }
 
@@ -419,6 +420,64 @@ namespace GreedLast.Editor
 
         [MenuItem("Greed Last/Run Legacy Renamed Candidate Check", true)]
         private static bool CanRunLegacyRenamedCandidates() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        [MenuItem("Greed Last/Run Stored Save Notice Check")]
+        public static void RunStoredSaveNotice()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Save notice checks require Edit mode.");
+            int failures = 0;
+            foreach (string scenario in new[] { "relic-name", "custom-name", "no-relic" })
+            {
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "stored-notice-" + Guid.NewGuid().ToString("N");
+                    try
+                    {
+                        string relic = scenario == "no-relic" ? string.Empty : "황금 박동";
+                        string name = scenario == "relic-name" ? "집중 축 + 황금 박동" : "나의 조합";
+                        var record = new GreedLastRunRecord(true, 800, 3, 0, 1, 6, 15, 0, 0, 90f, name,
+                            "박자 감각", "집중 축", relic, "박자 감각 / 집중 축" + (string.IsNullOrEmpty(relic) ? string.Empty : " / " + relic), string.Empty);
+                        var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        backend.RegisterClear(record);
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.ConfirmSaveLoadout();
+                        GreedLastRunRecord stored = ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot];
+                        Require(stored.IsValid && string.IsNullOrEmpty(stored.Relic)
+                            && (string.IsNullOrEmpty(relic) || !stored.LoadoutName.Contains(relic, StringComparison.Ordinal)),
+                            "The actual stored record must exclude the normal-run relic before checking its notice.");
+                        string message = backend.BuildSaveConfirmMessage();
+                        if (!message.StartsWith("슬롯 " + (slot + 1) + " 저장 조합 저장 완료\n" + stored.LoadoutName + "\n", StringComparison.Ordinal)
+                            || (!string.IsNullOrEmpty(relic) && message.Contains(relic, StringComparison.Ordinal)))
+                        {
+                            Debug.Log("Greed stored notice mismatch: confirmed slot name=" + stored.LoadoutName
+                                + ", original run name=" + record.LoadoutName + ", scenario=" + scenario + ", slot=" + slot);
+                            failures++;
+                        }
+                        var state = new GreedLastStateMachine(new GreedLastRequestGate());
+                        GreedLastStateSnapshot screen = default;
+                        state.StateChanged += value => screen = value;
+                        state.SetLobbyReady(backend.LoadLobby());
+                        state.ShowLocalNotice(message);
+                        Require(screen.Detail == message && !screen.SaveLoadoutCandidateAvailable
+                            && screen.SaveSlotOccupied[slot] && ReadApp<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2,
+                            "The actual notice must reach the lobby without reviving a candidate or spending a use.");
+                        Require(ReadApp<GreedLastRunRecord>(backend, "lastRunRecord").LoadoutName == record.LoadoutName
+                            && ReadApp<GreedLastRunRecord>(backend, "lastRunRecord").Relic == record.Relic,
+                            "Naming the stored loadout must not rewrite the original clear's name or one-run relic.");
+                        backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        Require(!backend.HasSaveLoadoutCandidate && ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(stored)
+                            && ReadApp<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2,
+                            "Reload must keep the exact stored record and both uses after its notice.");
+                    }
+                    finally { PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+                }
+            }
+            Require(failures == 0, "Save completion notices must identify the stored slot, not its normal-run-only relic name. Failures=" + failures);
+            Debug.Log("Greed stored save notices passed: nine isolated keys, three slots x relic-derived/custom/no-relic names, actual stored name and relic exclusion, original clear unchanged, lobby notice/candidate consumption/two-use JSON reload. Not rendered frames, physical input or hardware testing.");
+        }
+
+        [MenuItem("Greed Last/Run Stored Save Notice Check", true)]
+        private static bool CanRunStoredSaveNotice() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
         private static object ReadData(string key)
             => JsonUtility.FromJson(PlayerPrefs.GetString(key), typeof(GreedLastMockBackend).GetNestedType("BackendSaveData", BindingFlags.NonPublic));
