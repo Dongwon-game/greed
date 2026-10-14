@@ -5981,8 +5981,8 @@ namespace GreedLast
                 return true;
             }
 
-            int candidateQuality = BuildSaveLoadoutQualityScore(candidate);
-            int currentQuality = BuildSaveLoadoutQualityScore(current);
+            double candidateQuality = BuildSaveLoadoutQualityScore(candidate);
+            double currentQuality = BuildSaveLoadoutQualityScore(current);
             if (candidateQuality != currentQuality)
             {
                 return candidateQuality > currentQuality;
@@ -5991,7 +5991,7 @@ namespace GreedLast
             return IsBetterRunRecord(candidate, current);
         }
 
-        private static int BuildSaveLoadoutQualityScore(GreedLastRunRecord record)
+        private static double BuildSaveLoadoutQualityScore(GreedLastRunRecord record)
         {
             if (!record.IsValid)
             {
@@ -6003,21 +6003,25 @@ namespace GreedLast
             int focusedSuccesses = ExtractTimingProfileCount(record.TimingProfile, "집중 성공 ");
             int cleanBonus = record.MissCount <= 0 ? 90 : record.MissCount == 1 ? 35 : 0;
             int loadoutIdentityBonus = BuildLoadoutProfile(record) == "균형형" ? 15 : 35;
-            int segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
+            long segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
+            float scaledDistance = record.Distance * 2.2f;
+            // Keep the existing float rounding where it fits; finite distances can exceed an integer.
+            double distanceBonus = (double)scaledDistance >= int.MinValue && (double)scaledDistance <= int.MaxValue
+                ? Mathf.RoundToInt(scaledDistance) : Math.Round((double)record.Distance * 2.2f);
             return record.Score
-                + Mathf.RoundToInt(record.Distance * 2.2f)
-                + record.Health * 95
-                + record.Focus * 75
-                + record.MaxCombo * 55
-                + record.SuccessCount * 16
-                + record.GoodCount * 5
-                + precisionStreak * 70
-                + focusActivations * 75
-                + focusedSuccesses * 20
+                + distanceBonus
+                + (long)record.Health * 95
+                + (long)record.Focus * 75
+                + (long)record.MaxCombo * 55
+                + (long)record.SuccessCount * 16
+                + (long)record.GoodCount * 5
+                + (long)precisionStreak * 70
+                + (long)focusActivations * 75
+                + (long)focusedSuccesses * 20
                 + cleanBonus
                 + loadoutIdentityBonus
                 + segmentStabilityBonus
-                - record.MissCount * 85;
+                - (long)record.MissCount * 85;
         }
 
         private static string BuildSaveLoadoutQualitySummary(GreedLastRunRecord record)
@@ -6029,18 +6033,18 @@ namespace GreedLast
 
             int precisionStreak = ExtractPrecisionStreak(record.TimingProfile);
             int focusActivations = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
-            int segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
+            long segmentStabilityBonus = BuildSegmentStabilityQualityBonus(record.TimingProfile);
             string text = "품질 " + BuildSaveLoadoutQualityScore(record)
                 + " / " + BuildRunGrade(record)
                 + " / " + BuildLoadoutAndRouteProfileCompact(record)
                 + " / " + BuildStoredGiftStackSummary(record)
                 + " / " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(record)
                 + (focusActivations > 0 ? " / 집중 발동 " + focusActivations : string.Empty)
-                + (segmentStabilityBonus != 0 ? " / 구간 " + FormatSigned(segmentStabilityBonus) : string.Empty);
+                + (segmentStabilityBonus != 0 ? " / 구간 " + FormatSigned((double)segmentStabilityBonus) : string.Empty);
             return precisionStreak > 0 ? text + " / 정박 " + precisionStreak : text;
         }
 
-        private static int BuildSegmentStabilityQualityBonus(string timingProfile)
+        private static long BuildSegmentStabilityQualityBonus(string timingProfile)
         {
             if (!HasDetailedSegmentPerformance(timingProfile))
             {
@@ -6048,19 +6052,19 @@ namespace GreedLast
             }
 
             string[] segments = { "1장", "2장", "3장", "4장", "탈출" };
-            int bonus = 0;
-            int totalExact = 0;
-            int totalGood = 0;
-            int totalMiss = 0;
+            long bonus = 0;
+            long totalExact = 0;
+            long totalGood = 0;
+            long totalMiss = 0;
             for (int i = 0; i < segments.Length; i += 1)
             {
                 int exact = ExtractTimingProfileCount(timingProfile, segments[i] + " 정확 ");
                 int good = ExtractTimingProfileCount(timingProfile, segments[i] + " 보정 ");
                 int miss = ExtractTimingProfileCount(timingProfile, segments[i] + " 실수 ");
                 int lateRunWeight = i >= 3 ? 2 : 1;
-                bonus += exact * 4 * lateRunWeight;
-                bonus += good * lateRunWeight;
-                bonus -= miss * 18 * lateRunWeight;
+                bonus += (long)exact * 4 * lateRunWeight;
+                bonus += (long)good * lateRunWeight;
+                bonus -= (long)miss * 18 * lateRunWeight;
                 totalExact += exact;
                 totalGood += good;
                 totalMiss += miss;
@@ -8903,6 +8907,11 @@ namespace GreedLast
         private static string FormatSigned(float value)
         {
             return value >= 0f ? "+" + value.ToString("0.0") : value.ToString("0.0");
+        }
+
+        private static string FormatSigned(double value)
+        {
+            return value >= 0d ? "+" + value : value.ToString();
         }
 
         private static string FormatBool(bool value)

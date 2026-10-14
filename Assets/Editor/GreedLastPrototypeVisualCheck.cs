@@ -293,7 +293,7 @@ namespace GreedLast.Editor
                         Frame frame = Frames.Dequeue();
                         if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)) Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == 12,
+                    Require(Frames.Count == (progressBoundaryOnly ? 12 : 21),
                         "The focused numeric capture must include only its assigned boundary frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1189,6 +1189,47 @@ namespace GreedLast.Editor
             Add("92-score-ceiling-record-small", 960, 540, () => ui.Render(board));
             Add("92-score-ceiling-record-tablet", 1024, 768, () => ui.Render(board));
             Add("92-score-ceiling-record-wide", 2340, 1080, () => ui.Render(board), 96f);
+
+            var high = new GreedLastRunRecord(true, int.MaxValue, 3, 0, 1, int.MaxValue, 15, 0, 0,
+                90f, "quality-boundary", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+            var qualityBackend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            qualityBackend.RegisterClear(high);
+            qualityBackend.SelectSaveLoadoutSlot(2);
+            double quality = Convert.ToDouble(typeof(GreedLastMockBackend).GetMethod("BuildSaveLoadoutQualityScore",
+                BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { high }));
+            Require(quality > int.MaxValue, "The quality capture must cover a sum above the stored score ceiling.");
+            machine.SetSaveLoadoutDraft(qualityBackend.LoadSelectedSaveSlotView(), qualityBackend.BuildSaveLoadoutDraftText(),
+                saveLoadoutCandidateAvailable: true);
+            AddQualityState("selected", board, "품질 " + quality);
+            machine.SetLobbyReady(qualityBackend.ConfirmSaveLoadout());
+            machine.ShowLocalNotice(qualityBackend.BuildSaveConfirmMessage());
+            AddQualityState("saved", board, "품질 " + quality);
+
+            var comparisonBackend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+            comparisonBackend.RegisterClear(new GreedLastRunRecord(true, 800, 3, 0, 1, 6, 15, 0, 0, 90f,
+                "ordinary-quality", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty));
+            comparisonBackend.SelectSaveLoadoutSlot(1);
+            comparisonBackend.ConfirmSaveLoadout();
+            comparisonBackend.RegisterClear(high);
+            comparisonBackend.SelectSaveLoadoutSlot(1);
+            string comparison = comparisonBackend.BuildSelectedSaveLoadoutOverwritePreviewText();
+            Require(comparison.Contains("품질 +", StringComparison.Ordinal), "A stronger candidate must retain a positive comparison.");
+            machine.SetSaveLoadoutDraft(comparisonBackend.LoadSelectedSaveSlotView(), comparison,
+                saveSlotOverwriteConfirmationPending: true, saveLoadoutCandidateAvailable: true);
+            AddQualityState("comparison", board, "품질 +");
+
+            void AddQualityState(string name, GreedLastStateSnapshot state, string expected)
+            {
+                void Show()
+                {
+                    ui.Render(state);
+                    Require(Read<Text>("detailText").text.Contains(expected, StringComparison.Ordinal),
+                        "The actual quality body must retain its wide amount/sign: " + expected);
+                }
+                Add("92-score-ceiling-quality-" + name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                Add("92-score-ceiling-quality-" + name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                Add("92-score-ceiling-quality-" + name + "-wide", 2340, 1080, Show, 96f, 0.16);
+            }
         }
 
         private static void AddProgressBoundaryFrames()

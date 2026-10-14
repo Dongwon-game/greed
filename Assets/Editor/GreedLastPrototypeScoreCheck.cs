@@ -22,6 +22,7 @@ namespace GreedLast.Editor
             RunTargets();
             RunProgress();
             RunRecordStatistics();
+            RunLoadoutQuality();
             VerifyRecordReload();
             VerifyLoadoutReload();
             Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload, and all three isolated normal-save slots with one candidate and two starts. Numeric boundary values are injected in isolated editor cores/records; this is not a multi-hour play or device-performance test. Personal settings are preserved and personal slots are not accessed.");
@@ -420,6 +421,111 @@ namespace GreedLast.Editor
             Debug.Log("Greed record statistics boundaries passed: seven ratio cases, record presence, clean-run comparison, six normal-distance grades, ten infinite start bonuses, three backend guidance cases and stopped review guidance. Existing half-point thresholds retained. Constructed records only; no personal persistence, performance or multi-hour play measurement.");
         }
 
+        [MenuItem("Greed Last/Run Loadout Quality Boundary Check")]
+        public static void RunLoadoutQuality()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Quality checks require Edit mode.");
+            int cases = 0, failures = 0;
+            void Check(bool passed, string detail)
+            {
+                cases++;
+                if (passed) return;
+                failures++;
+                Debug.Log("Greed quality boundary mismatch: " + detail);
+            }
+            GreedLastRunRecord Normal(int score = 800, int health = 3, int focus = 1, int combo = 6,
+                int exact = 15, int good = 0, int miss = 0, float distance = 90f, string timing = "")
+                => new GreedLastRunRecord(true, score, health, 0, focus, combo, exact, good, miss, distance,
+                    "quality-boundary", string.Empty, string.Empty, string.Empty, string.Empty, timing);
+            double Reference(GreedLastRunRecord record)
+            {
+                float scaled = record.Distance * 2.2f;
+                double distance = (double)scaled >= int.MinValue && (double)scaled <= int.MaxValue
+                    ? Mathf.RoundToInt(scaled) : Math.Round((double)record.Distance * 2.2f);
+                int profile = Invoke<string>(typeof(GreedLastMockBackend), "BuildLoadoutProfile", record) == "균형형" ? 15 : 35;
+                int clean = record.MissCount == 0 ? 90 : record.MissCount == 1 ? 35 : 0;
+                return record.Score + distance + (long)record.Health * 95 + (long)record.Focus * 75
+                    + (long)record.MaxCombo * 55 + (long)record.SuccessCount * 16 + (long)record.GoodCount * 5
+                    + clean + profile - (long)record.MissCount * 85;
+            }
+            double Quality(GreedLastRunRecord record)
+                => Convert.ToDouble(Invoke<object>(typeof(GreedLastMockBackend), "BuildSaveLoadoutQualityScore", record));
+
+            foreach (int score in new[] { 0, 800, 1240, 1940 })
+            foreach (float distance in new[] { 0f, 6.3f, 90f, 145.75f })
+            foreach (int health in new[] { 2, 3 })
+            {
+                GreedLastRunRecord record = Normal(score, health, distance: distance);
+                Check(Quality(record) == Reference(record), "ordinary weights/rounding at " + score + "/" + distance + "/" + health);
+            }
+            var boundaries = new[] { Normal(int.MaxValue), Normal(health: int.MaxValue), Normal(focus: int.MaxValue),
+                Normal(combo: int.MaxValue), Normal(exact: int.MaxValue), Normal(good: int.MaxValue),
+                Normal(miss: int.MaxValue), Normal(distance: 5_000_000_000f), Normal(distance: float.MaxValue) };
+            foreach (GreedLastRunRecord record in boundaries)
+            {
+                double actual = Quality(record), expected = Reference(record);
+                Check(!double.IsNaN(actual) && !double.IsInfinity(actual) && actual == expected,
+                    "quality expected=" + expected + ", actual=" + actual + ", score=" + record.Score
+                        + ", distance=" + record.Distance + ", health=" + record.Health + ", combo=" + record.MaxCombo);
+            }
+            GreedLastRunRecord baseline = Normal();
+            foreach (GreedLastRunRecord record in boundaries)
+            {
+                double delta = Reference(record) - Reference(baseline);
+                bool actual = Invoke<bool>(typeof(GreedLastMockBackend), "IsBetterSaveLoadoutRecord", record, baseline);
+                Check(actual == (delta > 0), "recommendation expected=" + (delta > 0) + ", actual=" + actual + ", expected delta=" + delta);
+                string expected = "품질 " + (delta >= 0 ? "+" : string.Empty) + delta;
+                string text = Invoke<string>(typeof(GreedLastMockBackend), "FormatSaveLoadoutQualityDelta", record, baseline);
+                Check(text == expected, "comparison expected=" + expected + ", actual=" + text);
+            }
+            foreach (var example in new[] { ("정박 최고 " + int.MaxValue, 70),
+                ("집중 발동 " + int.MaxValue + "회", 75), ("집중 성공 " + int.MaxValue + "회", 20) })
+            {
+                GreedLastRunRecord record = Normal(timing: example.Item1);
+                Check(Quality(record) == Reference(record) + (long)int.MaxValue * example.Item2,
+                    "profile counter multiplier " + example.Item2 + ", actual=" + Quality(record));
+            }
+
+            string AllSegments(string kind)
+            {
+                string text = kind == "정확" ? string.Empty : "1장 정확 0회";
+                foreach (string segment in new[] { "1장", "2장", "3장", "4장", "탈출" })
+                    text += (text.Length == 0 ? string.Empty : " / ") + segment + " " + kind + " " + int.MaxValue + "회";
+                return text;
+            }
+            foreach (var example in new[] { ("1장 정확 " + int.MaxValue + "회", (long)int.MaxValue * 4 + 60),
+                (AllSegments("정확"), (long)int.MaxValue * 28 + 60),
+                (AllSegments("보정"), (long)int.MaxValue * 7 + 25),
+                (AllSegments("실수"), -(long)int.MaxValue * 126) })
+            {
+                long actual = Convert.ToInt64(Invoke<object>(typeof(GreedLastMockBackend), "BuildSegmentStabilityQualityBonus", example.Item1));
+                Check(actual == example.Item2, "segment quality expected=" + example.Item2 + ", actual=" + actual);
+                GreedLastRunRecord record = Normal(timing: example.Item1);
+                Check(Quality(record) == Reference(record) + example.Item2, "wide segment bonus must remain in total quality");
+                string summary = Invoke<string>(typeof(GreedLastMockBackend), "BuildSaveLoadoutQualitySummary", record);
+                Check(summary.Contains(" / 구간 " + (example.Item2 >= 0 ? "+" : string.Empty) + example.Item2, StringComparison.Ordinal),
+                    "wide segment text must retain its integer amount and sign: " + summary);
+            }
+            for (int strongest = 0; strongest < 3; strongest++)
+            {
+                var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                int weakest = (strongest + 1) % 3;
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    backend.RegisterClear(Normal(score: slot == strongest ? int.MaxValue : slot == weakest ? 800 : 1200));
+                    backend.SelectSaveLoadoutSlot(slot);
+                    backend.ConfirmSaveLoadout();
+                }
+                Check(InvokeInstance<int>(backend, "FindBestUsableSaveLoadoutSlot") == strongest, "best slot must retain the capped record at S" + (strongest + 1));
+                Check(InvokeInstance<int>(backend, "FindWeakestSaveLoadoutSlot") == weakest, "weakest slot must remain S" + (weakest + 1));
+                backend.RegisterClear(Normal(score: 1240));
+                Check(InvokeInstance<int>(backend, "FindRecommendedSaveLoadoutSlotForCandidate") == weakest,
+                    "a moderate new candidate must recommend the weakest slot, not the capped one");
+            }
+            Require(failures == 0, "Loadout quality must preserve ordinary weights and wide recommendation/comparison sums. Cases=" + cases + ", failures=" + failures);
+            Debug.Log("Greed loadout quality passed: " + cases + " constructed arithmetic/ordering/text cases, ordinary weights/rounding retained. No personal persistence or device/full-play measurement.");
+        }
+
         private static void VerifyLoadoutReload()
         {
             for (int slot = 0; slot < 3; slot++)
@@ -437,6 +543,10 @@ namespace GreedLast.Editor
                             "A capped normal clear must still offer its one save candidate.");
                         backend.SelectSaveLoadoutSlot(slot);
                         backend.ConfirmSaveLoadout();
+                        var justSaved = ((GreedLastRunRecord[])Field(backend, "saveLoadoutSlots").GetValue(backend))[slot];
+                        double quality = Convert.ToDouble(Invoke<object>(typeof(GreedLastMockBackend), "BuildSaveLoadoutQualityScore", justSaved));
+                        Require(quality > int.MaxValue && backend.BuildSaveConfirmMessage().Contains("품질 " + quality, StringComparison.Ordinal),
+                            "A capped saved record must retain its positive wide quality in the actual confirmation.");
                         backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                         Require(!backend.HasSaveLoadoutCandidate, "Saving a capped normal record must consume its candidate across reload.");
                         var saved = (GreedLastRunRecord[])Field(backend, "saveLoadoutSlots").GetValue(backend);
@@ -444,6 +554,8 @@ namespace GreedLast.Editor
                             && saved[slot].PrimaryGift == record.PrimaryGift && string.IsNullOrEmpty(saved[slot].Relic)
                             && !saved[slot].ChoiceSummary.Contains(record.Relic, StringComparison.Ordinal),
                             "The chosen slot must retain capped score/gift while excluding the normal-run-only relic through JSON reload.");
+                        Require(Convert.ToDouble(Invoke<object>(typeof(GreedLastMockBackend), "BuildSaveLoadoutQualityScore", saved[slot])) == quality,
+                            "Wide quality must be reconstructed unchanged from the existing JSON record fields.");
                         backend.SelectSaveLoadoutSlot((slot + 1) % 3);
                         backend.ConfirmSaveLoadout();
                         Require(!backend.HasSaveLoadoutCandidate
