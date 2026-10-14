@@ -78,11 +78,19 @@ namespace GreedLast.Editor
             Require(failures == 0, "Repeated clear candidates must survive reload independently of equal statistics. Failures=" + failures);
             VerifyCompatibility();
             RunRecoveredSlotChoice();
+            RunRecoveredOverwrite();
             Debug.Log("Greed repeated clear saves passed: nine isolated keys, three slot rotations/new identities, equal-stat reload/one save, preserved prior slots, resolved flag replay after deletion/discard, six legacy/malformed/case controls. Personal save keys untouched; not full-play, security or hardware testing.");
         }
 
         [MenuItem("Greed Last/Run Recovered Candidate Slot Choice Check")]
         public static void RunRecoveredSlotChoice()
+            => CheckRecoveredSlotChoice(occupiedTarget: false);
+
+        [MenuItem("Greed Last/Run Recovered Candidate Overwrite Check")]
+        public static void RunRecoveredOverwrite()
+            => CheckRecoveredSlotChoice(occupiedTarget: true);
+
+        private static void CheckRecoveredSlotChoice(bool occupiedTarget)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Recovered candidate checks require Edit mode.");
             int failures = 0;
@@ -101,12 +109,33 @@ namespace GreedLast.Editor
                             "recovered-clear", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
                         var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                         int priorSlot = (slot + 1) % 3;
-                        backend.RegisterClear(record);
-                        backend.SelectSaveLoadoutSlot(priorSlot);
-                        backend.ConfirmSaveLoadout();
+                        if (occupiedTarget)
+                        {
+                            for (int old = 0; old < 3; old++)
+                            {
+                                backend.RegisterClear(new GreedLastRunRecord(true, 600 + old, 3, 0, 1, 6, 15, 0, 0, 90f,
+                                    "older-slot-" + old, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty));
+                                backend.SelectSaveLoadoutSlot(old);
+                                backend.ConfirmSaveLoadout();
+                                backend.RenameSelectedSaveLoadoutSlot();
+                            }
+                            backend.SelectSaveLoadoutSlot(slot);
+                            Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                                "The occupied fixture must seed one remaining use via the isolated backend API.");
+                        }
+                        else
+                        {
+                            backend.RegisterClear(record);
+                            backend.SelectSaveLoadoutSlot(priorSlot);
+                            backend.ConfirmSaveLoadout();
+                        }
                         backend.RegisterClear(record);
                         backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
-                        Require(backend.HasSaveLoadoutCandidate, "The distinct equal-stat clear must survive reload before checking its UI entry.");
+                        Require(backend.HasSaveLoadoutCandidate, "The distinct clear must survive reload before checking its UI entry.");
+                        var original = (GreedLastRunRecord[])ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                        var originalUses = (int[])ReadApp<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                        var originalNames = (int[])ReadApp<int[]>(backend, "saveLoadoutRenameSteps").Clone();
+                        string candidateToken = ReadToken(key);
 
                         var app = host.AddComponent<GreedLastApp>();
                         Require(ReadApp<GreedLastMockBackend>(app, "backend") == null, "The isolated app must not boot personal persistence.");
@@ -141,17 +170,51 @@ namespace GreedLast.Editor
                         AppMethod(app, "ConfirmSaveLoadoutAndReturn").Invoke(app, null);
                         AppMethod(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.None });
                         Require(screen.SaveSlotChoiceRequired && backend.HasSaveLoadoutCandidate
-                            && !backend.LoadSelectedSaveSlotView().SaveSlotOccupied[slot],
+                            && backend.LoadSelectedSaveSlotView().SaveSlotOccupied[slot] == occupiedTarget,
                             "A direct confirmation or invalid channel must not choose or save an automatic slot.");
                         Click(ReadApp<Button[]>(ui, "laneButtons")[slot]);
                         Require(!screen.SaveSlotChoiceRequired && primary.IsInteractable(), "A fresh explicit slot choice must enable saving.");
                         Click(primary);
+                        if (occupiedTarget)
+                        {
+                            Require(screen.SaveSlotOverwriteConfirmationPending && backend.HasSaveLoadoutCandidate,
+                                "Selecting an occupied slot must request overwrite consent without saving.");
+                            Click(primary);
+                            Require(screen.SaveSlotOverwriteConfirmationPending && backend.HasSaveLoadoutCandidate,
+                                "The immediate repeated confirmation must not overwrite during its guard.");
+                            RequireStoredSlotsUnchanged(backend, original, originalUses, originalNames);
+                            Click(ReadApp<Button[]>(ui, "laneButtons")[priorSlot]);
+                            Require(!screen.SaveSlotOverwriteConfirmationPending && !screen.SaveLoadoutSkipConfirmationPending
+                                && backend.HasSaveLoadoutCandidate && ReadToken(key) == candidateToken,
+                                "Changing slots must cancel overwrite without resolving or replacing the recovered candidate.");
+                            RequireStoredSlotsUnchanged(backend, original, originalUses, originalNames);
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            WriteApp(app, "backend", backend);
+                            state.SetLobbyReady(backend.LoadLobby());
+                            AppMethod(app, entry).Invoke(app, null);
+                            Require(screen.SaveSlotChoiceRequired && backend.HasSaveLoadoutCandidate,
+                                "Reloading a canceled overwrite must require new slot consent, preserving its candidate.");
+                            Click(ReadApp<Button[]>(ui, "laneButtons")[slot]);
+                            Click(primary);
+                            Require(screen.SaveSlotOverwriteConfirmationPending && backend.HasSaveLoadoutCandidate,
+                                "The reloaded occupied slot must request fresh overwrite consent.");
+                            System.Threading.Thread.Sleep(450);
+                            Click(primary);
+                            RequireStoredSlotsUnchanged(backend, original, originalUses, originalNames, excludedSlot: slot);
+                            Require(ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Score == record.Score
+                                && ReadApp<int[]>(backend, "saveLoadoutRenameSteps")[slot] == 0,
+                                "Confirmed overwrite must replace only the chosen record and reset only its stored name step.");
+                        }
                         GreedLastLobbySnapshot saved = backend.LoadLobby();
                         Require(screen.State == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
                             && saved.SaveSlotOccupied[slot] && saved.SaveSlotOccupied[priorSlot]
-                            && !saved.SaveSlotOccupied[(slot + 2) % 3], "The actual callbacks must save once into the chosen empty slot, preserving the older clear.");
+                            && saved.SaveSlotOccupied[(slot + 2) % 3] == occupiedTarget,
+                            "The actual callbacks must save once into the chosen slot, preserving the older neighbors.");
                         Require(Array.TrueForAll(ReadField<int[]>(ReadData(key), "saveLoadoutUsesRemaining"), uses => uses == 0 || uses == 2),
                             "Opening, choosing and saving must not consume infinite-run uses.");
+                        Require(ReadToken(key) == candidateToken
+                            && ReadField<string>(ReadData(key), "resolvedSaveLoadoutCandidateToken") == candidateToken,
+                            "Saving must resolve this same candidate exactly once, without creating another identity.");
                         backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                         WriteApp(app, "backend", backend);
                         state.SetLobbyReady(backend.LoadLobby());
@@ -171,10 +234,14 @@ namespace GreedLast.Editor
                 }
             }
             Require(failures == 0, "Recovered candidates must require a fresh explicit choice across all three lobby entries. Failures=" + failures);
-            Debug.Log("Greed recovered candidate slot choices passed: nine isolated reload/UI callback cases, three lobby entry routes x three chosen slots, pre-choice confirmation/invalid input blocked, chosen one-time save and older slot/use preservation, management after reload. No personal saves, full-play, physical input or hardware testing.");
+            Debug.Log("Greed recovered candidate " + (occupiedTarget ? "overwrites" : "slot choices")
+                + " passed: nine isolated reload/UI callback cases, three lobby entry routes x three chosen slots, pre-choice confirmation/invalid input blocked, chosen one-time save and older slot/use preservation, management after reload."
+                + (occupiedTarget ? " All three slots occupied; immediate confirmation blocked, slot-change cancellation/reload/new consent, named neighbors preserved, selected one-use slot replaced with two uses and same candidate resolved. Real 450ms editor wait, not private clock edits." : string.Empty)
+                + " No personal saves, full-play, physical input or hardware testing.");
         }
 
         [MenuItem("Greed Last/Run Recovered Candidate Slot Choice Check", true)]
+        [MenuItem("Greed Last/Run Recovered Candidate Overwrite Check", true)]
         private static bool CanRunRecoveredSlotChoice() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
         private static MethodInfo AppMethod(object target, string name)
@@ -195,6 +262,17 @@ namespace GreedLast.Editor
         {
             GameObject created = GameObject.Find(name);
             if (existing == null && created != null) UnityEngine.Object.DestroyImmediate(created);
+        }
+
+        private static void RequireStoredSlotsUnchanged(GreedLastMockBackend backend, GreedLastRunRecord[] records,
+            int[] uses, int[] names, int excludedSlot = -1)
+        {
+            for (int slot = 0; slot < records.Length; slot++)
+                if (slot != excludedSlot)
+                    Require(ReadApp<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(records[slot])
+                        && ReadApp<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]
+                        && ReadApp<int[]>(backend, "saveLoadoutRenameSteps")[slot] == names[slot],
+                        "Confirmation, cancellation and reload must preserve every unmodified slot's record, uses and name.");
         }
 
         private static void VerifyCompatibility()
