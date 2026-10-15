@@ -21643,13 +21643,13 @@ namespace GreedLast
             if (snapshot.Health <= 1)
             {
                 return " / 생존 우선"
-                    + BuildPatternObjectiveSuffix(snapshot.Pattern)
+                    + BuildPatternObjectiveSuffix(snapshot)
                     + BuildStageTransitionObjectiveSuffix(snapshot)
                     + timingCorrectionObjective;
             }
 
             string transitionObjective = BuildStageTransitionObjectiveSuffix(snapshot);
-            string patternObjective = BuildPatternObjectiveSuffix(snapshot.Pattern);
+            string patternObjective = BuildPatternObjectiveSuffix(snapshot);
             if (!string.IsNullOrEmpty(transitionObjective)
                 && !string.IsNullOrEmpty(patternObjective))
             {
@@ -22117,7 +22117,7 @@ namespace GreedLast
             if (prompt.Contains("[복구]", StringComparison.Ordinal))
             {
                 coach = "복구 패턴 / 정확권 재진입";
-                string recoveryRoutePayoff = BuildActiveRoutePayoffCoach(snapshot.Pattern);
+                string recoveryRoutePayoff = BuildActiveRoutePayoffCoach(snapshot);
                 if (!string.IsNullOrEmpty(recoveryRoutePayoff))
                 {
                     coach += " / " + recoveryRoutePayoff;
@@ -22142,7 +22142,7 @@ namespace GreedLast
                         break;
                 }
 
-                string routePayoff = BuildActiveRoutePayoffCoach(snapshot.Pattern);
+                string routePayoff = BuildActiveRoutePayoffCoach(snapshot);
                 if (!string.IsNullOrEmpty(routePayoff))
                 {
                     coach = string.IsNullOrEmpty(coach) ? routePayoff : routePayoff + " / " + coach;
@@ -22198,12 +22198,14 @@ namespace GreedLast
             return snapshot.ChapterIndex == 3 ? "변주 정점" : string.Empty;
         }
 
-        private static string BuildActiveRoutePayoffCoach(GreedLastPatternModel pattern)
+        private static string BuildActiveRoutePayoffCoach(GreedLastRunSnapshot snapshot)
         {
+            GreedLastPatternModel pattern = snapshot.Pattern;
             string prompt = pattern.Prompt ?? string.Empty;
-            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            if (snapshot.ActiveRouteProfile == "안정 루트")
             {
-                return "안정 보험 / 보정 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus;
+                return snapshot.GoodHealthGainPreview > 0
+                    ? "안정 보험 / 보정 체력 +" + snapshot.GoodHealthGainPreview : "안정 보험 / 회복 상한";
             }
 
             if (prompt.Contains("[변주]", StringComparison.Ordinal)
@@ -22324,7 +22326,7 @@ namespace GreedLast
             switch (snapshot.ActiveChoiceProfile)
             {
                 case "안정형":
-                    return snapshot.Health < snapshot.MaxHealth ? " / 안정 회복" : " / 안전 돌파";
+                    return snapshot.GoodHealthGainPreview > 0 ? " / 안정 회복" : " / 안전 돌파";
                 case "집중형":
                     return snapshot.FocusStateActive ? " / 집중 상태 연장" : " / 집중 채우기";
                 case "연쇄형":
@@ -22338,8 +22340,9 @@ namespace GreedLast
             }
         }
 
-        private static string BuildPatternObjectiveSuffix(GreedLastPatternModel pattern)
+        private static string BuildPatternObjectiveSuffix(GreedLastRunSnapshot snapshot)
         {
+            GreedLastPatternModel pattern = snapshot.Pattern;
             string prompt = pattern.Prompt ?? string.Empty;
             string objective;
             if (prompt.Contains("[복구]", StringComparison.Ordinal))
@@ -22386,7 +22389,7 @@ namespace GreedLast
 
             return BuildPatternAvoidanceObjectiveSuffix(pattern)
                 + objective
-                + BuildRoutePatternObjectiveSuffix(pattern);
+                + BuildRoutePatternObjectiveSuffix(snapshot);
         }
 
         private static string BuildPatternAvoidanceObjectiveSuffix(GreedLastPatternModel pattern)
@@ -22399,12 +22402,14 @@ namespace GreedLast
             return " / " + BuildTrapResponseCueLabel(pattern) + " " + BuildPatternActionVerb(pattern);
         }
 
-        private static string BuildRoutePatternObjectiveSuffix(GreedLastPatternModel pattern)
+        private static string BuildRoutePatternObjectiveSuffix(GreedLastRunSnapshot snapshot)
         {
+            GreedLastPatternModel pattern = snapshot.Pattern;
             string prompt = pattern.Prompt ?? string.Empty;
-            if (prompt.Contains("[안정]", StringComparison.Ordinal))
+            if (snapshot.ActiveRouteProfile == "안정 루트")
             {
-                return " / 보정 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus;
+                return snapshot.GoodHealthGainPreview > 0
+                    ? " / 보정 체력 +" + snapshot.GoodHealthGainPreview : " / 회복 상한";
             }
 
             if (prompt.Contains("[변주]", StringComparison.Ordinal)
@@ -23533,9 +23538,7 @@ namespace GreedLast
             }
 
             int currentThreat = Mathf.Clamp(snapshot.InfiniteThreatLevel, 1, 5);
-            int nextSectionsCleared = snapshot.InfiniteSectionsCleared + 1;
-            int nextThreat = Mathf.Clamp(1 + nextSectionsCleared / 2, 1, 5);
-            return nextThreat > currentThreat;
+            return snapshot.NextInfiniteThreatLevel > currentThreat;
         }
 
         private static string BuildNextChainStatus(GreedLastRunSnapshot snapshot)
@@ -45687,8 +45690,7 @@ namespace GreedLast
                 AppendCompactStatus(ref effect, "복구 성공");
             }
 
-            if (PatternHasRoute(feedbackPattern, "안정")
-                && JudgementTextContains(snapshot, "안정 루트 - 보정 회복"))
+            if (JudgementTextContains(snapshot, "안정 루트 - 보정 회복"))
             {
                 AppendCompactStatus(ref effect, "안정 회복 +" + GreedLastRunCore.StableRouteGoodHealthBonus);
             }
@@ -47509,18 +47511,19 @@ namespace GreedLast
 
         private static string BuildActiveRouteActionCuePayoffTag(GreedLastRunSnapshot snapshot)
         {
-            if (PatternHasRoute(snapshot.Pattern, "안정"))
+            if (snapshot.ActiveRouteProfile == "안정 루트")
             {
-                return "보정회복+" + GreedLastRunCore.StableRouteGoodHealthBonus;
+                return snapshot.GoodHealthGainPreview > 0
+                    ? "보정회복+" + snapshot.GoodHealthGainPreview : string.Empty;
             }
 
-            if (PatternHasRoute(snapshot.Pattern, "변주")
+            if (snapshot.ActiveRouteProfile == "변주 루트"
                 && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
             {
                 return "변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
             }
 
-            if (PatternHasRoute(snapshot.Pattern, "압박")
+            if (snapshot.ActiveRouteProfile == "압박 루트"
                 && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
             {
                 return "압박+" + GreedLastRunCore.PressureRouteClutchScoreBonus;

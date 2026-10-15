@@ -495,7 +495,9 @@ namespace GreedLast
             float lastInputTimingDeltaSeconds,
             GreedLastRunChannel lastJudgedInputChannel,
             int centerHitScoreGainPreview = 0,
-            int goodScoreGainPreview = 0)
+            int goodScoreGainPreview = 0,
+            int goodHealthGainPreview = 0,
+            int nextInfiniteThreatLevel = 0)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -603,6 +605,8 @@ namespace GreedLast
             LastJudgedInputChannel = lastJudgedInputChannel;
             CenterHitScoreGainPreview = Mathf.Max(0, centerHitScoreGainPreview);
             GoodScoreGainPreview = Mathf.Max(0, goodScoreGainPreview);
+            GoodHealthGainPreview = Mathf.Max(0, goodHealthGainPreview);
+            NextInfiniteThreatLevel = Mathf.Clamp(nextInfiniteThreatLevel, 0, 5);
         }
 
         public GreedLastPatternModel Pattern { get; }
@@ -638,6 +642,7 @@ namespace GreedLast
         public int LastJudgementScoreGain { get; }
         public int CenterHitScoreGainPreview { get; }
         public int GoodScoreGainPreview { get; }
+        public int GoodHealthGainPreview { get; }
         public int LastJudgementHealthChange { get; }
         public bool HasJudgedInputTiming { get; }
         public float LastInputTimingDeltaSeconds { get; }
@@ -651,6 +656,7 @@ namespace GreedLast
         public int NoInputMissCount { get; }
         public int InfiniteSectionsCleared { get; }
         public int InfiniteThreatLevel { get; }
+        public int NextInfiniteThreatLevel { get; }
         public int MaxInfiniteThreatLevel { get; }
         public float Distance { get; }
         public int ChapterIndex { get; }
@@ -2474,34 +2480,20 @@ namespace GreedLast
                     int profileGoodBonus = BuildChoiceProfileGoodScoreBonus(out string profileGoodText);
                     int goodFocusGain = 0;
                     int goodHealthGain = 0;
-                    int survivalGiftHealthGain = 0;
-                    int stableRouteHealthGain = 0;
                     if (HasChoice(startGift, "박자 감각") || HasChoice(relic, "사막의 잔상"))
                     {
                         goodFocusGain = 1;
                     }
 
                     int survivalGiftStacks = GetActiveGiftStackCount("생존 축");
-                    if (survivalGiftStacks > 0 && health < BuildBonusHealthCap())
+                    CalculateGoodRecovery(out int survivalGiftHealthGain, out int stableRouteHealthGain);
+                    goodHealthGain = survivalGiftHealthGain + stableRouteHealthGain;
+                    if (goodHealthGain > 0)
                     {
-                        survivalGiftHealthGain = Mathf.Min(
-                            1 + survivalGiftStacks / 2,
-                            BuildBonusHealthCap() - health);
-                        health += survivalGiftHealthGain;
-                        goodHealthGain += survivalGiftHealthGain;
+                        health += goodHealthGain;
                         maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
                     }
-
-                    if (HasActiveRoute("안정 루트") && health < BuildBonusHealthCap())
-                    {
-                        stableRouteHealthGain = Mathf.Min(
-                            StableRouteGoodHealthBonus,
-                            BuildBonusHealthCap() - health);
-                        health += stableRouteHealthGain;
-                        goodHealthGain += stableRouteHealthGain;
-                        stableRouteRecoveryCount += stableRouteHealthGain > 0 ? 1 : 0;
-                        maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    }
+                    stableRouteRecoveryCount += stableRouteHealthGain > 0 ? 1 : 0;
 
                     if (HasChoice(startGift, "고점 본능"))
                     {
@@ -3001,6 +2993,22 @@ namespace GreedLast
             if (infiniteMode && chapterProgress + 1 >= ChapterTargetPatterns)
                 gain += 50 * GetInfiniteThreatLevelForSections(infiniteSectionsCleared + 1);
             return Math.Min(Mathf.Max(0, gain), int.MaxValue - Mathf.Max(0, score));
+        }
+
+        private void CalculateGoodRecovery(out int survivalGain, out int stableGain)
+        {
+            int room = Mathf.Max(0, BuildBonusHealthCap() - health);
+            int stacks = GetActiveGiftStackCount("생존 축");
+            survivalGain = stacks > 0 ? Mathf.Min(1 + stacks / 2, room) : 0;
+            stableGain = HasActiveRoute("안정 루트")
+                ? Mathf.Min(StableRouteGoodHealthBonus, room - survivalGain) : 0;
+        }
+
+        private int BuildGoodHealthGainPreview()
+        {
+            if (stopped || (phase != GreedLastRunPhase.RunPlaying && phase != GreedLastRunPhase.EscapeRunning)) return 0;
+            CalculateGoodRecovery(out int survivalGain, out int stableGain);
+            return survivalGain + stableGain;
         }
 
         private int BuildThreatPrecisionBonus(GreedLastTimingType timingType)
@@ -5385,7 +5393,7 @@ namespace GreedLast
             }
         }
 
-        private static string BuildRoutePatternCue(GreedLastPatternModel pattern)
+        private string BuildRoutePatternCue(GreedLastPatternModel pattern)
         {
             string prompt = pattern.Prompt ?? string.Empty;
             if (prompt.Contains("[복구]", StringComparison.Ordinal))
@@ -5405,7 +5413,9 @@ namespace GreedLast
 
             if (prompt.Contains("[안정]", StringComparison.Ordinal))
             {
-                return "루트 예고: 안정 - Good 체력 +" + StableRouteGoodHealthBonus + " / 판정 여유";
+                int gain = BuildGoodHealthGainPreview();
+                return gain > 0 ? "루트 예고: 안정 - Good 체력 +" + gain + " / 판정 여유"
+                    : "루트 예고: 안정 - 회복 상한 / 판정 여유";
             }
 
             if (prompt.Contains("[유예]", StringComparison.Ordinal))
@@ -6774,7 +6784,9 @@ namespace GreedLast
                 lastInputTimingDeltaSeconds,
                 lastJudgedInputChannel,
                 BuildJudgementScoreGainPreview(true),
-                BuildJudgementScoreGainPreview(false)));
+                BuildJudgementScoreGainPreview(false),
+                BuildGoodHealthGainPreview(),
+                infiniteMode ? GetInfiniteThreatLevelForSections(infiniteSectionsCleared + 1) : 0));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)

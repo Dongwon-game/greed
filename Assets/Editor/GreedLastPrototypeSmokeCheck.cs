@@ -1578,6 +1578,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeClockCheck.Run();
             GreedLastPrototypeTimelineCheck.Run();
             GreedLastPrototypeScoreCheck.Run();
+            GreedLastPrototypeRecoveryCheck.Run();
             GreedLastPrototypeJudgementCheck.Run();
             GreedLastPrototypeLiveCheck.Run();
             GreedLastPrototypeRotationCheck.Run();
@@ -14087,11 +14088,13 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildRunGuideLine", snapshot).Contains("경로 안정 보험", StringComparison.Ordinal),
                 "The live guide must retain the stable-route identity.");
             Require(
-                snapshot.JudgementText.Contains("Good 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus, StringComparison.Ordinal),
-                "The first stable trap must announce its persistent recovery contract.");
+                snapshot.JudgementText.Contains(snapshot.GoodHealthGainPreview > 0
+                    ? "Good 체력 +" + snapshot.GoodHealthGainPreview : "회복 상한", StringComparison.Ordinal),
+                "The first stable trap must announce available recovery or the actual cap.");
             Require(
-                GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains("보정 체력 +" + GreedLastRunCore.StableRouteGoodHealthBonus, StringComparison.Ordinal),
-                "The stable route coach must preview its Good recovery insurance.");
+                GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains(snapshot.GoodHealthGainPreview > 0
+                    ? "보정 체력 +" + snapshot.GoodHealthGainPreview : "회복 상한", StringComparison.Ordinal),
+                "The stable route coach must preview available Good recovery rather than promise capped healing.");
 
             GreedLastRunChannel wrongChannel = snapshot.Pattern.Channel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right

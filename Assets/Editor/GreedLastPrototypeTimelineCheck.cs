@@ -12,6 +12,7 @@ namespace GreedLast.Editor
         {
             Require(CanRun(), "Continuous timeline checks require Edit mode.");
             RunAuthoredModes();
+            RunThreatPreviews();
             float[][] schedules = { new[] { 1f / 30f }, new[] { 1f / 60f }, new[] { 1f / 120f },
                 new[] { 0.008f, 0.04f, 0.017f, 0.025f } };
             foreach (float[] schedule in schedules)
@@ -75,6 +76,79 @@ namespace GreedLast.Editor
                 && preferred() == GreedLastAvoidanceType.None,
                 "Actual infinite entry uses chapter index one but must not inherit normal chapter-one action preference.");
             Debug.Log($"Greed authored run modes passed: {cases} contracts and three actual mode entries. Normal/practice/final routes remain authored; infinite selection has no normal-chapter action preference. No personal settings or slots changed.");
+        }
+
+        [MenuItem("Greed Last/Run Threat Preview Check")]
+        public static void RunThreatPreviews()
+        {
+            Require(CanRun(), "Threat preview checks require Edit mode.");
+            var preview = (Func<GreedLastRunSnapshot, bool>)Delegate.CreateDelegate(typeof(Func<GreedLastRunSnapshot, bool>),
+                typeof(GreedLastRuntimeUi).GetMethod("WillInfiniteThreatRiseAfterSection", BindingFlags.Static | BindingFlags.NonPublic));
+            int boundaries = 0, mismatches = 0, rises = 0, holds = 0;
+            for (int mode = 0; mode < 5; mode++)
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.EnterInfiniteRun();
+                float clock = Time.realtimeSinceStartup;
+                bool adjusted = false;
+                for (int input = 0; input < 36; input++)
+                {
+                    for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 500; wait++) Advance(0.01f);
+                    Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible,
+                        "Threat boundaries must come from naturally arriving live traps, without shortcuts or invincibility.");
+                    if (!adjusted && mode > 0 && (mode <= 2 || run.InfiniteSectionsCleared >= (mode == 3 ? 4 : 8)))
+                    {
+                        for (int command = 0; command < (mode == 1 || mode == 3 ? 2 : 4); command++)
+                            if (mode <= 2) core.RaiseInfiniteThreatForTest(); else core.LowerInfiniteThreatForTest();
+                        // Commands publish against engine time; resample at the existing synthetic timeline, never rewind it.
+                        core.Tick(clock);
+                        adjusted = true;
+                    }
+                    float untilInput = run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
+                    Require(untilInput >= -0.01f, "Every threat check must retain a playable input lead-in.");
+                    Advance(Mathf.Max(0f, untilInput));
+                    var before = run;
+                    bool expectedRise = preview(before);
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    Require(run.LastResult == GreedLastJudgementResult.Success && !run.Stopped,
+                        "Threat preview controls must keep all 36 actual exact inputs per transient core."
+                            + $" mode={mode}, input={input}, result={run.LastResult}, ignore={run.IgnoreReason}, miss={run.MissReason},"
+                            + $" elapsed={before.ElapsedSeconds}, core={before.Pattern.CoreSeconds}, countdown={before.CountdownActive}, phase={before.Phase}.");
+                    if (run.InfiniteSectionsCleared > before.InfiniteSectionsCleared)
+                    {
+                        bool actualRise = run.InfiniteThreatLevel > before.InfiniteThreatLevel;
+                        Require(before.NextInfiniteThreatLevel == run.InfiniteThreatLevel,
+                            "The core's readonly next threat must match the actual completed section, including capped test offsets.");
+                        boundaries++;
+                        if (actualRise) rises++; else holds++;
+                        if (expectedRise != actualRise)
+                        {
+                            mismatches++;
+                            Debug.Log($"Greed threat preview mismatch: mode={mode}, sections={before.InfiniteSectionsCleared},"
+                                + $" threat={before.InfiniteThreatLevel}->{run.InfiniteThreatLevel}, predictedRise={expectedRise}.");
+                        }
+                    }
+                }
+                core.Exit();
+                Require(mode == 0 || adjusted, "Every threat-offset scenario must actually use its public test commands.");
+
+                void Advance(float seconds)
+                {
+                    Require(seconds >= -0.0002f, "Threat checks must never rewind the clock.");
+                    while (seconds > 0.0001f)
+                    {
+                        float step = Mathf.Min(seconds, 0.01f);
+                        core.Tick(clock += step);
+                        seconds -= step;
+                    }
+                }
+            }
+            Require(boundaries == 60 && rises > 0 && holds > 0 && mismatches == 0,
+                $"Threat previews must match actual next-section levels, including positive/negative offsets and caps. Boundaries={boundaries}, mismatches={mismatches}.");
+            Debug.Log($"Greed threat previews passed: five transient cores, 180 actual exact inputs, {boundaries} section boundaries,"
+                + $" {rises} rises/{holds} holds, natural progression, raised/lowered test offsets and both caps. Public core timing/input only; no personal slots or private clocks changed, not physical/device testing.");
         }
 
         public static (GreedLastRunSnapshot before, GreedLastRunSnapshot after) VerifyLongInfiniteRun(

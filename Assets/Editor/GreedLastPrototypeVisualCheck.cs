@@ -49,6 +49,7 @@ namespace GreedLast.Editor
             public bool progressBoundaryOnly;
             public bool preparationPreviewOnly;
             public bool rewardPreviewOnly;
+            public bool recoveryPreviewOnly;
             public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
@@ -144,6 +145,12 @@ namespace GreedLast.Editor
             Begin(false, rewardPreviewOnly: true);
         }
 
+        [MenuItem("Greed Last/Capture Recovery Previews")]
+        public static void RunRecoveryPreviewOnly()
+        {
+            Begin(false, recoveryPreviewOnly: true);
+        }
+
         [MenuItem("Greed Last/Capture Text Clipping Rejection Check")]
         public static void RunTextClippingRejection()
         {
@@ -158,7 +165,7 @@ namespace GreedLast.Editor
 
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
             bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false,
-            bool rewardPreviewOnly = false)
+            bool rewardPreviewOnly = false, bool recoveryPreviewOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -183,6 +190,7 @@ namespace GreedLast.Editor
                 progressBoundaryOnly = progressBoundaryOnly,
                 preparationPreviewOnly = preparationPreviewOnly,
                 rewardPreviewOnly = rewardPreviewOnly,
+                recoveryPreviewOnly = recoveryPreviewOnly,
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
             };
@@ -289,6 +297,7 @@ namespace GreedLast.Editor
                 AddProgressBoundaryFrames();
                 AddPreparationPreviewFrames();
                 AddRewardPreviewFrames();
+                AddRecoveryPreviewFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -303,9 +312,9 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
-                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly || rewardPreviewOnly)
+                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly || rewardPreviewOnly || recoveryPreviewOnly)
                 {
-                    string prefix = rewardPreviewOnly ? "98-live-reward-" : preparationPreviewOnly ? "96-preparation-"
+                    string prefix = recoveryPreviewOnly ? "99-recovery-" : rewardPreviewOnly ? "98-live-reward-" : preparationPreviewOnly ? "96-preparation-"
                         : progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
                     int count = Frames.Count;
                     for (int i = 0; i < count; i++)
@@ -315,7 +324,7 @@ namespace GreedLast.Editor
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (recoveryPreviewOnly || rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1267,6 +1276,43 @@ namespace GreedLast.Editor
                     Add(name + suffix + "-small", 960, 540, show, settleSeconds: 0.16);
                     Add(name + suffix + "-tablet", 1024, 768, show, settleSeconds: 0.16);
                     Add(name + suffix + "-wide", 2340, 1080, show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddRecoveryPreviewFrames()
+        {
+            var stable = GreedLastPrototypeRecoveryCheck.CreateSamples(0, 0, "안정 루트", false);
+            var stacked = GreedLastPrototypeRecoveryCheck.CreateSamples(0, 2, "안정 루트", true);
+            var samples = new[] { stable[0], stable[1], stacked[0] };
+            for (int i = 0; i < samples.Length; i++)
+            {
+                var sample = samples[i];
+                int expected = i == 0 ? 1 : i == 1 ? 0 : 2;
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구");
+                        ShowRun(sample.Before);
+                        if (detailed) ui.ToggleDevCleanView();
+                        typeof(GreedLastRuntimeUi).GetMethod("UpdateRunTimingVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .Invoke(ui, null);
+                        Require(sample.Before.GoodHealthGainPreview == expected
+                            && sample.After.LastJudgementHealthChange == expected,
+                            "Recovery captures must use real +1/+0/+2 Good snapshots with unchanged recovery rules.");
+                        string cue = Read<Text>("activeActionCueText").text;
+                        if (detailed)
+                            Require(expected > 0 ? cue.Contains("보정회복+" + expected, StringComparison.Ordinal)
+                                : !cue.Contains("보정회복+", StringComparison.Ordinal),
+                                "Detailed recovery captures must not promise healing after its actual cap.");
+                    }
+                    string name = "99-recovery-" + (expected == 0 ? "capped" : expected == 1 ? "expand" : "stacked")
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
                 }
             }
         }
@@ -2740,7 +2786,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";

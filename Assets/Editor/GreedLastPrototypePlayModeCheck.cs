@@ -284,6 +284,9 @@ namespace GreedLast.Editor
                         && cycle.legacyRenamedCandidateRepairCases == 3
                         && cycle.preparedInfinitePreviewCases == 8
                         && cycle.liveRewardPreviewJudgements >= 17
+                        && cycle.engineRecoveryGoodPreviews == 3 && cycle.engineRecoveryDamageCases == 2
+                        && cycle.engineRecoveryActualHealing == 3 && cycle.engineRecoveryCapPreserved
+                        && cycle.engineThreatPreviewBoundaries > 0
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -420,6 +423,9 @@ namespace GreedLast.Editor
             public int legacyRenamedCandidateRepairCases;
             public int preparedInfinitePreviewCases;
             public int liveRewardPreviewJudgements;
+            public int engineRecoveryGoodPreviews, engineRecoveryDamageCases, engineRecoveryActualHealing;
+            public bool engineRecoveryCapPreserved;
+            public int engineThreatPreviewBoundaries;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -739,6 +745,7 @@ namespace GreedLast.Editor
                 yield return VerifySuspendedFreshInput();
                 if (SessionState.GetBool(Prefix + "fullLoop", false))
                 {
+                    yield return VerifyRecoveryPreviews();
                     yield return VerifyMultiTouch();
                     yield return VerifyFullLoop();
                 }
@@ -2712,6 +2719,67 @@ namespace GreedLast.Editor
             private static Touch TouchAt(int id, Vector2 point, TouchPhase phase)
                 => new Touch { fingerId = id, position = point, phase = phase };
 
+            private IEnumerator VerifyRecoveryPreviews()
+            {
+                GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
+                try
+                {
+                    core.Exit();
+                    if (ui.UsePlayerRunControls == report.domainReloadDisabled) ui.ToggleDevCleanView();
+                    foreach (int gifts in new[] { 0, 2 })
+                    {
+                        core.ConfigureGrowth(0, 0, 0);
+                        state.SetInfiniteRun(string.Empty);
+                        string summary = gifts == 0 ? "안정 루트" : "안정 루트 / 생존 축 / 생존 축";
+                        core.EnterInfiniteRun(new GreedLastRunRecord(true, 0, 3, 0, 0, 0, 0, 0, 0, 20f,
+                            "engine-recovery", string.Empty, gifts == 0 ? string.Empty : "생존 축", string.Empty, summary, string.Empty));
+                        if (run.DevInvincible) core.ToggleDevInvincible();
+                        for (int inputIndex = 0; inputIndex < (gifts == 0 ? 2 : 3); inputIndex++)
+                        {
+                            bool miss = gifts > 0 && inputIndex < 2;
+                            float deadline = Time.realtimeSinceStartup + 9f;
+                            while (!run.ActivePattern || run.CountdownActive || run.ElapsedSeconds + core.InputTimingOffsetSeconds
+                                < run.Pattern.CoreSeconds + (miss ? 0f : run.Pattern.SuccessWindowSeconds + 0.015f))
+                            {
+                                Require(!run.Stopped && Time.realtimeSinceStartup < deadline,
+                                    "Recovery checks need actual engine-driven trap timing, without clock edits.");
+                                yield return null;
+                            }
+                            var before = run;
+                            int expected = miss ? -1 : gifts > 0 ? 2 : inputIndex == 0 ? 1 : 0;
+                            int lane = (int)run.Pattern.Channel - 1;
+                            if (miss) lane = (lane + 1) % 3;
+                            yield return TapTouch(Read<Button[]>(ui, "laneButtons")[lane]);
+                            Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good)
+                                && run.Health - before.Health == expected && run.LastJudgementHealthChange == expected,
+                                "Engine recovery must retain two actual -1 hits, +1/+0 stable and +2 stacked Good recovery.");
+                            if (miss) report.engineRecoveryDamageCases++;
+                            else
+                            {
+                                Require(before.GoodHealthGainPreview == expected,
+                                    "Engine recovery preview must match actual healing and zero after the cap.");
+                                report.engineRecoveryGoodPreviews++;
+                                report.engineRecoveryActualHealing += expected;
+                                report.engineRecoveryCapPreserved |= expected == 0 && run.Health == 5;
+                            }
+                        }
+                        core.Exit();
+                        state.SetLobbyReady(backend.LoadLobby());
+                        yield return null;
+                    }
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
+                    core.ConfigureGrowth(backend.GrowthSurvivalLevel, backend.GrowthFocusLevel, backend.GrowthTimingLevel);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
+                Debug.Log("Greed engine recovery previews passed: three Good predictions (+1/+0/+2), two natural -1 hits,"
+                    + " actual Update/EventSystem touch frames, growth/source restored and no persistence or private clocks edited. Not physical input or device-performance testing.");
+            }
+
             private IEnumerator VerifyFullLoop()
             {
                 float began = Time.realtimeSinceStartup;
@@ -3139,7 +3207,17 @@ namespace GreedLast.Editor
                         Require(expected == snapshot.LastJudgementScoreGain,
                             "Engine center/Good reward previews must include the actual next chain and bundle gain: expected="
                                 + expected + ", actual=" + snapshot.LastJudgementScoreGain);
+                        if (snapshot.LastResult == GreedLastJudgementResult.Good)
+                            Require(run.GoodHealthGainPreview == snapshot.LastJudgementHealthChange,
+                                "Every actual engine Good must match its immediately preceding recovery prediction.");
                         report.liveRewardPreviewJudgements++;
+                    }
+                    if (run.InfiniteMode && snapshot.InfiniteMode && run.ActivePattern
+                        && snapshot.InfiniteSectionsCleared == run.InfiniteSectionsCleared + 1)
+                    {
+                        Require(run.NextInfiniteThreatLevel == snapshot.InfiniteThreatLevel,
+                            "Actual engine section completions must retain their preceding next-threat prediction.");
+                        report.engineThreatPreviewBoundaries++;
                     }
                     run = snapshot;
                     report.publications++;
