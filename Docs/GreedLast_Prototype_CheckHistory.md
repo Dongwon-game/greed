@@ -1,5 +1,20 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-15 18:39~49 보상 안내 검증 실행본
+
+현재 기준은 소스 `21a3169`(게임 변경 `ee3edbf`), **18:45 KST 비개발 Windows/reward-guidance**다. 선택 전후 체력/집중과 발동 중 충전·연장·배지/추천, 회복·위협 상승 직후의 채점 보너스를 맞췄다. 실제 지급량/판정 폭·집중 보호/저장 규칙·개인 데이터와 아트는 유지했다.
+
+- **선택 전 재현**: `prototype-choice-preview-baseline-20261015.log`, SHA-256 `F47F07D3A671431A573290B498C44A4AEA52038979C957950E2F9DE05F951AD1`의 집중 안내 246불일치, `prototype-choice-health-preview-baseline-20261015.log`/`84C740498BC334B3144BF80129EA65D4E201712263131C7A96A9A30BA1F2F527`의 체력 안내 78불일치를 실제 선택 전→후로 비교했다. `prototype-focus-recommendation-baseline-20261015.log`/`F9EE9548B62CC9EE28BE75099EF7C76CB9B0234611B7801D90C13265CCA39269`는 발동 중 게이지 0을 부족으로 추천한 151건이다. 서로 다른 비교 집합이며 독립 결함 개수로 더하지 않는다.
+- **점수 세부 재현**: `prototype-resolved-bonus-baseline-20261015.log`, SHA-256 `42F3600A3DA365B853BB983438D8AFDCAF31D4FDFEE89CE959F3805EC924114E`. 두 실제 무한 런/36판정에서 안정 회복 후 실제 조합 8점을 12점으로 바꾼 2건, 위협 상승 후 다음 단계의 보너스로 바꾼 6건을 확인했다. 총점 계산 결함이 아니라 세부 표시 결함이다. 수정 타깃 `prototype-resolved-bonus-fixed-20261015.log`/`9BBF6703E73C90120BF16C7881E6C453CDFE18ACFDF9F79CC497FCABDDACC37E`는 모두 일치했다.
+- **18:39 엔진**: `report-full-loop-20261015-093906-0514967.json`, SHA-256 `B3AFDD8F7457785E746AEBB505EED726568C79F2A2D88360B18DBA09D0CAFED1`. 두 방식 354.56/355.75초에서 각각 체력 선택 9·집중 선택 11·집중 유지/연장 18·점수 세부 42건/위협 상승 1건, Good 회복 3/위협 예고 5/정비 8대조와 S2/S3 한 번 저장→취소 무소모→실제 두 번/자동 비움·자연 실패/기록/보충 통과. 개인 일곱 키 불변이며 실제 엔진 프레임의 합성 입력이다. 엔진 뒤에는 편집기 전용 검사만 보강했으며 게임 소스는 같다.
+- **18:41 통합 렌더**: `report-reward-guidance-20261015-094155-4794445-31e85442.json`, SHA-256 `A5858FEB1D336D61CBDAAFA21C6A784BFB0A7318C07DCDE01071B1EEBE6B9E93`. 선택 30+집중 24+점수 세부 12=66장, 버튼 516/명령 클릭 576/글자 완전성 660회. 별도 상한 24장 `report-score-boundary-20261015-094228-8291115-3f4571cd.json`/`45A0CA55B4715034EAAF3D5333D6DE39A66B7BE5AC6DB7B7A425E31722D18C5B`도 통과했다. 작은 창·태블릿·넓은 안전 영역의 격리 카메라/합성 입력이며 실제 기기 검사는 아니다.
+- **18:45 빌드**: `prototype-reward-guidance-verified-build-20261015.log`, SHA-256 `53911D45A86B97574C2AB8BA9F01D6967824CC796FC079D519E8391833E4B670`. 선택 전후 체력 84/집중 257건, 중앙·바깥 성공 180와 별도 Good 15, 기존 639점수 판정/162체력 줄·새 점수 경계/정비·저장 등을 포함한 전체 스모크와 비개발 Windows 통과. UTC `2026-10-15T09:45:30.1042096Z`, DLL SHA-256 `1C8C0FBFF4E4B83496A42D22AB3B7DE510DFDBA87450FB05FA2A8E63239E046F`. 정수 상한 9대조+양수 조합 부분 지급 2대조의 누적 점수는 격리 검사에만 주입한다.
+- **패키지**: `GreedLastPrototype-verified-20261015-reward-guidance.zip`, 58430693바이트/154파일, SHA-256 `6A8A89E4D806E92532A0DE6456A1B4FC0100D67F5C5C343C2A974286D37A20C7`. 모든 파일/다섯 해시·14개 개발 잠금·저장/터치/화면 보호 및 편집기 검사/초기화 API 제외 대조 통과. 이전 ZIP은 보존했다.
+- **18:46 초기 구동**: `report-startup-20261015-094607-7209441.json`, SHA-256 `0ACC67A9E495D081A53F9ABBF3999BED2AEEB4CE72EC41C61C7734BCB2EF4CC1`. 헤드리스 20초/예외 0/개인 값 0→0·시작한 PID 20228만 종료. 렌더/소리·손/기기 성능 검사는 아니다.
+- **18:49 Android**: `prerequisites-20261015-094918-6045908.json`, SHA-256 `CF1DE25C0E7DF9C91180D212AF2975F263C3EC867AEEEB6F6C0D4ED322102412`. 모듈 지원 없음·포함 도구 9파일 누락. 설치/SDK 동의/외부 설정 변경·APK나 기기 검사는 하지 않았다.
+
+`prototype-choice-live-focus-20261015.log`는 전환 요약의 남은 거짓 충전을 찾아 중단됐고 이를 수정했다. `prototype-focus-guidance-smoke-20261015.log`와 `prototype-focus-guidance-final-smoke-20261015.log`는 새 충전/연장 및 실제 선택 회복 안내에도 이전 고정 문구를 요구하던 검사 기대값에서 중단됐다. 상태별 기대와 줄 분리 검사를 유지해 보완했으며 실패 로그를 통과로 바꾸거나 삭제하지 않았다. 이후 `prototype-focus-guidance-complete-smoke-20261015.log`와 최종 빌드가 전체 통과했다.
+
 ## 2026-10-15 14:34~35 집중 선택 상한 실행본
 
 현재는 소스 `9ab6e05`, 14:34 KST 비개발 Windows/choice-focus다. 실제 연속 선택으로 7초에 닿은 뒤 사막의 잔상/파라오의 각인이 0을 지급하면서 +1/+3을 표시하던 네 경우만 `집중 상태 상한 유지`로 고쳤다. 지급/상한/보호/저장 규칙과 개인 데이터는 그대로다.
