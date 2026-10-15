@@ -169,7 +169,7 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Capture Reward Guidance")]
         public static void RunRewardGuidanceOnly()
         {
-            Begin(false, choicePreviewOnly: true, liveFocusPreviewOnly: true);
+            Begin(false, choicePreviewOnly: true, liveFocusPreviewOnly: true, resolvedBonusPreviewOnly: true);
         }
 
         [MenuItem("Greed Last/Capture Resolved Bonus Feedback")]
@@ -357,10 +357,13 @@ namespace GreedLast.Editor
                         Frame frame = Frames.Dequeue();
                         if (frame.Name.StartsWith(prefix, StringComparison.Ordinal)
                             || (choicePreviewOnly && frame.Name.StartsWith("100-choice-reward-", StringComparison.Ordinal))
+                            || (liveFocusPreviewOnly && frame.Name.StartsWith("101-live-focus-", StringComparison.Ordinal))
+                            || (resolvedBonusPreviewOnly && frame.Name.StartsWith("102-resolved-bonus-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (resolvedBonusPreviewOnly ? 12 : liveFocusPreviewOnly ? choicePreviewOnly ? 54 : 24 : choicePreviewOnly ? 30 : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
+                    int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0);
+                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -2949,7 +2952,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? report.choicePreviewOnly ? "reward-guidance-" : "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.choicePreviewOnly && report.liveFocusPreviewOnly ? "reward-guidance-" : report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";

@@ -17,6 +17,8 @@ namespace GreedLast.Editor
                     GreedLastJudgementResult.Good, GreedLastJudgementResult.Miss })
                     VerifyJudgement(initial, result);
             }
+            VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success, includeProfile: true);
+            VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Good, includeProfile: true);
             VerifyBundleAwards();
             RunGrades();
             RunTargets();
@@ -418,13 +420,15 @@ namespace GreedLast.Editor
         }
 
         internal static (GreedLastRunSnapshot before, GreedLastRunSnapshot after) VerifyJudgement(
-            int initial, GreedLastJudgementResult expected)
+            int initial, GreedLastJudgementResult expected, bool includeProfile = false)
         {
             var core = new GreedLastRunCore();
             GreedLastRunSnapshot run = default;
             core.SnapshotChanged += value => run = value;
             float clock = Time.realtimeSinceStartup;
-            core.EnterInfiniteRun();
+            core.EnterInfiniteRun(includeProfile ? new GreedLastRunRecord(true, 0, 3, 0, 0, 0, 0, 0, 0, 20f,
+                "capped-profile", "안정 호흡", "생존 축", string.Empty, "안정 호흡 / 안정 루트 / 생존 축", string.Empty)
+                : GreedLastRunRecord.Empty);
             void Advance(float seconds)
             {
                 while (seconds > 0.0001f)
@@ -467,6 +471,13 @@ namespace GreedLast.Editor
             if (limited) Require(Invoke<string>(typeof(GreedLastRuntimeUi), expected == GreedLastJudgementResult.Good
                     ? "BuildGoodEffectLine" : "BuildSuccessEffectLine", run).Contains("점수 상한", StringComparison.Ordinal),
                 "Capped feedback must not present every nominal bonus as fully awarded points.");
+            if (includeProfile)
+            {
+                string profile = Invoke<string>(typeof(GreedLastRuntimeUi), "BuildChoiceProfileScoreBonusPreview", run);
+                Require(limited && run.LastJudgementProfileScoreBonus > 0 && profile.Contains("점수 상한", StringComparison.Ordinal)
+                    && !profile.Contains("조합 +", StringComparison.Ordinal),
+                    "A partially paid profile component must not claim its entire nominal amount was awarded.");
+            }
             GreedLastRunSnapshot afterJudgement = run;
             int judged = run.SuccessCount + run.GoodCount + run.MissCount;
             core.HandleInput(channel, clock);
