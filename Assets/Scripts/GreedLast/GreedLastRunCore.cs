@@ -497,7 +497,10 @@ namespace GreedLast
             int centerHitScoreGainPreview = 0,
             int goodScoreGainPreview = 0,
             int goodHealthGainPreview = 0,
-            int nextInfiniteThreatLevel = 0)
+            int nextInfiniteThreatLevel = 0,
+            int choiceHealthGainPreview = 0,
+            bool lastJudgementStartedInFocusState = false,
+            float lastJudgementFocusStateExtensionSeconds = 0f)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -607,6 +610,9 @@ namespace GreedLast
             GoodScoreGainPreview = Mathf.Max(0, goodScoreGainPreview);
             GoodHealthGainPreview = Mathf.Max(0, goodHealthGainPreview);
             NextInfiniteThreatLevel = Mathf.Clamp(nextInfiniteThreatLevel, 0, 5);
+            ChoiceHealthGainPreview = Mathf.Max(0, choiceHealthGainPreview);
+            LastJudgementStartedInFocusState = lastJudgementStartedInFocusState;
+            LastJudgementFocusStateExtensionSeconds = Mathf.Max(0f, lastJudgementFocusStateExtensionSeconds);
         }
 
         public GreedLastPatternModel Pattern { get; }
@@ -643,6 +649,9 @@ namespace GreedLast
         public int CenterHitScoreGainPreview { get; }
         public int GoodScoreGainPreview { get; }
         public int GoodHealthGainPreview { get; }
+        public int ChoiceHealthGainPreview { get; }
+        public bool LastJudgementStartedInFocusState { get; }
+        public float LastJudgementFocusStateExtensionSeconds { get; }
         public int LastJudgementHealthChange { get; }
         public bool HasJudgedInputTiming { get; }
         public float LastInputTimingDeltaSeconds { get; }
@@ -941,6 +950,8 @@ namespace GreedLast
         private bool lastCenterHit;
         private int lastJudgementScoreGain;
         private int lastJudgementHealthChange;
+        private bool lastJudgementStartedInFocusState;
+        private float lastJudgementFocusStateExtensionSeconds;
         private bool hasJudgedInputTiming;
         private float lastInputTimingDeltaSeconds;
         private GreedLastRunChannel lastJudgedInputChannel;
@@ -1013,6 +1024,8 @@ namespace GreedLast
             lastCenterHit = false;
             lastJudgementScoreGain = 0;
             lastJudgementHealthChange = 0;
+            lastJudgementStartedInFocusState = false;
+            lastJudgementFocusStateExtensionSeconds = 0f;
             hasJudgedInputTiming = false;
             lastInputTimingDeltaSeconds = 0f;
             lastJudgedInputChannel = GreedLastRunChannel.None;
@@ -2227,6 +2240,8 @@ namespace GreedLast
             lastCenterHit = outcome.Result == GreedLastJudgementResult.Success && outcome.CenterHit;
             int comboBeforeResolve = combo;
             bool focusStateWasActive = IsFocusStateActive;
+            float focusSecondsBeforeResolve = focusStateRemainingSeconds;
+            lastJudgementStartedInFocusState = focusStateWasActive;
             bool recoveryPattern = IsRecoveryPattern(currentPattern);
             bool routeBundleWasIntact = patternBundleBreakCount <= 0;
             maxInfiniteThreatLevel = Mathf.Max(maxInfiniteThreatLevel, GetInfiniteThreatLevel());
@@ -2352,6 +2367,7 @@ namespace GreedLast
                     int focusStateScoreBonus = BuildFocusStateScoreBonus(totalSuccessScore, focusStateWasActive);
                     totalSuccessScore += focusStateScoreBonus;
                     totalSuccessScore = AddScore(totalSuccessScore);
+                    float focusSecondsBeforeGain = focusStateRemainingSeconds;
                     GainFocus(
                         focusGain + centerHitFocusGain + recoveryFocusGain + perfectFocusChargeGain + variationRouteFocusGain,
                         extendActiveState: true,
@@ -2367,7 +2383,8 @@ namespace GreedLast
                     AppendChoiceEffect(successEffect);
                     if (focusGiftStacks > 0)
                     {
-                        AppendChoiceEffect("집중 축 x" + focusGiftStacks + " - 정확 집중 +" + focusGain);
+                        AppendChoiceEffect("집중 축 x" + focusGiftStacks + (focusStateWasActive
+                            ? " - 집중 상태 유지" : " - 정확 집중 +" + focusGain));
                     }
 
                     if (chainGiftStacks > 0)
@@ -2423,7 +2440,8 @@ namespace GreedLast
 
                     if (perfectFocusChargeGain > 0)
                     {
-                        AppendChoiceEffect("정박 중앙 - 집중 충전 / 집중 +" + perfectFocusChargeGain);
+                        AppendChoiceEffect("정박 중앙 - 집중 충전 / " + (focusStateWasActive
+                            ? "집중 상태 유지" : "집중 +" + perfectFocusChargeGain));
                     }
 
                     if (clutchCounterBonus > 0)
@@ -2437,7 +2455,8 @@ namespace GreedLast
 
                     if (variationRouteFocusGain > 0)
                     {
-                        AppendChoiceEffect("변주 루트 - 엇박 공명 / 집중 +" + variationRouteFocusGain);
+                        AppendChoiceEffect("변주 루트 - 엇박 공명 / " + (focusStateWasActive
+                            ? "집중 상태 유지" : "집중 +" + variationRouteFocusGain));
                     }
 
                     if (pressureRouteCounterBonus > 0)
@@ -2456,7 +2475,7 @@ namespace GreedLast
                     }
                     else if (focusStateExtended)
                     {
-                        AppendChoiceEffect("집중 상태 연장 +" + FocusStateSuccessExtensionSeconds.ToString("0.00") + "초");
+                        AppendChoiceEffect("집중 상태 연장 +" + (focusStateRemainingSeconds - focusSecondsBeforeGain).ToString("0.00") + "초");
                     }
 
                     AppendRunStateResult("결과: 점수 +" + totalSuccessScore + " / 콤보 " + combo + " / " + BuildFocusStateResultText());
@@ -2540,7 +2559,8 @@ namespace GreedLast
 
                     if (HasChoice(relic, "사막의 잔상") && goodFocusGain > 0)
                     {
-                        AppendChoiceEffect("사막의 잔상 - 보정 집중 +" + goodFocusGain);
+                        AppendChoiceEffect(focusStateWasActive ? "사막의 잔상 - 보정 집중 유지"
+                            : "사막의 잔상 - 보정 집중 +" + goodFocusGain);
                     }
 
                     if (profileGoodBonus > 0)
@@ -2630,6 +2650,8 @@ namespace GreedLast
             // Include chain and completed-bundle rewards in this judgement's actual gain.
             lastJudgementScoreGain = Mathf.Max(0, score - scoreBeforeResolve);
             lastJudgementHealthChange = health - healthBeforeResolve;
+            lastJudgementFocusStateExtensionSeconds = focusStateWasActive
+                ? Mathf.Max(0f, focusStateRemainingSeconds - focusSecondsBeforeResolve) : 0f;
             Publish(now);
         }
 
@@ -4298,27 +4320,26 @@ namespace GreedLast
 
         private string ApplyChoiceFocusReward(int amount)
         {
+            string effect = BuildChoiceFocusRewardPreview(focus, focusStateRemainingSeconds, amount);
             GainFocus(
                 Mathf.Max(0, amount),
                 extendActiveState: true,
-                out bool stateActivated,
-                out bool stateExtended);
-            if (stateActivated)
+                out _,
+                out _);
+            return effect;
+        }
+
+        public static string BuildChoiceFocusRewardPreview(int currentFocus, float stateSeconds, int amount)
+        {
+            if (stateSeconds > 0.01f)
             {
-                return "집중 상태 발동";
+                float extended = Mathf.Min(FocusStateMaxDurationSeconds, stateSeconds + FocusStateSuccessExtensionSeconds);
+                return extended > stateSeconds + 0.001f ? "집중 상태 연장" : "집중 상태 상한 유지";
             }
 
-            if (stateExtended)
-            {
-                return "집중 상태 연장";
-            }
-
-            if (IsFocusStateActive)
-            {
-                return "집중 상태 상한 유지";
-            }
-
-            return "집중 +" + Mathf.Max(0, amount);
+            amount = Mathf.Max(0, amount);
+            return amount > 0 && currentFocus + amount >= MaxFocus
+                ? "집중 상태 발동" : "집중 +" + amount;
         }
 
         public static string BuildInfiniteLoadoutBonusPreview(GreedLastRunRecord loadoutRecord)
@@ -5050,7 +5071,8 @@ namespace GreedLast
             switch (currentPattern.TimingType)
             {
                 case GreedLastTimingType.Perfect:
-                    timingPayoff = "정박 중앙 - 집중 충전 / 집중 +" + PerfectFocusChargeBonus;
+                    timingPayoff = "정박 중앙 - 집중 충전 / " + (lastJudgementStartedInFocusState
+                        ? "집중 상태 유지" : "집중 +" + PerfectFocusChargeBonus);
                     break;
                 case GreedLastTimingType.Clutch:
                     timingPayoff = "압박 정박 - 반격 / 보너스 +" + ClutchCounterScoreBonus + "점";
@@ -5067,7 +5089,8 @@ namespace GreedLast
             if (currentPattern.TimingType == GreedLastTimingType.Offbeat
                 && HasActiveRoute("변주 루트"))
             {
-                routePayoff = "변주 루트 - 엇박 공명 / 집중 +" + VariationRouteOffbeatFocusBonus;
+                routePayoff = "변주 루트 - 엇박 공명 / " + (lastJudgementStartedInFocusState
+                    ? "집중 상태 유지" : "집중 +" + VariationRouteOffbeatFocusBonus);
             }
             else if (currentPattern.TimingType == GreedLastTimingType.Clutch
                 && HasActiveRoute("압박 루트"))
@@ -5414,7 +5437,9 @@ namespace GreedLast
 
             if (prompt.Contains("[변주]", StringComparison.Ordinal))
             {
-                return "루트 예고: 변주 - 엇박 정박 집중 +" + VariationRouteOffbeatFocusBonus;
+                return IsFocusStateActive
+                    ? "루트 예고: 변주 - 엇박 정박 / " + BuildChoiceFocusRewardPreview(focus, focusStateRemainingSeconds, 1)
+                    : "루트 예고: 변주 - 엇박 정박 집중 +" + VariationRouteOffbeatFocusBonus;
             }
 
             if (prompt.Contains("[안정]", StringComparison.Ordinal))
@@ -6792,7 +6817,11 @@ namespace GreedLast
                 BuildJudgementScoreGainPreview(true),
                 BuildJudgementScoreGainPreview(false),
                 BuildGoodHealthGainPreview(),
-                infiniteMode ? GetInfiniteThreatLevelForSections(infiniteSectionsCleared + 1) : 0));
+                infiniteMode ? GetInfiniteThreatLevelForSections(infiniteSectionsCleared + 1) : 0,
+                choiceKind != GreedLastChoiceKind.None && !stopped
+                    ? Mathf.Max(0, Mathf.Min(BuildBonusHealthCap(), health + 1) - health) : 0,
+                lastJudgementStartedInFocusState,
+                lastJudgementFocusStateExtensionSeconds));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)

@@ -12490,7 +12490,8 @@ namespace GreedLast.Editor
                 "The route choice header preview must keep the right route timing and action readable.");
             string stableLaneLabel = InvokeRuntimeUiLabel("BuildChoiceLaneLabel", snapshot, "안정 루트");
             Require(
-                stableLaneLabel.Contains("\nGood 체력+" + GreedLastRunCore.StableRouteGoodHealthBonus + "\n", StringComparison.Ordinal)
+                stableLaneLabel.Contains("\n" + (snapshot.ChoiceHealthGainPreview > 0
+                        ? "체력 +" + snapshot.ChoiceHealthGainPreview : "체력 상한 유지") + " / Good 회복\n", StringComparison.Ordinal)
                     && stableLaneLabel.Contains("\n정-압-정 / 점-숙-틀", StringComparison.Ordinal),
                 "The stable route lane button must split reward and timing/action hints into readable lines.");
             RequireTextLayoutBudget(stableLaneLabel, 5, 32, "stable route choice lane label");
@@ -12592,7 +12593,7 @@ namespace GreedLast.Editor
                 case "안정 루트":
                     return "안정 완주 회복";
                 case "변주 루트":
-                    return "변주 완주 집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus;
+                    return "변주 완주 집중 보상";
                 default:
                     return "압박 완주 +" + GreedLastRunCore.PressureRouteBundleScoreBonus;
             }
@@ -12623,7 +12624,7 @@ namespace GreedLast.Editor
                 case "안정 루트":
                     return "회복 대기";
                 case "변주 루트":
-                    return "집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus + " 대기";
+                    return "집중 보상 대기";
                 default:
                     return "+" + GreedLastRunCore.PressureRouteBundleScoreBonus + "점 대기";
             }
@@ -14159,19 +14160,23 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildChapterExperienceTitle", snapshot).StartsWith("변주 · ", StringComparison.Ordinal),
                 "The chapter title must retain the selected variation route.");
             Require(
-                snapshot.JudgementText.Contains("엇박 정박 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
+                snapshot.JudgementText.Contains(snapshot.FocusStateActive ? "엇박 정박 / 집중 상태"
+                    : "엇박 정박 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
                 "The first variation trap must announce its persistent focus contract.");
             Require(
                 GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains("변주 공명", StringComparison.Ordinal)
-                    && GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains("집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
+                    && GreedLastRuntimeUi.BuildLiveRunCoachLine(snapshot).Contains(snapshot.FocusStateActive ? "집중 연장"
+                        : "집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
                 "The variation route coach must preview its Offbeat focus payoff.");
             string variationObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", snapshot);
             Require(
-                variationObjective.Contains("변주 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
+                variationObjective.Contains(snapshot.FocusStateActive ? "변주 집중 연장"
+                    : "변주 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
                 "The run objective must expose the variation-route focus contract. Actual: " + variationObjective);
             Require(
                 InvokeRuntimeUiLabel("BuildActiveActionCueText", snapshot)
-                    .Contains("변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
+                    .Contains(snapshot.FocusStateActive ? "변주 집중 연장"
+                        : "변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
                 "The active variation route cue must preview its focus route payoff.");
 
             core.HandleInput(
@@ -14188,7 +14193,8 @@ namespace GreedLast.Editor
                 InvokeMockBackendStaticLabel("BuildRoutePayoffStrengthText", snapshot.TimingProfile) == "변주 공명 1회",
                 "The result strength analysis must recognize variation flow.");
             Require(
-                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot).Contains("루트 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
+                InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot).Contains(snapshot.LastJudgementStartedInFocusState
+                    ? "루트 공명 유지" : "루트 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus, StringComparison.Ordinal),
                 "Variation-route flow must have distinct central feedback.");
             Color32 variationColor = InvokeRuntimeUiSnapshotColor("GetJudgementFeedbackColor", snapshot);
             Require(

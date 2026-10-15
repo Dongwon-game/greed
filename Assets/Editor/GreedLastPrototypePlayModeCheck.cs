@@ -289,6 +289,7 @@ namespace GreedLast.Editor
                         && cycle.engineThreatPreviewBoundaries > 0
                         && cycle.engineStableFinisherPreviews > 0 && cycle.engineStableFocusFallbacks > 0
                         && cycle.engineChoiceHealthPreviews > 0 && cycle.engineCappedChoiceHealthPreviews > 0
+                        && cycle.engineChoiceFocusPreviews > 0 && cycle.engineLiveFocusFeedbackCases > 0
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -430,6 +431,7 @@ namespace GreedLast.Editor
             public int engineThreatPreviewBoundaries;
             public int engineStableFinisherPreviews, engineStableFocusFallbacks;
             public int engineChoiceHealthPreviews, engineCappedChoiceHealthPreviews;
+            public int engineChoiceFocusPreviews, engineLiveFocusFeedbackCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -3215,6 +3217,15 @@ namespace GreedLast.Editor
                             Require(run.GoodHealthGainPreview == snapshot.LastJudgementHealthChange,
                                 "Every actual engine Good must match its immediately preceding recovery prediction.");
                         report.liveRewardPreviewJudgements++;
+                        Require(snapshot.LastJudgementStartedInFocusState == run.FocusStateActive,
+                            "Engine focus provenance must distinguish activation from prior active state.");
+                        if (run.FocusStateActive && snapshot.LastResult == GreedLastJudgementResult.Success)
+                        {
+                            float gained = Mathf.Max(0f, snapshot.FocusStateRemainingSeconds - run.FocusStateRemainingSeconds);
+                            Require(Mathf.Abs(snapshot.LastJudgementFocusStateExtensionSeconds - gained) < 0.0002f,
+                                "Engine focus feedback must retain the actual judgement/bundle time extension.");
+                            report.engineLiveFocusFeedbackCases++;
+                        }
                     }
                     if (run.ActivePattern && run.ActiveRouteProfile == "안정 루트"
                         && snapshot.StableRouteBundleCount == run.StableRouteBundleCount + 1)
@@ -3235,11 +3246,28 @@ namespace GreedLast.Editor
                         if (healthChoice != null)
                         {
                             int gain = snapshot.Health - run.Health;
-                            Require((gain == 0 || gain == 1) && snapshot.JudgementText.Contains(gain == 0
+                            Require(run.ChoiceHealthGainPreview == gain && (gain == 0 || gain == 1) && snapshot.JudgementText.Contains(gain == 0
                                 ? "효과: 체력 상한 유지" : "효과: 체력 +1", StringComparison.Ordinal),
                                 "Actual engine health choices must report their real gain or existing cap.");
                             report.engineChoiceHealthPreviews++;
+                            int mismatches = 0;
+                            GreedLastPrototypeRecoveryCheck.CheckChoicePreview(run, healthChoice,
+                                gain == 0 ? "체력 상한 유지" : "체력 +1", ref mismatches);
+                            Require(mismatches == 0, "Engine choice health previews must match the actual result.");
                             if (gain == 0) report.engineCappedChoiceHealthPreviews++;
+                        }
+                        string focusChoice = Array.Find(new[] { "박자 감각", "변주 루트", "집중 축", "사막의 잔상", "파라오의 각인" },
+                            choice => snapshot.JudgementText.StartsWith(choice + " 선택", StringComparison.Ordinal));
+                        if (focusChoice != null)
+                        {
+                            string expected = run.FocusStateActive
+                                ? snapshot.FocusStateRemainingSeconds > run.FocusStateRemainingSeconds + 0.001f ? "집중 상태 연장" : "집중 상태 상한 유지"
+                                : snapshot.FocusStateActive ? "집중 상태 발동" : "집중 +" + (snapshot.Focus - run.Focus);
+                            int mismatches = 0;
+                            GreedLastPrototypeRecoveryCheck.CheckChoicePreview(run, focusChoice, expected, ref mismatches);
+                            Require(mismatches == 0 && snapshot.JudgementText.Contains(expected, StringComparison.Ordinal),
+                                "Engine choice focus previews must match real charge, activation, extension or cap.");
+                            report.engineChoiceFocusPreviews++;
                         }
                     }
                     if (run.InfiniteMode && snapshot.InfiniteMode && run.ActivePattern

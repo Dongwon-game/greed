@@ -20375,10 +20375,12 @@ namespace GreedLast
             int precisionRewardRemaining = BuildPrecisionRewardRemaining(snapshot);
             if (precisionRewardRemaining == 0)
             {
-                return " / 집중 +1";
+                return snapshot.FocusStateActive
+                    ? snapshot.LastJudgementStartedInFocusState ? " / 집중 유지" : " / 집중 발동"
+                    : " / 집중 +1";
             }
 
-            if (precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
+            if (!snapshot.FocusStateActive && precisionRewardRemaining > 0 && precisionRewardRemaining <= 2)
             {
                 return " / 집중 " + precisionRewardRemaining + "회";
             }
@@ -21779,7 +21781,7 @@ namespace GreedLast
                 case "안정 루트":
                     return snapshot.GoodHealthGainPreview > 0 ? " / 안정 완주 회복" : " / 안정 완주 집중";
                 case "변주 루트":
-                    return " / 변주 완주 집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus;
+                    return " / 변주 완주 집중 보상";
                 case "압박 루트":
                     return " / 압박 완주 +" + GreedLastRunCore.PressureRouteBundleScoreBonus;
                 default:
@@ -21900,7 +21902,8 @@ namespace GreedLast
 
                     if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
                     {
-                        return AppendImmediatePrecisionRewardCoach(snapshot, "정박 충전 / 집중 가속");
+                        return AppendImmediatePrecisionRewardCoach(snapshot, snapshot.LastJudgementStartedInFocusState
+                            ? "정박 집중 유지 / 고점 연장" : "정박 충전 / 집중 가속");
                     }
 
                     if (snapshot.LastCenterHit && snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
@@ -22129,7 +22132,8 @@ namespace GreedLast
                 switch (snapshot.Pattern.TimingType)
                 {
                     case GreedLastTimingType.Perfect:
-                        coach = "정박 타이밍 / 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+                        coach = snapshot.FocusStateActive ? "정박 타이밍 / " + BuildActiveFocusPayoffHint(snapshot)
+                            : "정박 타이밍 / 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
                         break;
                     case GreedLastTimingType.Clutch:
                         coach = "압박 타이밍 / 정박 반격 +" + GreedLastRunCore.ClutchCounterScoreBonus;
@@ -22211,7 +22215,8 @@ namespace GreedLast
             if (prompt.Contains("[변주]", StringComparison.Ordinal)
                 && pattern.TimingType == GreedLastTimingType.Offbeat)
             {
-                return "변주 공명 / 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+                return snapshot.FocusStateActive ? "변주 공명 / " + BuildActiveFocusPayoffHint(snapshot)
+                    : "변주 공명 / 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
             }
 
             if (prompt.Contains("[압박]", StringComparison.Ordinal)
@@ -22328,7 +22333,7 @@ namespace GreedLast
                 case "안정형":
                     return snapshot.GoodHealthGainPreview > 0 ? " / 안정 회복" : " / 안전 돌파";
                 case "집중형":
-                    return snapshot.FocusStateActive ? " / 집중 상태 연장" : " / 집중 채우기";
+                    return snapshot.FocusStateActive ? " / " + BuildActiveFocusPayoffHint(snapshot) : " / 집중 채우기";
                 case "연쇄형":
                     return snapshot.Combo <= 0 ? " / 연쇄 시동" : " / 연쇄 유지";
                 case "고점형":
@@ -22352,7 +22357,8 @@ namespace GreedLast
             }
             else if (pattern.TimingType == GreedLastTimingType.Perfect)
             {
-                objective = " / 정박 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+                objective = snapshot.FocusStateActive ? " / 정박 " + BuildActiveFocusPayoffHint(snapshot)
+                    : " / 정박 중앙 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
             }
             else if (pattern.TimingType == GreedLastTimingType.Clutch)
             {
@@ -22415,7 +22421,8 @@ namespace GreedLast
             if (prompt.Contains("[변주]", StringComparison.Ordinal)
                 && pattern.TimingType == GreedLastTimingType.Offbeat)
             {
-                return " / 변주 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+                return snapshot.FocusStateActive ? " / 변주 " + BuildActiveFocusPayoffHint(snapshot)
+                    : " / 변주 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
             }
 
             if (prompt.Contains("[압박]", StringComparison.Ordinal)
@@ -22563,9 +22570,9 @@ namespace GreedLast
                 return string.Empty;
             }
 
-            string leftHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceLeft);
-            string centerHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceCenter);
-            string rightHint = BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, snapshot.ChoiceRight);
+            string leftHint = BuildCurrentChoiceHeaderPreviewPart(snapshot, snapshot.ChoiceLeft);
+            string centerHint = BuildCurrentChoiceHeaderPreviewPart(snapshot, snapshot.ChoiceCenter);
+            string rightHint = BuildCurrentChoiceHeaderPreviewPart(snapshot, snapshot.ChoiceRight);
             if (string.IsNullOrEmpty(leftHint)
                 && string.IsNullOrEmpty(centerHint)
                 && string.IsNullOrEmpty(rightHint))
@@ -22574,6 +22581,13 @@ namespace GreedLast
             }
 
             return "좌 " + leftHint + " / 중 " + centerHint + " / 우 " + rightHint;
+        }
+
+        private static string BuildCurrentChoiceHeaderPreviewPart(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            return snapshot.ChoiceKind == GreedLastChoiceKind.Node
+                ? BuildChoiceHeaderPreviewPart(snapshot.ChoiceKind, choiceName)
+                : BuildCurrentChoiceEffectHint(snapshot, choiceName);
         }
 
         private static string BuildChoiceHeaderPreviewPart(GreedLastChoiceKind kind, string choiceName)
@@ -22789,7 +22803,7 @@ namespace GreedLast
             }
 
             string reason = BuildChoiceRecommendationReasonText(snapshot, recommendedChoice);
-            string effect = BuildChoiceEffectHint(snapshot.ChoiceKind, recommendedChoice);
+            string effect = BuildCurrentChoiceEffectHint(snapshot, recommendedChoice);
             string text = "추천: " + recommendedChoice;
             if (!string.IsNullOrEmpty(reason))
             {
@@ -23456,7 +23470,7 @@ namespace GreedLast
 
             if (remaining == 0)
             {
-                return "정박 보상 +집중";
+                return snapshot.FocusStateActive ? "정박 보상 · 집중 유지" : "정박 보상 +집중";
             }
 
             return remaining <= 2 ? "정박 보상까지 " + remaining : string.Empty;
@@ -45418,7 +45432,9 @@ namespace GreedLast
             if (snapshot.JudgementText.Contains("정박 중앙 - 집중 충전", StringComparison.Ordinal)
                 || feedbackPattern.TimingType == GreedLastTimingType.Perfect)
             {
-                return "정확→집중 · 정박 충전 · 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
+                return snapshot.LastJudgementStartedInFocusState
+                    ? "정확→집중 · 정박 집중 유지 · " + BuildResolvedFocusStateHint(snapshot)
+                    : "정확→집중 · 정박 충전 · 집중 +" + GreedLastRunCore.PerfectFocusChargeBonus;
             }
 
             if (snapshot.JudgementText.Contains("압박 정박 - 반격", StringComparison.Ordinal)
@@ -45594,7 +45610,7 @@ namespace GreedLast
                 case "안정 루트":
                     return snapshot.GoodHealthGainPreview > 0 ? "회복 대기" : "집중 보상 대기";
                 case "변주 루트":
-                    return "집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus + " 대기";
+                    return "집중 보상 대기";
                 case "압박 루트":
                     return "+" + GreedLastRunCore.PressureRouteBundleScoreBonus + "점 대기";
                 default:
@@ -45624,7 +45640,8 @@ namespace GreedLast
 
             if (snapshot.LastCenterHit && feedbackPatternValid && feedbackPattern.TimingType == GreedLastTimingType.Perfect)
             {
-                AppendCompactStatus(ref effect, "정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus);
+                AppendCompactStatus(ref effect, snapshot.LastJudgementStartedInFocusState
+                    ? "정박 집중 유지" : "정박 충전 +" + GreedLastRunCore.PerfectFocusChargeBonus);
             }
 
             if (snapshot.LastCenterHit && feedbackPatternValid && feedbackPattern.TimingType == GreedLastTimingType.Clutch)
@@ -45640,7 +45657,8 @@ namespace GreedLast
                 AppendCompactStatus(ref effect, "엇박 연쇄 +" + GreedLastRunCore.OffbeatFlowComboBonus);
                 if (PatternHasRoute(feedbackPattern, "변주"))
                 {
-                    AppendCompactStatus(ref effect, "루트 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus);
+                    AppendCompactStatus(ref effect, snapshot.LastJudgementStartedInFocusState
+                        ? "루트 공명 유지" : "루트 집중 +" + GreedLastRunCore.VariationRouteOffbeatFocusBonus);
                 }
             }
 
@@ -45671,6 +45689,7 @@ namespace GreedLast
 
             if (snapshot.FocusStateActive)
             {
+                if (snapshot.LastJudgementStartedInFocusState) AppendCompactStatus(ref effect, BuildResolvedFocusStateHint(snapshot));
                 AppendCompactStatus(ref effect, "집중 " + snapshot.FocusStateRemainingSeconds.ToString("0.0") + "s");
             }
             else if (snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
@@ -47486,7 +47505,21 @@ namespace GreedLast
 
         private static string BuildActiveTimingActionCuePayoffTag(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.FocusStateActive && snapshot.Pattern.TimingType == GreedLastTimingType.Perfect && !IsRecoveryPattern(snapshot.Pattern))
+                return BuildActiveFocusPayoffHint(snapshot);
             return BuildTimingActionPayoffTag(snapshot.Pattern);
+        }
+
+        private static string BuildActiveFocusPayoffHint(GreedLastRunSnapshot snapshot)
+        {
+            return GreedLastRunCore.BuildChoiceFocusRewardPreview(snapshot.Focus, snapshot.FocusStateRemainingSeconds, 1)
+                .Replace("집중 상태 ", "집중 ");
+        }
+
+        private static string BuildResolvedFocusStateHint(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.LastJudgementFocusStateExtensionSeconds > 0.001f
+                ? "집중 연장 +" + snapshot.LastJudgementFocusStateExtensionSeconds.ToString("0.00") + "s" : "집중 상한 유지";
         }
 
         private static string BuildTimingActionPayoffTag(GreedLastPatternModel pattern)
@@ -47520,7 +47553,8 @@ namespace GreedLast
             if (snapshot.ActiveRouteProfile == "변주 루트"
                 && snapshot.Pattern.TimingType == GreedLastTimingType.Offbeat)
             {
-                return "변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
+                return snapshot.FocusStateActive ? "변주 " + BuildActiveFocusPayoffHint(snapshot)
+                    : "변주집중+" + GreedLastRunCore.VariationRouteOffbeatFocusBonus;
             }
 
             if (snapshot.ActiveRouteProfile == "압박 루트"
@@ -48270,7 +48304,8 @@ namespace GreedLast
             }
             else if (snapshot.Pattern.TimingType == GreedLastTimingType.Perfect)
             {
-                payoffHint = "충전+" + GreedLastRunCore.PerfectFocusChargeBonus;
+                payoffHint = snapshot.FocusStateActive ? BuildActiveFocusPayoffHint(snapshot)
+                    : "충전+" + GreedLastRunCore.PerfectFocusChargeBonus;
             }
             else if (snapshot.Pattern.TimingType == GreedLastTimingType.Clutch)
             {
@@ -48371,7 +48406,7 @@ namespace GreedLast
 
         private static string BuildChoiceLaneLabel(GreedLastRunSnapshot snapshot, string choiceName)
         {
-            string hint = BuildChoiceLaneHint(snapshot.ChoiceKind, choiceName);
+            string hint = BuildChoiceLaneHint(snapshot, choiceName);
             string text = string.IsNullOrEmpty(hint)
                 ? choiceName
                 : choiceName + "\n" + hint;
@@ -48380,16 +48415,44 @@ namespace GreedLast
                 : text;
         }
 
-        private static string BuildChoiceLaneHint(GreedLastChoiceKind kind, string choiceName)
+        private static string BuildChoiceLaneHint(GreedLastRunSnapshot snapshot, string choiceName)
         {
-            if (kind == GreedLastChoiceKind.Node && IsRouteChoiceName(choiceName))
+            if (snapshot.ChoiceKind == GreedLastChoiceKind.Node && IsRouteChoiceName(choiceName))
             {
-                return BuildRouteChoiceRewardText(choiceName)
-                    + "\n" + BuildRouteCadenceText(choiceName)
+                string reward = choiceName == "안정 루트" ? BuildCurrentChoiceHealthHint(snapshot) + " / Good 회복"
+                    : choiceName == "변주 루트" ? BuildCurrentChoiceFocusHint(snapshot, 1) + " / 엇박 공명"
+                    : BuildRouteChoiceRewardText(choiceName);
+                return reward + "\n" + BuildRouteCadenceText(choiceName)
                     + " / " + BuildAvoidanceCadenceText(choiceName, false, -1);
             }
+            return BuildCurrentChoiceEffectHint(snapshot, choiceName);
+        }
 
-            return BuildChoiceEffectHint(kind, choiceName);
+        private static string BuildCurrentChoiceHealthHint(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.ChoiceHealthGainPreview > 0
+                ? "체력 +" + snapshot.ChoiceHealthGainPreview : "체력 상한 유지";
+        }
+
+        private static string BuildCurrentChoiceFocusHint(GreedLastRunSnapshot snapshot, int amount)
+        {
+            return GreedLastRunCore.BuildChoiceFocusRewardPreview(snapshot.Focus, snapshot.FocusStateRemainingSeconds, amount);
+        }
+
+        private static string BuildCurrentChoiceEffectHint(GreedLastRunSnapshot snapshot, string choiceName)
+        {
+            switch (choiceName)
+            {
+                case "박자 감각": return BuildCurrentChoiceFocusHint(snapshot, 1);
+                case "안정 호흡": return BuildCurrentChoiceHealthHint(snapshot);
+                case "안정 루트": return BuildRouteChoiceEffectHint(BuildCurrentChoiceHealthHint(snapshot) + "/Good 회복", choiceName);
+                case "변주 루트": return BuildRouteChoiceEffectHint(BuildCurrentChoiceFocusHint(snapshot, 1) + "/엇박 공명", choiceName);
+                case "집중 축": return BuildCurrentChoiceFocusHint(snapshot, 2) + "/정확 누적";
+                case "생존 축": return BuildCurrentChoiceHealthHint(snapshot) + "/보정 회복";
+                case "사막의 잔상": return BuildCurrentChoiceHealthHint(snapshot) + "/" + BuildCurrentChoiceFocusHint(snapshot, 1);
+                case "파라오의 각인": return "콤보+3/" + BuildCurrentChoiceFocusHint(snapshot, 3) + "/연쇄 증폭";
+                default: return BuildChoiceEffectHint(snapshot.ChoiceKind, choiceName);
+            }
         }
 
         private static string BuildChoiceLaneRecommendationText(GreedLastRunSnapshot snapshot, string choiceName)
@@ -48555,7 +48618,7 @@ namespace GreedLast
                 return segmentChoice;
             }
 
-            if (snapshot.Focus <= 1)
+            if (!snapshot.FocusStateActive && snapshot.Focus <= 1)
             {
                 string focusChoice = FindChoiceByEffectGroup(snapshot, "focus", "hybrid");
                 if (!string.IsNullOrEmpty(focusChoice))
@@ -48646,7 +48709,7 @@ namespace GreedLast
                 }
             }
 
-            if ((effectGroup == "focus" || effectGroup == "hybrid") && snapshot.Focus <= 1)
+            if ((effectGroup == "focus" || effectGroup == "hybrid") && !snapshot.FocusStateActive && snapshot.Focus <= 1)
             {
                 return " / 집중 회복";
             }
