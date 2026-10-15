@@ -298,6 +298,7 @@ namespace GreedLast.Editor
                 AddPreparationPreviewFrames();
                 AddRewardPreviewFrames();
                 AddRecoveryPreviewFrames();
+                AddFinisherPreviewFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -324,7 +325,7 @@ namespace GreedLast.Editor
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
-                    Require(Frames.Count == (recoveryPreviewOnly || rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1309,6 +1310,38 @@ namespace GreedLast.Editor
                                 "Detailed recovery captures must not promise healing after its actual cap.");
                     }
                     string name = "99-recovery-" + (expected == 0 ? "capped" : expected == 1 ? "expand" : "stacked")
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddFinisherPreviewFrames()
+        {
+            var normal = GreedLastPrototypeRecoveryCheck.CreateBundleSamples(0, 0, 0, 0);
+            var broken = GreedLastPrototypeRecoveryCheck.CreateBundleSamples(0, 0, 0, 0, true);
+            var samples = new[] { normal[0], normal[1], broken[0] };
+            for (int i = 0; i < samples.Length; i++)
+            {
+                var sample = samples[i];
+                string expected = i == 0 ? "회복 대기" : i == 1 ? "집중 보상 대기" : "중단";
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구");
+                        ShowRun(sample.AnticipationBefore);
+                        ui.RenderRun(sample.Anticipation);
+                        if (detailed) ui.ToggleDevCleanView();
+                        if (detailed)
+                            Require(Read<Text>("judgementFeedbackText").text.Contains(expected, StringComparison.Ordinal),
+                                "Visible penultimate-judgement feedback must distinguish recovery, capped focus and broken bundles. Actual: "
+                                    + Read<Text>("judgementFeedbackText").text);
+                    }
+                    string name = "99-recovery-finisher-" + (i == 0 ? "heal" : i == 1 ? "focus" : "broken")
                         + (detailed ? "-detail" : "-basic");
                     Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
                     Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);

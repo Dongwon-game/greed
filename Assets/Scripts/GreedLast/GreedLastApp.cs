@@ -21748,7 +21748,7 @@ namespace GreedLast
             }
 
             string routeFinish = snapshot.PerfectBundleIntact
-                ? BuildRouteBundleObjectiveSuffix(snapshot.ActiveRouteProfile)
+                ? BuildRouteBundleObjectiveSuffix(snapshot)
                 : string.Empty;
 
             if (snapshot.InfiniteMode)
@@ -21772,12 +21772,12 @@ namespace GreedLast
             return routeFinish + " / 다음 통과로 선택지";
         }
 
-        private static string BuildRouteBundleObjectiveSuffix(string routeProfile)
+        private static string BuildRouteBundleObjectiveSuffix(GreedLastRunSnapshot snapshot)
         {
-            switch (routeProfile)
+            switch (snapshot.ActiveRouteProfile)
             {
                 case "안정 루트":
-                    return " / 안정 완주 회복";
+                    return snapshot.GoodHealthGainPreview > 0 ? " / 안정 완주 회복" : " / 안정 완주 집중";
                 case "변주 루트":
                     return " / 변주 완주 집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus;
                 case "압박 루트":
@@ -45547,7 +45547,7 @@ namespace GreedLast
             {
                 return "경로 " + routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget
                     + " · 마지막 " + nextTiming + " · " + nextAction
-                    + " · " + BuildRouteBundleRewardPreview(snapshot.ActiveRouteProfile);
+                    + " · " + BuildRouteBundleRewardPreview(snapshot);
             }
 
             return "경로 " + routeLabel + " " + snapshot.ChapterProgress + "/" + snapshot.ChapterTarget
@@ -45587,12 +45587,12 @@ namespace GreedLast
             return !string.IsNullOrEmpty(routeLabel) && nextTiming != "-" && avoidance != GreedLastAvoidanceType.None;
         }
 
-        private static string BuildRouteBundleRewardPreview(string routeProfile)
+        private static string BuildRouteBundleRewardPreview(GreedLastRunSnapshot snapshot)
         {
-            switch (routeProfile)
+            switch (snapshot.ActiveRouteProfile)
             {
                 case "안정 루트":
-                    return "회복 대기";
+                    return snapshot.GoodHealthGainPreview > 0 ? "회복 대기" : "집중 보상 대기";
                 case "변주 루트":
                     return "집중 +" + GreedLastRunCore.VariationRouteBundleFocusBonus + " 대기";
                 case "압박 루트":

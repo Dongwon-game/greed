@@ -10,11 +10,14 @@ namespace GreedLast.Editor
     {
         internal readonly struct Sample
         {
-            internal readonly GreedLastRunSnapshot Before, After;
-            internal Sample(GreedLastRunSnapshot before, GreedLastRunSnapshot after)
+            internal readonly GreedLastRunSnapshot Before, After, Anticipation, AnticipationBefore;
+            internal Sample(GreedLastRunSnapshot before, GreedLastRunSnapshot after, GreedLastRunSnapshot anticipation = default,
+                GreedLastRunSnapshot anticipationBefore = default)
             {
                 Before = before;
                 After = after;
+                Anticipation = anticipation;
+                AnticipationBefore = anticipationBefore;
             }
         }
 
@@ -88,9 +91,189 @@ namespace GreedLast.Editor
             Require(routeMismatches == 0 && objectiveMismatches == 0,
                 $"Recovery hints must match actual Good gains. Route={routeMismatches}, objective={objectiveMismatches}.");
             VerifyGoldenRecovery();
+            RunBundlePreviews();
+            RunChoiceHealthPreviews();
             Debug.Log($"Greed recovery previews passed: {cases} transient cores, {inputs} real Good judgements, growth 0/3,"
                 + " survival stacks 0-3, six route histories, healthy/two-natural-Miss entry, actual recovery cap/gauge expansion"
                 + " and survival/stable source ordering. Public core timing/input only; no private gameplay state edits, persistence, physical input or device-performance claim.");
+        }
+
+        [MenuItem("Greed Last/Run Route Finisher Preview Check")]
+        public static void RunBundlePreviews()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Finisher checks require Edit mode.");
+            int runs = 0, bundles = 0, mismatches = 0, recovery = 0, focus = 0, broken = 0, controls = 0;
+            foreach (int growth in new[] { 0, 3 })
+            {
+                for (int start = 0; start < 3; start++)
+                {
+                    for (int gift = 0; gift < 3; gift++) Check(growth, start, gift, 0, false);
+                    Check(growth, start, 0, 0, true);
+                }
+                Check(growth, 0, 0, 1, false);
+                Check(growth, 0, 0, 2, false);
+            }
+            Require(runs == 28 && bundles == 112 && recovery > 0 && focus > 0 && broken == 24 && controls == 16,
+                "Finisher checks must cover real healthy/capped stable rewards, broken bundles and unchanged variation/pressure controls.");
+            Require(mismatches == 0, $"Finisher hints must name the actual reward, not capped recovery. Mismatches={mismatches}.");
+            Debug.Log($"Greed route finisher previews passed: {runs} complete transient normal runs/420 actual judgements,"
+                + $" {bundles} route bundles, recovery={recovery}, focus={focus}, broken={broken}, other-route controls={controls}."
+                + " Public core timing/choice/input APIs only, no private state/clock edits, invincibility or personal saves. Not physical/device testing.");
+
+            void Check(int growth, int start, int gift, int route, bool breakBundles)
+            {
+                runs++;
+                foreach (Sample sample in CreateBundleSamples(growth, start, gift, route, breakBundles))
+                {
+                    bundles++;
+                    var before = sample.Before;
+                    var after = sample.After;
+                    string objective = Label("BuildStageTransitionObjectiveSuffix", before);
+                    string step = Label("BuildRouteStepFeedback", sample.Anticipation);
+                    bool valid;
+                    if (breakBundles)
+                    {
+                        broken++;
+                        valid = !objective.Contains("안정 완주", StringComparison.Ordinal)
+                            && !step.Contains("대기", StringComparison.Ordinal)
+                            && !after.JudgementText.Contains("패턴 묶음 완벽 -", StringComparison.Ordinal);
+                    }
+                    else if (route == 0)
+                    {
+                        bool healed = after.LastJudgementHealthChange > 0;
+                        if (healed) recovery++; else focus++;
+                        Require(after.JudgementText.Contains("패턴 묶음 완벽 - 안정 완주 / "
+                            + (healed ? "체력 +1" : "집중"), StringComparison.Ordinal),
+                            "Stable finishers must actually heal once or retain their existing capped focus fallback.");
+                        valid = objective.Contains(healed ? "안정 완주 회복" : "안정 완주 집중", StringComparison.Ordinal)
+                            && step.Contains(healed ? "회복 대기" : "집중 보상 대기", StringComparison.Ordinal);
+                    }
+                    else
+                    {
+                        controls++;
+                        string token = route == 1 ? "변주 완주 집중 +" : "압박 완주 +";
+                        valid = objective.Contains(token, StringComparison.Ordinal)
+                            && after.JudgementText.Contains(route == 1 ? "변주 완주 / 집중" : "압박 완주 / 점수 +", StringComparison.Ordinal);
+                    }
+                    if (!valid)
+                    {
+                        mismatches++;
+                        Debug.Log($"Greed finisher mismatch: growth={growth}, start={start}, gift={gift}, route={route},"
+                            + $" broken={breakBundles}, chapter={before.ChapterIndex}/{before.Phase}, health={before.Health}/{before.MaxHealth},"
+                            + $" actualHealth={after.LastJudgementHealthChange}, objective={objective}, step={step}.");
+                    }
+                }
+            }
+        }
+
+        [MenuItem("Greed Last/Run Choice Health Reward Check")]
+        public static void RunChoiceHealthPreviews()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Choice health checks require Edit mode.");
+            int choices = 0, healthChoices = 0, capped = 0, recovered = 0, mismatches = 0;
+            var types = new HashSet<string>();
+            var cappedTypes = new HashSet<string>();
+            foreach (int growth in new[] { 0, 3 })
+                for (int start = 0; start < 3; start++)
+                    for (int gift = 0; gift < 3; gift++)
+                        CreateBundleSamples(growth, start, gift, 0, observeChoice: (kind, selected, sample) =>
+                        {
+                            choices++;
+                            if (selected != "안정 호흡" && selected != "안정 루트" && selected != "생존 축" && selected != "사막의 잔상") return;
+                            healthChoices++;
+                            types.Add(selected);
+                            int gain = sample.After.Health - sample.Before.Health;
+                            Require(gain == 0 || gain == 1, "Real choice healing must preserve its existing one-point reward and cap.");
+                            Require(sample.After.MaxHealth == Mathf.Max(sample.Before.MaxHealth, sample.After.Health),
+                                "Choice health feedback must not change the historical maximum gauge.");
+                            if (gain == 0) { capped++; cappedTypes.Add(selected); } else recovered++;
+                            string expected = gain == 0 ? "효과: 체력 상한 유지" : "효과: 체력 +1";
+                            string effect = Array.Find(sample.After.JudgementText.Split('\n'), line => line.StartsWith("효과: ", StringComparison.Ordinal));
+                            if (effect == null || !effect.StartsWith(expected, StringComparison.Ordinal))
+                            {
+                                mismatches++;
+                                Debug.Log($"Greed choice health mismatch: growth={growth}, kind={kind}, selected={selected},"
+                                    + $" before={sample.Before.Health}/{sample.Before.MaxHealth}, after={sample.After.Health}/{sample.After.MaxHealth}, effect={effect}.");
+                            }
+                        });
+            Require(choices == 144 && healthChoices == 84 && types.Count == 4 && capped > 0 && recovered > 0
+                && cappedTypes.Contains("안정 루트") && cappedTypes.Contains("생존 축") && cappedTypes.Contains("사막의 잔상"),
+                "Choice controls must cover 18 complete runs, eight real choices each, four healing sources and three capped choice types.");
+            Require(mismatches == 0, $"Choice health notices must show actual gains or caps. Mismatches={mismatches}.");
+            int relicControls = 0;
+            foreach (int growth in new[] { 0, 3 })
+                CreateBundleSamples(growth, 0, 0, 1, observeChoice: (kind, selected, sample) =>
+                {
+                    if (selected != "사막의 잔상") return;
+                    Require(kind == GreedLastChoiceKind.Relic && sample.After.Health - sample.Before.Health == 1
+                        && sample.After.JudgementText.Contains("효과: 체력 +1 / ", StringComparison.Ordinal),
+                        "Separate non-stable route controls must retain an actual positive Sand Afterimage health reward.");
+                    relicControls++;
+                }, relic: 1);
+            Require(relicControls == 2, "Both growth levels need a separate positive relic health control.");
+            Debug.Log($"Greed choice health rewards passed: 18 matrix runs/270 actual judgements plus two complete relic controls/30 judgements,"
+                + $" {choices} choices/{healthChoices} healing choices, recovered={recovered}, capped={capped}."
+                + " Existing health rewards/caps/gauges unchanged, public choice/input/timing only; no personal data or private state edits, not physical/device testing.");
+        }
+
+        internal static List<Sample> CreateBundleSamples(int growth, int start, int gift, int route, bool broken = false,
+            Action<GreedLastChoiceKind, string, Sample> observeChoice = null, int relic = -1)
+        {
+            var samples = new List<Sample>();
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default, anticipation = default, anticipationBefore = default;
+            core.SnapshotChanged += value => run = value;
+            core.ConfigureGrowth(growth, growth, 0);
+            core.Enter();
+            float clock = Time.realtimeSinceStartup;
+            int inputs = 0;
+            while (!run.Stopped && inputs < 15)
+            {
+                if (run.ChoiceActive)
+                {
+                    int lane = run.ChoiceKind == GreedLastChoiceKind.StartGift ? start
+                        : run.ChoiceKind == GreedLastChoiceKind.Node ? route
+                        : run.ChoiceKind == GreedLastChoiceKind.Relic && relic >= 0 ? relic : gift;
+                    var previous = run;
+                    string selected = lane == 0 ? run.ChoiceLeft : lane == 1 ? run.ChoiceCenter : run.ChoiceRight;
+                    core.HandleInput((GreedLastRunChannel)(lane + 1), clock);
+                    observeChoice?.Invoke(previous.ChoiceKind, selected, new Sample(previous, run));
+                    continue;
+                }
+                for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 500; wait++) Advance(0.01f);
+                Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible,
+                    "Finisher samples need naturally arriving normal/escape traps without shortcut or invincibility.");
+                bool good = broken && run.ChapterProgress == 0 && !string.IsNullOrEmpty(run.ActiveRouteProfile);
+                float delta = good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
+                var before = run;
+                core.HandleInput(run.Pattern.Channel, clock);
+                Require(run.LastResult == (good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success),
+                    "Finisher samples must use actual declared exact/Good judgements.");
+                if (before.ChapterProgress == before.ChapterTarget - 1 && before.ActiveRouteProfile.EndsWith(" 루트", StringComparison.Ordinal))
+                    samples.Add(new Sample(before, run, anticipation, anticipationBefore));
+                if (before.ChapterProgress == before.ChapterTarget - 2)
+                {
+                    anticipationBefore = before;
+                    anticipation = run;
+                }
+                inputs++;
+            }
+            Require(run.EscapeSucceeded && inputs == 15 && samples.Count == 4,
+                "Every finisher sample must naturally clear 15 traps, all choices, core recovery and escape with four route bundles.");
+            core.Exit();
+            return samples;
+
+            void Advance(float seconds)
+            {
+                Require(seconds >= -0.0002f, "Finisher checks must not rewind a core clock.");
+                while (seconds > 0.0001f)
+                {
+                    float step = Mathf.Min(seconds, 0.01f);
+                    core.Tick(clock += step);
+                    seconds -= step;
+                }
+            }
         }
 
         private static void VerifyGoldenRecovery()

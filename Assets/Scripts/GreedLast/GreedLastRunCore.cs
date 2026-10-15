@@ -4245,16 +4245,12 @@ namespace GreedLast
                 case "박자 감각":
                     return ApplyChoiceFocusReward(1);
                 case "안정 호흡":
-                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
-                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return "체력 +1";
+                    return ApplyChoiceHealthReward();
                 case "고점 본능":
                     AddScore(80);
                     return "점수 +80";
                 case "안정 루트":
-                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
-                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return "체력 +1 / 넓은 판정 / Good 체력 +" + StableRouteGoodHealthBonus;
+                    return ApplyChoiceHealthReward() + " / 넓은 판정 / Good 체력 +" + StableRouteGoodHealthBonus;
                 case "변주 루트":
                     return ApplyChoiceFocusReward(1) + " / 엇박 우선 / 정박 집중 +" + VariationRouteOffbeatFocusBonus;
                 case "압박 루트":
@@ -4265,9 +4261,7 @@ namespace GreedLast
                 case "집중 축":
                     return AppendGiftStackReward(selected, ApplyChoiceFocusReward(2));
                 case "생존 축":
-                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
-                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return AppendGiftStackReward(selected, "체력 +1");
+                    return AppendGiftStackReward(selected, ApplyChoiceHealthReward());
                 case "연쇄 축":
                     combo += 2;
                     maxCombo = Mathf.Max(maxCombo, combo);
@@ -4277,9 +4271,7 @@ namespace GreedLast
                     AddScore(200);
                     return "점수 +200";
                 case "사막의 잔상":
-                    health = Mathf.Min(BuildBonusHealthCap(), health + 1);
-                    maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
-                    return "체력 +1 / " + ApplyChoiceFocusReward(1);
+                    return ApplyChoiceHealthReward() + " / " + ApplyChoiceFocusReward(1);
                 case "파라오의 각인":
                     combo += 3;
                     maxCombo = Mathf.Max(maxCombo, combo);
@@ -4287,6 +4279,15 @@ namespace GreedLast
                 default:
                     return completedKind == GreedLastChoiceKind.None ? string.Empty : "기본 흐름 유지";
             }
+        }
+
+        private string ApplyChoiceHealthReward()
+        {
+            int previous = health;
+            health = Mathf.Min(BuildBonusHealthCap(), health + 1);
+            maxHealthThisRun = Mathf.Max(maxHealthThisRun, health);
+            int gain = health - previous;
+            return gain == 0 ? "체력 상한 유지" : "체력 " + (gain > 0 ? "+" : string.Empty) + gain;
         }
 
         private string AppendGiftStackReward(string gift, string rewardText)

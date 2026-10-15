@@ -287,6 +287,8 @@ namespace GreedLast.Editor
                         && cycle.engineRecoveryGoodPreviews == 3 && cycle.engineRecoveryDamageCases == 2
                         && cycle.engineRecoveryActualHealing == 3 && cycle.engineRecoveryCapPreserved
                         && cycle.engineThreatPreviewBoundaries > 0
+                        && cycle.engineStableFinisherPreviews > 0 && cycle.engineStableFocusFallbacks > 0
+                        && cycle.engineChoiceHealthPreviews > 0 && cycle.engineCappedChoiceHealthPreviews > 0
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -426,6 +428,8 @@ namespace GreedLast.Editor
             public int engineRecoveryGoodPreviews, engineRecoveryDamageCases, engineRecoveryActualHealing;
             public bool engineRecoveryCapPreserved;
             public int engineThreatPreviewBoundaries;
+            public int engineStableFinisherPreviews, engineStableFocusFallbacks;
+            public int engineChoiceHealthPreviews, engineCappedChoiceHealthPreviews;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -3211,6 +3215,32 @@ namespace GreedLast.Editor
                             Require(run.GoodHealthGainPreview == snapshot.LastJudgementHealthChange,
                                 "Every actual engine Good must match its immediately preceding recovery prediction.");
                         report.liveRewardPreviewJudgements++;
+                    }
+                    if (run.ActivePattern && run.ActiveRouteProfile == "안정 루트"
+                        && snapshot.StableRouteBundleCount == run.StableRouteBundleCount + 1)
+                    {
+                        bool heals = run.GoodHealthGainPreview > 0;
+                        Require(snapshot.LastResult == GreedLastJudgementResult.Success
+                            && snapshot.LastJudgementHealthChange == (heals ? 1 : 0)
+                            && snapshot.JudgementText.Contains("패턴 묶음 완벽 - 안정 완주 / "
+                                + (heals ? "체력 +1" : "집중"), StringComparison.Ordinal),
+                            "Actual engine stable finishers must retain recovery or their existing capped focus fallback.");
+                        report.engineStableFinisherPreviews++;
+                        if (!heals) report.engineStableFocusFallbacks++;
+                    }
+                    if (run.ChoiceActive && (!snapshot.ChoiceActive || snapshot.ChoiceKind != run.ChoiceKind))
+                    {
+                        string healthChoice = Array.Find(new[] { "안정 호흡", "안정 루트", "생존 축", "사막의 잔상" },
+                            choice => snapshot.JudgementText.StartsWith(choice + " 선택", StringComparison.Ordinal));
+                        if (healthChoice != null)
+                        {
+                            int gain = snapshot.Health - run.Health;
+                            Require((gain == 0 || gain == 1) && snapshot.JudgementText.Contains(gain == 0
+                                ? "효과: 체력 상한 유지" : "효과: 체력 +1", StringComparison.Ordinal),
+                                "Actual engine health choices must report their real gain or existing cap.");
+                            report.engineChoiceHealthPreviews++;
+                            if (gain == 0) report.engineCappedChoiceHealthPreviews++;
+                        }
                     }
                     if (run.InfiniteMode && snapshot.InfiniteMode && run.ActivePattern
                         && snapshot.InfiniteSectionsCleared == run.InfiniteSectionsCleared + 1)
