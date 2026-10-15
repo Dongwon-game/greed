@@ -53,6 +53,7 @@ namespace GreedLast.Editor
             public bool choicePreviewOnly;
             public bool liveFocusPreviewOnly;
             public bool resolvedBonusPreviewOnly;
+            public bool goodFocusPreviewOnly;
             public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
@@ -169,13 +170,19 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Capture Reward Guidance")]
         public static void RunRewardGuidanceOnly()
         {
-            Begin(false, choicePreviewOnly: true, liveFocusPreviewOnly: true, resolvedBonusPreviewOnly: true);
+            Begin(false, choicePreviewOnly: true, liveFocusPreviewOnly: true, resolvedBonusPreviewOnly: true, goodFocusPreviewOnly: true);
         }
 
         [MenuItem("Greed Last/Capture Resolved Bonus Feedback")]
         public static void RunResolvedBonusPreviewOnly()
         {
             Begin(false, resolvedBonusPreviewOnly: true);
+        }
+
+        [MenuItem("Greed Last/Capture Good Focus Feedback")]
+        public static void RunGoodFocusPreviewOnly()
+        {
+            Begin(false, goodFocusPreviewOnly: true);
         }
 
         [MenuItem("Greed Last/Capture Text Clipping Rejection Check")]
@@ -193,7 +200,7 @@ namespace GreedLast.Editor
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
             bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false,
             bool rewardPreviewOnly = false, bool recoveryPreviewOnly = false, bool choicePreviewOnly = false, bool liveFocusPreviewOnly = false,
-            bool resolvedBonusPreviewOnly = false)
+            bool resolvedBonusPreviewOnly = false, bool goodFocusPreviewOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -222,6 +229,7 @@ namespace GreedLast.Editor
                 choicePreviewOnly = choicePreviewOnly,
                 liveFocusPreviewOnly = liveFocusPreviewOnly,
                 resolvedBonusPreviewOnly = resolvedBonusPreviewOnly,
+                goodFocusPreviewOnly = goodFocusPreviewOnly,
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
             };
@@ -333,6 +341,7 @@ namespace GreedLast.Editor
                 AddChoiceRewardPreviewFrames();
                 AddLiveFocusFeedbackFrames();
                 AddResolvedBonusFeedbackFrames();
+                AddGoodFocusFeedbackFrames();
                 AddGameplayChoiceFrames();
                 AddBeatPulseFrames(live, resume);
                 AddCombinedFeedbackFrames();
@@ -347,9 +356,9 @@ namespace GreedLast.Editor
                 AddRetainedViewportFrames("62-pause", () => ShowRun(paused));
                 AddRetainedViewportFrames("79-player-trap-resume", () => ShowRun(flowStopped));
                 AddConnectionFrames();
-                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly || rewardPreviewOnly || recoveryPreviewOnly || choicePreviewOnly || liveFocusPreviewOnly || resolvedBonusPreviewOnly)
+                if (scoreBoundaryOnly || progressBoundaryOnly || preparationPreviewOnly || rewardPreviewOnly || recoveryPreviewOnly || choicePreviewOnly || liveFocusPreviewOnly || resolvedBonusPreviewOnly || goodFocusPreviewOnly)
                 {
-                    string prefix = resolvedBonusPreviewOnly ? "102-resolved-bonus-" : liveFocusPreviewOnly ? "101-live-focus-" : choicePreviewOnly ? "100-choice-reward-" : recoveryPreviewOnly ? "99-recovery-" : rewardPreviewOnly ? "98-live-reward-" : preparationPreviewOnly ? "96-preparation-"
+                    string prefix = goodFocusPreviewOnly ? "103-good-focus-" : resolvedBonusPreviewOnly ? "102-resolved-bonus-" : liveFocusPreviewOnly ? "101-live-focus-" : choicePreviewOnly ? "100-choice-reward-" : recoveryPreviewOnly ? "99-recovery-" : rewardPreviewOnly ? "98-live-reward-" : preparationPreviewOnly ? "96-preparation-"
                         : progressBoundaryOnly ? "93-progress-" : "92-score-ceiling-";
                     int count = Frames.Count;
                     for (int i = 0; i < count; i++)
@@ -359,10 +368,11 @@ namespace GreedLast.Editor
                             || (choicePreviewOnly && frame.Name.StartsWith("100-choice-reward-", StringComparison.Ordinal))
                             || (liveFocusPreviewOnly && frame.Name.StartsWith("101-live-focus-", StringComparison.Ordinal))
                             || (resolvedBonusPreviewOnly && frame.Name.StartsWith("102-resolved-bonus-", StringComparison.Ordinal))
+                            || (goodFocusPreviewOnly && frame.Name.StartsWith("103-good-focus-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
-                    int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0);
+                    int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
                     Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
@@ -1476,6 +1486,43 @@ namespace GreedLast.Editor
                             "Visible threat bonus must belong to the completed trap, not the next level. Actual: " + feedback);
                     }
                     string name = "102-resolved-bonus-" + (index == 0 ? "profile-heal" : "threat-rise") + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
+        }
+
+        private static void AddGoodFocusFeedbackFrames()
+        {
+            var samples = GreedLastPrototypeRecoveryCheck.CreateGoodFocusSamples();
+            var activation = samples.Find(sample => sample.After.LastResult == GreedLastJudgementResult.Good
+                && !sample.Before.FocusStateActive && sample.After.FocusStateActive && !sample.After.ChoiceActive);
+            var empty = samples.Find(sample => sample.After.LastResult == GreedLastJudgementResult.Good
+                && sample.Before.FocusStateActive && sample.Before.Combo == 0 && !sample.After.ChoiceActive);
+            var retained = samples.Find(sample => sample.After.LastResult == GreedLastJudgementResult.Good
+                && sample.Before.FocusStateActive && sample.After.Combo > 0 && !sample.After.ChoiceActive);
+            Require(activation.After.LastResult == GreedLastJudgementResult.Good && empty.After.LastResult == GreedLastJudgementResult.Good
+                && retained.After.LastResult == GreedLastJudgementResult.Good, "Good captures need natural activation, empty and retained chain results.");
+            for (int index = 0; index < 3; index++)
+            {
+                var sample = index == 0 ? activation : index == 1 ? empty : retained;
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                        ShowScreen(GreedLastScreenState.LobbyReady, "피라미드 입구");
+                        ShowRun(sample.Before);
+                        ui.RenderRun(sample.After);
+                        if (detailed) ui.ToggleDevCleanView();
+                        if (!detailed) return;
+                        string feedback = Read<Text>("judgementFeedbackText").text;
+                        Require(feedback.Contains("집중 발동", StringComparison.Ordinal) == !sample.Before.FocusStateActive
+                            && feedback.Contains("집중 연쇄 완충", StringComparison.Ordinal) == (sample.After.Combo > 0),
+                            "Good feedback must separate activation and genuinely retained chains. Actual: " + feedback);
+                    }
+                    string name = "103-good-focus-" + (index == 0 ? "activation" : index == 1 ? "empty" : "retained") + (detailed ? "-detail" : "-basic");
                     Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
                     Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
                     Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
@@ -2952,7 +2999,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.choicePreviewOnly && report.liveFocusPreviewOnly ? "reward-guidance-" : report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.choicePreviewOnly && report.liveFocusPreviewOnly ? "reward-guidance-" : report.goodFocusPreviewOnly ? "good-focus-" : report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";

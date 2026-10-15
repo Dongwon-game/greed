@@ -291,6 +291,8 @@ namespace GreedLast.Editor
                         && cycle.engineChoiceHealthPreviews > 0 && cycle.engineCappedChoiceHealthPreviews > 0
                         && cycle.engineChoiceFocusPreviews > 0 && cycle.engineLiveFocusFeedbackCases > 0
                         && cycle.engineResolvedBonusCases > 0 && cycle.engineResolvedBonusThreatBoundaries > 0
+                        && cycle.engineGoodFocusFeedbackCases > 0
+                        && cycle.engineGoodFocusStateCases == 3
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -434,6 +436,8 @@ namespace GreedLast.Editor
             public int engineChoiceHealthPreviews, engineCappedChoiceHealthPreviews;
             public int engineChoiceFocusPreviews, engineLiveFocusFeedbackCases;
             public int engineResolvedBonusCases, engineResolvedBonusThreatBoundaries;
+            public int engineGoodFocusFeedbackCases;
+            public int engineGoodFocusStateCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -754,6 +758,7 @@ namespace GreedLast.Editor
                 if (SessionState.GetBool(Prefix + "fullLoop", false))
                 {
                     yield return VerifyRecoveryPreviews();
+                    yield return VerifyGoodFocusStates();
                     yield return VerifyMultiTouch();
                     yield return VerifyFullLoop();
                 }
@@ -2788,6 +2793,69 @@ namespace GreedLast.Editor
                     + " actual Update/EventSystem touch frames, growth/source restored and no persistence or private clocks edited. Not physical input or device-performance testing.");
             }
 
+            private IEnumerator VerifyGoodFocusStates()
+            {
+                GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
+                var loadout = new GreedLastRunRecord(true, 0, 3, 0, 0, 0, 0, 0, 0, 20f,
+                    "engine-good-focus", "박자 감각", string.Empty, string.Empty, "박자 감각 / 변주 루트", string.Empty);
+                try
+                {
+                    core.Exit();
+                    if (ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                    for (int mode = 0; mode < 3; mode++)
+                    {
+                        core.ConfigureGrowth(0, mode == 0 ? 0 : 3, 0);
+                        state.SetInfiniteRun(string.Empty);
+                        core.EnterInfiniteRun(loadout);
+                        if (run.DevInvincible) core.ToggleDevInvincible();
+                        if (mode == 2)
+                            for (int hit = 0; hit < 2; hit++)
+                            {
+                                yield return WaitForTouchablePattern();
+                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                                Require(run.LastResult == GreedLastJudgementResult.Success, "Retained-chain setup needs two real successful taps.");
+                            }
+                        float deadline = Time.realtimeSinceStartup + 9f;
+                        while (!run.ActivePattern || run.CountdownActive || run.ElapsedSeconds + core.InputTimingOffsetSeconds
+                            < run.Pattern.CoreSeconds + run.Pattern.SuccessWindowSeconds + 0.015f)
+                        {
+                            Require(!run.Stopped && Time.realtimeSinceStartup < deadline, "Good focus cases need real engine-driven Good timing.");
+                            yield return null;
+                        }
+                        var before = run;
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                        yield return null;
+                        Require(run.LastResult == GreedLastJudgementResult.Good && run.FocusStateActive
+                            && run.LastJudgementFocusStateExtensionSeconds == 0f,
+                            "Good focus cases must keep their real judgement and must not extend the timer.");
+                        bool activates = mode == 0;
+                        bool retains = mode == 2;
+                        Require(before.FocusStateActive != activates && (activates ? before.Focus == 2 : true)
+                            && (retains ? run.Combo > 0 && run.Combo == before.Combo - 1 : run.Combo == 0),
+                            "Good states must arise from actual charge/activation/empty or retained combos, not seeded fields.");
+                        string feedback = Read<Text>(ui, "judgementFeedbackText").text;
+                        Require(feedback.Contains("집중 발동", StringComparison.Ordinal) == activates
+                            && feedback.Contains("집중 연쇄 완충", StringComparison.Ordinal) == retains,
+                            "Visible engine Good feedback must distinguish activation, empty and retained chains. Actual: " + feedback);
+                        report.engineGoodFocusStateCases++;
+                        core.Exit();
+                        state.SetLobbyReady(backend.LoadLobby());
+                        yield return null;
+                    }
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
+                    core.ConfigureGrowth(backend.GrowthSurvivalLevel, backend.GrowthFocusLevel, backend.GrowthTimingLevel);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
+                Debug.Log("Greed engine Good focus states passed: new activation, active empty combo and genuinely retained combo,"
+                    + " visible detailed feedback after real Update/EventSystem touches, no Good timer extension. Public temporary core/loadout setup,"
+                    + " growth/source restored, no private clocks/state or personal persistence; not hardware/device testing.");
+            }
+
             private IEnumerator VerifyFullLoop()
             {
                 float began = Time.realtimeSinceStartup;
@@ -3216,8 +3284,17 @@ namespace GreedLast.Editor
                             "Engine center/Good reward previews must include the actual next chain and bundle gain: expected="
                                 + expected + ", actual=" + snapshot.LastJudgementScoreGain);
                         if (snapshot.LastResult == GreedLastJudgementResult.Good)
+                        {
                             Require(run.GoodHealthGainPreview == snapshot.LastJudgementHealthChange,
                                 "Every actual engine Good must match its immediately preceding recovery prediction.");
+                            string goodEffect = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildGoodEffectLine", BindingFlags.Static | BindingFlags.NonPublic)
+                                .Invoke(null, new object[] { snapshot });
+                            bool retains = run.FocusStateActive && snapshot.Combo > 0;
+                            Require(goodEffect.Contains("집중 연쇄 완충", StringComparison.Ordinal) == retains
+                                && (run.FocusStateActive || !snapshot.FocusStateActive || goodEffect.Contains("집중 발동", StringComparison.Ordinal)),
+                                "Engine Good feedback must distinguish new focus activation from actually retained combos.");
+                            report.engineGoodFocusFeedbackCases++;
+                        }
                         report.liveRewardPreviewJudgements++;
                         int expectedThreat = snapshot.LastResult == GreedLastJudgementResult.Success && run.InfiniteMode
                             ? (int)typeof(GreedLastRunCore).GetMethod("BuildThreatPrecisionBonusForLevel", BindingFlags.Static | BindingFlags.NonPublic)

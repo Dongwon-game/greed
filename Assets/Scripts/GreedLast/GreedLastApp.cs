@@ -45738,7 +45738,8 @@ namespace GreedLast
 
             if (snapshot.FocusStateActive)
             {
-                AppendCompactStatus(ref effect, "집중 연쇄 완충");
+                if (!snapshot.LastJudgementStartedInFocusState) AppendCompactStatus(ref effect, "집중 발동");
+                else if (snapshot.Combo > 0) AppendCompactStatus(ref effect, "집중 연쇄 완충");
             }
             else if (snapshot.Focus == snapshot.MaxFocus - 1 && snapshot.MaxFocus > 1)
             {

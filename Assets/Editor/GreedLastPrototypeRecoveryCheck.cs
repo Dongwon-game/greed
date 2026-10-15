@@ -347,26 +347,65 @@ namespace GreedLast.Editor
                         });
             Require(inputs == 180 && active > 0 && inactive > 0 && activations > 0 && perfect > 0 && variation > 0,
                 "Focus feedback controls need twelve complete runs, center/outer Success, activation and active Perfect/variation rewards.");
-            int goodInputs = 0, activeGood = 0, activeSandGood = 0;
-            CreateBundleSamples(3, 0, 0, 1, relic: 1, allGood: true, observeJudgement: sample =>
-            {
-                goodInputs++;
-                Require(sample.After.LastResult == GreedLastJudgementResult.Good
-                    && sample.After.LastJudgementStartedInFocusState == sample.Before.FocusStateActive,
-                    "Good focus controls must preserve their actual result and focus provenance.");
-                if (!sample.Before.FocusStateActive) return;
-                activeGood++;
-                Require(sample.After.LastJudgementFocusStateExtensionSeconds == 0f
-                    && Mathf.Abs(sample.After.FocusStateRemainingSeconds - sample.Before.FocusStateRemainingSeconds) < 0.0002f
-                    && !sample.After.JudgementText.Contains("보정 집중 +", StringComparison.Ordinal),
-                    "An active-state Good must neither extend focus nor claim a discarded charge.");
-                if (sample.Before.ActiveRelic == "사막의 잔상") activeSandGood++;
-            });
-            Require(goodInputs == 15 && activeGood > 0 && activeSandGood > 0,
-                "Separate Good controls must reach actual active Sand Afterimage rewards, not seeded focus.");
+            RunGoodFocusFeedback();
             Debug.Log($"Greed live focus feedback passed: 12 complete normal runs/{inputs} actual judgements, active={active}, inactive={inactive},"
-                + $" activations={activations}, active Perfect={perfect}, active variation={variation}; separate Good run={goodInputs}, active={activeGood}, active Sand={activeSandGood}. Existing scoring, focus and counters preserved;"
+                + $" activations={activations}, active Perfect={perfect}, active variation={variation}. Existing scoring, focus and counters preserved;"
                 + " public monotonic timing/input only, no invincibility, private state or personal data, not physical/device testing.");
+        }
+
+        [MenuItem("Greed Last/Run Good Focus Feedback Check")]
+        public static void RunGoodFocusFeedback()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Good focus checks require Edit mode.");
+            var samples = CreateGoodFocusSamples();
+            int good = 0, active = 0, sand = 0, activations = 0, retained = 0, mismatches = 0;
+            foreach (var sample in samples)
+            {
+                var before = sample.Before;
+                var after = sample.After;
+                if (after.LastResult != GreedLastJudgementResult.Good) continue;
+                good++;
+                Require(after.LastJudgementStartedInFocusState == before.FocusStateActive,
+                    "A Good must retain whether focus existed before the judgement.");
+                int expectedCombo = before.FocusStateActive && before.Combo > 0 ? Mathf.Max(0, before.Combo - 1) : 0;
+                Require(after.Combo == expectedCombo, "Existing Good combo softening/reset must remain unchanged.");
+                if (before.FocusStateActive)
+                {
+                    active++;
+                    Require(after.LastJudgementFocusStateExtensionSeconds == 0f
+                        && Mathf.Abs(after.FocusStateRemainingSeconds - before.FocusStateRemainingSeconds) < 0.0002f
+                        && !after.JudgementText.Contains("보정 집중 +", StringComparison.Ordinal),
+                        "An active-state Good must neither extend focus nor claim a discarded charge.");
+                    if (before.ActiveRelic == "사막의 잔상") sand++;
+                }
+                bool activates = !before.FocusStateActive && after.FocusStateActive;
+                bool retains = before.FocusStateActive && expectedCombo > 0;
+                if (activates) activations++;
+                if (retains) retained++;
+                string effect = Label("BuildGoodEffectLine", after);
+                if (effect.Contains("집중 연쇄 완충", StringComparison.Ordinal) != retains
+                    || (activates && !effect.Contains("집중 발동", StringComparison.Ordinal)))
+                {
+                    mismatches++;
+                    if (mismatches <= 8) Debug.Log($"Greed Good focus mismatch: before={before.FocusStateActive}/{before.Combo},"
+                        + $" after={after.FocusStateActive}/{after.Combo}, activation={activates}, retained={retains}, effect={effect}.");
+                }
+            }
+            Debug.Log($"Greed Good focus audit: three complete transient normal runs/{samples.Count} actual judgements, Good={good},"
+                + $" active={active}, active Sand={sand}, activations={activations}, retained chains={retained}, mismatches={mismatches}."
+                + " Public monotonic timing/input only, no private state, invincibility, shortcuts or personal data; not physical/device testing.");
+            Require(samples.Count == 45 && good == 34 && active > 0 && sand > 0 && activations > 0 && retained > 0,
+                "Good controls must naturally cover new activation, active empty chains and actual retained combos.");
+            Require(mismatches == 0, $"Good focus feedback must describe the actual activation/retained combo. Mismatches={mismatches}.");
+        }
+
+        internal static List<Sample> CreateGoodFocusSamples()
+        {
+            var samples = new List<Sample>();
+            foreach (int growth in new[] { 0, 3 })
+                CreateBundleSamples(growth, 0, 0, 1, relic: 1, allGood: true, observeJudgement: samples.Add);
+            CreateBundleSamples(3, 0, 0, 1, broken: true, relic: 1, observeJudgement: samples.Add);
+            return samples;
         }
 
         internal static Dictionary<string, Sample> CreateLiveFocusSamples()
