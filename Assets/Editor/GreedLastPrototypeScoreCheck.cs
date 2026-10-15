@@ -26,6 +26,7 @@ namespace GreedLast.Editor
             VerifyRecordReload();
             VerifyLoadoutReload();
             RunRewardPreviews();
+            RunResolvedBonusFeedback();
             Debug.Log("Greed score boundaries passed: actual exact/Good/Miss rewards, section/route rewards, grade and review targets, capped recent/best/ranking JSON reload, and all three isolated normal-save slots with one candidate and two starts. Numeric boundary values are injected in isolated editor cores/records; this is not a multi-hour play or device-performance test. Personal settings are preserved and personal slots are not accessed.");
         }
 
@@ -105,6 +106,9 @@ namespace GreedLast.Editor
                     float delta = good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
                     var before = run;
+                    int profileBefore = miss ? 0 : ReadProfileBonusBeforeInput(core, before, good);
+                    int threatBefore = miss || good || normal ? 0
+                        : Invoke<int>(typeof(GreedLastRunCore), "BuildThreatPrecisionBonusForLevel", before.InfiniteThreatLevel, before.Pattern.TimingType);
                     int preview = Invoke<int>(typeof(GreedLastRuntimeUi), good ? "BuildActiveGoodScorePreview" : "BuildActiveExactScorePreview", before);
                     var input = miss ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
                         : run.Pattern.Channel;
@@ -132,6 +136,9 @@ namespace GreedLast.Editor
                     if (!miss)
                     {
                         comparisons++;
+                        Require(run.LastJudgementProfileScoreBonus == profileBefore && run.LastJudgementThreatScoreBonus == threatBefore
+                            && !run.LastJudgementScoreLimited,
+                            "Live bonus accounting must retain the pre-hit profile/threat inputs across every normal/infinite Success and Good.");
                         if (preview != run.LastJudgementScoreGain)
                         {
                             mismatches++;
@@ -161,6 +168,103 @@ namespace GreedLast.Editor
                     }
                 }
             }
+        }
+
+        [MenuItem("Greed Last/Run Resolved Score Feedback Check")]
+        public static void RunResolvedBonusFeedback()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Resolved bonus checks require Edit mode.");
+            int comparisons = 0, profileMismatches = 0, threatMismatches = 0, healingBoundaries = 0, threatBoundaries = 0;
+            foreach (int growth in new[] { 0, 3 })
+                foreach (var sample in CreateResolvedBonusSamples(growth))
+                {
+                    if (sample.after.LastResult != GreedLastJudgementResult.Success) continue;
+                    comparisons++;
+                    Require(sample.after.LastJudgementProfileScoreBonus == sample.profile
+                        && sample.after.LastJudgementThreatScoreBonus == sample.threat && !sample.after.LastJudgementScoreLimited,
+                        "Resolved bonus metadata must retain actual scoring inputs independently of the later recovery/threat state.");
+                    if (sample.after.Health > sample.before.Health) healingBoundaries++;
+                    if (sample.after.InfiniteThreatLevel > sample.before.InfiniteThreatLevel) threatBoundaries++;
+                    string profile = Invoke<string>(typeof(GreedLastRuntimeUi), "BuildChoiceProfileScoreBonusPreview", sample.after);
+                    int threat = (int)typeof(GreedLastRuntimeUi).GetMethod("BuildThreatPrecisionBonusPreview",
+                        BindingFlags.Static | BindingFlags.NonPublic, null,
+                        new[] { typeof(GreedLastRunSnapshot), typeof(GreedLastPatternModel) }, null)
+                        .Invoke(null, new object[] { sample.after, sample.before.Pattern });
+                    if (profile != "조합 +" + sample.profile)
+                    {
+                        profileMismatches++;
+                        Debug.Log($"Greed resolved profile mismatch: growth={growth}, health={sample.before.Health}/{sample.before.MaxHealth}"
+                            + $"->{sample.after.Health}/{sample.after.MaxHealth}, expected={sample.profile}, actual={profile}.");
+                    }
+                    if (threat != sample.threat)
+                    {
+                        threatMismatches++;
+                        Debug.Log($"Greed resolved threat mismatch: growth={growth}, level={sample.before.InfiniteThreatLevel}"
+                            + $"->{sample.after.InfiniteThreatLevel}, timing={sample.before.Pattern.TimingType}, expected={sample.threat}, actual={threat}.");
+                    }
+                }
+            Debug.Log($"Greed resolved bonus audit: two transient infinite runs/36 actual judgements, success comparisons={comparisons},"
+                + $" healing boundaries={healingBoundaries}, threat boundaries={threatBoundaries}, profile mismatches={profileMismatches}, threat mismatches={threatMismatches}."
+                + " Public monotonic timing/input, natural two-Miss damage and actual stable finishers; pure core calculators read before input,"
+                + " no private state edits, invincibility, shortcuts or persistence. Not physical/device testing.");
+            Require(comparisons == 32 && healingBoundaries > 0 && threatBoundaries == 6,
+                "Resolved bonus controls must naturally heal through stable finishers and cross three threat levels at both growth levels.");
+            Require(profileMismatches == 0 && threatMismatches == 0,
+                $"Resolved bonus details must use the scored state, not the next state. Profile={profileMismatches}, threat={threatMismatches}.");
+        }
+
+        internal static System.Collections.Generic.List<(GreedLastRunSnapshot before, GreedLastRunSnapshot after, int profile, int threat)> CreateResolvedBonusSamples(int growth)
+        {
+            var samples = new System.Collections.Generic.List<(GreedLastRunSnapshot, GreedLastRunSnapshot, int, int)>();
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.ConfigureGrowth(growth, 0, 0);
+            core.EnterInfiniteRun(new GreedLastRunRecord(true, 0, 3, 0, 0, 0, 0, 0, 0, 20f,
+                "resolved-bonus", string.Empty, string.Empty, string.Empty, "안정 루트", string.Empty));
+            float clock = Time.realtimeSinceStartup;
+            for (int input = 0; input < 18; input++)
+            {
+                for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 500; wait++) Advance(0.01f);
+                Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible, "Bonus controls need naturally arriving traps with normal damage.");
+                Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds);
+                var before = run;
+                bool miss = input < 2;
+                int profile = 0, threat = 0;
+                if (!miss)
+                {
+                    profile = ReadProfileBonusBeforeInput(core, before, false);
+                    threat = Invoke<int>(typeof(GreedLastRunCore), "BuildThreatPrecisionBonusForLevel", run.InfiniteThreatLevel, run.Pattern.TimingType);
+                }
+                core.HandleInput(miss ? (run.Pattern.Channel == GreedLastRunChannel.Left
+                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.Channel, clock);
+                Require(!run.Stopped && run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Success),
+                    "Resolved bonus controls must survive their two real misses and score actual center hits.");
+                samples.Add((before, run, profile, threat));
+            }
+            core.Exit();
+            return samples;
+
+            void Advance(float seconds)
+            {
+                Require(seconds >= -0.0002f, "Resolved bonus checks must not rewind a clock.");
+                while (seconds > 0.0001f)
+                {
+                    float step = Mathf.Min(seconds, 0.01f);
+                    core.Tick(clock += step);
+                    seconds -= step;
+                }
+            }
+        }
+
+        private static int ReadProfileBonusBeforeInput(GreedLastRunCore core, GreedLastRunSnapshot snapshot, bool good)
+        {
+            if (good) return (int)typeof(GreedLastRunCore).GetMethod("BuildChoiceProfileGoodScoreBonus", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(core, new object[] { null });
+            int combo = snapshot.Combo + InvokeInstance<int>(core, "BuildSuccessComboGain", true);
+            return (int)typeof(GreedLastRunCore).GetMethod("BuildChoiceProfileSuccessScoreBonus", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(bool), typeof(int), typeof(string).MakeByRefType() }, null)
+                .Invoke(core, new object[] { true, combo, null });
         }
 
         private static void VerifyHealthFeedbackControls()
@@ -357,6 +461,12 @@ namespace GreedLast.Editor
             Require(expected == GreedLastJudgementResult.Miss ? run.Score == initial
                 : initial == 0 ? run.Score > 0 : run.Score == int.MaxValue,
                 "Score rewards must remain unchanged normally and saturate only at the existing storage ceiling.");
+            bool limited = initial > 0 && expected != GreedLastJudgementResult.Miss;
+            Require(run.LastJudgementScoreLimited == limited,
+                "Only a real capped award may mark its judgement as score limited, not normal rewards or Miss.");
+            if (limited) Require(Invoke<string>(typeof(GreedLastRuntimeUi), expected == GreedLastJudgementResult.Good
+                    ? "BuildGoodEffectLine" : "BuildSuccessEffectLine", run).Contains("점수 상한", StringComparison.Ordinal),
+                "Capped feedback must not present every nominal bonus as fully awarded points.");
             GreedLastRunSnapshot afterJudgement = run;
             int judged = run.SuccessCount + run.GoodCount + run.MissCount;
             core.HandleInput(channel, clock);

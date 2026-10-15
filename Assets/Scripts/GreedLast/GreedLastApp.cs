@@ -45620,6 +45620,15 @@ namespace GreedLast
 
         private static string BuildSuccessEffectLine(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.LastJudgementScoreLimited)
+            {
+                string limited = "점수 상한";
+                if (snapshot.LastCenterHit) AppendCompactStatus(ref limited, "정박");
+                if (snapshot.Combo > 0) AppendCompactStatus(ref limited, "콤보 " + snapshot.Combo);
+                if (snapshot.FocusStateActive) AppendCompactStatus(ref limited, snapshot.LastJudgementStartedInFocusState
+                    ? BuildResolvedFocusStateHint(snapshot) : "집중 발동");
+                return limited;
+            }
             string effect = string.Empty;
             GreedLastPatternModel feedbackPattern = BuildJudgementFeedbackPattern(snapshot);
             bool feedbackPatternValid = feedbackPattern.IsValid;
@@ -45703,6 +45712,7 @@ namespace GreedLast
         private static string BuildGoodEffectLine(GreedLastRunSnapshot snapshot)
         {
             string effect = "보정 생존";
+            if (snapshot.LastJudgementScoreLimited) AppendCompactStatus(ref effect, "점수 상한");
             GreedLastPatternModel feedbackPattern = BuildJudgementFeedbackPattern(snapshot);
             if (IsRecoveryPattern(feedbackPattern))
             {
@@ -45759,6 +45769,12 @@ namespace GreedLast
                 && snapshot.LastResult != GreedLastJudgementResult.Good)
             {
                 return string.Empty;
+            }
+
+            if (snapshot.LastJudgementProfileScoreBonus >= 0)
+            {
+                return snapshot.LastJudgementProfileScoreBonus == 0 ? string.Empty
+                    : snapshot.LastJudgementScoreLimited ? "조합 보상 · 점수 상한" : "조합 +" + snapshot.LastJudgementProfileScoreBonus;
             }
 
             int bonus = 0;
@@ -45895,6 +45911,9 @@ namespace GreedLast
 
         private static int BuildThreatPrecisionBonusPreview(GreedLastRunSnapshot snapshot, GreedLastPatternModel pattern)
         {
+            if (snapshot.LastResult == GreedLastJudgementResult.Success && !snapshot.ActivePattern
+                && snapshot.LastJudgementThreatScoreBonus >= 0)
+                return snapshot.LastJudgementScoreLimited ? 0 : snapshot.LastJudgementThreatScoreBonus;
             if (!snapshot.InfiniteMode
                 || (!snapshot.ActivePattern && snapshot.LastResult != GreedLastJudgementResult.Success)
                 || !pattern.IsValid)

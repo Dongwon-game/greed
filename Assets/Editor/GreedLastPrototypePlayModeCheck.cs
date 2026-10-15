@@ -290,6 +290,7 @@ namespace GreedLast.Editor
                         && cycle.engineStableFinisherPreviews > 0 && cycle.engineStableFocusFallbacks > 0
                         && cycle.engineChoiceHealthPreviews > 0 && cycle.engineCappedChoiceHealthPreviews > 0
                         && cycle.engineChoiceFocusPreviews > 0 && cycle.engineLiveFocusFeedbackCases > 0
+                        && cycle.engineResolvedBonusCases > 0 && cycle.engineResolvedBonusThreatBoundaries > 0
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -432,6 +433,7 @@ namespace GreedLast.Editor
             public int engineStableFinisherPreviews, engineStableFocusFallbacks;
             public int engineChoiceHealthPreviews, engineCappedChoiceHealthPreviews;
             public int engineChoiceFocusPreviews, engineLiveFocusFeedbackCases;
+            public int engineResolvedBonusCases, engineResolvedBonusThreatBoundaries;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -3217,6 +3219,18 @@ namespace GreedLast.Editor
                             Require(run.GoodHealthGainPreview == snapshot.LastJudgementHealthChange,
                                 "Every actual engine Good must match its immediately preceding recovery prediction.");
                         report.liveRewardPreviewJudgements++;
+                        int expectedThreat = snapshot.LastResult == GreedLastJudgementResult.Success && run.InfiniteMode
+                            ? (int)typeof(GreedLastRunCore).GetMethod("BuildThreatPrecisionBonusForLevel", BindingFlags.Static | BindingFlags.NonPublic)
+                                .Invoke(null, new object[] { run.InfiniteThreatLevel, run.Pattern.TimingType }) : 0;
+                        Require(!snapshot.LastJudgementScoreLimited && snapshot.LastJudgementThreatScoreBonus == expectedThreat
+                            && snapshot.LastJudgementProfileScoreBonus >= 0,
+                            "Engine resolved bonus accounting must retain the scored threat/profile rather than subsequent progression.");
+                        string profileBonus = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildChoiceProfileScoreBonusPreview", BindingFlags.Static | BindingFlags.NonPublic)
+                            .Invoke(null, new object[] { snapshot });
+                        Require(profileBonus == (snapshot.LastJudgementProfileScoreBonus > 0 ? "조합 +" + snapshot.LastJudgementProfileScoreBonus : string.Empty),
+                            "Engine profile feedback must use its actual scoring component.");
+                        report.engineResolvedBonusCases++;
+                        if (snapshot.InfiniteThreatLevel > run.InfiniteThreatLevel) report.engineResolvedBonusThreatBoundaries++;
                         Require(snapshot.LastJudgementStartedInFocusState == run.FocusStateActive,
                             "Engine focus provenance must distinguish activation from prior active state.");
                         if (run.FocusStateActive && snapshot.LastResult == GreedLastJudgementResult.Success)
