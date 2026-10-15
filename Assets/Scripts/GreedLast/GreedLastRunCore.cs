@@ -4313,6 +4313,11 @@ namespace GreedLast
                 return "집중 상태 연장";
             }
 
+            if (IsFocusStateActive)
+            {
+                return "집중 상태 상한 유지";
+            }
+
             return "집중 +" + Mathf.Max(0, amount);
         }
 

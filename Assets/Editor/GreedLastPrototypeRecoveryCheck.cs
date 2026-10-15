@@ -93,6 +93,7 @@ namespace GreedLast.Editor
             VerifyGoldenRecovery();
             RunBundlePreviews();
             RunChoiceHealthPreviews();
+            RunChoiceFocusPreviews();
             Debug.Log($"Greed recovery previews passed: {cases} transient cores, {inputs} real Good judgements, growth 0/3,"
                 + " survival stacks 0-3, six route histories, healthy/two-natural-Miss entry, actual recovery cap/gauge expansion"
                 + " and survival/stable source ordering. Public core timing/input only; no private gameplay state edits, persistence, physical input or device-performance claim.");
@@ -216,8 +217,81 @@ namespace GreedLast.Editor
                 + " Existing health rewards/caps/gauges unchanged, public choice/input/timing only; no personal data or private state edits, not physical/device testing.");
         }
 
+        [MenuItem("Greed Last/Run Choice Focus Reward Check")]
+        public static void RunChoiceFocusPreviews()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Focus choice checks require Edit mode.");
+            int runs = 0, choices = 0, charges = 0, activations = 0, extensions = 0, capped = 0, mismatches = 0;
+            float maxBeforeSeconds = 0f;
+            var sources = new HashSet<string>();
+            foreach (int growth in new[] { 0, 3 })
+                for (int start = 0; start < 3; start++)
+                    for (int gift = 0; gift < 3; gift++)
+                        for (int route = 0; route < 3; route++)
+                            Check(growth, start, gift, route);
+            foreach (int growth in new[] { 0, 3 })
+                for (int start = 0; start < 3; start++)
+                    for (int relic = 1; relic <= 2; relic++) Check(growth, start, 0, 1, relic);
+            Check(0, 2, 0, 1, 2, true);
+            Debug.Log($"Greed choice focus audit: {runs} complete normal runs/{runs * 15} actual judgements, {choices} focus choices,"
+                + $" charges={charges}, activations={activations}, extensions={extensions}, capped={capped},"
+                + $" maximum before={maxBeforeSeconds:0.000}s, sources={string.Join(",", sources)}, mismatches={mismatches}."
+                + " Public choice/input/timing only, no private state, shortcuts, persistence or physical/device claim.");
+            Require(runs == 67 && choices == 257 && sources.Count == 5 && charges > 0 && activations > 0 && extensions > 0 && capped == 4,
+                "Real focus choices must cover all five sources and charge/activation/extension/four capped relic choices, not privately seeded states.");
+            Require(mismatches == 0, $"Focus choice notices must match actual gauge/state changes. Mismatches={mismatches}.");
+
+            void Check(int growth, int start, int gift, int route, int relic = -1, bool allGood = false)
+            {
+                runs++;
+                CreateBundleSamples(growth, start, gift, route, observeChoice: (kind, selected, sample) =>
+                            {
+                                int amount = selected == "집중 축" ? 2 : selected == "파라오의 각인" ? 3
+                                    : selected == "박자 감각" || selected == "변주 루트" || selected == "사막의 잔상" ? 1 : 0;
+                                if (amount == 0) return;
+                                choices++;
+                                sources.Add(selected);
+                                var before = sample.Before;
+                                var after = sample.After;
+                                maxBeforeSeconds = Mathf.Max(maxBeforeSeconds, before.FocusStateRemainingSeconds);
+                                string expected;
+                                if (before.FocusStateActive)
+                                {
+                                    Require(after.Focus == before.Focus && after.FocusStateActive,
+                                        "An active-state choice must not also charge a second focus gauge.");
+                                    float gain = after.FocusStateRemainingSeconds - before.FocusStateRemainingSeconds;
+                                    Require(gain >= -0.0001f && gain <= 0.3501f,
+                                        "Active-state choices must preserve the existing capped extension, not multiply it by nominal focus.");
+                                    if (gain > 0.001f) { extensions++; expected = "집중 상태 연장"; }
+                                    else { capped++; expected = "집중 상태 상한 유지"; }
+                                }
+                                else if (after.FocusStateActive)
+                                {
+                                    activations++;
+                                    expected = "집중 상태 발동";
+                                    Require(after.Focus == 0 && after.FocusStateActivationCount == before.FocusStateActivationCount + 1,
+                                        "A real choice activation must consume the charge and register exactly one state.");
+                                }
+                                else
+                                {
+                                    charges++;
+                                    Require(after.Focus - before.Focus == amount, "Inactive choices must retain their authored charge.");
+                                    expected = "집중 +" + amount;
+                                }
+                                string effect = Array.Find(after.JudgementText.Split('\n'), line => line.StartsWith("효과: ", StringComparison.Ordinal));
+                                if (effect == null || !effect.Contains(expected, StringComparison.Ordinal))
+                                {
+                                    mismatches++;
+                                    Debug.Log($"Greed choice focus mismatch: growth={growth}, kind={kind}, selected={selected},"
+                                        + $" before={before.Focus}/{before.FocusStateRemainingSeconds:0.000}s,"
+                                        + $" after={after.Focus}/{after.FocusStateRemainingSeconds:0.000}s, expected={expected}, effect={effect}.");
+                                }
+                }, relic: relic, allGood: allGood);
+            }
+        }
+
         internal static List<Sample> CreateBundleSamples(int growth, int start, int gift, int route, bool broken = false,
-            Action<GreedLastChoiceKind, string, Sample> observeChoice = null, int relic = -1)
+            Action<GreedLastChoiceKind, string, Sample> observeChoice = null, int relic = -1, bool allGood = false)
         {
             var samples = new List<Sample>();
             var core = new GreedLastRunCore();
@@ -243,7 +317,7 @@ namespace GreedLast.Editor
                 for (int wait = 0; !run.ActivePattern && !run.Stopped && wait < 500; wait++) Advance(0.01f);
                 Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible,
                     "Finisher samples need naturally arriving normal/escape traps without shortcut or invincibility.");
-                bool good = broken && run.ChapterProgress == 0 && !string.IsNullOrEmpty(run.ActiveRouteProfile);
+                bool good = allGood || (broken && run.ChapterProgress == 0 && !string.IsNullOrEmpty(run.ActiveRouteProfile));
                 float delta = good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                 Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
                 var before = run;
