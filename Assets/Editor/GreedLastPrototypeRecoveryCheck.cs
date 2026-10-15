@@ -95,6 +95,7 @@ namespace GreedLast.Editor
             RunChoiceHealthPreviews();
             RunChoiceFocusPreviews();
             RunLiveFocusFeedback();
+            RunFocusDamageRules();
             Debug.Log($"Greed recovery previews passed: {cases} transient cores, {inputs} real Good judgements, growth 0/3,"
                 + " survival stacks 0-3, six route histories, healthy/two-natural-Miss entry, actual recovery cap/gauge expansion"
                 + " and survival/stable source ordering. Public core timing/input only; no private gameplay state edits, persistence, physical input or device-performance claim.");
@@ -302,6 +303,7 @@ namespace GreedLast.Editor
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Live focus checks require Edit mode.");
             int inputs = 0, active = 0, inactive = 0, activations = 0, perfect = 0, variation = 0;
+            int compactCases = 0, compactMismatches = 0;
             foreach (int growth in new[] { 0, 3 })
                 for (int route = 0; route < 3; route++)
                     foreach (bool peripheral in new[] { false, true })
@@ -315,6 +317,16 @@ namespace GreedLast.Editor
                             float gained = before.FocusStateActive ? Mathf.Max(0f, after.FocusStateRemainingSeconds - before.FocusStateRemainingSeconds) : 0f;
                             Require(Mathf.Abs(after.LastJudgementFocusStateExtensionSeconds - gained) < 0.0002f,
                                 "Published focus time gain must include actual capped judgement and bundle gains without counting activation as extension.");
+                            if (after.LastCenterHit && before.Pattern.TimingType == GreedLastTimingType.Perfect
+                                && !before.Pattern.Prompt.Contains("[복구]", StringComparison.Ordinal))
+                            {
+                                compactCases++;
+                                string compact = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildCompactJudgementFeedbackText",
+                                    BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { after, false, false });
+                                string expectedCompact = before.FocusStateActive ? "집중 유지"
+                                    : after.FocusStateActive ? "집중 발동" : "집중+1";
+                                if (!compact.Contains(expectedCompact, StringComparison.Ordinal)) compactMismatches++;
+                            }
                             if (!before.FocusStateActive)
                             {
                                 inactive++;
@@ -347,6 +359,9 @@ namespace GreedLast.Editor
                         });
             Require(inputs == 180 && active > 0 && inactive > 0 && activations > 0 && perfect > 0 && variation > 0,
                 "Focus feedback controls need twelve complete runs, center/outer Success, activation and active Perfect/variation rewards.");
+            Debug.Log($"Greed compact focus audit: {compactCases} real center Perfect results, mismatches={compactMismatches}.");
+            Require(compactCases > 0 && compactMismatches == 0,
+                "Basic Perfect feedback must distinguish actual charge, new activation and existing focus maintenance.");
             RunGoodFocusFeedback();
             Debug.Log($"Greed live focus feedback passed: 12 complete normal runs/{inputs} actual judgements, active={active}, inactive={inactive},"
                 + $" activations={activations}, active Perfect={perfect}, active variation={variation}. Existing scoring, focus and counters preserved;"
@@ -397,6 +412,54 @@ namespace GreedLast.Editor
             Require(samples.Count == 45 && good == 34 && active > 0 && sand > 0 && activations > 0 && retained > 0,
                 "Good controls must naturally cover new activation, active empty chains and actual retained combos.");
             Require(mismatches == 0, $"Good focus feedback must describe the actual activation/retained combo. Mismatches={mismatches}.");
+        }
+
+        [MenuItem("Greed Last/Run Focus Damage Rule Check")]
+        public static void RunFocusDamageRules()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Focus damage checks require Edit mode.");
+            int cases = 0, active = 0;
+            foreach (int growth in new[] { 0, 2, 3 })
+                foreach (bool noInput in new[] { false, true })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.ConfigureGrowth(0, growth, 0);
+                    float clock = Time.realtimeSinceStartup;
+                    core.EnterInfiniteRun();
+                    for (int wait = 0; !run.ActivePattern && wait < 500; wait++) core.Tick(clock += 0.01f);
+                    Require(run.ActivePattern && !run.DevInvincible && run.Health == 3,
+                        "Focus damage controls require an actual first trap with no invincibility or health edits.");
+                    GreedLastRunSnapshot before = run;
+                    if (noInput)
+                    {
+                        for (int wait = 0; run.LastResult != GreedLastJudgementResult.Miss && wait < 500; wait++)
+                        {
+                            before = run;
+                            core.Tick(clock += 0.01f);
+                        }
+                    }
+                    else
+                    {
+                        while (run.ElapsedSeconds < run.Pattern.CoreSeconds - 0.01f) core.Tick(clock += 0.01f);
+                        before = run;
+                        core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+                            ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
+                    }
+                    if (before.FocusStateActive) active++;
+                    Require(run.LastResult == GreedLastJudgementResult.Miss && run.Health == 2
+                        && run.LastJudgementHealthChange == -1 && !run.FocusStateActive
+                        && run.LastJudgementStartedInFocusState == before.FocusStateActive
+                        && run.MissReason == (noInput ? "no_input" : "wrong_channel"),
+                        "Inactive, charged and active focus must retain normal Miss damage, not a one-hit insurance reward.");
+                    cases++;
+                    core.Exit();
+                }
+            Require(cases == 6 && active == 2, "Damage controls need wrong-lane and omission while focus is actually active.");
+            Debug.Log("Greed focus damage rules passed: six public-input/monotonic-time cores, focus growth 0/2/3 x wrong-lane/omission;"
+                + " all actual health 3-to-2, active focus cleared and original Miss reasons retained. No gameplay changes, private state,"
+                + " invincibility, saves or personal data; original plan 24 insurance exclusion verified for these cases only.");
         }
 
         internal static List<Sample> CreateGoodFocusSamples()

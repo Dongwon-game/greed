@@ -290,6 +290,7 @@ namespace GreedLast.Editor
                         && cycle.engineStableFinisherPreviews > 0 && cycle.engineStableFocusFallbacks > 0
                         && cycle.engineChoiceHealthPreviews > 0 && cycle.engineCappedChoiceHealthPreviews > 0
                         && cycle.engineChoiceFocusPreviews > 0 && cycle.engineLiveFocusFeedbackCases > 0
+                        && cycle.engineCompactFocusCases > 0
                         && cycle.engineResolvedBonusCases > 0 && cycle.engineResolvedBonusThreatBoundaries > 0
                         && cycle.engineGoodFocusFeedbackCases > 0
                         && cycle.engineGoodFocusStateCases == 3
@@ -435,6 +436,7 @@ namespace GreedLast.Editor
             public int engineStableFinisherPreviews, engineStableFocusFallbacks;
             public int engineChoiceHealthPreviews, engineCappedChoiceHealthPreviews;
             public int engineChoiceFocusPreviews, engineLiveFocusFeedbackCases;
+            public int engineCompactFocusCases;
             public int engineResolvedBonusCases, engineResolvedBonusThreatBoundaries;
             public int engineGoodFocusFeedbackCases;
             public int engineGoodFocusStateCases;
@@ -3296,6 +3298,16 @@ namespace GreedLast.Editor
                             report.engineGoodFocusFeedbackCases++;
                         }
                         report.liveRewardPreviewJudgements++;
+                        if (snapshot.LastCenterHit && run.Pattern.TimingType == GreedLastTimingType.Perfect
+                            && !run.Pattern.Prompt.Contains("[복구]", StringComparison.Ordinal))
+                        {
+                            string compact = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildCompactJudgementFeedbackText",
+                                BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { snapshot, false, false });
+                            string focus = run.FocusStateActive ? "집중 유지" : snapshot.FocusStateActive ? "집중 발동" : "집중+1";
+                            Require(compact.Contains(focus, StringComparison.Ordinal),
+                                "Engine basic Perfect feedback must describe the actual charge, activation or maintenance.");
+                            report.engineCompactFocusCases++;
+                        }
                         int expectedThreat = snapshot.LastResult == GreedLastJudgementResult.Success && run.InfiniteMode
                             ? (int)typeof(GreedLastRunCore).GetMethod("BuildThreatPrecisionBonusForLevel", BindingFlags.Static | BindingFlags.NonPublic)
                                 .Invoke(null, new object[] { run.InfiniteThreatLevel, run.Pattern.TimingType }) : 0;

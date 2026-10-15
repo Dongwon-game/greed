@@ -471,6 +471,10 @@ namespace GreedLast.Editor
             if (limited) Require(Invoke<string>(typeof(GreedLastRuntimeUi), expected == GreedLastJudgementResult.Good
                     ? "BuildGoodEffectLine" : "BuildSuccessEffectLine", run).Contains("점수 상한", StringComparison.Ordinal),
                 "Capped feedback must not present every nominal bonus as fully awarded points.");
+            if (limited && expected == GreedLastJudgementResult.Success)
+                Require(Invoke<string>(typeof(GreedLastRuntimeUi), "BuildCompactJudgementFeedbackText", run, false, false)
+                    .Contains("점수 상한", StringComparison.Ordinal),
+                    "Basic capped feedback must not revive a nominal counter/recovery reward beside the actual capped gain.");
             if (includeProfile)
             {
                 string profile = Invoke<string>(typeof(GreedLastRuntimeUi), "BuildChoiceProfileScoreBonusPreview", run);

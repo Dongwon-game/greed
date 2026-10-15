@@ -45122,6 +45122,15 @@ namespace GreedLast
             {
                 case GreedLastJudgementResult.Success:
                     string bonus = snapshot.LastCenterHit ? BuildTimingActionPayoffTag(pattern) : "회피 성공";
+                    if (snapshot.LastJudgementScoreLimited)
+                    {
+                        bonus = "점수 상한";
+                    }
+                    else if (snapshot.LastCenterHit && pattern.TimingType == GreedLastTimingType.Perfect && !IsRecoveryPattern(pattern))
+                    {
+                        if (snapshot.LastJudgementStartedInFocusState) bonus = "집중 유지";
+                        else if (snapshot.FocusStateActive) bonus = "집중 발동";
+                    }
                     string exactPayoff = snapshot.LastJudgementHealthChange > 0
                         ? "체력 +" + snapshot.LastJudgementHealthChange : "콤보 " + snapshot.Combo;
                     return "정확 · " + action + " · +" + snapshot.LastJudgementScoreGain + "점"

@@ -1450,6 +1450,9 @@ namespace GreedLast.Editor
                                     && feedback.Contains("집중 연장", StringComparison.Ordinal),
                                     "Detailed focus feedback must show actual extension rather than an ignored charge. Actual: " + feedback);
                             }
+                            if (resolved && !detailed && kind == "perfect")
+                                Require(Read<Text>("judgementFeedbackText").text.Contains("집중 유지", StringComparison.Ordinal),
+                                    "Basic active-focus Perfect feedback must not claim another gauge charge.");
                         }
                         string name = "101-live-focus-" + kind + (resolved ? "-result" : "-preview") + (detailed ? "-detail" : "-basic");
                         Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
@@ -1556,7 +1559,8 @@ namespace GreedLast.Editor
                     GreedLastRunSnapshot presented = Read<GreedLastRunSnapshot>("lastPresentedJudgementSnapshot");
                     string feedback = Read<Text>("judgementFeedbackText").text;
                     Require(presented.Score == int.MaxValue && presented.LastJudgementScoreGain == 5
-                        && (detailed ? !string.IsNullOrEmpty(feedback) : feedback.Contains("+5점", StringComparison.Ordinal)),
+                        && feedback.Contains("점수 상한", StringComparison.Ordinal)
+                        && (detailed || feedback.Contains("+5점", StringComparison.Ordinal)),
                         "Capped feedback must retain five awarded points in both views and show +5 points in the player format.");
                 }
                 string name = "92-score-ceiling-" + (detailed ? "detail" : "basic");
