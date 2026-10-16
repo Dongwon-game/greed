@@ -26,6 +26,7 @@ namespace GreedLast.Editor
             RunRecordStatistics();
             RunLoadoutQuality();
             VerifyRecordReload();
+            RunRecordDistanceReload();
             VerifyLoadoutReload();
             RunRewardPreviews();
             RunResolvedBonusFeedback();
@@ -646,6 +647,139 @@ namespace GreedLast.Editor
                         "A third backend start must remain unavailable after reload.");
                 }
                 finally { PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+            }
+        }
+
+        [MenuItem("Greed Last/Run Record Distance Recovery Check")]
+        public static void RunRecordDistanceReload()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Distance checks require Edit mode.");
+            int cases = 0, failures = 0;
+            foreach (float distance in new[] { 0f, 90.25f, float.MaxValue, -1.25f,
+                float.NaN, float.PositiveInfinity, float.NegativeInfinity })
+            {
+                string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "distance-recovery-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    GreedLastRunRecord Normal(int score, float value) => new GreedLastRunRecord(true, score,
+                        3, 1, 1, 6, 15, 0, 0, value, "distance-recovery", "박자 감각", "집중 축", string.Empty,
+                        "박자 감각 / 안정 루트 / 집중 축", string.Empty);
+                    backend.RegisterClear(Normal(100, 30f));
+                    backend.RegisterClear(Normal(200, distance));
+                    backend.SelectSaveLoadoutSlot(1);
+                    backend.ConfirmSaveLoadout();
+                    backend.RegisterNormalAttempt(new GreedLastRunAttemptRecord(true, GreedLastRunAttemptOutcome.Failed,
+                        222, 0, 0, 1, 3, 5, 2, 1, distance, 2, 1, 3, false, "wrong_channel", string.Empty, string.Empty));
+                    backend.RegisterInfiniteRun(Record(50, 30f));
+                    backend.RegisterInfiniteRun(Record(80, distance));
+                    string persisted = PlayerPrefs.GetString(key);
+                    foreach (bool legacy in new[] { false, true })
+                    {
+                        string source = persisted;
+                        if (legacy)
+                        {
+                            source = CreateLegacyDistancePayload(persisted, distance);
+                            PlayerPrefs.SetString(key, source);
+                            PlayerPrefs.Save();
+                        }
+                        var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        float expected = float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0f ? 0f : distance;
+                        var normal = (GreedLastRunRecord)Field(reloaded, "lastRunRecord").GetValue(reloaded);
+                        var best = (GreedLastRunRecord)Field(reloaded, "bestRunRecord").GetValue(reloaded);
+                        var attempt = (GreedLastRunAttemptRecord)Field(reloaded, "lastRunAttemptRecord").GetValue(reloaded);
+                        var infinite = (GreedLastInfiniteRunRecord)Field(reloaded, "lastInfiniteRunRecord").GetValue(reloaded);
+                        var bestInfinite = (GreedLastInfiniteRunRecord)Field(reloaded, "bestInfiniteRunRecord").GetValue(reloaded);
+                        var slots = (GreedLastRunRecord[])Field(reloaded, "saveLoadoutSlots").GetValue(reloaded);
+                        var uses = (int[])Field(reloaded, "saveLoadoutUsesRemaining").GetValue(reloaded);
+                        bool passed = normal.IsValid && normal.Score == 200 && normal.Distance == expected
+                            && best.Score == 200 && best.Distance == expected
+                            && attempt.IsValid && attempt.Score == 222 && attempt.Distance == expected
+                            && infinite.IsValid && infinite.Score == 80 && infinite.Distance == expected
+                            && bestInfinite.Score == 80 && bestInfinite.Distance == expected
+                            && slots[1].IsValid && slots[1].Score == 200 && slots[1].Distance == expected
+                            && uses[1] == 2 && !slots[0].IsValid && !slots[2].IsValid
+                            && ((GreedLastRunRecord)Field(reloaded, "previousBestBeforeLastRun").GetValue(reloaded)).Distance == 30f
+                            && ((GreedLastInfiniteRunRecord)Field(reloaded, "previousBestBeforeLastInfiniteRun").GetValue(reloaded)).Distance == 30f
+                            && ((GreedLastRunRecord[])Field(reloaded, "normalRunRankings").GetValue(reloaded))[0].Distance == expected
+                            && ((GreedLastRunAttemptRecord[])Field(reloaded, "normalAttemptHistory").GetValue(reloaded))[0].Distance == expected
+                            && ((GreedLastInfiniteRunRecord[])Field(reloaded, "infiniteRunRankings").GetValue(reloaded))[0].Distance == expected
+                            && (bool)Field(reloaded, "lastRunWasNewBest").GetValue(reloaded)
+                            && (bool)Field(reloaded, "lastInfiniteRunWasNewBest").GetValue(reloaded)
+                            && !reloaded.HasSaveLoadoutCandidate && PlayerPrefs.GetString(key) == source;
+                        for (int page = 0; page < 4; page++)
+                        {
+                            string board = reloaded.BuildRecordBoardText(page);
+                            passed &= !board.Contains("NaN", StringComparison.Ordinal)
+                                && !board.Contains("Infinity", StringComparison.Ordinal);
+                        }
+                        for (int use = 0; use < 2; use++)
+                        {
+                            reloaded.SelectSaveLoadoutSlot(1);
+                            Require(reloaded.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord consumed, out _, out string error)
+                                && string.IsNullOrEmpty(error) && consumed.Score == 200 && consumed.Distance == expected,
+                                "A repaired record must retain its score/distance through each real start.");
+                            var core = new GreedLastRunCore();
+                            GreedLastRunSnapshot run = default;
+                            core.SnapshotChanged += value => run = value;
+                            core.EnterInfiniteRun(GreedLastRunCore.CreatePreparedInfiniteLoadout(consumed, "집중 축", "황금 박동"));
+                            reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            var afterSlots = (GreedLastRunRecord[])Field(reloaded, "saveLoadoutSlots").GetValue(reloaded);
+                            var afterUses = (int[])Field(reloaded, "saveLoadoutUsesRemaining").GetValue(reloaded);
+                            Require(run.InfiniteMode && !run.Stopped && !run.SaveEligible
+                                && (use == 0 ? afterSlots[1].IsValid && afterUses[1] == 1 : !afterSlots[1].IsValid && afterUses[1] == 0)
+                                && !afterSlots[0].IsValid && !afterSlots[2].IsValid && !reloaded.HasSaveLoadoutCandidate,
+                                "Distance repair must retain first-use/reload, second-use auto-clear and the already started live run.");
+                            core.Exit();
+                        }
+                        Require(!reloaded.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                            "A repaired record must not acquire a third use or resurrect its consumed candidate.");
+                        reloaded.RegisterClear(Normal(200, 1000f));
+                        reloaded.RegisterInfiniteRun(Record(80, 1000f));
+                        reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        float expectedBest = Mathf.Max(expected, 1000f);
+                        Require(((GreedLastRunRecord)Field(reloaded, "bestRunRecord").GetValue(reloaded)).Distance == expectedBest
+                            && ((GreedLastInfiniteRunRecord)Field(reloaded, "bestInfiniteRunRecord").GetValue(reloaded)).Distance == expectedBest
+                            && reloaded.HasSaveLoadoutCandidate,
+                            "Repaired distances must not block later equal-score bests or the next legitimate clear's single candidate.");
+                        Debug.Log($"Greed record distance audit: legacy={legacy}, input={distance}, expected={expected},"
+                            + $" normal={normal.Distance}, attempt={attempt.Distance}, infinite={infinite.Distance},"
+                            + $" slot={slots[1].Distance}, preserved={passed}.");
+                        if (!passed) failures++;
+                        cases++;
+                    }
+                }
+                finally { PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+            }
+            Require(cases == 14 && failures == 0,
+                "Record JSON must preserve finite distances and restore invalid distances without losing records, slots or uses. Failures=" + failures);
+            Debug.Log("Greed record distance recovery passed: fourteen isolated write/legacy-read JSON controls covering normal/recent/best/ranking,"
+                + " attempt/history, infinite/recent/best/ranking and saved S2; valid previous-best distances, new-best flags, score ties,"
+                + " finite board text, 28 actual starts/auto-clear and next-clear candidates retained. Constructed corruption"
+                + " controls only; no personal progress/settings writes or gameplay timing, health, reward or device-performance changes.");
+        }
+
+        internal static string CreateLegacyDistancePayload(string json, float distance)
+        {
+            // Corrupt only distance in a transient copy of the actual persisted schema.
+            Type rootType = typeof(GreedLastMockBackend).GetNestedType("BackendSaveData", BindingFlags.NonPublic);
+            object payload = JsonUtility.FromJson(json, rootType);
+            foreach (string field in new[] { "lastRunRecord", "bestRunRecord", "lastRunAttemptRecord",
+                "lastInfiniteRunRecord", "bestInfiniteRunRecord", "normalRunRankings", "normalAttemptHistory",
+                "infiniteRunRankings", "saveLoadoutSlots" })
+            {
+                object value = rootType.GetField(field).GetValue(payload);
+                if (value is Array records) foreach (object item in records) CorruptDistance(item);
+                else CorruptDistance(value);
+            }
+            return JsonUtility.ToJson(payload);
+            void CorruptDistance(object record)
+            {
+                if (record == null) return;
+                Type type = record.GetType();
+                int score = (int)type.GetField("score").GetValue(record);
+                if (score == 200 || score == 222 || score == 80)
+                    type.GetField("distance").SetValue(record, distance);
             }
         }
 

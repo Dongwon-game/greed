@@ -282,6 +282,7 @@ namespace GreedLast.Editor
                         && cycle.registeredHeldCommandPresses == 44
                         && cycle.recoveredCandidateSlotChoiceCases == 9 && cycle.recoveredCandidateSlotsPreserved
                         && cycle.legacyRenamedCandidateRepairCases == 3
+                        && cycle.engineRecoveredDistanceCases == 4
                         && cycle.preparedInfinitePreviewCases == 8
                         && cycle.liveRewardPreviewJudgements >= 17
                         && cycle.engineRecoveryGoodPreviews == 3 && cycle.engineRecoveryDamageCases == 2
@@ -439,6 +440,7 @@ namespace GreedLast.Editor
             public int engineCompactFocusCases;
             public int engineResolvedBonusCases, engineResolvedBonusThreatBoundaries;
             public int engineGoodFocusFeedbackCases;
+            public int engineRecoveredDistanceCases;
             public int engineGoodFocusStateCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
@@ -588,6 +590,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredRecordDistances();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -2512,6 +2515,85 @@ namespace GreedLast.Editor
                 finally
                 {
                     input.Touches = Array.Empty<Touch>();
+                    backendField.SetValue(app, originalBackend);
+                    state.SetLobbyReady(originalBackend.LoadLobby());
+                    if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
+                }
+            }
+
+            private IEnumerator VerifyRecoveredRecordDistances()
+            {
+                GreedLastMockBackend originalBackend = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                try
+                {
+                    core.Exit();
+                    foreach (float distance in new[] { 90.25f, -1.25f, float.NaN, float.PositiveInfinity })
+                    {
+                        string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "engine-record-distance-" + Guid.NewGuid().ToString("N");
+                        try
+                        {
+                            bool detailed = report.engineRecoveredDistanceCases % 2 != 0;
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            backend.RegisterClear(new GreedLastRunRecord(true, 200, 3, 1, 1, 6, 15, 0, 0, 90.25f,
+                                "engine-distance", "박자 감각", "집중 축", string.Empty,
+                                "박자 감각 / 안정 루트 / 집중 축", string.Empty));
+                            backend.SelectSaveLoadoutSlot(1);
+                            backend.ConfirmSaveLoadout();
+                            backend.RegisterInfiniteRun(new GreedLastInfiniteRunRecord(true, 80, 90.25f, 1, 1,
+                                "engine-distance", string.Empty, 3, 0, 0, 3, "no_input", string.Empty));
+                            PlayerPrefs.SetString(key, GreedLastPrototypeScoreCheck.CreateLegacyDistancePayload(PlayerPrefs.GetString(key), distance));
+                            PlayerPrefs.Save();
+                            string source = PlayerPrefs.GetString(key);
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            float expected = float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0f ? 0f : distance;
+                            Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[1].Distance == expected,
+                                "The engine must receive the actual recovered legacy distance.");
+                            backendField.SetValue(app, backend);
+                            state.SetLobbyReady(backend.LoadLobby());
+                            yield return null;
+                            yield return TapTouch(Read<Button>(ui, "infiniteRecordButton"));
+                            string board = Read<Text>(ui, "detailText").text;
+                            Require(state.CurrentState == GreedLastScreenState.InfiniteRecordBoard
+                                && !board.Contains("NaN", StringComparison.Ordinal) && !board.Contains("Infinity", StringComparison.Ordinal)
+                                && (board.Contains("200점", StringComparison.Ordinal) || board.Contains("80점", StringComparison.Ordinal)),
+                                "Actual engine record navigation must retain a visible finite record, not hide a repaired score. Actual: " + board);
+                            yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                            yield return TapTouch(Read<Button>(ui, "saveLoadoutButton"));
+                            Require(PlayerPrefs.GetString(key) == source,
+                                "Read-only record/management entry must not rewrite the legacy payload.");
+                            yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                            string saved = Read<Text>(ui, "detailText").text;
+                            Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                                && !saved.Contains("NaN", StringComparison.Ordinal) && !saved.Contains("Infinity", StringComparison.Ordinal)
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2
+                                && !backend.HasSaveLoadoutCandidate && !Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                                && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
+                                "Explicit slot selection must preserve the repaired S2, two uses and resolved candidate.");
+                            var selected = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            Require(Read<GreedLastRunRecord[]>(selected, "saveLoadoutSlots")[1].Distance == expected
+                                && Read<int[]>(selected, "saveLoadoutUsesRemaining")[1] == 2 && !selected.HasSaveLoadoutCandidate,
+                                "The existing explicit-selection write must persist the repaired distance without creating uses or a candidate.");
+                            yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                            report.engineRecoveredDistanceCases++;
+                        }
+                        finally
+                        {
+                            backendField.SetValue(app, originalBackend);
+                            state.SetLobbyReady(originalBackend.LoadLobby());
+                            PlayerPrefs.DeleteKey(key);
+                            PlayerPrefs.Save();
+                        }
+                    }
+                    Debug.Log("Greed engine record distance recovery passed: four isolated legacy JSON cases, real synthetic EventSystem"
+                        + " record/management/S2 touches in clean/detailed views, finite records retained, no new save candidate or use consumption"
+                        + "; read-only entry preserved and explicit slot-selection writes repaired distance. Not physical input, actual process reload or device testing.");
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
                     backendField.SetValue(app, originalBackend);
                     state.SetLobbyReady(originalBackend.LoadLobby());
                     if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();

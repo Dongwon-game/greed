@@ -10175,6 +10175,11 @@ namespace GreedLast
             PlayerPrefs.Save();
         }
 
+        private static float NormalizePersistedRecordDistance(float value)
+        {
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Max(0f, value);
+        }
+
         private static RunRecordSaveData ToData(GreedLastRunRecord record)
         {
             return new RunRecordSaveData
@@ -10188,7 +10193,7 @@ namespace GreedLast
                 successCount = record.SuccessCount,
                 goodCount = record.GoodCount,
                 missCount = record.MissCount,
-                distance = record.Distance,
+                distance = NormalizePersistedRecordDistance(record.Distance),
                 loadoutName = record.LoadoutName,
                 startGift = record.StartGift,
                 primaryGift = record.PrimaryGift,
@@ -10215,7 +10220,7 @@ namespace GreedLast
                 Mathf.Max(0, data.successCount),
                 Mathf.Max(0, data.goodCount),
                 Mathf.Max(0, data.missCount),
-                data.distance,
+                NormalizePersistedRecordDistance(data.distance),
                 data.loadoutName,
                 data.startGift,
                 data.primaryGift,
@@ -10238,7 +10243,7 @@ namespace GreedLast
                 successCount = record.SuccessCount,
                 goodCount = record.GoodCount,
                 missCount = record.MissCount,
-                distance = record.Distance,
+                distance = NormalizePersistedRecordDistance(record.Distance),
                 chapterIndex = record.ChapterIndex,
                 chapterProgress = record.ChapterProgress,
                 chapterTarget = record.ChapterTarget,
@@ -10275,7 +10280,7 @@ namespace GreedLast
                 data.successCount,
                 data.goodCount,
                 data.missCount,
-                data.distance,
+                NormalizePersistedRecordDistance(data.distance),
                 Mathf.Max(1, data.chapterIndex),
                 Mathf.Max(0, data.chapterProgress),
                 Mathf.Max(1, data.chapterTarget),
@@ -10291,7 +10296,7 @@ namespace GreedLast
             {
                 isValid = record.IsValid,
                 score = record.Score,
-                distance = record.Distance,
+                distance = NormalizePersistedRecordDistance(record.Distance),
                 sectionsCleared = record.SectionsCleared,
                 maxThreatLevel = record.MaxThreatLevel,
                 loadoutName = record.LoadoutName,
@@ -10315,7 +10320,7 @@ namespace GreedLast
             return new GreedLastInfiniteRunRecord(
                 true,
                 data.score,
-                data.distance,
+                NormalizePersistedRecordDistance(data.distance),
                 data.sectionsCleared,
                 Mathf.Max(1, data.maxThreatLevel),
                 string.IsNullOrEmpty(data.loadoutName) ? "기록 조합" : data.loadoutName,
