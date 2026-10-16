@@ -335,6 +335,7 @@ namespace GreedLast.Editor
                 AddScoreBoundaryFrames();
                 AddProgressBoundaryFrames();
                 AddPreparationPreviewFrames();
+                AddDirectRetryReviewFrames();
                 AddRewardPreviewFrames();
                 AddRecoveryPreviewFrames();
                 AddFinisherPreviewFrames();
@@ -369,11 +370,12 @@ namespace GreedLast.Editor
                             || (liveFocusPreviewOnly && frame.Name.StartsWith("101-live-focus-", StringComparison.Ordinal))
                             || (resolvedBonusPreviewOnly && frame.Name.StartsWith("102-resolved-bonus-", StringComparison.Ordinal))
                             || (goodFocusPreviewOnly && frame.Name.StartsWith("103-good-focus-", StringComparison.Ordinal))
+                            || (preparationPreviewOnly && frame.Name.StartsWith("104-direct-retry-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
                     int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
-                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 12 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 30 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1286,6 +1288,75 @@ namespace GreedLast.Editor
                 Add(name + "-tablet", 1024, 768, Show);
                 Add(name + "-wide", 2340, 1080, Show, 96f);
             }
+        }
+
+        private static void AddDirectRetryReviewFrames()
+        {
+            var backend = new GreedLastMockBackend(false, false);
+            backend.AddSampleSaveLoadoutForTest(out _);
+            var gate = new GreedLastRequestGate();
+            var state = new GreedLastStateMachine(gate);
+            GreedLastStateSnapshot screen = default;
+            state.StateChanged += value => screen = value;
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            GreedLastApp app = CreateIsolatedCaptureApp(backend, state, gate, core);
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                void Command(string name, params object[] args) => typeof(GreedLastApp).GetMethod(name, flags).Invoke(app, args);
+                void Capture(string phase, bool live)
+                {
+                    GreedLastStateSnapshot captured = screen;
+                    GreedLastRunSnapshot capturedRun = run;
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        void Show()
+                        {
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            ui.Render(captured);
+                            if (live) ui.RenderRun(capturedRun);
+                            else if (phase == "entry")
+                            {
+                                string body = Read<Text>("detailText").text;
+                                int result = body.IndexOf("무한 기록 저장", StringComparison.Ordinal);
+                                Require(result >= 0 && body.IndexOf("시작 정비", StringComparison.Ordinal) < result
+                                    && body.IndexOf("시작 상태:", StringComparison.Ordinal) >= 0
+                                    && body.IndexOf("시작 상태:", StringComparison.Ordinal) < result,
+                                    "Direct retry preparation must show current choices/start before the previous result summary.");
+                            }
+                        }
+                        string name = "104-direct-retry-" + phase + (detailed ? "-detail" : "-basic");
+                        Add(name + "-small", 960, 540, Show);
+                        Add(name + "-tablet", 1024, 768, Show);
+                        Add(name + "-wide", 2340, 1080, Show, 96f);
+                    }
+                }
+                state.SetInfiniteRun(string.Empty);
+                core.EnterInfiniteRun(((GreedLastRunRecord[])typeof(GreedLastMockBackend)
+                    .GetField("saveLoadoutSlots", flags).GetValue(backend))[0]);
+                GreedLastPrototypeAppLoopCheck.RunToFailure(core, () => run);
+                Command("RequestNextRunPattern");
+                string review = (string)typeof(GreedLastApp)
+                    .GetField("pendingInfinitePreparationReviewContext", flags).GetValue(app);
+                Require(!string.IsNullOrEmpty(review) && screen.Detail.Contains(review, StringComparison.Ordinal),
+                    "Retry captures must contain the natural result's actual transferred review.");
+                Capture("entry", false);
+                foreach (GreedLastRunChannel channel in new[] { GreedLastRunChannel.Center, GreedLastRunChannel.Center })
+                {
+                    typeof(GreedLastApp).GetField("infinitePreparationInputBlockUntil", flags).SetValue(app, 0f);
+                    Command("HandleRunChannelInput", channel);
+                }
+                Capture("ready", false);
+                typeof(GreedLastApp).GetField("infinitePreparationInputBlockUntil", flags).SetValue(app, 0f);
+                Command("RequestNextRunPattern");
+                Require(run.InfiniteMode && !string.IsNullOrEmpty(run.ReviewTargetText)
+                    && run.JudgementText.Contains(review, StringComparison.Ordinal),
+                    "Retry-start captures must retain the prepared current goal in the actual core snapshot.");
+                Capture("start", true);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
         }
 
         private static void AddRewardPreviewFrames()

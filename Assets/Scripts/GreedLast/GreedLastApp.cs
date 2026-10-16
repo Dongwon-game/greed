@@ -13000,14 +13000,14 @@ namespace GreedLast
         private void OpenInfinitePreparation(string notice = null, bool resetPreparation = true)
         {
             GreedLastLobbySnapshot lobby = backend.LoadLobby();
+            bool settledResultNotice = notice != null
+                && (notice.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                    || notice.StartsWith("무한모드 기록이 없습니다.", StringComparison.Ordinal));
             if (resetPreparation)
             {
                 ResetInfinitePreparation();
                 // Direct settlement still has the previous run's screen detail, not its new result.
-                string contextDetail = notice != null
-                    && (notice.StartsWith("무한 기록 저장", StringComparison.Ordinal)
-                        || notice.StartsWith("무한모드 기록이 없습니다.", StringComparison.Ordinal))
-                    ? notice : stateMachine.CurrentDetail;
+                string contextDetail = settledResultNotice ? notice : stateMachine.CurrentDetail;
                 pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(contextDetail);
                 pendingInfinitePreparationEntryNotice = BuildInfinitePreparationEntryNoticeFromLobbyDetail(contextDetail);
                 pendingRefillRunReviewContext = !HasAnyUsableSaveSlot(lobby)
@@ -13040,7 +13040,7 @@ namespace GreedLast
 
             if (!string.IsNullOrEmpty(notice))
             {
-                detail = notice + "\n\n" + detail;
+                detail = settledResultNotice ? detail + "\n\n" + notice : notice + "\n\n" + detail;
             }
 
             infinitePreparationInputBlockUntil = Time.realtimeSinceStartup + RunChoiceTransitionInputBlockSeconds;

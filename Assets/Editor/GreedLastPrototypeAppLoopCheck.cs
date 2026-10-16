@@ -828,6 +828,9 @@ namespace GreedLast.Editor
                         }
                         Require(state.CurrentDetail.Contains(expected, StringComparison.Ordinal),
                             "Preparation must show the same fresh review it will transfer to the next run.");
+                        Require(state.CurrentDetail.IndexOf("시작 정비", StringComparison.Ordinal)
+                            < state.CurrentDetail.IndexOf("무한 기록 저장", StringComparison.Ordinal),
+                            "The fresh preparation must appear before its preserved prior result summary.");
                         FinishPreparationTransition(app);
                         Click(Read<Button[]>(ui, "laneButtons")[1]);
                         FinishPreparationTransition(app);
@@ -3086,7 +3089,7 @@ namespace GreedLast.Editor
             Require(latest().Stopped, "The bounded callback fixture must reach a terminal result.");
         }
 
-        private static void RunToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest, Action beforeFatal = null)
+        internal static void RunToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest, Action beforeFatal = null)
         {
             float clock = Time.realtimeSinceStartup;
             for (int step = 0; step < 100 && !latest().Stopped; step++)
