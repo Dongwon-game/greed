@@ -13003,10 +13003,15 @@ namespace GreedLast
             if (resetPreparation)
             {
                 ResetInfinitePreparation();
-                pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(stateMachine.CurrentDetail);
-                pendingInfinitePreparationEntryNotice = BuildInfinitePreparationEntryNoticeFromLobbyDetail(stateMachine.CurrentDetail);
+                // Direct settlement still has the previous run's screen detail, not its new result.
+                string contextDetail = notice != null
+                    && (notice.StartsWith("무한 기록 저장", StringComparison.Ordinal)
+                        || notice.StartsWith("무한모드 기록이 없습니다.", StringComparison.Ordinal))
+                    ? notice : stateMachine.CurrentDetail;
+                pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(contextDetail);
+                pendingInfinitePreparationEntryNotice = BuildInfinitePreparationEntryNoticeFromLobbyDetail(contextDetail);
                 pendingRefillRunReviewContext = !HasAnyUsableSaveSlot(lobby)
-                    ? BuildNormalRunOpeningContextFromLobbyDetail(stateMachine.CurrentDetail)
+                    ? BuildNormalRunOpeningContextFromLobbyDetail(contextDetail)
                     : string.Empty;
             }
 

@@ -276,7 +276,8 @@ namespace GreedLast.Editor
                         && cycle.liveBackPauseResume && cycle.heldPauseCommandCases == 2
                         && cycle.heldPauseCommandsPreservedRun && cycle.heldNormalClearPreservedResult
                         && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
-                        && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 2
+                        && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
+                        && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.registeredHeldCommandPresses == 44
@@ -378,6 +379,7 @@ namespace GreedLast.Editor
             public bool growthFirstCommandOnly, growthHeldReleaseCanceled, growthFreshTapRecovered;
             public bool growthEntryHeldTapCanceled;
             public int heldSaveConfirmationCases, terminalBackSettlements;
+            public bool directInfiniteRetryPrepared, directInfiniteRetryGoalStarted;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
             public bool heldConfirmationResolutionsPreservedData, heldConfirmationResolutionFreshTapRecovered;
@@ -3066,6 +3068,7 @@ namespace GreedLast.Editor
                     && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 2,
                     "Canceling complete preparation must preserve both actual starts.");
                 report.preparationCancelPreservedUses = true;
+                string directRetryReview = string.Empty;
                 for (int use = 0; use < 2; use++)
                 {
                     yield return PrepareInfinite();
@@ -3078,6 +3081,14 @@ namespace GreedLast.Editor
                         && backend.LoadLobby().SaveSlotOccupied[report.savedSlotIndex] == (use == 0),
                         "Only actual infinite start may consume a use, with immediate source auto-clear on its second start.");
                     VerifyPreparedInfinitePreview(prepared);
+                    if (use == 1)
+                    {
+                        Require(!string.IsNullOrEmpty(directRetryReview)
+                            && !string.IsNullOrEmpty(run.ReviewTargetText)
+                            && run.JudgementText.Contains(directRetryReview, StringComparison.Ordinal),
+                            "The second actual start must transfer the first natural result's current review goal.");
+                        report.directInfiniteRetryGoalStarted = true;
+                    }
                     report.multiTouchConfirmationCases++;
                     report.actualInfiniteStarts++;
                     if (run.DevInvincible) core.ToggleDevInvincible();
@@ -3098,6 +3109,22 @@ namespace GreedLast.Editor
                         "A consumed source must support its live run until actual natural failure, without a new normal-save opportunity.");
                     int settledBefore = Read<int>(backend, "infiniteRunCount");
                     yield return null;
+                    if (use == 0)
+                    {
+                        GreedLastInfiniteRunRecord record = core.CreateInfiniteRunRecord();
+                        yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                        directRetryReview = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(
+                            backend.BuildInfiniteRunSavedPrepMessage(record));
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int>(backend, "infiniteRunCount") == settledBefore + 1
+                            && !string.IsNullOrEmpty(directRetryReview)
+                            && Read<string>(app, "pendingInfinitePreparationReviewContext") == directRetryReview
+                            && state.CurrentDetail.Contains(directRetryReview, StringComparison.Ordinal)
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex] == 1,
+                            "A real result touch must settle once and prepare its fresh review without spending the last use.");
+                        report.directInfiniteRetryPrepared = true;
+                        continue;
+                    }
                     Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
                     yield return null;
                     Require(state.CurrentState == GreedLastScreenState.LobbyReady,
@@ -3131,7 +3158,8 @@ namespace GreedLast.Editor
             {
                 GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
                 int uses = Read<int[]>(backend, "saveLoadoutUsesRemaining")[report.savedSlotIndex];
-                yield return ClickMouse(Read<Button>(ui, "infiniteButton"));
+                if (state.CurrentState != GreedLastScreenState.InfiniteStartReady)
+                    yield return ClickMouse(Read<Button>(ui, "infiniteButton"));
                 Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady, "Infinite entry must open preparation, not consume a use.");
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(0, 1, uses);

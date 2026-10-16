@@ -16,6 +16,7 @@ namespace GreedLast.Editor
         private static bool usePointerModule;
         private static bool growthCommandsOnly;
         private static bool resultBackOnly;
+        private static bool infiniteRetryReviewOnly;
         private static bool heldConfirmationsOnly;
         private static bool heldSlotChangesOnly;
         private static bool heldRunResultsOnly;
@@ -114,6 +115,16 @@ namespace GreedLast.Editor
             resultBackOnly = true;
             try { Run(); }
             finally { resultBackOnly = false; }
+        }
+
+        [MenuItem("Greed Last/Run Infinite Retry Review Check")]
+        public static void RunInfiniteRetryReviewCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !infiniteRetryReviewOnly,
+                "Infinite retry review checks require an isolated Edit-mode fixture.");
+            infiniteRetryReviewOnly = true;
+            try { Run(); }
+            finally { infiniteRetryReviewOnly = false; }
         }
 
         [MenuItem("Greed Last/Run Held Save Confirmation Check")]
@@ -233,6 +244,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (infiniteRetryReviewOnly)
+                {
+                    VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (compoundKeyboardOnly)
                 {
                     VerifyCompoundMenuKeyboard(app, ui, backend, state, core);
@@ -274,6 +290,8 @@ namespace GreedLast.Editor
                 if (growthCommandsOnly) return;
                 VerifyResultBackNavigation(app, backend, state, core, () => run);
                 VerifyHeldSaveConfirmations(app, ui, backend, state);
+
+                VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
@@ -765,6 +783,77 @@ namespace GreedLast.Editor
                 Write(app, "preferredRecordBoardPageIndex", preferredPage);
                 core.Exit();
                 Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyInfiniteRetryReview(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            var errors = new List<string>();
+            int cases = 0;
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    foreach (bool staleReview in new[] { false, true })
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        backend.SelectSaveLoadoutSlot(0);
+                        Write(app, "backend", backend);
+                        core.ConfigureGrowth(0, 0, 0);
+                        string oldContext = staleReview ? "무한 복기 재도전\n목표: 이전 기록 확인" : string.Empty;
+                        state.SetInfiniteRun(oldContext);
+                        core.EnterInfiniteRun(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0], oldContext);
+                        if (latest().DevInvincible) core.ToggleDevInvincible();
+                        RunToFailure(core, latest);
+                        GreedLastInfiniteRunRecord record = core.CreateInfiniteRunRecord();
+                        Click(ui, "nextPatternButton");
+                        string expected = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(
+                            backend.BuildInfiniteRunSavedPrepMessage(record));
+                        string actual = Read<string>(app, "pendingInfinitePreparationReviewContext");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int>(backend, "infiniteRunCount") == 1 && !string.IsNullOrEmpty(expected)
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 2,
+                            "Natural infinite settlement must register once and open unused preparation with a fresh review.");
+                        cases++;
+                        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                        {
+                            errors.Add($"detailed={detailed}, stale={staleReview}: expected=[{expected}], actual=[{actual}]");
+                            core.Exit();
+                            continue;
+                        }
+                        Require(state.CurrentDetail.Contains(expected, StringComparison.Ordinal),
+                            "Preparation must show the same fresh review it will transfer to the next run.");
+                        FinishPreparationTransition(app);
+                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        FinishPreparationTransition(app);
+                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        FinishPreparationTransition(app);
+                        Click(ui, "nextPatternButton");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteRun && !latest().Stopped
+                            && !string.IsNullOrEmpty(latest().ReviewTargetText)
+                            && latest().JudgementText.Contains(expected, StringComparison.Ordinal)
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 1
+                            && Read<int>(backend, "infiniteRunCount") == 1 && !backend.HasSaveLoadoutCandidate,
+                            "A fresh actual retry must retain the new review goal, spend one use and not duplicate settlement.");
+                        core.Exit();
+                    }
+                Require(errors.Count == 0, "Direct infinite retry lost its current review: " + string.Join(" | ", errors));
+                Debug.Log("Greed direct infinite retry review passed: " + cases
+                    + " clean/detailed and absent/stale review cases, natural failures, actual result/preparation/start callbacks, one settlement and one paid retry each. Isolated in-memory data and fixture clock progression only.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                Write(app, "backend", originalBackend);
+                Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
         }
