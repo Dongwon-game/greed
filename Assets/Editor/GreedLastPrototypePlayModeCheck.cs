@@ -278,6 +278,7 @@ namespace GreedLast.Editor
                         && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
+                        && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
                         && cycle.registeredHeldCommandPresses == 44
@@ -380,6 +381,7 @@ namespace GreedLast.Editor
             public bool growthEntryHeldTapCanceled;
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool directInfiniteRetryPrepared, directInfiniteRetryGoalStarted;
+            public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
             public bool heldConfirmationResolutionsPreservedData, heldConfirmationResolutionFreshTapRecovered;
@@ -2316,7 +2318,20 @@ namespace GreedLast.Editor
                                 + $" normal={Read<int>(backend, "normalFailCount")}, infinite={Read<int>(backend, "infiniteRunCount")},"
                                 + $" candidate={backend.HasSaveLoadoutCandidate}, score={run.Score}/{terminal.Score},"
                                 + $" distance={run.Distance}/{terminal.Distance}");
-                        yield return TapTouch(back);
+                        if (mode == 2)
+                        {
+                            yield return TapTouch(primary);
+                            Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                                && Read<int>(backend, "infiniteRunCount") == 1,
+                                "A fresh infinite result tap must settle once into current preparation.");
+                            yield return TapTouch(back);
+                            Require(state.CurrentDetail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal)
+                                && !backend.HasSaveLoadoutCandidate
+                                && Array.TrueForAll(backend.LoadLobby().SaveSlotOccupied, occupied => !occupied),
+                                "Canceling composite result preparation must preserve its saved notice without creating a slot.");
+                            report.directInfinitePreparationCancelCases++;
+                        }
+                        else yield return TapTouch(back);
                         Require(state.CurrentState == GreedLastScreenState.LobbyReady
                             && Read<int>(backend, "normalFailCount") == (mode == 1 ? 1 : 0)
                             && Read<int>(backend, "infiniteRunCount") == (mode == 2 ? 1 : 0),
@@ -2326,7 +2341,7 @@ namespace GreedLast.Editor
                     }
                     report.heldRunResultsPreservedData = report.heldRunResultCases == 6;
                     report.heldRunResultFreshTapRecovered = report.heldRunResultsPreservedData;
-                    Debug.Log("Greed engine held run results passed: three natural failures in clean primary/primary and detailed primary/back views; both pointer identities registered, old press eligibility cleared before delayed releases, fresh back settlement recovered. In-memory progress only.");
+                    Debug.Log("Greed engine held run results passed: three natural failures in clean primary/primary and detailed primary/back views; both pointer identities registered, old press eligibility cleared before delayed releases, fresh back or infinite preparation/cancel settlement recovered. In-memory progress only.");
                 }
                 finally
                 {

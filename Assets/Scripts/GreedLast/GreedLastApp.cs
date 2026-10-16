@@ -14580,7 +14580,9 @@ namespace GreedLast
 
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
-                bool hasSavedInfinitePrep = IsInfiniteRecordResultDetail(stateMachine.CurrentDetail ?? string.Empty);
+                string preparationDetail = stateMachine.CurrentDetail ?? string.Empty;
+                bool hasSavedInfinitePrep = IsInfiniteRecordResultDetail(preparationDetail)
+                    || HasLineStartingWith(preparationDetail, "무한 기록 저장");
                 ResetInfinitePreparation();
                 ClearInfinitePreparationContext();
                 stateMachine.SetLobbyReady(backend.LoadLobby());

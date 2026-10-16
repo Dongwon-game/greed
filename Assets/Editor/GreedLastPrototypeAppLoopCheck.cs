@@ -798,11 +798,15 @@ namespace GreedLast.Editor
             {
                 foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
                     foreach (bool staleReview in new[] { false, true })
+                    foreach (int startingUses in new[] { 2, 1 })
                     {
                         if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                         var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                         backend.AddSampleSaveLoadoutForTest(out _);
                         backend.SelectSaveLoadoutSlot(0);
+                        if (startingUses == 1)
+                            Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                                "The last-use retry fixture needs one legitimate previous consumption.");
                         Write(app, "backend", backend);
                         core.ConfigureGrowth(0, 0, 0);
                         string oldContext = staleReview ? "무한 복기 재도전\n목표: 이전 기록 확인" : string.Empty;
@@ -817,7 +821,7 @@ namespace GreedLast.Editor
                         string actual = Read<string>(app, "pendingInfinitePreparationReviewContext");
                         Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
                             && Read<int>(backend, "infiniteRunCount") == 1 && !string.IsNullOrEmpty(expected)
-                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 2,
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == startingUses,
                             "Natural infinite settlement must register once and open unused preparation with a fresh review.");
                         cases++;
                         if (!string.Equals(expected, actual, StringComparison.Ordinal))
@@ -840,14 +844,38 @@ namespace GreedLast.Editor
                         Require(state.CurrentState == GreedLastScreenState.InfiniteRun && !latest().Stopped
                             && !string.IsNullOrEmpty(latest().ReviewTargetText)
                             && latest().JudgementText.Contains(expected, StringComparison.Ordinal)
-                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 1
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == startingUses - 1
+                            && backend.LoadLobby().SaveSlotOccupied[0] == (startingUses == 2)
                             && Read<int>(backend, "infiniteRunCount") == 1 && !backend.HasSaveLoadoutCandidate,
                             "A fresh actual retry must retain the new review goal, spend one use and not duplicate settlement.");
+                        RunToFailure(core, latest);
+                        Click(ui, "nextPatternButton");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int>(backend, "infiniteRunCount") == 2,
+                            "The next natural result must settle once before either preparation or refill.");
+                        Click(ui, "returnLobbyButton");
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == startingUses - 1
+                            && Read<int>(backend, "infiniteRunCount") == 2 && !backend.HasSaveLoadoutCandidate,
+                            "Canceling the result's preparation must not spend, resurrect or settle anything again.");
+                        if (!state.CurrentDetail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal))
+                            errors.Add($"Cancel lost settlement notice: detailed={detailed}, stale={staleReview}, uses={startingUses}");
+                        if (startingUses == 1)
+                        {
+                            Click(ui, "infiniteButton");
+                            FinishPreparationTransition(app);
+                            Click(ui, "nextPatternButton");
+                            Require(latest().RefillRun && latest().ChoiceActive && !latest().InfiniteMode
+                                && string.IsNullOrEmpty(latest().ReviewTargetText)
+                                && Array.TrueForAll(backend.LoadLobby().SaveSlotOccupied, occupied => !occupied)
+                                && Read<int>(backend, "infiniteRunCount") == 2 && !backend.HasSaveLoadoutCandidate,
+                                "An exhausted retry source must enter a fresh refill without an old infinite goal or free slot.");
+                        }
                         core.Exit();
                     }
-                Require(errors.Count == 0, "Direct infinite retry lost its current review: " + string.Join(" | ", errors));
+                Require(errors.Count == 0, "Direct infinite retry/cancel did not preserve its current result: " + string.Join(" | ", errors));
                 Debug.Log("Greed direct infinite retry review passed: " + cases
-                    + " clean/detailed and absent/stale review cases, natural failures, actual result/preparation/start callbacks, one settlement and one paid retry each. Isolated in-memory data and fixture clock progression only.");
+                    + " clean/detailed, absent/stale and two/one-use cases; current goal, one paid retry, two natural settlements, canceled preparation notice/use preservation and depleted-source refill. Isolated in-memory data and fixture clock progression only.");
             }
             finally
             {
