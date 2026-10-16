@@ -247,6 +247,7 @@ namespace GreedLast.Editor
                 if (infiniteRetryReviewOnly)
                 {
                     VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
+                    VerifyInfiniteRetryReviewBranches(app, ui, backend, state, core, () => run);
                     return;
                 }
                 if (compoundKeyboardOnly)
@@ -292,6 +293,7 @@ namespace GreedLast.Editor
                 VerifyHeldSaveConfirmations(app, ui, backend, state);
 
                 VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
+                VerifyInfiniteRetryReviewBranches(app, ui, backend, state, core, () => run);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
@@ -876,6 +878,76 @@ namespace GreedLast.Editor
                 Require(errors.Count == 0, "Direct infinite retry/cancel did not preserve its current result: " + string.Join(" | ", errors));
                 Debug.Log("Greed direct infinite retry review passed: " + cases
                     + " clean/detailed, absent/stale and two/one-use cases; current goal, one paid retry, two natural settlements, canceled preparation notice/use preservation and depleted-source refill. Isolated in-memory data and fixture clock progression only.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                Write(app, "backend", originalBackend);
+                Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyInfiniteRetryReviewBranches(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            int cases = 0;
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    for (int mode = 0; mode < 3; mode++)
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(false, false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        Write(app, "backend", backend);
+                        core.ConfigureGrowth(0, 0, 0);
+                        bool noGoal = mode == 1;
+                        string context = "무한 복기 재도전\n목표: " + (noGoal ? "이전 기록 확인" : "실수 9 이하");
+                        state.SetInfiniteRun(context);
+                        core.EnterInfiniteRun(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0], context);
+                        if (mode == 0) RunToFailure(core, latest);
+                        else
+                        {
+                            float clock = Time.realtimeSinceStartup;
+                            core.Tick(clock += 2f);
+                            core.Tick(clock += 1f);
+                            Require(latest().ActivePattern, "Forced result branch checks need a real first trap.");
+                            core.HandleInput(latest().Pattern.Channel,
+                                clock + latest().Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
+                            Require(latest().SuccessCount == 1, "The forced fixture must first resolve one public-input success.");
+                            core.ForceStopInfiniteRunForTest();
+                        }
+                        Click(ui, "nextPatternButton");
+                        string review = Read<string>(app, "pendingInfinitePreparationReviewContext");
+                        string notice = Read<string>(app, "pendingInfinitePreparationEntryNotice");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
+                            && Read<int>(backend, "infiniteRunCount") == 1
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 2
+                            && (noGoal ? string.IsNullOrEmpty(review) && notice.Contains("복기 목표 없이", StringComparison.Ordinal)
+                                : review.Contains("목표: 실수 8 이하", StringComparison.Ordinal) && string.IsNullOrEmpty(notice)),
+                            "Natural/forced achieved goals must advance 9 to 8; only non-advanced forced settlement re-enters without a goal. Mode " + mode);
+                        FinishPreparationTransition(app);
+                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        FinishPreparationTransition(app);
+                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        FinishPreparationTransition(app);
+                        Click(ui, "nextPatternButton");
+                        Require(state.CurrentState == GreedLastScreenState.InfiniteRun && !latest().Stopped
+                            && latest().ReviewTargetText == (noGoal ? string.Empty : "실수 8 이하")
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 1
+                            && Read<int>(backend, "infiniteRunCount") == 1 && !backend.HasSaveLoadoutCandidate,
+                            "The actual paid retry must retain the advanced/absent target without restoring the previous one or settling twice.");
+                        core.Exit();
+                        cases++;
+                    }
+                Debug.Log("Greed direct retry goal branches passed: " + cases
+                    + " clean/detailed natural achievement, forced settlement without a new goal and forced achievement; explicit 9-to-8 advancement/empty live target, one settlement and one paid retry. Editor-only forced-stop API, isolated data and public-input fixture clock; not a shipping control or hardware test.");
             }
             finally
             {
