@@ -10811,6 +10811,7 @@ namespace GreedLast
         private bool presentationSettingsCaptured;
         private int previousQualityLevel, previousVSyncCount, previousTargetFrameRate, previousSleepTimeout;
         private bool applicationPaused;
+        private bool applicationQuitting;
         private bool applicationHasFocus = true;
         private bool appStarted;
         private bool interruptedBootPending;
@@ -11022,6 +11023,19 @@ namespace GreedLast
                 requestGate.CancelPending();
                 interruptedBootPending = true;
             }
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (applicationQuitting) return;
+            applicationQuitting = true;
+            runtimeUi?.SetAppInputAvailable(false);
+            if (stateMachine == null || backend == null || runCore == null
+                || stateMachine.CurrentState != GreedLastScreenState.RunCoreTest
+                || !runCore.CanExitAfterClear || runCore.IsPracticeRun) return;
+
+            // Preserve the earned candidate on normal close, without choosing a slot for the player.
+            backend.RegisterClear(runCore.CreateRunRecord());
         }
 
         private void OnDestroy()
@@ -12727,13 +12741,13 @@ namespace GreedLast
 
         private bool CanAcceptPlayerInput()
         {
-            return isActiveAndEnabled && applicationHasFocus && !applicationPaused
+            return !applicationQuitting && isActiveAndEnabled && applicationHasFocus && !applicationPaused
                 && runtimeUi != null && runtimeUi.AcceptsPlayerInput;
         }
 
         private void RefreshPlayerInputAvailability()
         {
-            runtimeUi?.SetAppInputAvailable(isActiveAndEnabled && applicationHasFocus && !applicationPaused);
+            runtimeUi?.SetAppInputAvailable(!applicationQuitting && isActiveAndEnabled && applicationHasFocus && !applicationPaused);
         }
 
         private bool PauseRunForAppBackground()
@@ -17612,12 +17626,14 @@ namespace GreedLast
 
             if (pauseMenuBodyText != null)
             {
+                string unplayedExitLine = IsUnplayedInfiniteRun(snapshot) ? "\n기록 없음 · 사용권 차감 유지" : string.Empty;
                 if (!DevToolsEnabled || devCleanViewEnabled)
                 {
                     pauseMenuBodyText.text = "체력 " + snapshot.Health + "/" + snapshot.MaxHealth
                         + " · 집중 " + snapshot.Focus + "/" + snapshot.MaxFocus
                         + "\n" + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m"
-                        + "\n보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds);
+                        + "\n보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds)
+                        + unplayedExitLine;
                     pauseMenuBodyText.fontSize = 36;
                     return;
                 }
@@ -17627,12 +17643,14 @@ namespace GreedLast
                 if (snapshot.ResumeCountdownActive)
                 {
                     pauseMenuBodyText.text = "카운트 후 앞 박자 여유를 두고 이어집니다.\n입력은 다시 보이는 판정선에 맞춰 받습니다."
+                        + unplayedExitLine
                         + coachBlock
                         + "\n" + settingsLine;
                 }
                 else if (snapshot.StartCountdownActive)
                 {
                     pauseMenuBodyText.text = "시작 카운트가 멈춰 있습니다.\n재개하면 여유 카운트 뒤 첫 함정이 내려옵니다."
+                        + unplayedExitLine
                         + coachBlock
                         + "\n" + settingsLine;
                 }
@@ -17741,6 +17759,12 @@ namespace GreedLast
             return string.IsNullOrEmpty(reviewTarget) ? string.Empty : " / " + reviewTarget;
         }
 
+        private static bool IsUnplayedInfiniteRun(GreedLastRunSnapshot snapshot)
+        {
+            return snapshot.InfiniteMode && !GreedLastRunCore.HasRecordableInfiniteProgress(
+                snapshot.Distance, snapshot.SuccessCount, snapshot.GoodCount, snapshot.MissCount);
+        }
+
         private static string BuildPauseExitHintLine(GreedLastRunSnapshot snapshot)
         {
             if (snapshot.PracticeMode)
@@ -17750,7 +17774,9 @@ namespace GreedLast
 
             if (snapshot.InfiniteMode)
             {
-                return "로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다.";
+                return IsUnplayedInfiniteRun(snapshot)
+                    ? "주행 전 종료: 기록·보상 없음 / 사용권 차감 유지"
+                    : "로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다.";
             }
 
             return snapshot.RefillRun
@@ -17775,12 +17801,17 @@ namespace GreedLast
                 return "로비로";
             }
 
-            if (snapshot.Paused)
+            if (snapshot.InfiniteMode)
             {
-                return snapshot.InfiniteMode ? "정산 후 로비" : snapshot.RefillRun ? "보충 중단" : "중단하고 로비";
+                return IsUnplayedInfiniteRun(snapshot) ? "기록 없이 로비" : "정산 후 로비";
             }
 
-            return snapshot.InfiniteMode ? "정산 후 로비" : snapshot.RefillRun ? "보충 포기" : "탈출 포기";
+            if (snapshot.Paused)
+            {
+                return snapshot.RefillRun ? "보충 중단" : "중단하고 로비";
+            }
+
+            return snapshot.RefillRun ? "보충 포기" : "탈출 포기";
         }
 
         private static string BuildRunPrimaryButtonLabelForMode(GreedLastRunSnapshot snapshot,
@@ -24544,7 +24575,7 @@ namespace GreedLast
             string exitLine = snapshot.PracticeMode
                 ? "로비로 돌아가도 일반 런 기록과 저장 기회에는 영향을 주지 않습니다."
                 : snapshot.InfiniteMode
-                ? "로비로 돌아가면 현재 무한 기록을 정산하고 종료합니다."
+                ? BuildPauseExitHintLine(snapshot)
                 : snapshot.RefillRun
                     ? "로비로 돌아가면 현재 보충 런은 중단 기록으로 남습니다."
                 : "로비로 돌아가면 현재 런은 중단 기록으로 남습니다.";

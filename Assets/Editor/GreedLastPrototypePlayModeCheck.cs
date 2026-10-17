@@ -279,6 +279,7 @@ namespace GreedLast.Editor
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
                         && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
+                        && cycle.engineClearQuitCandidatePreserved
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
@@ -384,6 +385,7 @@ namespace GreedLast.Editor
             public bool directInfiniteRetryPrepared, directInfiniteRetryGoalStarted;
             public bool directInfiniteResultRetainedAfterChoices;
             public int infiniteCountdownRecordBoundaryCases;
+            public bool engineClearQuitCandidatePreserved;
             public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
@@ -3057,6 +3059,7 @@ namespace GreedLast.Editor
                 if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                 report.fullNormalClear = true;
                 report.fullNormalJudgements = report.judgements;
+                VerifyQuitCandidateFromEngineClear();
                 Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
                 yield return null;
                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate
@@ -3171,6 +3174,55 @@ namespace GreedLast.Editor
                     "After natural failures and source depletion the actual empty preparation must re-enter a fresh refill choice.");
                 report.emptySlotRefillReentered = true;
                 report.fullLoopSeconds = Time.realtimeSinceStartup - began;
+            }
+
+            private void VerifyQuitCandidateFromEngineClear()
+            {
+                string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "engine-clear-quit-" + Guid.NewGuid().ToString("N");
+                var host = new GameObject("GreedLastInactiveQuitProbe");
+                host.SetActive(false);
+                try
+                {
+                    var closingApp = host.AddComponent<GreedLastApp>();
+                    Require(closingApp.enabled && Read<GreedLastMockBackend>(closingApp, "backend") == null,
+                        "The inactive quit probe must not run Awake or boot any personal persistence.");
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    var closingState = new GreedLastStateMachine(new GreedLastRequestGate());
+                    closingState.SetRunCoreTest();
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    typeof(GreedLastApp).GetField("backend", flags).SetValue(closingApp, backend);
+                    typeof(GreedLastApp).GetField("stateMachine", flags).SetValue(closingApp, closingState);
+                    typeof(GreedLastApp).GetField("runCore", flags).SetValue(closingApp, core);
+                    Require(core.CanExitAfterClear && run.EscapeSucceeded, "Quit probes need the actual completed engine course.");
+                    int originalClears = Read<int>(Read<GreedLastMockBackend>(app, "backend"), "normalClearCount");
+                    Call(closingApp, "OnApplicationQuit");
+                    var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    Require(reloaded.HasSaveLoadoutCandidate && Read<int>(reloaded, "normalClearCount") == 1
+                        && Read<int>(reloaded, "growthPoints") == 3
+                        && Array.TrueForAll(reloaded.LoadLobby().SaveSlotOccupied, occupied => !occupied)
+                        && Read<GreedLastRunRecord>(reloaded, "lastRunRecord").Score == run.Score,
+                        "The normal-quit callback must persist the engine-earned clear, not auto-save a slot.");
+                    string json = PlayerPrefs.GetString(key);
+                    Call(closingApp, "OnApplicationQuit");
+                    Require(PlayerPrefs.GetString(key) == json && core.CanExitAfterClear
+                        && Read<int>(Read<GreedLastMockBackend>(app, "backend"), "normalClearCount") == originalClears,
+                        "A repeated probe must neither duplicate its clear nor mutate the original live result/backend.");
+                    reloaded.SelectSaveLoadoutSlot(1);
+                    reloaded.ConfirmSaveLoadout();
+                    reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    Require(!reloaded.HasSaveLoadoutCandidate && reloaded.LoadLobby().SaveSlotOccupied[1]
+                        && !reloaded.LoadLobby().SaveSlotOccupied[0]
+                        && Read<int[]>(reloaded, "saveLoadoutUsesRemaining")[1] == 2
+                        && Read<int>(reloaded, "normalClearCount") == 1,
+                        "The engine-earned recovered candidate must save once to an explicitly selected slot.");
+                    report.engineClearQuitCandidatePreserved = true;
+                }
+                finally
+                {
+                    UnityEngine.Object.Destroy(host);
+                    PlayerPrefs.DeleteKey(key);
+                    PlayerPrefs.Save();
+                }
             }
 
             private IEnumerator VerifyInfiniteCountdownRecordBoundaries()

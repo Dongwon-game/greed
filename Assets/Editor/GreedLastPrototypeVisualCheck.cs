@@ -375,7 +375,7 @@ namespace GreedLast.Editor
                             Frames.Enqueue(frame);
                     }
                     int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
-                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 42 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 48 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1316,12 +1316,21 @@ namespace GreedLast.Editor
                         {
                             if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                             ui.Render(captured);
-                            if (live) ui.RenderRun(capturedRun);
+                            if (live)
+                            {
+                                ui.RenderRun(capturedRun);
+                                if (phase == "start-pause")
+                                    Require(Read<Button>("returnLobbyButton").GetComponentInChildren<Text>().text == "기록 없이 로비"
+                                        && Read<Text>("pauseMenuBodyText").text.Contains("사용권 차감 유지", StringComparison.Ordinal),
+                                        "An unplayed pause must describe no record and the already-spent use in both views.");
+                            }
+                            else if (phase == "unplayed")
+                                Require(Read<Text>("detailText").text.Contains("주행 전 종료 / 기록·성장 보상 없음", StringComparison.Ordinal),
+                                    "The visible unplayed-abandonment receipt must explain the absent record and reward.");
                             else
                             {
                                 string body = Read<Text>("detailText").text;
-                                int result = body.IndexOf(phase == "unplayed"
-                                    ? "무한모드 기록이 없습니다." : "무한 기록 저장", StringComparison.Ordinal);
+                                int result = body.IndexOf("무한 기록 저장", StringComparison.Ordinal);
                                 Require(result >= 0 && body.IndexOf("시작 정비", StringComparison.Ordinal) < result
                                     && body.IndexOf("시작 상태:", StringComparison.Ordinal) >= 0
                                     && body.IndexOf("시작 상태:", StringComparison.Ordinal) < result,
@@ -1358,15 +1367,17 @@ namespace GreedLast.Editor
                     && run.JudgementText.Contains(review, StringComparison.Ordinal),
                     "Retry-start captures must retain the prepared current goal in the actual core snapshot.");
                 Capture("start", true);
-                core.ForceStopInfiniteRunForTest();
-                Command("RequestNextRunPattern");
+                Command("RequestToggleRunPause");
+                Capture("start-pause", true);
+                Command("RequestReturnToLobby");
                 Require(screen.Detail.Contains("주행 전 종료 / 기록·성장 보상 없음", StringComparison.Ordinal)
                     && (int)typeof(GreedLastMockBackend).GetField("infiniteRunCount", flags).GetValue(backend) == 1,
-                    "Stopping an unplayed seeded-score start must preserve the prior record, not settle another one.");
+                    "Abandoning an unplayed seeded-score start must preserve the prior record, not settle another one.");
                 Capture("unplayed", false);
-                Command("RequestReturnToLobby");
-                Require(!screen.Detail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal),
-                    "Canceling unplayed-result preparation must not claim that a new record was saved.");
+                Command("RequestInfiniteRun");
+                Require(string.IsNullOrEmpty((string)typeof(GreedLastApp)
+                    .GetField("pendingInfinitePreparationResultNotice", flags).GetValue(app)),
+                    "A new preparation after unplayed abandonment must not restore the old saved-result summary.");
             }
             finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
         }

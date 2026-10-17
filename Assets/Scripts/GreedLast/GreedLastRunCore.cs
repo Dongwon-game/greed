@@ -1558,14 +1558,16 @@ namespace GreedLast
                 && profile != "저장 조합";
         }
 
+        internal static bool HasRecordableInfiniteProgress(float traveledDistance, int successes, int goods, int misses)
+        {
+            return traveledDistance > 0.01f || successes > 0 || goods > 0 || misses > 0;
+        }
+
         public GreedLastInfiniteRunRecord CreateInfiniteRunRecord()
         {
             // Loadout score is granted before play; movement or judgements establish an attempt.
             bool hasRunStarted = infiniteMode
-                && (distance > 0.01f
-                    || successCount > 0
-                    || goodCount > 0
-                    || missCount > 0);
+                && HasRecordableInfiniteProgress(distance, successCount, goodCount, missCount);
             if (!hasRunStarted)
             {
                 return GreedLastInfiniteRunRecord.Empty;
