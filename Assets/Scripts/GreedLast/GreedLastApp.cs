@@ -1948,6 +1948,7 @@ namespace GreedLast
         public string BuildInfiniteRunNoRecordMessage()
         {
             return "무한모드 기록이 없습니다."
+                + "\n주행 전 종료 / 기록·성장 보상 없음"
                 + BuildLastSaveLoadoutUseResultLine()
                 + "\n저장 조합은 무한 시작 시점에 1회 차감됩니다."
                 + "\n" + BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: true);
@@ -10852,6 +10853,7 @@ namespace GreedLast
         private string infinitePreparationRelic = string.Empty;
         private string pendingInfinitePreparationReviewContext = string.Empty;
         private string pendingInfinitePreparationEntryNotice = string.Empty;
+        private string pendingInfinitePreparationResultNotice = string.Empty;
         private string pendingRefillRunReviewContext = string.Empty;
         private GreedLastRunSnapshot latestAppRunSnapshot;
         private bool hasLatestAppRunSnapshot;
@@ -13006,6 +13008,7 @@ namespace GreedLast
             if (resetPreparation)
             {
                 ResetInfinitePreparation();
+                pendingInfinitePreparationResultNotice = settledResultNotice ? notice : string.Empty;
                 // Direct settlement still has the previous run's screen detail, not its new result.
                 string contextDetail = settledResultNotice ? notice : stateMachine.CurrentDetail;
                 pendingInfinitePreparationReviewContext = BuildInfinitePreparationReviewContextFromLobbyDetail(contextDetail);
@@ -13038,9 +13041,14 @@ namespace GreedLast
                 detail = BuildInfinitePreparationDetail().TrimStart() + "\n\n" + detail;
             }
 
-            if (!string.IsNullOrEmpty(notice))
+            if (!string.IsNullOrEmpty(notice) && !settledResultNotice)
             {
-                detail = settledResultNotice ? detail + "\n\n" + notice : notice + "\n\n" + detail;
+                detail = notice + "\n\n" + detail;
+            }
+
+            if (!string.IsNullOrEmpty(pendingInfinitePreparationResultNotice))
+            {
+                detail += "\n\n" + pendingInfinitePreparationResultNotice;
             }
 
             infinitePreparationInputBlockUntil = Time.realtimeSinceStartup + RunChoiceTransitionInputBlockSeconds;
@@ -13136,6 +13144,7 @@ namespace GreedLast
         {
             pendingInfinitePreparationReviewContext = string.Empty;
             pendingInfinitePreparationEntryNotice = string.Empty;
+            pendingInfinitePreparationResultNotice = string.Empty;
             pendingRefillRunReviewContext = string.Empty;
         }
 
@@ -14561,16 +14570,6 @@ namespace GreedLast
                 return;
             }
 
-            if (stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
-            {
-                saveSlotDeleteConfirmPending = false;
-                saveSlotDetailViewActive = false;
-                saveSlotRenameConfirmPending = false;
-                ClearInfinitePreparationContext();
-                stateMachine.SetLobbyReady(backend.LoadLobby());
-                return;
-            }
-
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard)
             {
                 recordBoardPageIndex = 0;
@@ -14578,11 +14577,16 @@ namespace GreedLast
                 return;
             }
 
-            if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
+            if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect)
             {
                 string preparationDetail = stateMachine.CurrentDetail ?? string.Empty;
                 bool hasSavedInfinitePrep = IsInfiniteRecordResultDetail(preparationDetail)
-                    || HasLineStartingWith(preparationDetail, "무한 기록 저장");
+                    || HasLineStartingWith(preparationDetail, "무한 기록 저장")
+                    || HasLineStartingWith(pendingInfinitePreparationResultNotice, "무한 기록 저장");
+                saveSlotDeleteConfirmPending = false;
+                saveSlotDetailViewActive = false;
+                saveSlotRenameConfirmPending = false;
                 ResetInfinitePreparation();
                 ClearInfinitePreparationContext();
                 stateMachine.SetLobbyReady(backend.LoadLobby());

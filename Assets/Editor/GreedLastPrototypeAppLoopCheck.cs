@@ -248,6 +248,8 @@ namespace GreedLast.Editor
                 {
                     VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
                     VerifyInfiniteRetryReviewBranches(app, ui, backend, state, core, () => run);
+                    VerifyInfinitePreparationResultContinuity(app, ui, backend, state, core, () => run);
+                    VerifyInfiniteCountdownAbandonment(app, ui, backend, state, core, () => run);
                     return;
                 }
                 if (compoundKeyboardOnly)
@@ -294,6 +296,8 @@ namespace GreedLast.Editor
 
                 VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
                 VerifyInfiniteRetryReviewBranches(app, ui, backend, state, core, () => run);
+                VerifyInfinitePreparationResultContinuity(app, ui, backend, state, core, () => run);
+                VerifyInfiniteCountdownAbandonment(app, ui, backend, state, core, () => run);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
@@ -839,6 +843,8 @@ namespace GreedLast.Editor
                             "The fresh preparation must appear before its preserved prior result summary.");
                         FinishPreparationTransition(app);
                         Click(Read<Button[]>(ui, "laneButtons")[1]);
+                        Require(state.CurrentDetail.Contains("무한 기록 저장\n이번:", StringComparison.Ordinal),
+                            "Choosing a preparation gift must retain the settled result below the current preparation.");
                         FinishPreparationTransition(app);
                         Click(Read<Button[]>(ui, "laneButtons")[1]);
                         FinishPreparationTransition(app);
@@ -948,6 +954,195 @@ namespace GreedLast.Editor
                     }
                 Debug.Log("Greed direct retry goal branches passed: " + cases
                     + " clean/detailed natural achievement, forced settlement without a new goal and forced achievement; explicit 9-to-8 advancement/empty live target, one settlement and one paid retry. Editor-only forced-stop API, isolated data and public-input fixture clock; not a shipping control or hardware test.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                Write(app, "backend", originalBackend);
+                Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyInfinitePreparationResultContinuity(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            int cases = 0;
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    for (int cancelAt = 0; cancelAt < 4; cancelAt++)
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(false, false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        var saved = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[0];
+                        backend.RegisterClear(saved);
+                        backend.SelectSaveLoadoutSlot(1);
+                        backend.ConfirmSaveLoadout();
+                        backend.SelectSaveLoadoutSlot(0);
+                        Write(app, "backend", backend);
+                        core.ConfigureGrowth(0, 0, 0);
+                        state.SetInfiniteRun(string.Empty);
+                        core.EnterInfiniteRun(saved);
+                        RunToFailure(core, latest);
+                        Click(ui, "nextPatternButton");
+                        string result = Read<string>(app, "pendingInfinitePreparationResultNotice");
+                        Require(result.StartsWith("무한 기록 저장\n이번:", StringComparison.Ordinal),
+                            "Continuity fixtures must retain an actual settled infinite result.");
+                        string review = Read<string>(app, "pendingInfinitePreparationReviewContext");
+                        void CheckDetail()
+                        {
+                            Require(state.CurrentDetail.EndsWith(result, StringComparison.Ordinal)
+                                && state.CurrentDetail.IndexOf("시작 정비", StringComparison.Ordinal)
+                                    < state.CurrentDetail.IndexOf(result, StringComparison.Ordinal)
+                                && state.CurrentDetail.IndexOf(result, StringComparison.Ordinal)
+                                    == state.CurrentDetail.LastIndexOf(result, StringComparison.Ordinal)
+                                && Read<string>(app, "pendingInfinitePreparationReviewContext") == review,
+                                "Current preparation must lead one preserved result and retain the same fresh review.");
+                        }
+                        CheckDetail();
+                        if (cancelAt >= 1)
+                        {
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[1]);
+                            CheckDetail();
+                        }
+                        if (cancelAt >= 2)
+                        {
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[2]);
+                            CheckDetail();
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[1]);
+                            CheckDetail();
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[0]);
+                            CheckDetail();
+                        }
+                        if (cancelAt == 3)
+                        {
+                            Click(ui, "saveLoadoutButton");
+                            Click(Read<Button[]>(ui, "laneButtons")[1]);
+                            Click(ui, "nextPatternButton");
+                            CheckDetail();
+                            Require(backend.LoadLobby().SelectedSaveSlotIndex == 1,
+                                "Continuity must survive a real switch to another saved source.");
+                            Click(ui, "saveLoadoutButton");
+                        }
+                        Click(ui, "returnLobbyButton");
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && state.CurrentDetail.StartsWith("무한 기록 저장 완료", StringComparison.Ordinal)
+                            && string.IsNullOrEmpty(Read<string>(app, "pendingInfinitePreparationResultNotice"))
+                            && string.IsNullOrEmpty(Read<string>(app, "pendingInfinitePreparationReviewContext"))
+                            && Read<int>(app, "infinitePreparationStep") == 0
+                            && Read<int>(backend, "infiniteRunCount") == 1
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 2
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[1] == 2
+                            && !backend.HasSaveLoadoutCandidate,
+                            "Entry, partial, complete and source-management cancellation must retain a truthful receipt without another settlement or use.");
+                        Click(ui, "infiniteButton");
+                        Require(string.IsNullOrEmpty(Read<string>(app, "pendingInfinitePreparationResultNotice"))
+                            && !state.CurrentDetail.Contains(result, StringComparison.Ordinal),
+                            "A new preparation after cancellation must not resurrect the old result summary.");
+                        Click(ui, "returnLobbyButton");
+                        core.Exit();
+                        cases++;
+                    }
+                Debug.Log("Greed preparation result continuity passed: " + cases
+                    + " clean/detailed entry, gift, relic/reselection and changed-source management cancellations; one retained result below current preparation, fresh review, truthful receipt, no duplicate settlement/use and no old-result resurrection. Isolated callback fixture only.");
+            }
+            finally
+            {
+                core.Exit();
+                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                Write(app, "backend", originalBackend);
+                Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyInfiniteCountdownAbandonment(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            int cases = 0;
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    foreach (int startingUses in new[] { 2, 1 })
+                    foreach (bool resumed in new[] { false, true })
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(false, false);
+                        backend.AddSampleSaveLoadoutForTest(out _);
+                        if (startingUses == 1)
+                            Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                                "The countdown last-use fixture needs one prior legitimate consumption.");
+                        Write(app, "backend", backend);
+                        core.ConfigureGrowth(0, 0, 0);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        int growth = Read<int>(backend, "growthPoints");
+                        void StartPrepared()
+                        {
+                            Click(ui, "infiniteButton");
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[1]);
+                            FinishPreparationTransition(app);
+                            Click(Read<Button[]>(ui, "laneButtons")[1]);
+                            FinishPreparationTransition(app);
+                            Click(ui, "nextPatternButton");
+                        }
+                        StartPrepared();
+                        Require(latest().StartCountdownActive && latest().Score > 0
+                            && latest().Distance == 0f && latest().SuccessCount + latest().GoodCount + latest().MissCount == 0,
+                            "The unplayed countdown fixture must have a real stored-loadout starting score, not gameplay progress.");
+                        Require(!core.CreateInfiniteRunRecord().IsValid,
+                            "A stored-loadout starting score alone must not create an unplayed infinite record.");
+                        Click(ui, "pauseButton");
+                        if (resumed)
+                        {
+                            Click(ui, "nextPatternButton");
+                            Require(latest().ResumeCountdownActive, "The countdown fixture must really begin pause recovery.");
+                            core.PauseForAppBackground(Time.realtimeSinceStartup);
+                        }
+                        Click(ui, "returnLobbyButton");
+                        Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                            && state.CurrentDetail.StartsWith("무한모드 기록이 없습니다.", StringComparison.Ordinal)
+                            && Read<int>(backend, "infiniteRunCount") == 0 && Read<int>(backend, "growthPoints") == growth
+                            && !Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord").IsValid
+                            && !Read<GreedLastInfiniteRunRecord>(backend, "bestInfiniteRunRecord").IsValid
+                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == startingUses - 1
+                            && backend.LoadLobby().SaveSlotOccupied[0] == (startingUses == 2)
+                            && !backend.HasSaveLoadoutCandidate,
+                            "Abandoning the initial/recovered countdown must preserve the spent use but create no record, ranking or growth reward.");
+                        if (startingUses == 2)
+                        {
+                            StartPrepared();
+                            float clock = Time.realtimeSinceStartup;
+                            core.Tick(clock += 2f);
+                            core.Tick(clock += 1f);
+                            Require(latest().Distance > 0f && core.CreateInfiniteRunRecord().IsValid,
+                                "Real running distance must still make an infinite attempt recordable without requiring a successful input.");
+                            Click(ui, "pauseButton");
+                            Click(ui, "returnLobbyButton");
+                            Require(Read<int>(backend, "infiniteRunCount") == 1
+                                && Read<int>(backend, "growthPoints") > growth && !backend.LoadLobby().SaveSlotOccupied[0],
+                                "The actual next played attempt must settle once even after the second use empties its source.");
+                        }
+                        core.Exit();
+                        cases++;
+                    }
+                Debug.Log("Greed infinite countdown abandonment passed: " + cases
+                    + " clean/detailed initial/resumed countdown and two/one-use cases; seeded score does not create records or rewards, paid starts stay spent, last-use auto-empty and actual movement settlement remain valid. Isolated callbacks/public core clock only.");
             }
             finally
             {

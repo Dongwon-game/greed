@@ -134,7 +134,7 @@ namespace GreedLast.Editor
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
             // Added natural choice courses and resume lead-ins retain their individual state/wait bounds.
-            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 390
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 450
                 : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 240;
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
@@ -278,6 +278,7 @@ namespace GreedLast.Editor
                         && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
+                        && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
@@ -381,6 +382,8 @@ namespace GreedLast.Editor
             public bool growthEntryHeldTapCanceled;
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool directInfiniteRetryPrepared, directInfiniteRetryGoalStarted;
+            public bool directInfiniteResultRetainedAfterChoices;
+            public int infiniteCountdownRecordBoundaryCases;
             public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
@@ -595,6 +598,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredRecordDistances();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyInfiniteCountdownRecordBoundaries();
                 yield return VerifyGrowthCommands();
                 yield return VerifyHeldSaveConfirmations();
                 yield return VerifyHeldSlotChanges();
@@ -3169,6 +3173,92 @@ namespace GreedLast.Editor
                 report.fullLoopSeconds = Time.realtimeSinceStartup - began;
             }
 
+            private IEnumerator VerifyInfiniteCountdownRecordBoundaries()
+            {
+                GreedLastMockBackend original = Read<GreedLastMockBackend>(app, "backend");
+                bool playerControls = ui.UsePlayerRunControls;
+                try
+                {
+                    foreach (bool detailed in new[] { false, true })
+                        foreach (int startingUses in new[] { 2, 1 })
+                        {
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            var backend = new GreedLastMockBackend(false, false);
+                            backend.AddSampleSaveLoadoutForTest(out _);
+                            if (startingUses == 1)
+                                Require(backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                                    "Engine countdown boundaries need one legitimately remaining start.");
+                            typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, backend);
+                            core.Exit();
+                            core.ConfigureGrowth(0, 0, 0);
+                            state.SetLobbyReady(backend.LoadLobby());
+                            yield return null;
+                            IEnumerator StartPrepared()
+                            {
+                                yield return TapTouch(Read<Button>(ui, "infiniteButton"));
+                                yield return WaitSeconds(0.4f);
+                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                                yield return WaitSeconds(0.4f);
+                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[1]);
+                                yield return WaitSeconds(0.4f);
+                                yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                            }
+                            int growth = Read<int>(backend, "growthPoints");
+                            yield return StartPrepared();
+                            Require(run.StartCountdownActive && run.Score > 0 && run.Distance == 0f
+                                && !core.CreateInfiniteRunRecord().IsValid,
+                                "Engine frames must not treat a paid source's starting score as played progress.");
+                            yield return TapTouch(Read<Button>(ui, "pauseButton"));
+                            if (detailed)
+                            {
+                                yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                                Require(run.ResumeCountdownActive, "Engine countdown boundaries must enter actual recovery.");
+                                core.PauseForAppBackground(Time.realtimeSinceStartup);
+                                yield return null;
+                            }
+                            Require(run.Paused && !core.CreateInfiniteRunRecord().IsValid,
+                                "Pause/recovery before play must not manufacture an infinite record.");
+                            yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                            Require(state.CurrentState == GreedLastScreenState.LobbyReady
+                                && state.CurrentDetail.StartsWith("무한모드 기록이 없습니다.", StringComparison.Ordinal)
+                                && Read<int>(backend, "infiniteRunCount") == 0
+                                && Read<int>(backend, "growthPoints") == growth
+                                && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == startingUses - 1
+                                && backend.LoadLobby().SaveSlotOccupied[0] == (startingUses == 2)
+                                && !backend.HasSaveLoadoutCandidate,
+                                "Real pause-menu abandonment must keep its spent use without a record, reward or revived last-use slot.");
+                            if (startingUses == 2)
+                            {
+                                yield return StartPrepared();
+                                float deadline = Time.realtimeSinceStartup + 5f;
+                                while (run.Distance <= 0.1f)
+                                {
+                                    Require(Time.realtimeSinceStartup < deadline, "A fresh real-time start must advance into actual running.");
+                                    yield return null;
+                                }
+                                Require(core.CreateInfiniteRunRecord().IsValid, "Actual engine movement must remain recordable without a hit.");
+                                yield return TapTouch(Read<Button>(ui, "pauseButton"));
+                                yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                                Require(Read<int>(backend, "infiniteRunCount") == 1
+                                    && Read<int>(backend, "growthPoints") > growth
+                                    && !backend.LoadLobby().SaveSlotOccupied[0],
+                                    "Real movement on the final start must settle once after its source auto-clears.");
+                            }
+                            report.infiniteCountdownRecordBoundaryCases++;
+                        }
+                }
+                finally
+                {
+                    core.Exit();
+                    Call(app, "ResetInfinitePreparation");
+                    Call(app, "ClearInfinitePreparationContext");
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                    typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(app, original);
+                    Call(app, "ApplyGrowthToRunCore");
+                    state.SetLobbyReady(original.LoadLobby());
+                }
+            }
+
             private IEnumerator PrepareInfinite()
             {
                 GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
@@ -3191,6 +3281,15 @@ namespace GreedLast.Editor
                     Read<string>(app, "infinitePreparationGift"), Read<string>(app, "infinitePreparationRelic")));
                 yield return WaitSeconds(0.4f);
                 yield return VerifyPreparationTouches(2, 2, uses);
+                string result = Read<string>(app, "pendingInfinitePreparationResultNotice");
+                if (!string.IsNullOrEmpty(result))
+                {
+                    Require(state.CurrentDetail.EndsWith(result, StringComparison.Ordinal)
+                        && state.CurrentDetail.IndexOf("시작 정비", StringComparison.Ordinal)
+                            < state.CurrentDetail.IndexOf(result, StringComparison.Ordinal),
+                        "Engine gift/relic/keep touches must preserve the prior settled result below the current preparation.");
+                    report.directInfiniteResultRetainedAfterChoices = true;
+                }
                 report.multiTouchPreparationPreservedUses = true;
             }
 

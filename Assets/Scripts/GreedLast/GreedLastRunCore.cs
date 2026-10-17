@@ -1560,9 +1560,9 @@ namespace GreedLast
 
         public GreedLastInfiniteRunRecord CreateInfiniteRunRecord()
         {
+            // Loadout score is granted before play; movement or judgements establish an attempt.
             bool hasRunStarted = infiniteMode
                 && (distance > 0.01f
-                    || score > 0
                     || successCount > 0
                     || goodCount > 0
                     || missCount > 0);
