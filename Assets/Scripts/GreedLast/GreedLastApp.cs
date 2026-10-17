@@ -1947,11 +1947,18 @@ namespace GreedLast
 
         public string BuildInfiniteRunNoRecordMessage()
         {
+            string nextAction = HasSaveLoadoutCandidate
+                ? BuildPostRunNextActionLine(preferSaveCandidate: true, preferInfinite: true)
+                : HasAnyUsableSaveLoadoutSlot()
+                    ? "다음: 무한모드 다시 준비"
+                    : firstSaveCompleted || saveLoadoutUnlocked
+                        ? "다음: 무한 버튼으로 보충 런 진입"
+                        : "다음: 일반 런 클리어 후 저장 조합 준비";
             return "무한모드 기록이 없습니다."
                 + "\n주행 전 종료 / 기록·성장 보상 없음"
                 + BuildLastSaveLoadoutUseResultLine()
                 + "\n저장 조합은 무한 시작 시점에 1회 차감됩니다."
-                + "\n" + BuildPostRunNextActionLine(preferSaveCandidate: false, preferInfinite: true);
+                + "\n" + nextAction;
         }
 
         public string BuildInfiniteRunSavedPrepMessage(GreedLastInfiniteRunRecord record)
@@ -11482,6 +11489,7 @@ namespace GreedLast
             if (detail.Contains("다음: 무한 복기 재도전", StringComparison.Ordinal)
                 || detail.Contains("다음 확인: 무한 복기 재도전", StringComparison.Ordinal)
                 || detail.Contains("다음: 저장 조합으로 무한모드", StringComparison.Ordinal)
+                || detail.Contains("다음: 무한모드 다시 준비", StringComparison.Ordinal)
                 || detail.Contains("다음: 정산 종료 확인 후 무한모드", StringComparison.Ordinal)
                 || detail.Contains("다음: 무한 버튼으로 보충 런", StringComparison.Ordinal)
                 || detail.Contains("다음: 무한 조합 보충", StringComparison.Ordinal)

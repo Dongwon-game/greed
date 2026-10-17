@@ -1145,6 +1145,12 @@ namespace GreedLast.Editor
                             && !backend.HasSaveLoadoutCandidate,
                             "Abandoning the initial/recovered countdown must preserve the spent use but create no record, ranking or growth reward.");
                         if (startingUses == 2)
+                            Require(state.CurrentDetail.Contains("다음: 무한모드 다시 준비", StringComparison.Ordinal),
+                                "An unrecorded start must offer fresh preparation, not imply a new saved review result.");
+                        Require((string)typeof(GreedLastApp).GetMethod("ResolveLobbyNextActionTarget",
+                            BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { state.CurrentDetail }) == "무한",
+                            "Both fresh preparation and exhausted-source refill notices must route the lobby primary action to infinite entry.");
+                        if (startingUses == 2)
                         {
                             StartPrepared();
                             float clock = Time.realtimeSinceStartup;

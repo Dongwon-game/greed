@@ -1325,7 +1325,8 @@ namespace GreedLast.Editor
                                         "An unplayed pause must describe no record and the already-spent use in both views.");
                             }
                             else if (phase == "unplayed")
-                                Require(Read<Text>("detailText").text.Contains("주행 전 종료 / 기록·성장 보상 없음", StringComparison.Ordinal),
+                                Require(Read<Text>("detailText").text.Contains("주행 전 종료 / 기록·성장 보상 없음", StringComparison.Ordinal)
+                                    && Read<Text>("detailText").text.Contains("다음: 무한모드 다시 준비", StringComparison.Ordinal),
                                     "The visible unplayed-abandonment receipt must explain the absent record and reward.");
                             else
                             {
