@@ -1195,7 +1195,7 @@ namespace GreedLast.Editor
             try
             {
                 foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
-                    for (int mode = 0; mode < 8; mode++)
+                    for (int mode = 0; mode < 12; mode++)
                     {
                         string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "clear-quit-" + Guid.NewGuid().ToString("N");
                         try
@@ -1216,12 +1216,24 @@ namespace GreedLast.Editor
                             Write(app, "activeNormalRunWasRefill", mode == 1);
                             core.ConfigureGrowth(0, 0, 0);
                             state.SetRunCoreTest();
-                            if (mode == 7)
+                            if (mode == 7 || mode >= 8 && mode <= 10)
                             {
                                 Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord source, out _, out _),
                                     "The quit infinite control must spend an actual source use first.");
                                 state.SetInfiniteRun(string.Empty);
                                 core.EnterInfiniteRun(source);
+                                if (mode == 8 || mode == 9) RunToFailure(core, latest);
+                                if (mode == 9) Click(ui, "nextPatternButton");
+                                if (mode == 10)
+                                {
+                                    float clock = Time.realtimeSinceStartup;
+                                    core.Tick(clock + 2f);
+                                    core.Tick(clock + 3f);
+                                    core.Tick(clock + 3.1f);
+                                    core.TogglePause(clock + 3.1f);
+                                    Require(latest().Paused && !latest().Stopped && core.CreateInfiniteRunRecord().IsValid,
+                                        "The live-quit control must contain real played progress, not only a countdown bonus.");
+                                }
                             }
                             else if (mode == 6)
                             {
@@ -1231,9 +1243,10 @@ namespace GreedLast.Editor
                             else
                             {
                                 core.Enter(string.Empty, mode == 1);
-                                if (mode == 5) RunToFailure(core, latest);
+                                if (mode == 5 || mode == 11) RunToFailure(core, latest);
                                 else RunToCompletion(core, latest);
                             }
+                            if (mode == 11) Click(ui, "returnLobbyButton");
                             if (mode >= 2 && mode <= 4) Click(ui, "nextPatternButton");
                             if (mode == 2) Click(ui, "returnLobbyButton");
                             if (mode == 3)
@@ -1249,16 +1262,30 @@ namespace GreedLast.Editor
                             }
                             string before = PlayerPrefs.GetString(key);
                             int clears = Read<int>(backend, "normalClearCount");
+                            int failures = Read<int>(backend, "normalFailCount");
+                            int infiniteRuns = Read<int>(backend, "infiniteRunCount");
                             int growth = Read<int>(backend, "growthPoints");
+                            GreedLastInfiniteRunRecord infiniteResult = core.CreateInfiniteRunRecord();
                             var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
                             var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
                             quit?.Invoke(app, null);
                             var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                             bool rawClear = mode <= 1;
+                            bool rawFailure = mode == 5;
+                            bool rawInfinite = mode == 8;
                             Require(reloaded.HasSaveLoadoutCandidate == (rawClear || mode == 2)
                                 && Read<int>(reloaded, "normalClearCount") == clears + (rawClear ? 1 : 0)
-                                && Read<int>(reloaded, "growthPoints") == growth + (rawClear ? 3 : 0),
-                                "Normal quit must preserve an unconfirmed clear candidate once, without replaying a draft, saved, discarded or non-clear result. Mode " + mode);
+                                && Read<int>(reloaded, "normalFailCount") == failures + (rawFailure ? 1 : 0)
+                                && Read<int>(reloaded, "infiniteRunCount") == infiniteRuns + (rawInfinite ? 1 : 0)
+                                && Read<int>(reloaded, "growthPoints") == growth + (rawClear ? 3 : rawFailure || rawInfinite ? 1 : 0),
+                                "Normal quit must preserve an unsettled terminal result once, without replaying a saved/discarded result or settling a live run. Mode " + mode);
+                            if (rawInfinite)
+                            {
+                                GreedLastInfiniteRunRecord saved = Read<GreedLastInfiniteRunRecord>(reloaded, "lastInfiniteRunRecord");
+                                Require(saved.IsValid && saved.Score == infiniteResult.Score
+                                    && saved.Distance == infiniteResult.Distance && saved.MissCount == infiniteResult.MissCount,
+                                    "Quit must retain the actual naturally ended infinite score/distance/misses, not manufacture progress.");
+                            }
                             for (int slot = 0; slot < slots.Length; slot++)
                             {
                                 var actualSlot = Read<GreedLastRunRecord[]>(reloaded, "saveLoadoutSlots")[slot];
@@ -1279,7 +1306,8 @@ namespace GreedLast.Editor
                                         + ", slot " + slot + ": " + string.Join(" | ", differences));
                             }
                             string after = PlayerPrefs.GetString(key);
-                            Require(rawClear || after == before, "Quit outside an unconfirmed clear must not rewrite persisted progress.");
+                            Require(rawClear || rawFailure || rawInfinite || after == before,
+                                "Quit outside an unsettled terminal result must not rewrite persisted progress.");
                             quit?.Invoke(app, null);
                             Method(app, "RequestNextRunPattern").Invoke(app, null);
                             Method(app, "OnApplicationFocus").Invoke(app, new object[] { true });
@@ -1316,7 +1344,7 @@ namespace GreedLast.Editor
                         }
                     }
                 Debug.Log("Greed clear quit recovery passed: " + cases
-                    + " isolated persisted clean/detailed normal/refill clear, existing draft/saved/discarded, failure/practice/infinite controls; one clear/reward, no slot auto-save, repeated quit/late command protection and explicit S3 recovery. Simulated normal-quit callback and JSON reload, not process kill or mobile suspension.");
+                    + " isolated persisted clean/detailed normal/refill clear, terminal normal/infinite failures, already settled/preparing and live/paused/practice controls; one terminal record/reward, no slot auto-save, repeated quit/late command protection and explicit S3 recovery. Simulated normal-quit callback and JSON reload, not process kill or mobile suspension.");
             }
             finally
             {

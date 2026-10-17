@@ -280,6 +280,7 @@ namespace GreedLast.Editor
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
                         && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
                         && cycle.engineClearQuitCandidatePreserved
+                        && cycle.engineInfiniteQuitResultsPreserved == 2
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
@@ -386,6 +387,7 @@ namespace GreedLast.Editor
             public bool directInfiniteResultRetainedAfterChoices;
             public int infiniteCountdownRecordBoundaryCases;
             public bool engineClearQuitCandidatePreserved;
+            public int engineInfiniteQuitResultsPreserved;
             public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
@@ -3129,6 +3131,7 @@ namespace GreedLast.Editor
                     }
                     Require(inputOnce && run.Health == 0 && !run.DevInvincible && !backend.HasSaveLoadoutCandidate,
                         "A consumed source must support its live run until actual natural failure, without a new normal-save opportunity.");
+                    VerifyInfiniteQuitFromEngineResult();
                     int settledBefore = Read<int>(backend, "infiniteRunCount");
                     yield return null;
                     if (use == 0)
@@ -3216,6 +3219,52 @@ namespace GreedLast.Editor
                         && Read<int>(reloaded, "normalClearCount") == 1,
                         "The engine-earned recovered candidate must save once to an explicitly selected slot.");
                     report.engineClearQuitCandidatePreserved = true;
+                }
+                finally
+                {
+                    UnityEngine.Object.Destroy(host);
+                    PlayerPrefs.DeleteKey(key);
+                    PlayerPrefs.Save();
+                }
+            }
+
+            private void VerifyInfiniteQuitFromEngineResult()
+            {
+                string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "engine-infinite-quit-" + Guid.NewGuid().ToString("N");
+                var host = new GameObject("GreedLastInactiveInfiniteQuitProbe");
+                host.SetActive(false);
+                try
+                {
+                    var closingApp = host.AddComponent<GreedLastApp>();
+                    Require(Read<GreedLastMockBackend>(closingApp, "backend") == null
+                        && core.IsStoppedInfiniteRun && run.Health == 0,
+                        "An inactive quit probe must use the engine-ended result without booting personal persistence.");
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    var closingState = new GreedLastStateMachine(new GreedLastRequestGate());
+                    closingState.SetInfiniteRun(string.Empty);
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    typeof(GreedLastApp).GetField("backend", flags).SetValue(closingApp, backend);
+                    typeof(GreedLastApp).GetField("stateMachine", flags).SetValue(closingApp, closingState);
+                    typeof(GreedLastApp).GetField("runCore", flags).SetValue(closingApp, core);
+                    GreedLastInfiniteRunRecord earned = core.CreateInfiniteRunRecord();
+                    var expected = new GreedLastMockBackend(false, false);
+                    Require(expected.RegisterInfiniteRun(earned), "The engine result must be recordable before quit.");
+                    int originalCount = Read<int>(Read<GreedLastMockBackend>(app, "backend"), "infiniteRunCount");
+                    Call(closingApp, "OnApplicationQuit");
+                    var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    GreedLastInfiniteRunRecord actual = Read<GreedLastInfiniteRunRecord>(reloaded, "lastInfiniteRunRecord");
+                    Require(actual.IsValid && actual.Score == earned.Score && actual.Distance == earned.Distance
+                        && actual.MissCount == earned.MissCount && actual.SuccessCount == earned.SuccessCount
+                        && Read<int>(reloaded, "infiniteRunCount") == 1
+                        && Read<int>(reloaded, "growthPoints") == Read<int>(expected, "growthPoints")
+                        && !reloaded.HasSaveLoadoutCandidate,
+                        "Normal quit must persist the exact engine-earned infinite result/reward once without a save candidate.");
+                    string json = PlayerPrefs.GetString(key);
+                    Call(closingApp, "OnApplicationQuit");
+                    Require(PlayerPrefs.GetString(key) == json && core.IsStoppedInfiniteRun
+                        && Read<int>(Read<GreedLastMockBackend>(app, "backend"), "infiniteRunCount") == originalCount,
+                        "A repeated quit probe must not duplicate its result or settle the original app's result early.");
+                    report.engineInfiniteQuitResultsPreserved++;
                 }
                 finally
                 {

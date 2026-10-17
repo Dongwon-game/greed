@@ -11038,11 +11038,19 @@ namespace GreedLast
             applicationQuitting = true;
             runtimeUi?.SetAppInputAvailable(false);
             if (stateMachine == null || backend == null || runCore == null
-                || stateMachine.CurrentState != GreedLastScreenState.RunCoreTest
-                || !runCore.CanExitAfterClear || runCore.IsPracticeRun) return;
+                || runCore.IsPracticeRun) return;
 
-            // Preserve the earned candidate on normal close, without choosing a slot for the player.
-            backend.RegisterClear(runCore.CreateRunRecord());
+            // Preserve only terminal results; normal close is not a live-run autosave or a slot choice.
+            if (stateMachine.CurrentState == GreedLastScreenState.RunCoreTest)
+            {
+                if (runCore.CanExitAfterClear) backend.RegisterClear(runCore.CreateRunRecord());
+                else if (runCore.IsStoppedNormalRun)
+                    backend.RegisterNormalAttempt(runCore.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed));
+            }
+            else if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun && runCore.IsStoppedInfiniteRun)
+            {
+                backend.RegisterInfiniteRun(runCore.CreateInfiniteRunRecord());
+            }
         }
 
         private void OnDestroy()
