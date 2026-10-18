@@ -19,6 +19,7 @@ namespace GreedLast.Editor
         private static bool infiniteRetryReviewOnly;
         private static bool clearQuitOnly;
         private static bool practiceCandidateOnly;
+        private static bool hiddenPresentationOnly;
         private static bool heldConfirmationsOnly;
         private static bool heldSlotChangesOnly;
         private static bool heldRunResultsOnly;
@@ -137,6 +138,16 @@ namespace GreedLast.Editor
             clearQuitOnly = true;
             try { Run(); }
             finally { clearQuitOnly = false; }
+        }
+
+        [MenuItem("Greed Last/Run Hidden Presentation Check")]
+        public static void RunHiddenPresentationCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !hiddenPresentationOnly,
+                "Hidden presentation checks require an isolated Edit-mode fixture.");
+            hiddenPresentationOnly = true;
+            try { Run(); }
+            finally { hiddenPresentationOnly = false; }
         }
 
         [MenuItem("Greed Last/Run Practice Candidate Handoff Check")]
@@ -266,6 +277,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (hiddenPresentationOnly)
+                {
+                    VerifyHiddenPresentation(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (practiceCandidateOnly)
                 {
                     VerifyPracticeCandidateHandoff(app, ui, backend, state, core, () => run);
@@ -333,6 +349,8 @@ namespace GreedLast.Editor
                 VerifyClearQuitCandidate(app, ui, backend, state, core, () => run);
 
                 VerifyPracticeCandidateHandoff(app, ui, backend, state, core, () => run);
+
+                VerifyHiddenPresentation(app, ui, backend, state, core, () => run);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
@@ -1197,6 +1215,94 @@ namespace GreedLast.Editor
                 Write(app, "backend", originalBackend);
                 Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
                 state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyHiddenPresentation(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            GameObject canvasObject = Read<GameObject>(ui, "ownedCanvas");
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            GameObject root = Read<GameObject>(ui, "rootPanel");
+            CanvasGroup group = root.GetComponent<CanvasGroup>();
+            bool canvasEnabled = canvas.enabled;
+            float alpha = group.alpha;
+            Action suspended = (Action)Method(app, "HandlePresentationSuspended").CreateDelegate(typeof(Action), app);
+            ui.PresentationSuspended += suspended;
+            int cases = 0;
+            void Hide(int kind, bool hidden)
+            {
+                if (kind == 0) canvas.enabled = !hidden;
+                else if (kind == 1) canvasObject.SetActive(!hidden);
+                else if (kind == 2) root.SetActive(!hidden);
+                else group.alpha = hidden ? 0f : alpha;
+            }
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    for (int kind = 0; kind < 4; kind++)
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        state.SetRunCoreTest();
+                        float now = Time.realtimeSinceStartup;
+                        core.RestartPractice(now - 3f);
+                        core.Tick(now);
+                        core.RequestNextPattern(now);
+                        GreedLastRunSnapshot before = latest();
+                        Require(before.ActivePattern && !before.Paused, "Visibility checks require a live public practice trap.");
+                        Hide(kind, true);
+                        Require(!ui.AcceptsPlayerInput, "A hidden Canvas/root/fully transparent presentation must immediately reject player input.");
+                        Method(ui, "Update").Invoke(ui, null);
+                        Require(latest().Paused && !latest().ResumeCountdownActive
+                            && latest().Score == before.Score && latest().Health == before.Health
+                            && latest().Distance == before.Distance && latest().MissCount == before.MissCount
+                            && Read<AudioSource>(ui, "rhythmAudio").mute,
+                            "Losing presentation must freeze the same live trap and mute feedback without unseen damage/movement.");
+                        Method(app, "RequestNextRunPattern").Invoke(app, null);
+                        Method(app, "RequestToggleRunPause").Invoke(app, null);
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { before.Pattern.Channel });
+                        Method(app, "RequestReturnToLobby").Invoke(app, null);
+                        Require(state.CurrentState == GreedLastScreenState.RunCoreTest && latest().Paused
+                            && !latest().ResumeCountdownActive && latest().MissCount == before.MissCount,
+                            "Hidden keyboard/app callbacks must not resume, judge or abandon the frozen run.");
+                        var probe = new GameObject("HiddenCommandProbe", typeof(RectTransform), typeof(Image), typeof(GreedLastCommandButton));
+                        probe.transform.SetParent(root.transform, false);
+                        try
+                        {
+                            int calls = 0;
+                            Button command = probe.GetComponent<Button>();
+                            Method(ui, "AddGuardedCommand").Invoke(ui, new object[] { command, new Action(() => calls++) });
+                            command.onClick.Invoke();
+                            Require(calls == 0, "The shared UI command binding must reject a hidden same-frame callback.");
+                            Hide(kind, false);
+                            Method(ui, "Update").Invoke(ui, null);
+                            Require(ui.AcceptsPlayerInput && latest().Paused && !latest().ResumeCountdownActive,
+                                "Restoring presentation must require explicit resume, not silently restart the trap.");
+                            command.onClick.Invoke();
+                            Require(calls == 1, "A fresh visible command binding must still work exactly once.");
+                            Click(ui, "nextPatternButton");
+                            Require(latest().ResumeCountdownActive, "A fresh visible resume must use the ordinary countdown.");
+                        }
+                        finally { UnityEngine.Object.DestroyImmediate(probe); Hide(kind, false); }
+                        core.Exit();
+                        cases++;
+                    }
+                Debug.Log("Greed hidden presentation passed: " + cases
+                    + " clean/detailed Canvas component/object, root and alpha-zero hides; immediate input/audio gate, frozen trap, blocked callbacks and explicit resume.");
+            }
+            finally
+            {
+                canvas.enabled = canvasEnabled;
+                canvasObject.SetActive(true);
+                root.SetActive(true);
+                group.alpha = alpha;
+                Method(ui, "Update").Invoke(ui, null);
+                ui.PresentationSuspended -= suspended;
+                core.Exit();
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                state.SetLobbyReady(backend.LoadLobby());
             }
         }
 

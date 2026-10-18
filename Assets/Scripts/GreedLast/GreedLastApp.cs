@@ -12957,6 +12957,7 @@ namespace GreedLast
 
         private void RequestSaveLoadout()
         {
+            if (!CanAcceptPlayerInput()) return;
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)
             {
                 saveSlotDeleteConfirmPending = false;
@@ -15694,6 +15695,10 @@ namespace GreedLast
 
         private GameObject rootPanel;
         private GameObject ownedCanvas;
+        private Canvas ownedCanvasSurface;
+        private bool presentationInitialized;
+        private bool presentationVisible = true;
+        private bool presentationReleased;
         private GameObject ownedCamera;
         private AudioListener ownedAudioListener;
         private GameObject ownedEventSystem;
@@ -16098,7 +16103,12 @@ namespace GreedLast
         public bool RotationTiltEnabled => rotationTiltEnabled;
         public bool UsePlayerRunControls => !DevToolsEnabled || devCleanViewEnabled;
         public bool AcceptsPlayerInput => appInputAvailable && sensoryComponentEnabled
-            && isActiveAndEnabled && sensoryHasFocus && !sensoryAppPaused;
+            && isActiveAndEnabled && sensoryHasFocus && !sensoryAppPaused && HasVisiblePresentation;
+
+        private bool HasVisiblePresentation => !presentationInitialized
+            || (ownedCanvasSurface != null && ownedCanvasSurface.isActiveAndEnabled
+                && rootPanel != null && rootPanel.activeInHierarchy
+                && (playerInputGroup == null || playerInputGroup.alpha > 0f));
 
         public event Action<bool> RotationTiltPreferenceChanged;
         public event Action ViewportChanged;
@@ -16328,6 +16338,7 @@ namespace GreedLast
 
         private void Update()
         {
+            if (!RefreshPresentationVisibility()) return;
             UpdatePrototypeEntranceBackdrop();
             UpdatePrototypeRunCorridorBackdrop();
             if (beatMarker == null)
@@ -26688,6 +26699,36 @@ namespace GreedLast
                 label.color = button.interactable ? new Color32(12, 16, 17, 255) : new Color32(218, 226, 224, 255);
         }
 
+        private void AddGuardedCommand(Button button, Action command)
+        {
+            button.onClick.AddListener(() =>
+            {
+                if (AcceptsPlayerInput) command();
+            });
+        }
+
+        private bool RefreshPresentationVisibility()
+        {
+            if (presentationInitialized && (ownedCanvasSurface == null || rootPanel == null))
+            {
+                presentationVisible = false;
+                RefreshPlayerInputGroup();
+                RefreshAudioPlaybackState();
+                ReleasePresentation();
+                enabled = false;
+                return false;
+            }
+
+            bool visible = HasVisiblePresentation;
+            if (visible == presentationVisible) return visible;
+            presentationVisible = visible;
+            CancelPendingUiInput();
+            RefreshPlayerInputGroup();
+            RefreshAudioPlaybackState();
+            if (!visible) PresentationSuspended?.Invoke();
+            return visible;
+        }
+
         private void EnsureUi()
         {
             if (rootPanel != null)
@@ -26707,6 +26748,7 @@ namespace GreedLast
             PreserveDuringPlay(canvasObject);
 
             Canvas canvas = canvasObject.GetComponent<Canvas>();
+            ownedCanvasSurface = canvas;
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
 
             CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
@@ -26720,6 +26762,7 @@ namespace GreedLast
 
             rootPanel = CreateRect("Root", canvas.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             playerInputGroup = rootPanel.AddComponent<CanvasGroup>();
+            presentationInitialized = true;
             RefreshPlayerInputGroup();
             rootPanelRect = rootPanel.GetComponent<RectTransform>();
             ApplySafeArea(force: true);
@@ -26894,43 +26937,43 @@ namespace GreedLast
                 SetButtonFontSize(sfxVolumeButtons[i], 22);
             }
 
-            practiceRunButton.onClick.AddListener(() => practiceRunRequested?.Invoke());
-            normalRunButton.onClick.AddListener(() => normalRunRequested?.Invoke());
-            saveLoadoutButton.onClick.AddListener(() => saveLoadoutRequested?.Invoke());
-            infiniteButton.onClick.AddListener(() => infiniteRunRequested?.Invoke());
-            infiniteRecordButton.onClick.AddListener(() => infiniteRecordRequested?.Invoke());
-            growthButton.onClick.AddListener(() => growthRequested?.Invoke());
-            profileButton.onClick.AddListener(() => profileRequested?.Invoke());
-            retryButton.onClick.AddListener(() => retryRequested?.Invoke());
-            debugConnectionButton.onClick.AddListener(() => debugConnectionRequested?.Invoke());
-            nextPatternButton.onClick.AddListener(() => nextPatternRequested?.Invoke());
-            returnLobbyButton.onClick.AddListener(() => returnLobbyRequested?.Invoke());
-            saveSlotDetailButton.onClick.AddListener(() => saveSlotDetailRequested?.Invoke());
-            saveSlotRenameButton.onClick.AddListener(() => saveSlotRenameRequested?.Invoke());
-            saveSlotDeleteButton.onClick.AddListener(() => saveSlotDeleteRequested?.Invoke());
-            pauseButton.onClick.AddListener(() => pauseRequested?.Invoke());
-            devInvincibleButton.onClick.AddListener(() => invincibleRequested?.Invoke());
-            infiniteTestStopButton.onClick.AddListener(() => infiniteTestStopRequested?.Invoke());
-            focusMaxButton.onClick.AddListener(() => focusMaxRequested?.Invoke());
-            threatUpButton.onClick.AddListener(() => threatUpRequested?.Invoke());
-            threatDownButton.onClick.AddListener(() => threatDownRequested?.Invoke());
-            hapticsButton.onClick.AddListener(() => ToggleHaptics());
-            rotationTiltButton.onClick.AddListener(() => ToggleRotationTiltPreference());
-            motionComfortButton.onClick.AddListener(() => ToggleMotionComfortPreference());
-            devShortcutButtons[0].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.GiftChoice));
-            devShortcutButtons[1].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.RelicChoice));
-            devShortcutButtons[2].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.AfterCore));
-            devShortcutButtons[3].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.BeforeClear));
-            devShortcutButtons[4].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.ReviewTargetCheck));
-            devShortcutButtons[5].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.RouteCycle));
-            devShortcutButtons[6].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.AvoidanceCycle));
-            devShortcutButtons[7].onClick.AddListener(() => devShortcutRequested?.Invoke(GreedLastDevShortcut.VisualDropPreview));
-            timingOffsetButtons[0].onClick.AddListener(() => timingOffsetRequested?.Invoke(20));
-            timingOffsetButtons[1].onClick.AddListener(() => timingOffsetRequested?.Invoke(0));
-            timingOffsetButtons[2].onClick.AddListener(() => timingOffsetRequested?.Invoke(-20));
-            sfxVolumeButtons[0].onClick.AddListener(() => AdjustSfxVolume(-0.1f));
-            sfxVolumeButtons[1].onClick.AddListener(() => ResetSfxVolume());
-            sfxVolumeButtons[2].onClick.AddListener(() => AdjustSfxVolume(0.1f));
+            AddGuardedCommand(practiceRunButton, () => practiceRunRequested?.Invoke());
+            AddGuardedCommand(normalRunButton, () => normalRunRequested?.Invoke());
+            AddGuardedCommand(saveLoadoutButton, () => saveLoadoutRequested?.Invoke());
+            AddGuardedCommand(infiniteButton, () => infiniteRunRequested?.Invoke());
+            AddGuardedCommand(infiniteRecordButton, () => infiniteRecordRequested?.Invoke());
+            AddGuardedCommand(growthButton, () => growthRequested?.Invoke());
+            AddGuardedCommand(profileButton, () => profileRequested?.Invoke());
+            AddGuardedCommand(retryButton, () => retryRequested?.Invoke());
+            AddGuardedCommand(debugConnectionButton, () => debugConnectionRequested?.Invoke());
+            AddGuardedCommand(nextPatternButton, () => nextPatternRequested?.Invoke());
+            AddGuardedCommand(returnLobbyButton, () => returnLobbyRequested?.Invoke());
+            AddGuardedCommand(saveSlotDetailButton, () => saveSlotDetailRequested?.Invoke());
+            AddGuardedCommand(saveSlotRenameButton, () => saveSlotRenameRequested?.Invoke());
+            AddGuardedCommand(saveSlotDeleteButton, () => saveSlotDeleteRequested?.Invoke());
+            AddGuardedCommand(pauseButton, () => pauseRequested?.Invoke());
+            AddGuardedCommand(devInvincibleButton, () => invincibleRequested?.Invoke());
+            AddGuardedCommand(infiniteTestStopButton, () => infiniteTestStopRequested?.Invoke());
+            AddGuardedCommand(focusMaxButton, () => focusMaxRequested?.Invoke());
+            AddGuardedCommand(threatUpButton, () => threatUpRequested?.Invoke());
+            AddGuardedCommand(threatDownButton, () => threatDownRequested?.Invoke());
+            AddGuardedCommand(hapticsButton, ToggleHaptics);
+            AddGuardedCommand(rotationTiltButton, ToggleRotationTiltPreference);
+            AddGuardedCommand(motionComfortButton, ToggleMotionComfortPreference);
+            AddGuardedCommand(devShortcutButtons[0], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.GiftChoice));
+            AddGuardedCommand(devShortcutButtons[1], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.RelicChoice));
+            AddGuardedCommand(devShortcutButtons[2], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.AfterCore));
+            AddGuardedCommand(devShortcutButtons[3], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.BeforeClear));
+            AddGuardedCommand(devShortcutButtons[4], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.ReviewTargetCheck));
+            AddGuardedCommand(devShortcutButtons[5], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.RouteCycle));
+            AddGuardedCommand(devShortcutButtons[6], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.AvoidanceCycle));
+            AddGuardedCommand(devShortcutButtons[7], () => devShortcutRequested?.Invoke(GreedLastDevShortcut.VisualDropPreview));
+            AddGuardedCommand(timingOffsetButtons[0], () => timingOffsetRequested?.Invoke(20));
+            AddGuardedCommand(timingOffsetButtons[1], () => timingOffsetRequested?.Invoke(0));
+            AddGuardedCommand(timingOffsetButtons[2], () => timingOffsetRequested?.Invoke(-20));
+            AddGuardedCommand(sfxVolumeButtons[0], () => AdjustSfxVolume(-0.1f));
+            AddGuardedCommand(sfxVolumeButtons[1], ResetSfxVolume);
+            AddGuardedCommand(sfxVolumeButtons[2], () => AdjustSfxVolume(0.1f));
 
             debugText = CreateText(rootPanel.transform, "Debug", string.Empty, 22, TextAnchor.LowerLeft, FontStyle.Normal);
             debugText.color = new Color32(125, 139, 143, 255);
@@ -28236,6 +28279,7 @@ namespace GreedLast
             entry.callback.AddListener(data =>
             {
                 if (!(data is PointerEventData pointer)
+                    || !AcceptsPlayerInput
                     || pointer.button != PointerEventData.InputButton.Left
                     || gateButton == null || !gateButton.IsActive() || !gateButton.IsInteractable())
                 {
@@ -28377,6 +28421,7 @@ namespace GreedLast
                 EnsureAudioListener();
                 EnsureEventSystem();
             }
+            RefreshPlayerInputGroup();
             RecoverAudioConfiguration();
             RefreshAudioPlaybackState();
         }
@@ -28393,7 +28438,7 @@ namespace GreedLast
 
         private void OnDestroy()
         {
-            PresentationReleased?.Invoke(this);
+            ReleasePresentation();
             StopRhythmAudio();
             SceneManager.sceneLoaded -= RestoreSceneResources;
             AudioSettings.OnAudioConfigurationChanged -= HandleAudioConfigurationChanged;
@@ -28413,6 +28458,13 @@ namespace GreedLast
                 if (ownedCanvas != null) Destroy(ownedCanvas);
                 if (ownedCamera != null) Destroy(ownedCamera);
             }
+        }
+
+        private void ReleasePresentation()
+        {
+            if (presentationReleased) return;
+            presentationReleased = true;
+            PresentationReleased?.Invoke(this);
         }
 
         private void CreateAudio()
@@ -46602,7 +46654,7 @@ namespace GreedLast
         }
 
         private bool CanPlaySensoryFeedback => appInputAvailable && sensoryComponentEnabled && isActiveAndEnabled && !audioConfigurationPending
-            && sensoryHasFocus && !sensoryAppPaused;
+            && sensoryHasFocus && !sensoryAppPaused && HasVisiblePresentation;
 
         private void RefreshAudioPlaybackState()
         {

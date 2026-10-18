@@ -134,7 +134,7 @@ namespace GreedLast.Editor
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
             // Added natural choice courses and resume lead-ins retain their individual state/wait bounds.
-            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 450
+            int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 510
                 : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 240;
             SessionState.SetString(Prefix + "deadline", DateTime.UtcNow.AddSeconds(cycleSeconds).ToString("O"));
             EditorApplication.EnterPlaymode();
@@ -282,6 +282,7 @@ namespace GreedLast.Editor
                         && cycle.engineClearQuitCandidatePreserved
                         && cycle.engineInfiniteQuitResultsPreserved == 2
                         && cycle.practiceCandidateHandoffs == 2
+                        && cycle.hiddenPresentationCases == 8 && cycle.removedCanvasBlockedCommands
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
                         && cycle.heldPreparationStartCases == 3 && cycle.heldPreparationStartsPreservedUses
@@ -390,6 +391,8 @@ namespace GreedLast.Editor
             public bool engineClearQuitCandidatePreserved;
             public int engineInfiniteQuitResultsPreserved;
             public int practiceCandidateHandoffs;
+            public int hiddenPresentationCases;
+            public bool removedCanvasBlockedCommands;
             public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
             public int heldConfirmationResolutionCases;
@@ -604,6 +607,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyPracticeCandidateHandoff();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyHiddenPresentation();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredRecordDistances();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyInfiniteCountdownRecordBoundaries();
                 yield return VerifyGrowthCommands();
@@ -2447,6 +2451,92 @@ namespace GreedLast.Editor
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
             }
 
+            private IEnumerator VerifyHiddenPresentation()
+            {
+                bool playerControls = ui.UsePlayerRunControls;
+                GameObject canvasObject = Read<GameObject>(ui, "ownedCanvas");
+                Canvas canvas = canvasObject.GetComponent<Canvas>();
+                GameObject root = Read<GameObject>(ui, "rootPanel");
+                CanvasGroup group = root.GetComponent<CanvasGroup>();
+                float alpha = group.alpha;
+                void Hide(int kind, bool hidden)
+                {
+                    if (kind == 0) canvas.enabled = !hidden;
+                    else if (kind == 1) canvasObject.SetActive(!hidden);
+                    else if (kind == 2) root.SetActive(!hidden);
+                    else group.alpha = hidden ? 0f : alpha;
+                }
+                try
+                {
+                    foreach (bool detailed in new[] { false, true })
+                        for (int kind = 0; kind < 4; kind++)
+                        {
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            state.SetRunCoreTest();
+                            core.ConfigureGrowth(0, 0, 0);
+                            core.RestartPractice(Time.realtimeSinceStartup);
+                            float deadline = Time.realtimeSinceStartup + 8f;
+                            while (!run.ActivePattern || run.CountdownActive)
+                            {
+                                Require(Time.realtimeSinceStartup < deadline, "Visibility checks need a live actual-engine trap.");
+                                yield return null;
+                            }
+                            yield return PressMouse(Read<Button>(ui, "nextPatternButton"));
+                            GreedLastRunSnapshot before = run;
+                            Hide(kind, true);
+                            Require(!ui.AcceptsPlayerInput, "Hidden engine presentation must reject input in the same frame.");
+                            yield return null;
+                            Require(run.Paused && !run.ResumeCountdownActive
+                                && run.Score == before.Score && run.Health == before.Health && run.Distance == before.Distance
+                                && run.MissCount == before.MissCount && Read<AudioSource>(ui, "rhythmAudio").mute,
+                                "A hidden actual-engine view must freeze the presented trap and mute feedback.");
+                            GreedLastRunSnapshot frozen = run;
+                            Read<Button>(ui, "nextPatternButton").onClick.Invoke();
+                            Call(app, "RequestNextRunPattern");
+                            Call(app, "RequestToggleRunPause");
+                            Call(app, "HandleRunChannelInput", before.Pattern.Channel);
+                            Call(app, "RequestReturnToLobby");
+                            Require(run.Paused && !run.ResumeCountdownActive && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                                "Hidden command callbacks must not resume, judge or abandon the actual run.");
+                            yield return WaitSeconds(0.12f);
+                            AssertFrozen(frozen);
+                            Hide(kind, false);
+                            yield return null;
+                            yield return ReleaseMouse();
+                            Require(ui.AcceptsPlayerInput && run.Paused && !run.ResumeCountdownActive,
+                                "An old held mouse release after restoring the view must not resume it.");
+                            AssertFrozen(frozen);
+                            yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                            Require(run.ResumeCountdownActive, "Restored presentation must accept a fresh explicit resume.");
+                            deadline = Time.realtimeSinceStartup + 4f;
+                            while (run.Paused)
+                            {
+                                Require(Time.realtimeSinceStartup < deadline, "Restored presentation must finish its normal recovery countdown.");
+                                AssertFrozen(frozen);
+                                yield return null;
+                            }
+                            Require(run.ActivePattern && run.Pattern.PatternId == frozen.Pattern.PatternId
+                                && run.ElapsedSeconds <= frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
+                                "Actual engine recovery must retain the same trap with lead-in, not charge hidden gameplay.");
+                            core.Exit();
+                            report.hiddenPresentationCases++;
+                        }
+                }
+                finally
+                {
+                    canvas.enabled = true;
+                    canvasObject.SetActive(true);
+                    root.SetActive(true);
+                    group.alpha = alpha;
+                    input.MouseDown = input.MouseHeld = input.MouseUp = false;
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                    state.SetLobbyReady(Read<GreedLastMockBackend>(app, "backend").LoadLobby());
+                }
+                Debug.Log("Greed engine hidden presentation passed: eight clean/detailed Canvas/component/root/alpha hides, immediate gates, no hidden progression, canceled held release and fresh same-trap recovery. Synthetic input, not OS rendering or hardware audio.");
+            }
+
             private IEnumerator VerifyPracticeCandidateHandoff()
             {
                 const string practiceKey = "GreedLast.Onboarding.PracticeCompleted";
@@ -3600,10 +3690,19 @@ namespace GreedLast.Editor
                     yield return null;
                 }
                 GameObject canvas = Read<GameObject>(ui, "ownedCanvas");
+                int releases = 0;
+                ui.PresentationReleased += _ => releases++;
+                UnityEngine.Object.Destroy(canvas);
+                yield return null;
+                yield return null;
+                Require(run.Paused && !ui.enabled && Read<GreedLastRuntimeUi>(app, "runtimeUi") == null
+                    && canvas == null && releases == 1,
+                    "Removing only the Canvas must detach presentation once and freeze its live run.");
+                report.removedCanvasBlockedCommands = true;
                 UnityEngine.Object.Destroy(ui);
                 yield return null;
                 yield return null;
-                Require(run.Paused && Count<GreedLastRuntimeUi>() == 0 && canvas == null,
+                Require(run.Paused && Count<GreedLastRuntimeUi>() == 0 && canvas == null && releases == 1,
                     "Removing presentation must first pause the live run and release its owned canvas.");
                 GreedLastRunSnapshot frozen = run;
                 GreedLastScreenState screen = state.CurrentState;
