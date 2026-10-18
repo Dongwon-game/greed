@@ -121,7 +121,7 @@ namespace GreedLast.Editor
             Require(mismatches == 0, $"Finisher hints must name the actual reward, not capped recovery. Mismatches={mismatches}.");
             Debug.Log($"Greed route finisher previews passed: {runs} complete transient normal runs/420 actual judgements,"
                 + $" {bundles} route bundles, recovery={recovery}, focus={focus}, broken={broken}, other-route controls={controls}."
-                + " Public core timing/choice/input APIs only, no private state/clock edits, invincibility or personal saves. Not physical/device testing.");
+                + " Public core timing/choice/input APIs only, neutral fixture calibration, no private gameplay state/clock edits, invincibility or personal saves. Not physical/device testing.");
 
             void Check(int growth, int start, int gift, int route, bool breakBundles)
             {
@@ -220,13 +220,15 @@ namespace GreedLast.Editor
             Require(relicControls == 2, "Both growth levels need a separate positive relic health control.");
             Debug.Log($"Greed choice health rewards passed: 18 matrix runs/270 actual judgements plus two complete relic controls/30 judgements,"
                 + $" {choices} choices/{healthChoices} healing choices, recovered={recovered}, capped={capped}."
-                + " Existing health rewards/caps/gauges unchanged, public choice/input/timing only; no personal data or private state edits, not physical/device testing.");
+                + " Existing health rewards/caps/gauges unchanged, public choice/input/timing only; neutral fixture calibration, no personal data or private gameplay-state edits, not physical/device testing.");
         }
 
         [MenuItem("Greed Last/Run Choice Focus Reward Check")]
         public static void RunChoiceFocusPreviews()
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Focus choice checks require Edit mode.");
+            bool hadCalibration = PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey);
+            float storedCalibration = PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f);
             int runs = 0, choices = 0, charges = 0, activations = 0, extensions = 0, capped = 0, mismatches = 0, previewMismatches = 0;
             float maxBeforeSeconds = 0f;
             var sources = new HashSet<string>();
@@ -242,11 +244,15 @@ namespace GreedLast.Editor
             Debug.Log($"Greed choice focus audit: {runs} complete normal runs/{runs * 15} actual judgements, {choices} focus choices,"
                 + $" charges={charges}, activations={activations}, extensions={extensions}, capped={capped},"
                 + $" maximum before={maxBeforeSeconds:0.000}s, sources={string.Join(",", sources)}, mismatches={mismatches}, previewMismatches={previewMismatches}."
-                + " Public choice/input/timing only, no private state, shortcuts, persistence or physical/device claim.");
-            Require(runs == 67 && choices == 257 && sources.Count == 5 && charges > 0 && activations > 0 && extensions > 0 && capped == 4,
-                "Real focus choices must cover all five sources and charge/activation/extension/four capped relic choices, not privately seeded states.");
+                + " Public choice/input/timing only, neutral fixture calibration, no private gameplay state, shortcuts, persistence or physical/device claim.");
+            Require(runs == 67 && choices == 257 && sources.Count == 5 && charges > 0 && activations > 0 && extensions > 0 && capped > 0,
+                "Real focus choices must cover all five sources and charge/activation/extension/cap paths, not privately seeded states.");
             Require(mismatches == 0, $"Focus choice notices must match actual gauge/state changes. Mismatches={mismatches}.");
             Require(previewMismatches == 0, $"Focus choice previews must match actual selection effects. Mismatches={previewMismatches}.");
+            Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
+                && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(storedCalibration),
+                "Reward-fixture calibration isolation must not rewrite the player's device correction.");
+            Debug.Log($"Greed reward calibration isolation passed: neutral transient cores; personal correction {storedCalibration * 1000f:0}ms unchanged.");
 
             void Check(int growth, int start, int gift, int route, int relic = -1, bool allGood = false)
             {
@@ -267,8 +273,11 @@ namespace GreedLast.Editor
                                     Require(after.Focus == before.Focus && after.FocusStateActive,
                                         "An active-state choice must not also charge a second focus gauge.");
                                     float gain = after.FocusStateRemainingSeconds - before.FocusStateRemainingSeconds;
-                                    Require(gain >= -0.0001f && gain <= 0.3501f,
-                                        "Active-state choices must preserve the existing capped extension, not multiply it by nominal focus.");
+                                    float expectedRemaining = Mathf.Min(7f, before.FocusStateRemainingSeconds + 0.35f);
+                                    Require(gain >= -0.0001f && gain <= 0.3501f
+                                        && after.FocusStateRemainingSeconds <= 7f
+                                        && Mathf.Abs(after.FocusStateRemainingSeconds - expectedRemaining) < 0.0001f,
+                                        "Every active-state choice must apply exactly one 0.35-second extension capped at seven seconds.");
                                     if (gain > 0.001f) { extensions++; expected = "집중 상태 연장"; }
                                     else { capped++; expected = "집중 상태 상한 유지"; }
                                 }
@@ -365,7 +374,7 @@ namespace GreedLast.Editor
             RunGoodFocusFeedback();
             Debug.Log($"Greed live focus feedback passed: 12 complete normal runs/{inputs} actual judgements, active={active}, inactive={inactive},"
                 + $" activations={activations}, active Perfect={perfect}, active variation={variation}. Existing scoring, focus and counters preserved;"
-                + " public monotonic timing/input only, no invincibility, private state or personal data, not physical/device testing.");
+                + " public monotonic timing/input only, neutral fixture calibration, no invincibility, private gameplay state or personal data, not physical/device testing.");
         }
 
         [MenuItem("Greed Last/Run Good Focus Feedback Check")]
@@ -408,7 +417,7 @@ namespace GreedLast.Editor
             }
             Debug.Log($"Greed Good focus audit: three complete transient normal runs/{samples.Count} actual judgements, Good={good},"
                 + $" active={active}, active Sand={sand}, activations={activations}, retained chains={retained}, mismatches={mismatches}."
-                + " Public monotonic timing/input only, no private state, invincibility, shortcuts or personal data; not physical/device testing.");
+                + " Public monotonic timing/input only, neutral fixture calibration, no private gameplay state, invincibility, shortcuts or personal data; not physical/device testing.");
             Require(samples.Count == 45 && good == 34 && active > 0 && sand > 0 && activations > 0 && retained > 0,
                 "Good controls must naturally cover new activation, active empty chains and actual retained combos.");
             Require(mismatches == 0, $"Good focus feedback must describe the actual activation/retained combo. Mismatches={mismatches}.");
@@ -422,7 +431,7 @@ namespace GreedLast.Editor
             foreach (int growth in new[] { 0, 2, 3 })
                 foreach (bool noInput in new[] { false, true })
                 {
-                    var core = new GreedLastRunCore();
+                    var core = CreateNeutralCalibrationCore();
                     GreedLastRunSnapshot run = default;
                     core.SnapshotChanged += value => run = value;
                     core.ConfigureGrowth(0, growth, 0);
@@ -458,7 +467,7 @@ namespace GreedLast.Editor
                 }
             Require(cases == 6 && active == 2, "Damage controls need wrong-lane and omission while focus is actually active.");
             Debug.Log("Greed focus damage rules passed: six public-input/monotonic-time cores, focus growth 0/2/3 x wrong-lane/omission;"
-                + " all actual health 3-to-2, active focus cleared and original Miss reasons retained. No gameplay changes, private state,"
+                + " all actual health 3-to-2, active focus cleared and original Miss reasons retained. Neutral fixture calibration only; no gameplay changes or private gameplay state,"
                 + " invincibility, saves or personal data; original plan 24 insurance exclusion verified for these cases only.");
         }
 
@@ -529,12 +538,13 @@ namespace GreedLast.Editor
             bool peripheral = false, Action<Sample> observeJudgement = null)
         {
             var samples = new List<Sample>();
-            var core = new GreedLastRunCore();
+            var core = CreateNeutralCalibrationCore();
             GreedLastRunSnapshot run = default, anticipation = default, anticipationBefore = default;
             core.SnapshotChanged += value => run = value;
             core.ConfigureGrowth(growth, growth, 0);
             core.Enter();
-            float clock = Time.realtimeSinceStartup;
+            // Public synthetic time has a declared origin; coverage counts must not depend on editor uptime.
+            float clock = 16f;
             int inputs = 0;
             while (!run.Stopped && inputs < 15)
             {
@@ -613,7 +623,7 @@ namespace GreedLast.Editor
         internal static List<Sample> CreateSamples(int growth, int gifts, string route, bool damaged)
         {
             var samples = new List<Sample>();
-            var core = new GreedLastRunCore();
+            var core = CreateNeutralCalibrationCore();
             GreedLastRunSnapshot run = default;
             core.SnapshotChanged += value => run = value;
             core.ConfigureGrowth(growth, 0, 0);
@@ -651,6 +661,15 @@ namespace GreedLast.Editor
                     seconds -= step;
                 }
             }
+        }
+
+        private static GreedLastRunCore CreateNeutralCalibrationCore()
+        {
+            var core = new GreedLastRunCore();
+            // Reward matrices declare neutral calibration; never reset the player's stored device correction.
+            typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(core, 0f);
+            return core;
         }
 
         private static string Label(string name, GreedLastRunSnapshot run)
