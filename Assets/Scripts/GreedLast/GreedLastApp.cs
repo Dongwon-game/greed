@@ -13559,6 +13559,12 @@ namespace GreedLast
                     {
                         MarkPracticeCompletedIfNeeded();
                         runCore.Exit();
+                        if (backend.HasSaveLoadoutCandidate)
+                        {
+                            OpenSaveLoadoutDraft(backend.LoadLobby(), requireExplicitSlotChoice: true,
+                                notice: "기초연습 완료\n이전 클리어의 저장 후보가 남아 있습니다.");
+                            return;
+                        }
                         StartNormalRunCore(BuildFirstNormalRunOpeningContext(), refillRun: false);
                         return;
                     }
@@ -16054,6 +16060,7 @@ namespace GreedLast
         private readonly RunnerResponseType[] judgementHistoryResponses = new RunnerResponseType[JudgementHistoryCapacity];
         private int judgementHistoryCount;
         private bool runModeActive;
+        private bool pendingSaveCandidate;
         private bool lobbyRunPortalVisible;
         private bool lobbyRunPortalReady;
         private bool lobbyRunPortalPracticeFirst;
@@ -16629,6 +16636,7 @@ namespace GreedLast
         public void Render(GreedLastStateSnapshot snapshot)
         {
             EnsureUi();
+            pendingSaveCandidate = snapshot.SaveLoadoutCandidateAvailable;
             ClearLanePointerHolds();
             if (runModeActive && snapshot.State != GreedLastScreenState.RunCoreTest
                 && snapshot.State != GreedLastScreenState.InfiniteRun)
@@ -17065,8 +17073,11 @@ namespace GreedLast
             SetRunMenuButtonLayout(snapshot.Paused);
 
             bool normalClearReady = snapshot.Stopped && snapshot.SaveEligible && !snapshot.InfiniteMode;
-            SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForMode(snapshot,
-                normalClearReady, UsePlayerRunControls));
+            bool practiceCandidateHandoff = pendingSaveCandidate
+                && GreedLastApp.ShouldContinuePracticeToFirstNormal(snapshot,
+                    PlayerPrefs.GetInt(GreedLastApp.PracticeCompletedPrefsKey, 0) == 1);
+            SetButtonLabel(nextPatternButton, practiceCandidateHandoff ? "저장 후보 확인"
+                : BuildRunPrimaryButtonLabelForMode(snapshot, normalClearReady, UsePlayerRunControls));
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForMode(snapshot, showDevTools));
             if (!UsePlayerRunControls) UpdateRunDebugButtonLabels(snapshot);

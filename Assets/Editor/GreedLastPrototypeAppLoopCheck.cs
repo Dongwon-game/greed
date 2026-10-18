@@ -18,6 +18,7 @@ namespace GreedLast.Editor
         private static bool resultBackOnly;
         private static bool infiniteRetryReviewOnly;
         private static bool clearQuitOnly;
+        private static bool practiceCandidateOnly;
         private static bool heldConfirmationsOnly;
         private static bool heldSlotChangesOnly;
         private static bool heldRunResultsOnly;
@@ -138,6 +139,16 @@ namespace GreedLast.Editor
             finally { clearQuitOnly = false; }
         }
 
+        [MenuItem("Greed Last/Run Practice Candidate Handoff Check")]
+        public static void RunPracticeCandidateCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !practiceCandidateOnly,
+                "Practice candidate checks require an isolated Edit-mode fixture.");
+            practiceCandidateOnly = true;
+            try { Run(); }
+            finally { practiceCandidateOnly = false; }
+        }
+
         [MenuItem("Greed Last/Run Held Save Confirmation Check")]
         public static void RunHeldSaveConfirmationCheck()
         {
@@ -255,6 +266,11 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                if (practiceCandidateOnly)
+                {
+                    VerifyPracticeCandidateHandoff(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (clearQuitOnly)
                 {
                     VerifyClearQuitCandidate(app, ui, backend, state, core, () => run);
@@ -315,6 +331,8 @@ namespace GreedLast.Editor
                 VerifyInfinitePreparationResultContinuity(app, ui, backend, state, core, () => run);
                 VerifyInfiniteCountdownAbandonment(app, ui, backend, state, core, () => run);
                 VerifyClearQuitCandidate(app, ui, backend, state, core, () => run);
+
+                VerifyPracticeCandidateHandoff(app, ui, backend, state, core, () => run);
 
                 VerifyHeldSlotChanges(app, ui, backend, state);
                 VerifyHeldRunResults(app, ui, backend, state, core, () => run);
@@ -1178,6 +1196,89 @@ namespace GreedLast.Editor
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 Write(app, "backend", originalBackend);
                 Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyPracticeCandidateHandoff(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
+            int practiceValue = PlayerPrefs.GetInt(PracticeKey), cases = 0;
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "practice-candidate-" + Guid.NewGuid().ToString("N");
+                        try
+                        {
+                            if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                            PlayerPrefs.SetInt(PracticeKey, mode == 3 ? 1 : 0);
+                            var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            backend.RegisterClear(new GreedLastRunRecord(true, 600, 3, 0, 0, 4, 3, 0, 0, 60f,
+                                "practice-neighbor", "박자 감각", "생존 축", string.Empty, "안정 루트 / 생존 축", string.Empty));
+                            backend.SelectSaveLoadoutSlot(0);
+                            backend.ConfirmSaveLoadout();
+                            backend.RenameSelectedSaveLoadoutSlot();
+                            if (mode != 2) backend.RegisterClear(new GreedLastRunRecord(true, 900, 2, 0, 0, 5, 3, 0, 0, 80f,
+                                "pending-before-practice", "박자 감각", "집중 축", string.Empty, "변주 루트 / 집중 축", string.Empty));
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            Write(app, "backend", backend);
+                            string before = PlayerPrefs.GetString(key);
+                            state.SetLobbyReady(backend.LoadLobby());
+                            Click(ui, "practiceRunButton");
+                            Require(latest().PracticeMode, "A pending candidate must still allow harmless practice.");
+                            RunToCompletion(core, latest);
+                            string label = Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text;
+                            Click(ui, "nextPatternButton");
+                            if (mode <= 1)
+                            {
+                                Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                                    && backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
+                                    "First-practice completion must resolve the recovered candidate before entering a new normal run.");
+                                Require(label == "저장 후보 확인" && PlayerPrefs.GetInt(PracticeKey) == 1
+                                    && PlayerPrefs.GetString(key) == before
+                                    && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
+                                    "Practice must mark onboarding, preserve exact progress and require an explicit candidate slot.");
+                                if (mode == 0)
+                                {
+                                    Click(Read<Button[]>(ui, "laneButtons")[2]);
+                                    Click(ui, "nextPatternButton");
+                                }
+                                else
+                                {
+                                    Click(ui, "returnLobbyButton");
+                                    Require(backend.HasSaveLoadoutCandidate, "A first discard press must not consume the candidate.");
+                                    FinishSaveConfirmation(app);
+                                    Click(ui, "returnLobbyButton");
+                                }
+                                var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                Require(!reloaded.HasSaveLoadoutCandidate && reloaded.LoadLobby().SaveSlotOccupied[0]
+                                    && reloaded.LoadLobby().SaveSlotOccupied[2] == (mode == 0)
+                                    && Read<int[]>(reloaded, "saveLoadoutUsesRemaining")[0] == 2
+                                    && Read<int>(reloaded, "normalClearCount") == 2 && Read<int>(reloaded, "growthPoints") == 6,
+                                    "Post-practice save/discard must consume only the prior candidate with no extra reward/use.");
+                            }
+                            else Require(state.CurrentState == GreedLastScreenState.RunCoreTest
+                                && latest().PracticeMode == (mode == 3) && latest().ChoiceActive == (mode == 2)
+                                && PlayerPrefs.GetString(key) == before && backend.HasSaveLoadoutCandidate == (mode == 3),
+                                "Candidate-free first entry and repeated practice must retain existing behavior and progress.");
+                            cases++;
+                        }
+                        finally { core.Exit(); PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
+                    }
+                Debug.Log("Greed practice candidate handoff passed: " + cases
+                    + " clean/detailed persisted first/repeated practice controls, explicit S3 save/protected discard, preserved named neighbor/uses and no extra record/reward.");
+            }
+            finally
+            {
+                core.Exit();
+                if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practiceValue); else PlayerPrefs.DeleteKey(PracticeKey);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                Write(app, "backend", originalBackend);
                 state.SetLobbyReady(originalBackend.LoadLobby());
             }
         }

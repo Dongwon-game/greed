@@ -336,6 +336,7 @@ namespace GreedLast.Editor
                 AddProgressBoundaryFrames();
                 AddPreparationPreviewFrames();
                 AddDirectRetryReviewFrames();
+                AddPracticeCandidateFrames();
                 AddRewardPreviewFrames();
                 AddRecoveryPreviewFrames();
                 AddFinisherPreviewFrames();
@@ -371,11 +372,12 @@ namespace GreedLast.Editor
                             || (resolvedBonusPreviewOnly && frame.Name.StartsWith("102-resolved-bonus-", StringComparison.Ordinal))
                             || (goodFocusPreviewOnly && frame.Name.StartsWith("103-good-focus-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("104-direct-retry-", StringComparison.Ordinal))
+                            || (preparationPreviewOnly && frame.Name.StartsWith("105-practice-candidate-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
                     int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
-                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 48 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 66 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1381,6 +1383,84 @@ namespace GreedLast.Editor
                     "A new preparation after unplayed abandonment must not restore the old saved-result summary.");
             }
             finally { UnityEngine.Object.DestroyImmediate(app.gameObject); }
+        }
+
+        private static void AddPracticeCandidateFrames()
+        {
+            const string practiceKey = "GreedLast.Onboarding.PracticeCompleted";
+            bool hadPractice = PlayerPrefs.HasKey(practiceKey);
+            int practiceValue = PlayerPrefs.GetInt(practiceKey);
+            var backend = new GreedLastMockBackend(false, false);
+            backend.RegisterClear(new GreedLastRunRecord(true, 900, 3, 0, 0, 5, 3, 0, 0, 80f,
+                "before-practice", "박자 감각", "집중 축", string.Empty, "변주 루트 / 집중 축", string.Empty));
+            var gate = new GreedLastRequestGate();
+            var state = new GreedLastStateMachine(gate);
+            GreedLastStateSnapshot screen = default;
+            state.StateChanged += value => screen = value;
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            GreedLastApp app = CreateIsolatedCaptureApp(backend, state, gate, core);
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                core.SnapshotChanged += (Action<GreedLastRunSnapshot>)typeof(GreedLastApp)
+                    .GetMethod("HandleRunSnapshotChanged", flags).CreateDelegate(typeof(Action<GreedLastRunSnapshot>), app);
+                void Command(string name, params object[] args) => typeof(GreedLastApp).GetMethod(name, flags).Invoke(app, args);
+                void Capture(string phase, bool live)
+                {
+                    GreedLastStateSnapshot captured = screen;
+                    GreedLastRunSnapshot capturedRun = run;
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        void Show()
+                        {
+                            bool hasKey = PlayerPrefs.HasKey(practiceKey);
+                            int previous = PlayerPrefs.GetInt(practiceKey);
+                            try
+                            {
+                                PlayerPrefs.SetInt(practiceKey, 0);
+                                if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                                ui.Render(captured);
+                                if (live) ui.RenderRun(capturedRun);
+                                Require(!live || Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "저장 후보 확인",
+                                    "The first-practice result must visibly name the pending candidate handoff.");
+                                Require(phase != "draft" || !Read<Button>("nextPatternButton").IsInteractable(),
+                                    "A captured practice handoff must not accept the recommended slot without a choice.");
+                            }
+                            finally
+                            {
+                                if (hasKey) PlayerPrefs.SetInt(practiceKey, previous); else PlayerPrefs.DeleteKey(practiceKey);
+                            }
+                        }
+                        string name = "105-practice-candidate-" + phase + (detailed ? "-detail" : "-basic");
+                        Add(name + "-small", 960, 540, Show);
+                        Add(name + "-tablet", 1024, 768, Show);
+                        Add(name + "-wide", 2340, 1080, Show, 96f);
+                    }
+                }
+                PlayerPrefs.SetInt(practiceKey, 0);
+                state.SetLobbyReady(backend.LoadLobby());
+                state.SetRunCoreTest();
+                core.EnterPractice();
+                GreedLastPrototypeAppLoopCheck.RunToCompletion(core, () => run);
+                Capture("result", true);
+                Command("RequestNextRunPattern");
+                Require(screen.State == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate,
+                    "The practice capture must follow the actual protected candidate handoff.");
+                Capture("draft", false);
+                Command("HandleRunChannelInput", GreedLastRunChannel.Right);
+                Command("RequestNextRunPattern");
+                Require(!backend.HasSaveLoadoutCandidate && backend.LoadLobby().SaveSlotOccupied[2],
+                    "The practice capture must save only to the explicitly selected S3.");
+                Capture("saved", false);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(app.gameObject);
+                if (hadPractice) PlayerPrefs.SetInt(practiceKey, practiceValue); else PlayerPrefs.DeleteKey(practiceKey);
+                PlayerPrefs.Save();
+            }
         }
 
         private static void AddRewardPreviewFrames()
