@@ -337,6 +337,7 @@ namespace GreedLast.Editor
                 AddPreparationPreviewFrames();
                 AddDirectRetryReviewFrames();
                 AddPracticeCandidateFrames();
+                AddResumeInputBufferFrames();
                 AddRewardPreviewFrames();
                 AddRecoveryPreviewFrames();
                 AddFinisherPreviewFrames();
@@ -373,11 +374,12 @@ namespace GreedLast.Editor
                             || (goodFocusPreviewOnly && frame.Name.StartsWith("103-good-focus-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("104-direct-retry-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("105-practice-candidate-", StringComparison.Ordinal))
+                            || (preparationPreviewOnly && frame.Name.StartsWith("106-resume-input-buffer-", StringComparison.Ordinal))
                             || (preparationPreviewOnly && frame.Name.StartsWith("97-growth-start-", StringComparison.Ordinal)))
                             Frames.Enqueue(frame);
                     }
                     int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
-                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 66 : progressBoundaryOnly ? 12 : 24),
+                    Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 78 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
                 }
                 if (textClippingRejectionOnly)
@@ -1460,6 +1462,50 @@ namespace GreedLast.Editor
                 UnityEngine.Object.DestroyImmediate(app.gameObject);
                 if (hadPractice) PlayerPrefs.SetInt(practiceKey, practiceValue); else PlayerPrefs.DeleteKey(practiceKey);
                 PlayerPrefs.Save();
+            }
+        }
+
+        private static void AddResumeInputBufferFrames()
+        {
+            foreach (bool practice in new[] { true, false })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                if (practice) core.RestartPractice(clock);
+                else
+                {
+                    core.Enter();
+                    core.HandleInput(GreedLastRunChannel.Center, clock);
+                }
+                clock = Mathf.Max(clock, Time.realtimeSinceStartup);
+                for (int wait = 0; !run.ActivePattern && wait < 500; wait++) core.Tick(clock += 0.01f);
+                Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible,
+                    "Resume preview requires a real opening trap without shortcuts.");
+                core.Tick(clock += 0.04f);
+                core.TogglePause(clock);
+                core.TogglePause(clock += 0.1f);
+                core.Tick(clock += 1.5f);
+                core.HandleInput(run.Pattern.Channel, clock += 0.01f);
+                Require(!run.Paused && !run.CountdownActive && run.ActivePattern && run.ElapsedSeconds < -0.5f
+                    && run.IgnoreReason == "resume_buffer" && run.MissCount == 0,
+                    "Resume preview must capture a genuinely ignored pre-start tap, not a seeded message.");
+                GreedLastRunSnapshot captured = run;
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        ShowRun(captured);
+                    }
+                    string name = "106-resume-input-buffer-" + (practice ? "practice" : "normal")
+                        + (detailed ? "-detail" : "-basic");
+                    Add(name + "-small", 960, 540, Show);
+                    Add(name + "-tablet", 1024, 768, Show);
+                    Add(name + "-wide", 2340, 1080, Show, 96f);
+                }
+                core.Exit();
             }
         }
 
