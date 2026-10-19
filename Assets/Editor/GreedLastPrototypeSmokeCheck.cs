@@ -29,6 +29,88 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Resume Input Boundary Check")]
+        public static void RunResumeInputBoundaryCheck()
+        {
+            Require(CanRun(), "Resume input checks require an idle Edit-mode editor.");
+            bool hadCalibration = PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey);
+            float calibration = PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f);
+            int buffered = 0, liveControls = 0;
+            for (int mode = 0; mode < 3; mode++)
+                for (int input = 1; input <= 5; input++)
+                {
+                    var core = new GreedLastRunCore();
+                    // Neutralize only this transient fixture's device correction, not personal preferences.
+                    typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(core, 0f);
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    float clock = Time.realtimeSinceStartup;
+                    if (mode == 0) core.RestartPractice(clock);
+                    else if (mode == 1)
+                    {
+                        core.Enter();
+                        core.HandleInput(GreedLastRunChannel.Center, clock);
+                    }
+                    else core.EnterInfiniteRun();
+                    clock = Mathf.Max(clock, Time.realtimeSinceStartup);
+                    for (int wait = 0; !run.ActivePattern && wait < 500; wait++) core.Tick(clock += 0.01f);
+                    Require(run.ActivePattern && !run.CountdownActive && !run.DevInvincible,
+                        "Resume checks require an actual opening trap without shortcuts or seeded gameplay.");
+                    if (input > 3)
+                    {
+                        Require(run.Pattern.CoreSeconds - run.ElapsedSeconds > run.Pattern.GoodWindowSeconds,
+                            "The live input control must be genuinely early, not inside Good.");
+                        GreedLastRunChannel channel = input == 4 ? run.Pattern.Channel
+                            : run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
+                        core.HandleInput(channel, clock);
+                        Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissCount == 1
+                            && run.MissReason == (input == 4 ? "too_early" : "wrong_channel"),
+                            "Once a trap has started, genuine early and wrong-channel taps must still consume one Miss.");
+                        liveControls++;
+                        core.Exit();
+                        continue;
+                    }
+                    core.Tick(clock += 0.04f);
+                    core.TogglePause(clock);
+                    core.TogglePause(clock += 0.1f);
+                    core.Tick(clock += 1.5f);
+                    Require(!run.Paused && !run.CountdownActive && run.ActivePattern && run.ElapsedSeconds < -0.5f,
+                        "Early-trap resume must expose its genuine pre-start buffer after the ordinary countdown.");
+                    GreedLastRunSnapshot before = run;
+                    for (int tap = 0; tap < 2; tap++)
+                    {
+                        core.HandleInput((GreedLastRunChannel)input, clock += 0.01f);
+                        Require(run.IgnoreReason == "resume_buffer" && run.LastResult == GreedLastJudgementResult.None
+                            && run.ActivePattern && run.Health == before.Health && run.Score == before.Score
+                            && run.SuccessCount == before.SuccessCount && run.GoodCount == before.GoodCount
+                            && run.MissCount == before.MissCount && run.Combo == before.Combo && run.Focus == before.Focus
+                            && run.TimingRecommendationSampleCount == before.TimingRecommendationSampleCount,
+                            "A tap before the resumed trap starts must not consume it, damage health or pollute timing samples. Mode="
+                                + mode + ", channel=" + input + ", reason=" + run.IgnoreReason + ", miss=" + run.MissReason);
+                    }
+                    float exactAt = clock + run.Pattern.CoreSeconds - run.ElapsedSeconds;
+                    while (clock < exactAt - 0.0001f)
+                    {
+                        clock = Mathf.Min(exactAt, clock + 0.01f);
+                        core.Tick(clock);
+                    }
+                    core.HandleInput(run.Pattern.Channel, exactAt);
+                    Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1
+                        && run.GoodCount == 0 && run.MissCount == 0 && run.TimingRecommendationSampleCount == 1,
+                        "A fresh exact tap must still resolve the same buffered trap once and produce one genuine timing sample.");
+                    buffered++;
+                    core.Exit();
+                }
+            Require(buffered == 9 && liveControls == 6, "Resume checks must cover practice/normal/infinite and all three buffered channels.");
+            Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
+                && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(calibration),
+                "Resume checks must not change personal device correction.");
+            Debug.Log("Greed resume input boundaries passed: nine practice/normal/infinite pre-start buffers, two ignored taps each, "
+                + "same-trap exact recovery and six genuine early/wrong-channel Miss controls. Public synthetic core time/input; "
+                + "neutral transient calibration only, no private gameplay/clock edits, persistence or physical-device claim.");
+        }
+
         private static void RunChecks()
         {
             GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
@@ -1408,6 +1490,7 @@ namespace GreedLast.Editor
                 "The first normal-run choice screen must name the start gift and keep the practice-to-run handoff visible.");
             RequireTextLayoutBudget(firstNormalChoiceDetail, 6, 430, "first normal-run choice handoff");
             VerifyInputBoundarySafety(practiceNow + 60f);
+            RunResumeInputBoundaryCheck();
             VerifyStoredGiftStackScaling();
             VerifyStoredGiftStacksRestoreIntoRun();
             VerifyInfiniteRoutePayoffRestoration();
@@ -4173,11 +4256,11 @@ namespace GreedLast.Editor
             GreedLastRunChannel wrongChannel = staggerSnapshot.Pattern.Channel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
-            float realtimeMiss = Time.realtimeSinceStartup;
-            staggerCore.HandleInput(wrongChannel, realtimeMiss);
+            float missAt = staggerClock + 3.1f;
+            staggerCore.HandleInput(wrongChannel, missAt);
             Require(staggerSnapshot.LastResult == GreedLastJudgementResult.Miss && staggerSnapshot.MissCount == 1, "The stagger boundary test must begin with one real miss.");
             string retainedMissReason = staggerSnapshot.MissReason;
-            staggerCore.HandleInput(staggerSnapshot.Pattern.Channel, realtimeMiss + 0.1f);
+            staggerCore.HandleInput(staggerSnapshot.Pattern.Channel, missAt + 0.1f);
             Require(staggerSnapshot.IgnoreReason == "locked_by_stagger", "Input during miss stagger must be ignored.");
             Require(staggerSnapshot.LastResult == GreedLastJudgementResult.None, "Ignored stagger input must clear stale visual judgement state.");
             Require(staggerSnapshot.MissCount == 1, "Stagger input must not add another miss.");

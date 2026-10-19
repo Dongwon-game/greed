@@ -281,7 +281,7 @@ namespace GreedLast.Editor
                         && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
                         && cycle.engineClearQuitCandidatePreserved
                         && cycle.engineInfiniteQuitResultsPreserved == 2
-                        && cycle.practiceCandidateHandoffs == 2
+                        && cycle.practiceCandidateHandoffs == 2 && cycle.resumeBufferInputCases == 2
                         && cycle.hiddenPresentationCases == 8 && cycle.removedCanvasBlockedCommands
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
@@ -391,6 +391,7 @@ namespace GreedLast.Editor
             public bool engineClearQuitCandidatePreserved;
             public int engineInfiniteQuitResultsPreserved;
             public int practiceCandidateHandoffs;
+            public int resumeBufferInputCases;
             public int hiddenPresentationCases;
             public bool removedCanvasBlockedCommands;
             public int directInfinitePreparationCancelCases;
@@ -607,6 +608,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyPracticeCandidateHandoff();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyResumeBufferInputs();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyHiddenPresentation();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredRecordDistances();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyInfiniteCountdownRecordBoundaries();
@@ -2449,6 +2451,72 @@ namespace GreedLast.Editor
                 report.heldChoiceCannotAdvance = report.multiTouchChoiceCases == 2;
                 report.multiTouchFreshTapRecovered = report.multiTouchFirstInputOnly && report.heldChoiceCannotAdvance;
                 Debug.Log("Greed engine multi-touch checks passed: six action/order cases, two held opening choices and fresh same-ID trap taps.");
+            }
+
+            private IEnumerator VerifyResumeBufferInputs()
+            {
+                bool playerControls = ui.UsePlayerRunControls;
+                try
+                {
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        state.SetRunCoreTest();
+                        core.ConfigureGrowth(0, 0, 0);
+                        core.RestartPractice(Time.realtimeSinceStartup);
+                        float deadline = Time.realtimeSinceStartup + 8f;
+                        while (!run.ActivePattern || run.CountdownActive)
+                        {
+                            Require(Time.realtimeSinceStartup < deadline, "Resume input checks need a naturally starting engine trap.");
+                            yield return null;
+                        }
+                        Call(app, "RequestToggleRunPause");
+                        Require(run.Paused && run.ElapsedSeconds < 0.2f,
+                            "The engine check must pause the opening trap early enough for genuine pre-start padding.");
+                        GreedLastRunSnapshot frozen = run;
+                        yield return null;
+                        yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
+                        deadline = Time.realtimeSinceStartup + 4f;
+                        while (run.Paused)
+                        {
+                            AssertFrozen(frozen);
+                            Require(Time.realtimeSinceStartup < deadline, "The normal engine resume countdown must complete.");
+                            yield return null;
+                        }
+                        Require(run.ActivePattern && run.ElapsedSeconds < -0.4f,
+                            "Engine GO must retain the same trap in a real pre-start buffer.");
+                        GreedLastRunSnapshot before = run;
+                        Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                        int target = (int)run.Pattern.Channel - 1;
+                        int prematureLane = detailed ? (target + 1) % 3 : target;
+                        if (detailed) yield return TapTouch(lanes[prematureLane]);
+                        else yield return ClickMouse(lanes[prematureLane]);
+                        Require(run.IgnoreReason == "resume_buffer" && run.ActivePattern
+                            && run.Pattern.PatternId == before.Pattern.PatternId
+                            && run.Health == before.Health && run.Score == before.Score
+                            && run.SuccessCount == before.SuccessCount && run.GoodCount == before.GoodCount
+                            && run.MissCount == before.MissCount
+                            && run.TimingRecommendationSampleCount == before.TimingRecommendationSampleCount,
+                            "Actual mouse/touch input before a resumed trap starts must not consume it or create a timing sample.");
+                        yield return WaitForTouchablePattern();
+                        yield return TapTouch(lanes[target]);
+                        Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1
+                            && run.MissCount == 0 && run.TimingRecommendationSampleCount == 1,
+                            "A fresh actual-engine exact tap must resolve the same buffered trap once.");
+                        core.Exit();
+                        report.resumeBufferInputCases++;
+                    }
+                }
+                finally
+                {
+                    input.MouseDown = input.MouseHeld = input.MouseUp = false;
+                    input.Touches = Array.Empty<Touch>();
+                    core.Exit();
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                    state.SetLobbyReady(Read<GreedLastMockBackend>(app, "backend").LoadLobby());
+                }
+                Debug.Log("Greed engine resume input buffers passed: basic mouse and detailed wrong-channel touch before trap start, "
+                    + "unchanged health/score/timing samples and one fresh same-trap exact input each. Actual engine frames and synthetic input only.");
             }
 
             private IEnumerator VerifyHiddenPresentation()

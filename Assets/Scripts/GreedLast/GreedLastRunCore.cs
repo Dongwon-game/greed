@@ -1899,6 +1899,13 @@ namespace GreedLast
                 return;
             }
 
+            // Resume can rewind a trap before its start; padding is not a judgement window.
+            if (now < patternStartedAt)
+            {
+                Ignore("resume_buffer", "재개 준비 중입니다. 함정이 내려오면 입력하세요.", now);
+                return;
+            }
+
             inputConsumed = true;
             float elapsed = now - patternStartedAt;
             float judgedElapsed = elapsed + inputTimingOffsetSeconds;
