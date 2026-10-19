@@ -122,8 +122,52 @@ namespace GreedLast.Editor
 
         public static void VerifyPreferenceCaptureCoverage()
         {
+            VerifyRoutineCleanup();
             Require(CapturePreferences().values.Exists(value => value.key == GreedLastRunCore.InputTimingOffsetPrefsKey),
                 "Personal preference comparisons must include the production input timing correction key.");
+        }
+
+        private static Exception DisposeRoutines(Stack<IEnumerator> routines, Exception error)
+        {
+            if (routines == null) return error;
+            while (routines.Count > 0)
+            {
+                try { (routines.Pop() as IDisposable)?.Dispose(); }
+                catch (Exception cleanup) { error = error == null ? cleanup : new AggregateException(error, cleanup); }
+            }
+            return error;
+        }
+
+        private static void VerifyRoutineCleanup()
+        {
+            for (int failure = 0; failure < 3; failure++)
+            {
+                var order = new List<int>();
+                IEnumerator Track(int marker, bool throws)
+                {
+                    try { yield return null; }
+                    finally
+                    {
+                        order.Add(marker);
+                        if (throws) throw new InvalidOperationException("Isolated cleanup failure");
+                    }
+                }
+                var stack = new Stack<IEnumerator>();
+                IEnumerator outer = Track(2, false), inner = Track(1, failure > 0);
+                Require(outer.MoveNext() && inner.MoveNext(), "Cleanup checks require entered iterator finally scopes.");
+                stack.Push(outer);
+                stack.Push(inner);
+                Exception original = failure == 2 ? new InvalidOperationException("Isolated caller failure") : null;
+                Exception result = DisposeRoutines(stack, original);
+                Require(stack.Count == 0 && order.Count == 2 && order[0] == 1 && order[1] == 2
+                    && (result != null) == (failure > 0),
+                    "Nested engine routines must restore outer scopes even if an inner cleanup throws.");
+                Require(ReferenceEquals(DisposeRoutines(stack, result), result) && order.Count == 2,
+                    "Repeated cleanup must not restore a scope twice or lose an existing error.");
+                if (original != null)
+                    Require(result is AggregateException aggregate && aggregate.Flatten().InnerExceptions.Contains(original),
+                        "Cleanup must preserve the caller's original failure as well as cleanup errors.");
+            }
         }
 
         private static void BeginCycle()
@@ -217,6 +261,11 @@ namespace GreedLast.Editor
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
+            Preference practiceBefore = before.values.Find(value => value.key == "GreedLast.Onboarding.PracticeCompleted");
+            results.practicePreferenceExistedBefore = practiceBefore != null && practiceBefore.exists;
+            results.practicePreferenceValueBefore = practiceBefore == null ? -1 : practiceBefore.intValue;
+            results.practicePreferenceExistsAfter = PlayerPrefs.HasKey("GreedLast.Onboarding.PracticeCompleted");
+            results.practicePreferenceValueAfter = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", -1);
             results.personalPreferencesUnchanged = JsonUtility.ToJson(before) == JsonUtility.ToJson(CapturePreferences());
             if (!results.personalPreferencesUnchanged) results.error += " Personal PlayerPrefs changed during the check.";
             EditorSettings.enterPlayModeOptions = (EnterPlayModeOptions)SessionState.GetInt(Prefix + "previousOptions", 0);
@@ -378,6 +427,8 @@ namespace GreedLast.Editor
             public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly, trapCueOnly;
             public List<Cycle> cycles = new List<Cycle>();
             public List<string> personalPreferenceKeys = new List<string>();
+            public bool practicePreferenceExistedBefore, practicePreferenceExistsAfter;
+            public int practicePreferenceValueBefore, practicePreferenceValueAfter;
         }
         [Serializable] private sealed class Cycle
         {
@@ -497,6 +548,7 @@ namespace GreedLast.Editor
             private GreedLastPrototypeKeyboardInput input;
             private Action lateCueAction;
             private bool checkingFullLoopClock;
+            private Stack<IEnumerator> activeRoutines;
 
             private void Start()
             {
@@ -520,6 +572,7 @@ namespace GreedLast.Editor
             private IEnumerator Guard(IEnumerator routine)
             {
                 var routines = new Stack<IEnumerator>();
+                activeRoutines = routines;
                 routines.Push(routine);
                 while (routines.Count > 0)
                 {
@@ -3898,9 +3951,9 @@ namespace GreedLast.Editor
                                 "Every actual engine Good must match its immediately preceding recovery prediction.");
                             string goodEffect = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildGoodEffectLine", BindingFlags.Static | BindingFlags.NonPublic)
                                 .Invoke(null, new object[] { snapshot });
-                            bool retains = run.FocusStateActive && snapshot.Combo > 0;
+                            bool retains = snapshot.LastJudgementStartedInFocusState && snapshot.Combo > 0;
                             Require(goodEffect.Contains("집중 연쇄 완충", StringComparison.Ordinal) == retains
-                                && (run.FocusStateActive || !snapshot.FocusStateActive || goodEffect.Contains("집중 발동", StringComparison.Ordinal)),
+                                && (snapshot.LastJudgementStartedInFocusState || !snapshot.FocusStateActive || goodEffect.Contains("집중 발동", StringComparison.Ordinal)),
                                 "Engine Good feedback must distinguish new focus activation from actually retained combos.");
                             report.engineGoodFocusFeedbackCases++;
                         }
@@ -3910,7 +3963,7 @@ namespace GreedLast.Editor
                         {
                             string compact = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildCompactJudgementFeedbackText",
                                 BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { snapshot, false, false });
-                            string focus = run.FocusStateActive ? "집중 유지" : snapshot.FocusStateActive ? "집중 발동" : "집중+1";
+                            string focus = snapshot.LastJudgementStartedInFocusState ? "집중 유지" : snapshot.FocusStateActive ? "집중 발동" : "집중+1";
                             Require(compact.Contains(focus, StringComparison.Ordinal),
                                 "Engine basic Perfect feedback must describe the actual charge, activation or maintenance.");
                             report.engineCompactFocusCases++;
@@ -3927,11 +3980,14 @@ namespace GreedLast.Editor
                             "Engine profile feedback must use its actual scoring component.");
                         report.engineResolvedBonusCases++;
                         if (snapshot.InfiniteThreatLevel > run.InfiniteThreatLevel) report.engineResolvedBonusThreatBoundaries++;
-                        Require(snapshot.LastJudgementStartedInFocusState == run.FocusStateActive,
+                        float inputGap = snapshot.LastInputTimingDeltaSeconds + run.Pattern.CoreSeconds
+                            - run.InputTimingOffsetSeconds - run.ElapsedSeconds;
+                        float focusBeforeInput = Mathf.Max(0f, run.FocusStateRemainingSeconds - Mathf.Max(0f, inputGap));
+                        Require(snapshot.LastJudgementStartedInFocusState == (focusBeforeInput > 0.01f),
                             "Engine focus provenance must distinguish activation from prior active state.");
-                        if (run.FocusStateActive && snapshot.LastResult == GreedLastJudgementResult.Success)
+                        if (snapshot.LastJudgementStartedInFocusState && snapshot.LastResult == GreedLastJudgementResult.Success)
                         {
-                            float gained = Mathf.Max(0f, snapshot.FocusStateRemainingSeconds - run.FocusStateRemainingSeconds);
+                            float gained = Mathf.Max(0f, snapshot.FocusStateRemainingSeconds - focusBeforeInput);
                             Require(Mathf.Abs(snapshot.LastJudgementFocusStateExtensionSeconds - gained) < 0.0002f,
                                 "Engine focus feedback must retain the actual judgement/bundle time extension.");
                             report.engineLiveFocusFeedbackCases++;
@@ -4087,6 +4143,7 @@ namespace GreedLast.Editor
             private void Complete(Exception error)
             {
                 if (completed) return;
+                error = DisposeRoutines(activeRoutines, error);
                 completed = true;
                 Application.logMessageReceived -= CollectError;
                 report.elapsedSeconds = Time.realtimeSinceStartup - startedAt;
@@ -4101,6 +4158,9 @@ namespace GreedLast.Editor
             private void OnDestroy()
             {
                 Application.logMessageReceived -= CollectError;
+                Exception cleanup = DisposeRoutines(activeRoutines, null);
+                if (cleanup != null && SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
+                    SessionState.SetString(Prefix + "error", "Engine routine cleanup failed: " + cleanup);
                 if (!completed && SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
                     SessionState.SetString(Prefix + "error", "The engine check was interrupted before its lifecycle cycle completed.");
             }
