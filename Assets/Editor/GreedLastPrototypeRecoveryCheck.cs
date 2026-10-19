@@ -249,6 +249,7 @@ namespace GreedLast.Editor
                 "Real focus choices must cover all five sources and charge/activation/extension/cap paths, not privately seeded states.");
             Require(mismatches == 0, $"Focus choice notices must match actual gauge/state changes. Mismatches={mismatches}.");
             Require(previewMismatches == 0, $"Focus choice previews must match actual selection effects. Mismatches={previewMismatches}.");
+            CreateChoicePreviewSamples();
             Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
                 && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(storedCalibration),
                 "Reward-fixture calibration isolation must not rewrite the player's device correction.");
@@ -500,8 +501,21 @@ namespace GreedLast.Editor
             CreateBundleSamples(0, 1, 1, 0, observeChoice: Collect);
             for (int start = 0; start < 3 && !samples.ContainsKey("focus-cap"); start++)
                 CreateBundleSamples(0, start, 0, 1, observeChoice: Collect, relic: 1);
+            // Choose a real capped relic screen from the same bounded public-play matrix as reward checks.
+            foreach (int growth in new[] { 0, 3 })
+                for (int start = 0; start < 3 && !samples.ContainsKey("focus-cap"); start++)
+                    for (int gift = 0; gift < 3 && !samples.ContainsKey("focus-cap"); gift++)
+                        for (int route = 0; route < 3 && !samples.ContainsKey("focus-cap"); route++)
+                        {
+                            CreateBundleSamples(growth, start, gift, route, observeChoice: Collect);
+                            if (samples.ContainsKey("focus-cap"))
+                                Debug.Log($"Greed capped relic capture source: growth={growth}, start={start}, gift={gift}, route={route}."
+                                    + " Actual public-play snapshot; no seeded focus or personal calibration change.");
+                        }
             CreateBundleSamples(0, 2, 0, 1, observeChoice: Collect, relic: 2, allGood: true);
-            Require(samples.Count == 5, "Choice captures require actual start, health-cap, route-cap, focus-cap and activation screens.");
+            Require(samples.Count == 5, "Choice captures require actual start, health-cap, route-cap, focus-cap and activation screens. Found: "
+                + string.Join(", ", samples.Keys));
+            Debug.Log("Greed choice capture samples passed: actual start, health-cap, route-cap, focus-cap and activation screens.");
             return samples;
 
             void Collect(GreedLastChoiceKind kind, string selected, Sample sample)
