@@ -282,6 +282,7 @@ namespace GreedLast.Editor
                         && cycle.engineClearQuitCandidatePreserved
                         && cycle.engineInfiniteQuitResultsPreserved == 2
                         && cycle.practiceCandidateHandoffs == 2 && cycle.resumeBufferInputCases == 2
+                        && cycle.engineInputClockComparisons >= 12 && cycle.engineTerminalClockComparisons >= 1
                         && cycle.hiddenPresentationCases == 8 && cycle.removedCanvasBlockedCommands
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
@@ -392,6 +393,7 @@ namespace GreedLast.Editor
             public int engineInfiniteQuitResultsPreserved;
             public int practiceCandidateHandoffs;
             public int resumeBufferInputCases;
+            public int engineInputClockComparisons, engineTerminalClockComparisons;
             public int hiddenPresentationCases;
             public bool removedCanvasBlockedCommands;
             public int directInfinitePreparationCancelCases;
@@ -494,6 +496,7 @@ namespace GreedLast.Editor
             private bool completed;
             private GreedLastPrototypeKeyboardInput input;
             private Action lateCueAction;
+            private bool checkingFullLoopClock;
 
             private void Start()
             {
@@ -3221,6 +3224,7 @@ namespace GreedLast.Editor
                 Require(run.ChoiceActive && !run.InfiniteMode, "The engine normal-run command must open its first choice.");
                 if (run.DevInvincible) core.ToggleDevInvincible();
                 Require(!run.DevInvincible, "The full normal loop must use real health and natural failure rules.");
+                checkingFullLoopClock = true;
                 float nextChoiceAt = Time.realtimeSinceStartup + 0.4f;
                 float deadline = Time.realtimeSinceStartup + 120f;
                 bool heldForClear = false;
@@ -3422,6 +3426,7 @@ namespace GreedLast.Editor
                     "After natural failures and source depletion the actual empty preparation must re-enter a fresh refill choice.");
                 report.emptySlotRefillReentered = true;
                 report.fullLoopSeconds = Time.realtimeSinceStartup - began;
+                checkingFullLoopClock = false;
             }
 
             private void VerifyQuitCandidateFromEngineClear()
@@ -3846,6 +3851,28 @@ namespace GreedLast.Editor
                 report.releasedUiBootSafe = true;
             }
 
+            private void VerifyInputClockPublication(GreedLastRunSnapshot snapshot)
+            {
+                if (!checkingFullLoopClock || !run.ActivePattern || run.Paused || run.CountdownActive
+                    || !string.IsNullOrEmpty(run.IgnoreReason) || !snapshot.HasJudgedInputTiming
+                    || snapshot.LastJudgedPattern.PatternId != run.Pattern.PatternId
+                    || snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount
+                        != run.SuccessCount + run.GoodCount + run.MissCount + 1) return;
+                float inputElapsed = snapshot.LastInputTimingDeltaSeconds + run.Pattern.CoreSeconds - run.InputTimingOffsetSeconds;
+                float elapsed = inputElapsed - run.ElapsedSeconds;
+                Require(elapsed >= -0.001f && elapsed <= 0.501f,
+                    "Engine clock comparisons need consecutive public trap/input publications inside the interaction budget.");
+                elapsed = Mathf.Max(0f, elapsed);
+                Require(Mathf.Abs(snapshot.Distance - run.Distance - elapsed * 4.2f) < 0.02f,
+                    "A real input publication must include movement up to the judgement, even when it ends the run: delta="
+                        + (snapshot.Distance - run.Distance) + ", elapsed=" + elapsed + ", phase=" + snapshot.Phase);
+                float activeSeconds = Mathf.Min(elapsed, run.FocusStateRemainingSeconds);
+                Require(Mathf.Abs(snapshot.FocusStateActiveSeconds - run.FocusStateActiveSeconds - activeSeconds) < 0.005f,
+                    "An engine input must age only the focus that existed before it, once and before reward/damage.");
+                report.engineInputClockComparisons++;
+                if (snapshot.Stopped) report.engineTerminalClockComparisons++;
+            }
+
             private void Attach(GreedLastApp value)
             {
                 app = value;
@@ -3855,6 +3882,7 @@ namespace GreedLast.Editor
                 core = Read<GreedLastRunCore>(app, "runCore");
                 core.SnapshotChanged += snapshot =>
                 {
+                    VerifyInputClockPublication(snapshot);
                     if (run.ActivePattern && snapshot.LastJudgedPattern.PatternId == run.Pattern.PatternId
                         && snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount
                             == run.SuccessCount + run.GoodCount + run.MissCount + 1

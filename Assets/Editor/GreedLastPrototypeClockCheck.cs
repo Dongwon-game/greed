@@ -13,6 +13,7 @@ namespace GreedLast.Editor
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Frame-clock checks require Edit mode.");
             VerifyCountdownOrigin();
             VerifyJudgementOrigin();
+            VerifyFocusInputOrder();
             VerifyCalibratedInputDeadlines();
             VerifyFrameInterruption();
             float[][] frames = { new[] { 1f / 30f }, new[] { 1f / 60f }, new[] { 1f / 120f }, new[] { 0.008f, 0.04f, 0.017f, 0.025f } };
@@ -96,6 +97,102 @@ namespace GreedLast.Editor
                 cases++;
             }
             Debug.Log($"Greed calibrated deadlines passed: {cases} exact/late-Good/no-input cases across the authored deck, six tempo/route modes, timing growth and five offsets; 30/60/120 Hz preceding ticks. No personal preferences changed.");
+        }
+
+        [MenuItem("Greed Last/Run Focus Input Clock Check")]
+        public static void VerifyFocusInputOrder()
+        {
+            Require(CanRun(), "Focus clock checks require Edit mode.");
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            bool hadCalibration = PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey);
+            float calibration = PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f);
+            int cases = 0, activations = 0, extensions = 0, misses = 0, terminals = 0;
+            foreach (int mode in new[] { 0, 1, 2 })
+            foreach (float gap in new[] { 1f / 30f, 0.249f, 0.49f })
+            {
+                var cores = new[] { new GreedLastRunCore(), new GreedLastRunCore() };
+                var runs = new GreedLastRunSnapshot[2];
+                float clock = Time.realtimeSinceStartup + 1f;
+                for (int i = 0; i < cores.Length; i++)
+                {
+                    int index = i;
+                    typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", fields).SetValue(cores[i], 0f);
+                    cores[i].SnapshotChanged += value => runs[index] = value;
+                    if (mode == 0) cores[i].RestartPractice(clock);
+                    else if (mode == 1)
+                    {
+                        cores[i].Enter();
+                        cores[i].HandleInput(GreedLastRunChannel.Center, clock);
+                    }
+                    else cores[i].EnterInfiniteRun();
+                }
+                void TickBoth(float at)
+                {
+                    cores[0].Tick(at);
+                    cores[1].Tick(at);
+                    clock = at;
+                }
+                for (int step = 0; step < 24 && !runs[0].Stopped; step++)
+                {
+                    for (int wait = 0; !runs[0].ActivePattern && wait < 1000; wait++)
+                    {
+                        if (runs[0].ChoiceActive)
+                        {
+                            cores[0].HandleInput(GreedLastRunChannel.Right, clock);
+                            cores[1].HandleInput(GreedLastRunChannel.Right, clock);
+                        }
+                        TickBoth(clock + 0.01f);
+                    }
+                    Require(runs[0].ActivePattern && runs[1].ActivePattern
+                        && runs[0].Pattern.PatternId == runs[1].Pattern.PatternId,
+                        "Focus order fixtures must reach the same trap through ordinary public progression.");
+                    float at = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
+                    if (step == 3) at += (runs[0].Pattern.SuccessWindowSeconds + runs[0].Pattern.GoodWindowSeconds) * 0.5f;
+                    float before = at - gap;
+                    while (clock < before - 0.0001f) TickBoth(Mathf.Min(before, clock + 0.01f));
+                    Require(at - clock <= 0.5f && at - clock > 0f,
+                        "The compared input frame must be inside the ordinary half-second interaction budget.");
+                    GreedLastRunSnapshot prior = runs[0];
+                    GreedLastRunChannel channel = step == 4 || (mode == 2 && (step == 8 || step == 12))
+                        ? (runs[0].Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                        : runs[0].Pattern.Channel;
+                    // Compare app-first and EventSystem-first delivery at exactly the same public time.
+                    cores[0].Tick(at);
+                    cores[0].HandleInput(channel, at);
+                    cores[1].HandleInput(channel, at);
+                    cores[1].Tick(at);
+                    clock = at;
+                    GreedLastRunSnapshot a = runs[0], b = runs[1];
+                    Require(Mathf.Abs(a.FocusStateRemainingSeconds - b.FocusStateRemainingSeconds) < 0.001f
+                        && Mathf.Abs(a.Distance - b.Distance) < 0.001f
+                        && Mathf.Abs(a.FocusStateActiveSeconds - b.FocusStateActiveSeconds) < 0.001f
+                        && a.FocusStateActivationCount == b.FocusStateActivationCount
+                        && a.Score == b.Score && a.Health == b.Health && a.Focus == b.Focus
+                        && a.Phase == b.Phase && a.Stopped == b.Stopped
+                        && a.SuccessCount == b.SuccessCount && a.GoodCount == b.GoodCount && a.MissCount == b.MissCount,
+                        $"Focus timing must not depend on input/update order. mode={mode}, step={step}, gap={gap}, "
+                            + $"remaining={a.FocusStateRemainingSeconds}/{b.FocusStateRemainingSeconds}, "
+                            + $"active={a.FocusStateActiveSeconds}/{b.FocusStateActiveSeconds}, score={a.Score}/{b.Score}, "
+                            + $"distance={a.Distance}/{b.Distance}, phase={a.Phase}/{b.Phase}.");
+                    if (a.FocusStateActivationCount > prior.FocusStateActivationCount) activations++;
+                    if (prior.FocusStateActive && a.LastResult == GreedLastJudgementResult.Success) extensions++;
+                    if (a.LastResult == GreedLastJudgementResult.Miss) misses++;
+                    cases++;
+                }
+                Require(runs[0].Stopped && runs[1].Stopped,
+                    "Each clock-order course must reach an ordinary practice/normal finish or natural infinite failure.");
+                terminals++;
+                foreach (GreedLastRunCore core in cores) core.Exit();
+            }
+            Require(activations >= 9 && extensions >= 3 && misses >= 6 && terminals == 9,
+                "Focus clock coverage must include genuine activations, active successes and damage in all frame gaps.");
+            Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
+                && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(calibration),
+                "Focus order checks must leave personal correction unchanged.");
+            Debug.Log($"Greed focus input order passed: {cases} paired judgements, {activations} activations, "
+                + $"{extensions} active successes, {misses} damage cases and {terminals} terminal distance comparisons "
+                + "across practice/normal/infinite and three frame gaps. "
+                + "Public synthetic core progression, neutral transient calibration only; no private gameplay clocks, persistence or hardware claim.");
         }
 
         [MenuItem("Greed Last/Run Frame Interruption Check")]

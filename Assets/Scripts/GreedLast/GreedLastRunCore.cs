@@ -852,6 +852,7 @@ namespace GreedLast
         private int focusStateActivationCount;
         private int focusStateSuccessCount;
         private float focusStateActiveSeconds;
+        private float runTimeAdvancedAt;
         private int maxCombo;
         private int precisionStreak;
         private int maxPrecisionStreak;
@@ -1083,6 +1084,7 @@ namespace GreedLast
             focusStateActivationCount = 0;
             focusStateSuccessCount = 0;
             focusStateActiveSeconds = 0f;
+            runTimeAdvancedAt = 0f;
             infiniteSectionsCleared = 0;
             infiniteThreatTestOffset = 0;
             maxInfiniteThreatLevel = 1;
@@ -1615,7 +1617,7 @@ namespace GreedLast
 
         public void Tick(float now)
         {
-            float deltaTime = Mathf.Max(0f, now - lastTickAt);
+            AdvanceRunTime(now);
             lastTickAt = now;
 
             if (startCountdownActive && !paused)
@@ -1653,18 +1655,6 @@ namespace GreedLast
                 return;
             }
 
-            if (!stopped && CanAutoStartPattern && focusStateRemainingSeconds > 0f)
-            {
-                float previousFocusSeconds = focusStateRemainingSeconds;
-                focusStateRemainingSeconds = Mathf.Max(0f, focusStateRemainingSeconds - deltaTime);
-                focusStateActiveSeconds += Mathf.Max(0f, previousFocusSeconds - focusStateRemainingSeconds);
-            }
-
-            if (!stopped && CanAutoStartPattern)
-            {
-                distance += deltaTime * RunSpeedMetersPerSecond;
-            }
-
             if (autoFlow
                 && CanAutoStartPattern
                 && !activePattern
@@ -1697,6 +1687,20 @@ namespace GreedLast
             }
 
             Publish(now, reuseTimingProfile: true);
+        }
+
+        private void AdvanceRunTime(float now)
+        {
+            // Apply gameplay time once, before an input changes rewards or ends the run.
+            float deltaTime = Mathf.Max(0f, now - Mathf.Max(lastTickAt, runTimeAdvancedAt));
+            runTimeAdvancedAt = now;
+            if (paused || startCountdownActive || stopped || !CanAutoStartPattern)
+                return;
+            distance += deltaTime * RunSpeedMetersPerSecond;
+            if (focusStateRemainingSeconds <= 0f) return;
+            float previous = focusStateRemainingSeconds;
+            focusStateRemainingSeconds = Mathf.Max(0f, previous - deltaTime);
+            focusStateActiveSeconds += Mathf.Max(0f, previous - focusStateRemainingSeconds);
         }
 
         public void ToggleAutoFlow(float now)
@@ -1906,6 +1910,7 @@ namespace GreedLast
                 return;
             }
 
+            AdvanceRunTime(now);
             inputConsumed = true;
             float elapsed = now - patternStartedAt;
             float judgedElapsed = elapsed + inputTimingOffsetSeconds;
