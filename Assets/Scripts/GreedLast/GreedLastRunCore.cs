@@ -1772,6 +1772,13 @@ namespace GreedLast
                 return;
             }
 
+            // Visible pause commands share the live frame boundary; background loss freezes the last presentation instead.
+            if ((startCountdownActive || CanPauseNow()) && now > lastTickAt)
+            {
+                Tick(now);
+                if (stopped || phase == GreedLastRunPhase.ChoiceSelecting) return;
+            }
+
             if (startCountdownActive)
             {
                 PauseAt(now, "시작 카운트 일시정지\n재개를 누르면 2-1-GO 뒤 이어집니다.");

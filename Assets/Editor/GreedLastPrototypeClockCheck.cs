@@ -14,6 +14,8 @@ namespace GreedLast.Editor
             VerifyCountdownOrigin();
             VerifyJudgementOrigin();
             VerifyFocusInputOrder();
+            VerifyPauseInputOrder();
+            VerifyPausePhaseBoundaries();
             VerifyCalibratedInputDeadlines();
             VerifyFrameInterruption();
             float[][] frames = { new[] { 1f / 30f }, new[] { 1f / 60f }, new[] { 1f / 120f }, new[] { 0.008f, 0.04f, 0.017f, 0.025f } };
@@ -193,6 +195,179 @@ namespace GreedLast.Editor
                 + $"{extensions} active successes, {misses} damage cases and {terminals} terminal distance comparisons "
                 + "across practice/normal/infinite and three frame gaps. "
                 + "Public synthetic core progression, neutral transient calibration only; no private gameplay clocks, persistence or hardware claim.");
+        }
+
+        [MenuItem("Greed Last/Run Pause Input Clock Check")]
+        public static void VerifyPauseInputOrder()
+        {
+            Require(CanRun(), "Pause clock checks require Edit mode.");
+            bool hadCalibration = PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey);
+            float calibration = PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f);
+            int cases = 0;
+            foreach (bool infinite in new[] { false, true })
+            foreach (bool background in new[] { false, true })
+            foreach (float gap in new[] { 1f / 30f, 0.249f, 0.49f })
+            {
+                var cores = new[] { new GreedLastRunCore(), new GreedLastRunCore() };
+                var runs = new GreedLastRunSnapshot[2];
+                float clock = Time.realtimeSinceStartup + 1f;
+                for (int i = 0; i < cores.Length; i++)
+                {
+                    int index = i;
+                    typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(cores[i], 0f);
+                    cores[i].SnapshotChanged += value => runs[index] = value;
+                    if (infinite) cores[i].EnterInfiniteRun();
+                    else { cores[i].Enter(); cores[i].HandleInput(GreedLastRunChannel.Center, clock); }
+                }
+                void TickBoth(float at)
+                { foreach (GreedLastRunCore core in cores) core.Tick(at); clock = at; }
+                for (int wait = 0; !(runs[0].FocusStateActive && runs[0].ActivePattern) && wait < 10000; wait++)
+                {
+                    Require(!runs[0].Stopped, "The pause fixture must reach a live focus state through ordinary play.");
+                    if (runs[0].ChoiceActive)
+                        foreach (GreedLastRunCore core in cores) core.HandleInput(GreedLastRunChannel.Right, clock);
+                    else if (runs[0].ActivePattern)
+                    {
+                        float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
+                        while (clock < target - 0.0001f) TickBoth(Mathf.Min(target, clock + 0.01f));
+                        for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                    }
+                    TickBoth(clock + 0.01f);
+                }
+                Require(runs[0].FocusStateActive && runs[0].ActivePattern && runs[1].ActivePattern,
+                    "Pause comparisons require an earned focus state and a fresh live trap.");
+                float at = clock + Mathf.Min(gap, runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds - 0.01f);
+                Require(at > clock, "The paired pause must precede the trap target.");
+                void Pause(int i)
+                { if (background) cores[i].PauseForAppBackground(at); else cores[i].TogglePause(at); }
+                GreedLastRunSnapshot beforePause = runs[0];
+                if (!background) cores[0].Tick(at);
+                Pause(0);
+                Pause(1);
+                cores[1].Tick(at);
+                if (background)
+                    Require(runs[0].Distance == beforePause.Distance
+                        && runs[0].FocusStateRemainingSeconds == beforePause.FocusStateRemainingSeconds
+                        && runs[0].FocusStateActiveSeconds == beforePause.FocusStateActiveSeconds,
+                        "Background loss must preserve the last presented movement/focus instead of charging unseen time.");
+                void Compare(string stage)
+                {
+                    GreedLastRunSnapshot a = runs[0], b = runs[1];
+                    Require(a.Paused == b.Paused && a.ActivePattern == b.ActivePattern
+                        && a.Pattern.PatternId == b.Pattern.PatternId && a.Health == b.Health && a.Score == b.Score
+                        && a.MissCount == b.MissCount && Mathf.Abs(a.Distance - b.Distance) < 0.001f
+                        && Mathf.Abs(a.FocusStateRemainingSeconds - b.FocusStateRemainingSeconds) < 0.001f
+                        && Mathf.Abs(a.FocusStateActiveSeconds - b.FocusStateActiveSeconds) < 0.001f
+                        && Mathf.Abs(a.ElapsedSeconds - b.ElapsedSeconds) < 0.001f,
+                        $"Pause must not depend on input/update order: {stage}, infinite={infinite}, background={background}, "
+                            + $"gap={gap}, distance={a.Distance}/{b.Distance}, focus={a.FocusStateRemainingSeconds}/{b.FocusStateRemainingSeconds}.");
+                }
+                Compare("pause");
+                GreedLastRunSnapshot frozen = runs[0];
+                TickBoth(at + 25f);
+                Compare("suspended");
+                Require(runs[0].Distance == frozen.Distance && runs[0].FocusStateRemainingSeconds == frozen.FocusStateRemainingSeconds,
+                    "Suspended wall time must not charge movement or focus.");
+                foreach (GreedLastRunCore core in cores) core.TogglePause(clock);
+                TickBoth(clock + 1.5f);
+                Compare("resume");
+                Require(!runs[0].Paused && runs[0].Distance == frozen.Distance,
+                    "The resume countdown must preserve earned movement and focus.");
+                float inputAt = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
+                while (clock < inputAt - 0.0001f) TickBoth(Mathf.Min(inputAt, clock + 0.01f));
+                for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, inputAt);
+                Compare("fresh exact input");
+                Require(runs[0].LastResult == GreedLastJudgementResult.Success && runs[0].MissCount == frozen.MissCount,
+                    "The same resumed trap must still accept a fresh exact input once.");
+                foreach (GreedLastRunCore core in cores) core.Exit();
+                cases++;
+            }
+            Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
+                && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(calibration),
+                "Pause clock checks must leave personal correction unchanged.");
+            Debug.Log($"Greed pause input order passed: {cases / 2} paired manual pauses and {cases / 2} last-presentation background controls, "
+                + "three frame gaps, earned focus, 25-second suspension, ordinary lead-in and same-trap exact recovery. "
+                + "Public synthetic core progression; neutral transient correction only, no personal writes or hardware claim.");
+        }
+
+        [MenuItem("Greed Last/Run Pause Phase Boundary Check")]
+        public static void VerifyPausePhaseBoundaries()
+        {
+            Require(CanRun(), "Pause boundary checks require Edit mode.");
+            int cases = 0;
+            foreach (int boundary in new[] { 0, 1, 2, 3 })
+            {
+                var cores = new[] { new GreedLastRunCore(), new GreedLastRunCore() };
+                var runs = new GreedLastRunSnapshot[2];
+                float clock = Time.realtimeSinceStartup + 1f;
+                int ticks = 0;
+                for (int i = 0; i < cores.Length; i++)
+                {
+                    int index = i;
+                    cores[i].SnapshotChanged += value => runs[index] = value;
+                    cores[i].RestartPractice(clock);
+                }
+                void TickBoth(float at)
+                {
+                    Require(++ticks < 4000, $"Pause fixture exceeded its bounded progression: boundary={boundary}, "
+                        + $"clock={clock}, next={at}, phase={runs[0].Phase}, active={runs[0].ActivePattern}, stopped={runs[0].Stopped}.");
+                    foreach (GreedLastRunCore core in cores) core.Tick(at);
+                    clock = at;
+                }
+                float at;
+                if (boundary == 0) at = clock + runs[0].StartCountdownRemainingSeconds + 0.01f;
+                else
+                {
+                    while (!runs[0].ActivePattern) TickBoth(clock + 0.01f);
+                    if (boundary == 3)
+                    {
+                        for (int trap = 0; trap < 2; trap++)
+                        {
+                            float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds - runs[0].InputTimingOffsetSeconds;
+                            while (clock < target - 0.0001f) TickBoth(Mathf.Min(target, clock + 0.01f));
+                            for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                            while (!runs[0].ActivePattern) TickBoth(clock + 0.01f);
+                        }
+                    }
+                    if (boundary == 1 || boundary == 3)
+                    {
+                        at = clock + Mathf.Max(runs[0].Pattern.HitSeconds,
+                            runs[0].Pattern.CoreSeconds + runs[0].Pattern.GoodWindowSeconds - runs[0].InputTimingOffsetSeconds) + 0.01f;
+                        float before = at - 0.1f;
+                        while (clock < before - 0.0001f) TickBoth(Mathf.Min(before, clock + 0.01f));
+                    }
+                    else
+                    {
+                        float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds - runs[0].InputTimingOffsetSeconds;
+                        for (int i = 0; i < cores.Length; i++)
+                            cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                        clock = target;
+                        at = clock + 0.9f;
+                        float before = at - 0.1f;
+                        while (clock < before - 0.0001f) TickBoth(Mathf.Min(before, clock + 0.01f));
+                    }
+                }
+                cores[0].Tick(at);
+                cores[0].TogglePause(at);
+                cores[1].TogglePause(at);
+                cores[1].Tick(at);
+                GreedLastRunSnapshot a = runs[0], b = runs[1];
+                Require(a.Paused == b.Paused && a.ActivePattern == b.ActivePattern && a.StartCountdownActive == b.StartCountdownActive
+                    && a.Pattern.PatternId == b.Pattern.PatternId && a.Phase == b.Phase && a.Stopped == b.Stopped
+                    && a.Score == b.Score && a.Health == b.Health && a.MissCount == b.MissCount
+                    && Mathf.Abs(a.Distance - b.Distance) < 0.001f && Mathf.Abs(a.ElapsedSeconds - b.ElapsedSeconds) < 0.001f,
+                    $"Pause boundary must not depend on command/update order: boundary={boundary}, active={a.ActivePattern}/{b.ActivePattern}, "
+                        + $"phase={a.Phase}/{b.Phase}, miss={a.MissCount}/{b.MissCount}, distance={a.Distance}/{b.Distance}.");
+                if (boundary == 0) Require(!a.StartCountdownActive && a.Paused, "A completed opening must not be paused as an unfinished countdown.");
+                if (boundary == 1) Require(a.MissCount == 1 && !a.ActivePattern, "An expired input must resolve once before a visible pause.");
+                if (boundary == 2) Require(a.ActivePattern && a.Paused, "A due next trap must start before the pause is captured.");
+                if (boundary == 3) Require(a.Stopped && !a.Paused && a.MissCount == 1,
+                    "A terminal timeout must keep its result, not open a pause or resurrect the final trap.");
+                foreach (GreedLastRunCore core in cores) core.Exit();
+                cases++;
+            }
+            Debug.Log($"Greed pause phase boundaries passed: {cases} paired opening/timeout/next-trap transitions. Public core time, no personal writes.");
         }
 
         [MenuItem("Greed Last/Run Frame Interruption Check")]
