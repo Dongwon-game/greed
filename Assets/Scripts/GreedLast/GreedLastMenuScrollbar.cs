@@ -9,10 +9,14 @@ namespace GreedLast
         private PointerEventData activePointer;
         private int canceledFrame = -1;
 
+        internal bool HasActiveGesture => activePointer != null;
+
         public override void OnPointerDown(PointerEventData pointer)
         {
+            GreedLastMenuScrollRect scroll = GetComponentInParent<GreedLastMenuScrollRect>();
             if (!IsActive() || !IsInteractable() || pointer.button != PointerEventData.InputButton.Left
                 || activePointer != null || (Application.isPlaying && canceledFrame == Time.frameCount)
+                || (scroll != null && scroll.verticalScrollbar == this && scroll.HasActiveGesture)
                 || !GreedLastPointerInput.IsFreshPress(pointer))
             {
                 pointer.eligibleForClick = false;

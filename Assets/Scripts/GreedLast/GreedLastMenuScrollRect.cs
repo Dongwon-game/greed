@@ -9,10 +9,13 @@ namespace GreedLast
         private PointerEventData activePointer;
         private int canceledFrame = -1;
 
+        internal bool HasActiveGesture => activePointer != null;
+
         public void OnPointerDown(PointerEventData pointer)
         {
             if (!IsActive() || pointer.button != PointerEventData.InputButton.Left || activePointer != null
                 || (Application.isPlaying && canceledFrame == Time.frameCount)
+                || (verticalScrollbar is GreedLastMenuScrollbar bar && bar.HasActiveGesture)
                 || !GreedLastPointerInput.IsFreshPress(pointer))
             {
                 pointer.eligibleForClick = false;

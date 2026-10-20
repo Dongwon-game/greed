@@ -610,6 +610,7 @@ namespace GreedLast.Editor
                     VerifyViewportDragCancellation(ui, scroll, input, module, screenPoint, dragPixels);
                     VerifyScrollbarInterruption(ui, scroll, input, module);
                     VerifyMixedScrollContacts(ui, scroll, input, module);
+                    VerifyCrossControlScrollContacts(scroll, input, module);
                     scroll.enabled = false;
                     try
                     {
@@ -825,6 +826,57 @@ namespace GreedLast.Editor
                     "A canceled mouse drag must not revive before or on release.");
             }
             input.MouseEnabled = false;
+        }
+
+        private static void VerifyCrossControlScrollContacts(ScrollRect scroll,
+            GreedLastPrototypeKeyboardInput input, StandaloneInputModule module)
+        {
+            Canvas canvas = scroll.GetComponentInParent<Canvas>();
+            Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            Vector2 Point(bool handle)
+            {
+                RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                return RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+            }
+            foreach (bool firstHandle in new[] { false, true })
+            foreach (bool alreadyDragging in new[] { false, true })
+            {
+                scroll.StopMovement();
+                scroll.verticalNormalizedPosition = scroll.verticalScrollbar.value = 0.5f;
+                Canvas.ForceUpdateCanvases();
+                scroll.Rebuild(CanvasUpdate.PostLayout);
+                input.MouseEnabled = false;
+                Vector2 first = Point(firstHandle);
+                Vector2 firstDelta = (firstHandle ? Vector2.down : Vector2.up)
+                    * Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                TouchFrame(input, module, TouchAt(101, first, TouchPhase.Began));
+                Vector2 held = first;
+                if (alreadyDragging)
+                {
+                    TouchFrame(input, module, TouchAt(101, first + firstDelta * 0.25f, TouchPhase.Moved));
+                    held = first + firstDelta * 0.5f;
+                    TouchFrame(input, module, TouchAt(101, held, TouchPhase.Moved));
+                }
+                Vector2 second = Point(!firstHandle);
+                Vector2 secondDelta = -firstDelta;
+                Vector2 frozen = scroll.content.anchoredPosition;
+                TouchFrame(input, module, TouchAt(101, held, TouchPhase.Stationary), TouchAt(102, second, TouchPhase.Began));
+                TouchFrame(input, module, TouchAt(101, held, TouchPhase.Stationary),
+                    TouchAt(102, second + secondDelta * 0.5f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(101, held, TouchPhase.Stationary),
+                    TouchAt(102, second + secondDelta, TouchPhase.Moved));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                    "A second finger on the other scroll control must not move the same content: firstHandle="
+                        + firstHandle + ", dragging=" + alreadyDragging);
+                TouchFrame(input, module, TouchAt(101, held, TouchPhase.Stationary),
+                    TouchAt(102, second + secondDelta, TouchPhase.Ended));
+                Vector2 destination = alreadyDragging ? first : first + firstDelta * 0.5f;
+                TouchFrame(input, module, TouchAt(101, first + firstDelta * 0.25f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(101, destination, TouchPhase.Moved));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) > 0.1f,
+                    "Releasing the rejected cross-control finger must leave the original scroll gesture working.");
+                TouchFrame(input, module, TouchAt(101, destination, TouchPhase.Canceled));
+            }
         }
 
         private static Touch TouchAt(int id, Vector2 point, TouchPhase phase)

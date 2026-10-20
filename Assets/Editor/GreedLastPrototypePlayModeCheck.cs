@@ -397,7 +397,7 @@ namespace GreedLast.Editor
                     && cycle.heldChoiceCannotAdvance && cycle.multiTouchFreshTapRecovered
                     && cycle.engineMenuScrollCases == 8 && cycle.engineMenuScrollbarCases == 8
                     && cycle.engineMenuFreshRecoveries == 16 && cycle.engineMenuOrphanCases == 6
-                    && cycle.engineMenuOverflowTransitions == 2);
+                    && cycle.engineMenuOverflowTransitions == 2 && cycle.engineMenuCrossControlCases == 4);
                 if (results.succeeded && results.fullLoopIncluded)
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
@@ -601,6 +601,7 @@ namespace GreedLast.Editor
             public int engineGoodFocusStateCases;
             public int engineMenuScrollCases, engineMenuScrollbarCases, engineMenuFreshRecoveries, engineMenuOrphanCases;
             public int engineMenuOverflowTransitions;
+            public int engineMenuCrossControlCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -3257,6 +3258,7 @@ namespace GreedLast.Editor
                         "Real engine menus must use the interruption-safe scroll controls.");
                     Canvas canvas = scroll.GetComponentInParent<Canvas>();
                     Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+                    yield return VerifyCrossControlMenuScroll(scroll, camera);
                     foreach (bool handle in new[] { false, true })
                     {
                         Vector2 Point()
@@ -3342,7 +3344,50 @@ namespace GreedLast.Editor
                     if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 }
                 Debug.Log("Greed engine menu scroll passed: eight body and eight scrollbar held/pending interruptions,"
-                    + " 16 fresh recoveries, six orphan phases and two short-to-long native callback transitions through actual EventSystem frames. Synthetic record text only; personal records/settings unchanged.");
+                    + " 16 fresh recoveries, six orphan phases, two short-to-long native callback transitions and four cross-control contacts through actual EventSystem frames. Synthetic record text only; personal records/settings unchanged.");
+            }
+
+            private IEnumerator VerifyCrossControlMenuScroll(ScrollRect scroll, Camera camera)
+            {
+                Vector2 Point(bool handle)
+                {
+                    RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                    return RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+                }
+                foreach (bool firstHandle in new[] { false, true })
+                foreach (bool alreadyDragging in new[] { false, true })
+                {
+                    scroll.StopMovement();
+                    scroll.verticalNormalizedPosition = 0.5f;
+                    yield return null;
+                    Vector2 first = Point(firstHandle);
+                    Vector2 delta = (firstHandle ? Vector2.down : Vector2.up)
+                        * Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                    yield return TouchFrame(TouchAt(63, first, TouchPhase.Began));
+                    Vector2 held = first;
+                    if (alreadyDragging)
+                    {
+                        yield return TouchFrame(TouchAt(63, first + delta * 0.25f, TouchPhase.Moved));
+                        held = first + delta * 0.5f;
+                        yield return TouchFrame(TouchAt(63, held, TouchPhase.Moved));
+                    }
+                    Vector2 second = Point(!firstHandle), frozen = scroll.content.anchoredPosition;
+                    yield return TouchFrame(TouchAt(63, held, TouchPhase.Stationary), TouchAt(64, second, TouchPhase.Began));
+                    yield return TouchFrame(TouchAt(63, held, TouchPhase.Stationary), TouchAt(64, second - delta * 0.5f, TouchPhase.Moved));
+                    yield return TouchFrame(TouchAt(63, held, TouchPhase.Stationary), TouchAt(64, second - delta, TouchPhase.Moved));
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                        "The first engine menu contact must own both linked controls: firstHandle=" + firstHandle
+                            + ", dragging=" + alreadyDragging);
+                    yield return TouchFrame(TouchAt(63, held, TouchPhase.Stationary), TouchAt(64, second - delta, TouchPhase.Ended));
+                    Vector2 destination = alreadyDragging ? first : first + delta * 0.5f;
+                    yield return TouchFrame(TouchAt(63, first + delta * 0.25f, TouchPhase.Moved));
+                    yield return TouchFrame(TouchAt(63, destination, TouchPhase.Moved));
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) > 0.1f,
+                        "Releasing a rejected cross-control contact must preserve the engine's original menu gesture.");
+                    yield return TouchFrame(TouchAt(63, destination, TouchPhase.Canceled));
+                    yield return TouchFrame();
+                    report.engineMenuCrossControlCases++;
+                }
             }
 
             private IEnumerator TouchFrame(params Touch[] touches)
