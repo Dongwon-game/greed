@@ -81,4 +81,4 @@
 
 ## GitHub 공개 범위
 
-2026-10-20 사용자는 공개 저장소 `Dongwon-game/greed`에 Unity 코드·이미지와 Greed 문서를 올리는 데 직접 동의했다. 첫 업로드는 Git의 `Connect to GitHub` 로그인 대기에서 취소됐고 원격 main은 `580c371` 그대로다. 공개 동의는 유효하며 사용자 인증 뒤 업로드를 재시도해야 한다. 원격 main과 로컬 HEAD 일치 확인 전에는 업로드 완료로 표시하지 않는다. Obsidian 전체 저장소는 별도이며 접근/공개 범위 미확인 상태로 업로드하지 않는다. 자세한 절차는 [확인 이력](GreedLast_Prototype_CheckHistory.md)을 따른다.
+2026-10-20 사용자는 공개 저장소 `Dongwon-game/greed`에 Unity 코드·이미지와 Greed 문서를 올리는 데 직접 동의했다. 사용자 로그인과 Git 인증 연결 뒤 대기 202커밋을 정상 push했으며, 16:10 KST 원격 main과 로컬 HEAD가 `0771229`로 일치함을 확인했다. 빌드·로그·개인 설정은 업로드하지 않았다. 이번 문서 정리는 게임 코드나 검증 Windows 실행본을 변경하지 않는다. Obsidian 전체 저장소는 별도이며 접근/공개 범위 미확인 상태로 업로드하지 않는다. 자세한 절차는 [확인 이력](GreedLast_Prototype_CheckHistory.md)을 따른다.
