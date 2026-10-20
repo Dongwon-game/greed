@@ -65,6 +65,8 @@ namespace GreedLast.Editor
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
                 "The engine lifecycle check requires an idle Edit-mode editor.");
+            Require(!SessionState.GetBool(Prefix + "ownsPracticePreference", false),
+                "A previous onboarding fixture still requires restoration. Do not replace its captured baseline.");
             RequireAsyncBatchLifetime();
             VerifyPreferenceCaptureCoverage();
             var scene = AssetDatabase.LoadAssetAtPath<SceneAsset>(BootScene);
@@ -76,6 +78,7 @@ namespace GreedLast.Editor
             SessionState.SetString(Prefix + "preferences", JsonUtility.ToJson(CapturePreferences()));
             SessionState.SetString(Prefix + "startedUtc", DateTime.UtcNow.ToString("O"));
             SessionState.SetString(Prefix + "error", string.Empty);
+            SessionState.SetString(Prefix + "practiceBackup", string.Empty);
             SessionState.SetInt(Prefix + "cycle", 0);
             SessionState.SetString(Prefix + "reports", JsonUtility.ToJson(new Results()));
             SessionState.SetBool(Prefix + "fullLoop", fullLoop);
@@ -128,6 +131,8 @@ namespace GreedLast.Editor
         public static void VerifyPreferenceCaptureCoverage()
         {
             VerifyRoutineCleanup();
+            VerifyFailurePublication();
+            GreedLastPrototypePracticePreferenceCheck.Run();
             Require(CapturePreferences().values.Exists(value => value.key == GreedLastRunCore.InputTimingOffsetPrefsKey),
                 "Personal preference comparisons must include the production input timing correction key.");
         }
@@ -179,18 +184,8 @@ namespace GreedLast.Editor
         {
             Preference practice = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"))
                 .values.Find(value => value.key == "GreedLast.Onboarding.PracticeCompleted");
-            Require(practice != null && (!practice.exists || practice.intValue == 0 || practice.intValue == 1),
-                "An engine check must not overwrite an unknown personal onboarding value.");
-            string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
-            Directory.CreateDirectory(directory);
-            string name = "practice-baseline-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff")
-                + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
-            using (var stream = new FileStream(Path.Combine(directory, name), FileMode.CreateNew, FileAccess.Write))
-            using (var writer = new StreamWriter(stream)) writer.Write(JsonUtility.ToJson(practice, true));
-            SessionState.SetString(Prefix + "practiceBackup", name);
-            SessionState.SetBool(Prefix + "ownsPracticePreference", true);
-            PlayerPrefs.SetInt(practice.key, 1);
-            PlayerPrefs.Save();
+            Require(practice != null, "Onboarding preparation requires its captured baseline.");
+            GreedLastPrototypePracticePreference.Prepare(new PracticePreferenceStore(), practice.exists, practice.intValue);
         }
 
         private static bool RestorePracticePreference(Preferences before)
@@ -198,11 +193,52 @@ namespace GreedLast.Editor
             if (!SessionState.GetBool(Prefix + "ownsPracticePreference", false)) return false;
             Preference practice = before.values.Find(value => value.key == "GreedLast.Onboarding.PracticeCompleted");
             Require(practice != null, "Owned onboarding restoration requires its captured baseline.");
-            if (practice.exists) PlayerPrefs.SetInt(practice.key, practice.intValue);
-            else PlayerPrefs.DeleteKey(practice.key);
-            PlayerPrefs.Save();
-            SessionState.SetBool(Prefix + "ownsPracticePreference", false);
-            return true;
+            return GreedLastPrototypePracticePreference.Restore(new PracticePreferenceStore(), practice.exists, practice.intValue);
+        }
+
+        private sealed class PracticePreferenceStore : GreedLastPrototypePracticePreference.IStore
+        {
+            private const string Key = "GreedLast.Onboarding.PracticeCompleted";
+            public bool Exists => PlayerPrefs.HasKey(Key);
+            public int Value { get => PlayerPrefs.GetInt(Key, int.MinValue); set => PlayerPrefs.SetInt(Key, value); }
+            public bool Owned
+            {
+                get => SessionState.GetBool(Prefix + "ownsPracticePreference", false);
+                set => SessionState.SetBool(Prefix + "ownsPracticePreference", value);
+            }
+            public void Delete() => PlayerPrefs.DeleteKey(Key);
+            public void Save() => PlayerPrefs.Save();
+            public void Backup(bool exists, int value)
+            {
+                string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
+                Directory.CreateDirectory(directory);
+                string name = "practice-baseline-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff")
+                    + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";
+                using (var stream = new FileStream(Path.Combine(directory, name), FileMode.CreateNew, FileAccess.Write))
+                using (var writer = new StreamWriter(stream))
+                    writer.Write(JsonUtility.ToJson(new Preference { key = Key, exists = exists, intValue = value }, true));
+                SessionState.SetString(Prefix + "practiceBackup", name);
+            }
+        }
+
+        private static string AppendFailure(string previous, string current)
+        {
+            if (string.IsNullOrEmpty(current)) return previous;
+            if (string.IsNullOrEmpty(previous)) return current;
+            return previous.Contains(current, StringComparison.Ordinal) ? previous : previous + "\n" + current;
+        }
+
+        private static void RecordFailure(string error)
+            => SessionState.SetString(Prefix + "error", AppendFailure(SessionState.GetString(Prefix + "error", string.Empty), error));
+
+        private static void VerifyFailurePublication()
+        {
+            string original = "Original watchdog failure", cleanup = "Nested cleanup failure", interrupted = "Interrupted cycle";
+            string result = AppendFailure(AppendFailure(original, cleanup), interrupted);
+            Require(result == original + "\n" + cleanup + "\n" + interrupted
+                && AppendFailure(result, cleanup) == result && AppendFailure(result, null) == result
+                && AppendFailure(null, original) == original,
+                "Interruption and cleanup messages must preserve the original cause without repeated watchdog noise.");
         }
 
         private static void BeginCycle()
@@ -264,7 +300,7 @@ namespace GreedLast.Editor
             if (!DateTime.TryParse(SessionState.GetString(Prefix + "deadline", string.Empty),
                 null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime deadline)
                 || DateTime.UtcNow < deadline) return;
-            SessionState.SetString(Prefix + "error", "Engine check exceeded its bounded cycle deadline.");
+            RecordFailure("Engine check exceeded its bounded cycle deadline.");
             if (EditorApplication.isPlaying) EditorApplication.ExitPlaymode();
             else if (!EditorApplication.isPlayingOrWillChangePlaymode) Finish();
         }
@@ -299,6 +335,7 @@ namespace GreedLast.Editor
             results.practicePreferenceValueBeforeCleanup = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", -1);
             try { results.practicePreferenceRestored = RestorePracticePreference(before); }
             catch (Exception restore) { results.error += " Onboarding fixture restoration failed: " + restore; }
+            results.practicePreferenceRestorationPending = SessionState.GetBool(Prefix + "ownsPracticePreference", false);
             results.personalPreferenceKeys = before.values.ConvertAll(value => value.key);
             Preference practiceBefore = before.values.Find(value => value.key == "GreedLast.Onboarding.PracticeCompleted");
             results.practicePreferenceExistedBefore = practiceBefore != null && practiceBefore.exists;
@@ -312,7 +349,8 @@ namespace GreedLast.Editor
             EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(
                 SessionState.GetString(Prefix + "previousScene", string.Empty));
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, false);
-            results.succeeded = string.IsNullOrEmpty(results.error) && results.cycles.Count == 2;
+            results.succeeded = string.IsNullOrEmpty(results.error) && !results.practicePreferenceRestorationPending
+                && results.cycles.Count == 2;
             if (results.succeeded && results.audioListenerOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.audioListenerOwnershipCases == 4
@@ -371,6 +409,7 @@ namespace GreedLast.Editor
                         && cycle.engineInfiniteQuitResultsPreserved == 2
                         && cycle.practiceCandidateHandoffs == 2 && cycle.resumeBufferInputCases == 2
                         && cycle.engineInputClockComparisons >= 12 && cycle.engineTerminalClockComparisons >= 1
+                        && cycle.enginePauseClockComparisons >= 8
                         && cycle.hiddenPresentationCases == 8 && cycle.removedCanvasBlockedCommands
                         && cycle.directInfinitePreparationCancelCases == 2
                         && cycle.heldRunResultCases == 6 && cycle.heldRunResultsPreservedData && cycle.heldRunResultFreshTapRecovered
@@ -469,6 +508,7 @@ namespace GreedLast.Editor
             public bool practicePreferenceExistedBefore, practicePreferenceExistsAfter;
             public int practicePreferenceValueBefore, practicePreferenceValueAfter;
             public bool practicePreferenceRestored;
+            public bool practicePreferenceRestorationPending;
             public int practicePreferenceValueBeforeCleanup;
             public string practicePreferenceBackup;
         }
@@ -487,6 +527,7 @@ namespace GreedLast.Editor
             public int practiceCandidateHandoffs;
             public int resumeBufferInputCases;
             public int engineInputClockComparisons, engineTerminalClockComparisons;
+            public int enginePauseClockComparisons;
             public int hiddenPresentationCases;
             public bool removedCanvasBlockedCommands;
             public int directInfinitePreparationCancelCases;
@@ -608,7 +649,7 @@ namespace GreedLast.Editor
                 lateCueAction = null;
                 if (action == null) return;
                 try { action(); }
-                catch (Exception error) { loggedError = error.ToString(); }
+                catch (Exception error) { loggedError = AppendFailure(loggedError, error.ToString()); }
             }
 
             private IEnumerator Guard(IEnumerator routine)
@@ -1342,6 +1383,11 @@ namespace GreedLast.Editor
                                 else { Call(app, method, value); Call(ui, method, value); }
                             }
                         }
+                        Require(run.Paused && run.ActivePattern == frozen.ActivePattern
+                            && run.Pattern.PatternId == frozen.Pattern.PatternId && run.Health == frozen.Health
+                            && run.Score == frozen.Score && run.MissCount == frozen.MissCount,
+                            "The first interruption must retain the trap and judgement while settling time up to its pause boundary.");
+                        frozen = run;
                         Require(run.Paused && !run.ResumeCountdownActive && source.mute && !source.isPlaying,
                             "Audio/focus/background ordering must cancel countdowns and keep background voices blocked.");
                         if (!interruptCountdown)
@@ -3946,6 +3992,24 @@ namespace GreedLast.Editor
                 report.releasedUiBootSafe = true;
             }
 
+            private void VerifyPauseClockPublication(GreedLastRunSnapshot snapshot)
+            {
+                if (!run.ActivePattern || run.Paused || run.CountdownActive || !snapshot.Paused
+                    || !snapshot.ActivePattern || snapshot.Pattern.PatternId != run.Pattern.PatternId) return;
+                float elapsed = snapshot.ElapsedSeconds - run.ElapsedSeconds;
+                Require(elapsed >= -0.001f && elapsed <= 0.501f,
+                    "Engine pauses must settle only the accepted interactive frame, or freeze a long gap at the previous frame.");
+                elapsed = Mathf.Max(0f, elapsed);
+                bool visiblePause = snapshot.JudgementText.StartsWith("일시정지 - ", StringComparison.Ordinal);
+                float advanced = visiblePause ? elapsed : 0f;
+                Require(snapshot.Health == run.Health && snapshot.Score == run.Score && snapshot.MissCount == run.MissCount
+                    && Mathf.Abs(snapshot.Distance - run.Distance - advanced * 4.2f) < 0.02f
+                    && Mathf.Abs(snapshot.FocusStateActiveSeconds - run.FocusStateActiveSeconds
+                        - Mathf.Min(advanced, run.FocusStateRemainingSeconds)) < 0.005f,
+                    "An engine pause publication must settle movement/focus once without damage or suspended wall time.");
+                report.enginePauseClockComparisons++;
+            }
+
             private void VerifyInputClockPublication(GreedLastRunSnapshot snapshot)
             {
                 if (!checkingFullLoopClock || !run.ActivePattern || run.Paused || run.CountdownActive
@@ -3977,6 +4041,7 @@ namespace GreedLast.Editor
                 core = Read<GreedLastRunCore>(app, "runCore");
                 core.SnapshotChanged += snapshot =>
                 {
+                    VerifyPauseClockPublication(snapshot);
                     VerifyInputClockPublication(snapshot);
                     if (run.ActivePattern && snapshot.LastJudgedPattern.PatternId == run.Pattern.PatternId
                         && snapshot.SuccessCount + snapshot.GoodCount + snapshot.MissCount
@@ -4180,7 +4245,7 @@ namespace GreedLast.Editor
                 "Engine pause/countdown must freeze health, score, distance and focus time.");
 
             private void CollectError(string message, string stack, LogType type)
-            { if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert) loggedError = message; }
+            { if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert) loggedError = AppendFailure(loggedError, message); }
 
             private void Complete(Exception error)
             {
@@ -4193,7 +4258,7 @@ namespace GreedLast.Editor
                 var results = JsonUtility.FromJson<Results>(SessionState.GetString(Prefix + "reports", "{}"));
                 results.cycles.Add(report);
                 SessionState.SetString(Prefix + "reports", JsonUtility.ToJson(results));
-                if (error != null) SessionState.SetString(Prefix + "error", error.ToString());
+                if (error != null) RecordFailure(error.ToString());
                 EditorApplication.ExitPlaymode();
             }
 
@@ -4202,9 +4267,9 @@ namespace GreedLast.Editor
                 Application.logMessageReceived -= CollectError;
                 Exception cleanup = DisposeRoutines(activeRoutines, null);
                 if (cleanup != null && SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
-                    SessionState.SetString(Prefix + "error", "Engine routine cleanup failed: " + cleanup);
+                    RecordFailure("Engine routine cleanup failed: " + cleanup);
                 if (!completed && SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
-                    SessionState.SetString(Prefix + "error", "The engine check was interrupted before its lifecycle cycle completed.");
+                    RecordFailure("The engine check was interrupted before its lifecycle cycle completed.");
             }
         }
 
