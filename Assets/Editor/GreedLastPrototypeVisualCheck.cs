@@ -1796,9 +1796,18 @@ namespace GreedLast.Editor
             GreedLastStateSnapshot board = default;
             machine.StateChanged += value => board = value;
             machine.SetInfiniteRecordBoard(backend.LoadLobby(), backend.BuildRecordBoardText(2), 2);
-            Add("92-score-ceiling-record-small", 960, 540, () => ui.Render(board));
-            Add("92-score-ceiling-record-tablet", 1024, 768, () => ui.Render(board));
-            Add("92-score-ceiling-record-wide", 2340, 1080, () => ui.Render(board), 96f);
+            GreedLastStateSnapshot recordBoard = board;
+            void ShowRecordBoard()
+            {
+                ui.Render(recordBoard);
+                Require(recordBoard.State == GreedLastScreenState.InfiniteRecordBoard
+                    && Read<Text>("titleText").text == recordBoard.Headline
+                    && Read<Text>("detailText").text.Contains(int.MaxValue.ToString(), StringComparison.Ordinal),
+                    "Deferred score-ceiling record captures must retain the board and its actual capped record, not a later save comparison.");
+            }
+            Add("92-score-ceiling-record-small", 960, 540, ShowRecordBoard);
+            Add("92-score-ceiling-record-tablet", 1024, 768, ShowRecordBoard);
+            Add("92-score-ceiling-record-wide", 2340, 1080, ShowRecordBoard, 96f);
 
             var high = new GreedLastRunRecord(true, int.MaxValue, 3, 0, 1, int.MaxValue, 15, 0, 0,
                 90f, "quality-boundary", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
