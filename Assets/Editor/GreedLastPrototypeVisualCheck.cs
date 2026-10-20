@@ -54,7 +54,7 @@ namespace GreedLast.Editor
             public bool liveFocusPreviewOnly;
             public bool resolvedBonusPreviewOnly;
             public bool goodFocusPreviewOnly;
-            public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly;
+            public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly, menuScrollInputOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
             public int pointerLoopClicks;
@@ -197,10 +197,15 @@ namespace GreedLast.Editor
             Begin(false, lowHealthInputOnly: true);
         }
 
+        public static void RunMenuScrollInput()
+        {
+            Begin(false, menuScrollInputOnly: true);
+        }
+
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
             bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false,
             bool rewardPreviewOnly = false, bool recoveryPreviewOnly = false, bool choicePreviewOnly = false, bool liveFocusPreviewOnly = false,
-            bool resolvedBonusPreviewOnly = false, bool goodFocusPreviewOnly = false)
+            bool resolvedBonusPreviewOnly = false, bool goodFocusPreviewOnly = false, bool menuScrollInputOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -232,6 +237,7 @@ namespace GreedLast.Editor
                 goodFocusPreviewOnly = goodFocusPreviewOnly,
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
+                menuScrollInputOnly = menuScrollInputOnly,
             };
             try
             {
@@ -427,6 +433,18 @@ namespace GreedLast.Editor
                             } });
                     }
                     Require(Frames.Count == 16, "Low-health input capture must cover four views at three feedback phases and a forced overlap each.");
+                }
+                if (menuScrollInputOnly)
+                {
+                    Frames.Clear();
+                    string detail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n");
+                    void ShowMenu() => ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                        GreedLastScreenState.InfiniteRecordBoard, "기록", detail, 0));
+                    Add("107-menu-scroll-desktop", 1280, 720, ShowMenu);
+                    Add("107-menu-scroll-small", 960, 540, ShowMenu);
+                    Add("107-menu-scroll-tablet", 1024, 768, ShowMenu);
+                    Add("107-menu-scroll-notch-left", 2340, 1080, ShowMenu, safeInsets: new Vector4(120f, 36f, 24f, 18f));
+                    Add("107-menu-scroll-notch-right", 2340, 1080, ShowMenu, safeInsets: new Vector4(24f, 36f, 120f, 18f));
                 }
                 BeginNextFrame();
                 EditorApplication.update += Tick;
@@ -3233,7 +3251,7 @@ namespace GreedLast.Editor
             report.completedUtc = DateTime.UtcNow.ToString("O");
             report.succeeded = succeeded;
             report.error = error;
-            report.archivedReport = "report-" + (report.choicePreviewOnly && report.liveFocusPreviewOnly ? "reward-guidance-" : report.goodFocusPreviewOnly ? "good-focus-" : report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
+            report.archivedReport = "report-" + (report.menuScrollInputOnly ? "menu-scroll-input-" : report.choicePreviewOnly && report.liveFocusPreviewOnly ? "reward-guidance-" : report.goodFocusPreviewOnly ? "good-focus-" : report.resolvedBonusPreviewOnly ? "resolved-bonus-" : report.liveFocusPreviewOnly ? "live-focus-" : report.choicePreviewOnly ? "choice-reward-preview-" : report.recoveryPreviewOnly ? "recovery-preview-" : report.rewardPreviewOnly ? "live-reward-preview-" : report.preparationPreviewOnly ? "preparation-preview-" : report.lowHealthInputOnly ? "low-health-input-" : report.textClippingRejectionOnly ? "text-rejection-" : report.progressBoundaryOnly ? "progress-boundary-"
                 : report.scoreBoundaryOnly ? "score-boundary-" : report.pointerLoopIncluded ? "full-" : "layout-")
                 + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture)
                 + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".json";

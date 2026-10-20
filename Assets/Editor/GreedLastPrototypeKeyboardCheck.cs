@@ -9,6 +9,13 @@ namespace GreedLast.Editor
 {
     internal static class GreedLastPrototypeKeyboardCheck
     {
+        [MenuItem("Greed Last/Run Menu Scroll Interruption Check")]
+        public static void VerifyMenuScrollInterruption()
+        {
+            // Reuse the rendered preview fixture; a headless overlay has no reliable raycast geometry.
+            GreedLastPrototypeVisualCheck.RunMenuScrollInput();
+        }
+
         public static void VerifyShortcutModifiers()
         {
             MethodInfo policy = typeof(GreedLastApp).GetMethod("ShouldAllowPrototypeKeyboardInput", BindingFlags.Static | BindingFlags.NonPublic);
@@ -594,6 +601,9 @@ namespace GreedLast.Editor
                             scroll.StopMovement();
                         }
                     }
+                    VerifyViewportDragCancellation(ui, scroll, input, module, screenPoint, dragPixels);
+                    VerifyScrollbarInterruption(ui, scroll, input, module);
+                    VerifyMixedScrollContacts(ui, scroll, input, module);
                     scroll.enabled = false;
                     try
                     {
@@ -612,6 +622,188 @@ namespace GreedLast.Editor
                 scroll.StopMovement();
                 scroll.content.anchoredPosition = originalPosition;
             }
+        }
+
+        private static void VerifyViewportDragCancellation(GreedLastRuntimeUi ui, ScrollRect scroll,
+            GreedLastPrototypeKeyboardInput input, StandaloneInputModule module, Vector2 point, float dragPixels)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Rect area = (Rect)typeof(GreedLastRuntimeUi).GetField("lastSafeArea", flags).GetValue(ui);
+            int width = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenWidth", flags).GetValue(ui);
+            int height = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenHeight", flags).GetValue(ui);
+            MethodInfo apply = typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", flags);
+            void RestoreArea() => apply.Invoke(ui, new object[] { area, width, height, true });
+            try
+            {
+                foreach (bool alreadyDragging in new[] { true, false })
+                {
+                    scroll.StopMovement();
+                    scroll.verticalNormalizedPosition = 1f;
+                    input.MouseEnabled = false;
+                    TouchFrame(input, module, TouchAt(94, point, TouchPhase.Began));
+                    if (alreadyDragging)
+                    {
+                        TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels * 0.25f, TouchPhase.Moved));
+                        TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels * 0.5f, TouchPhase.Moved));
+                        Require(scroll.content.anchoredPosition.y > 1f, "Viewport interruption must include an established drag.");
+                    }
+                    apply.Invoke(ui, new object[] { new Rect(area.x + 2f, area.y, area.width - 2f, area.height), width, height, false });
+                    RestoreArea();
+                    Vector2 frozen = scroll.content.anchoredPosition;
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels * 0.5f, TouchPhase.Stationary));
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels * 0.75f, TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels, TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels, TouchPhase.Ended));
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                        "A viewport change must cancel the old scroll gesture, including a press before the drag threshold: dragging=" + alreadyDragging);
+                    TouchFrame(input, module, TouchAt(94, point, TouchPhase.Began));
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels * 0.5f, TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels, TouchPhase.Moved));
+                    Require(scroll.content.anchoredPosition.y > frozen.y + 1f,
+                        "A fresh gesture after viewport cancellation must still scroll the same text.");
+                    TouchFrame(input, module, TouchAt(94, point + Vector2.up * dragPixels, TouchPhase.Canceled));
+                }
+            }
+            finally
+            {
+                RestoreArea();
+                scroll.StopMovement();
+            }
+        }
+
+        private static void VerifyScrollbarInterruption(GreedLastRuntimeUi ui, ScrollRect scroll,
+            GreedLastPrototypeKeyboardInput input, StandaloneInputModule module)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Scrollbar bar = scroll.verticalScrollbar;
+            Canvas canvas = scroll.GetComponentInParent<Canvas>();
+            Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            Vector2 HandlePoint() => RectTransformUtility.WorldToScreenPoint(camera,
+                bar.handleRect.TransformPoint(bar.handleRect.rect.center));
+            Rect area = (Rect)typeof(GreedLastRuntimeUi).GetField("lastSafeArea", flags).GetValue(ui);
+            int width = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenWidth", flags).GetValue(ui);
+            int height = (int)typeof(GreedLastRuntimeUi).GetField("lastSafeAreaScreenHeight", flags).GetValue(ui);
+            MethodInfo apply = typeof(GreedLastRuntimeUi).GetMethod("ApplySafeAreaSample", flags);
+            foreach (string interruption in new[] { "focus", "app", "viewport", "command" })
+            foreach (bool alreadyDragging in new[] { true, false })
+            {
+                scroll.StopMovement();
+                scroll.verticalNormalizedPosition = bar.value = 0.5f;
+                Canvas.ForceUpdateCanvases();
+                Vector2 point = HandlePoint();
+                input.MouseEnabled = false;
+                TouchFrame(input, module, TouchAt(95, point, TouchPhase.Began));
+                float before = scroll.verticalNormalizedPosition;
+                if (alreadyDragging)
+                {
+                    TouchFrame(input, module, TouchAt(95, point + Vector2.down * 12f, TouchPhase.Moved));
+                    TouchFrame(input, module, TouchAt(95, point + Vector2.down * 24f, TouchPhase.Moved));
+                    Require(Mathf.Abs(scroll.verticalNormalizedPosition - before) > 0.01f,
+                        "Scrollbar interruption needs a real module drag of the handle.");
+                }
+                if (interruption == "viewport")
+                {
+                    apply.Invoke(ui, new object[] { new Rect(area.x + 2f, area.y, area.width - 2f, area.height), width, height, false });
+                    apply.Invoke(ui, new object[] { area, width, height, true });
+                }
+                else if (interruption == "command")
+                    typeof(GreedLastRuntimeUi).GetMethod("CancelPendingUiInput", flags).Invoke(ui, null);
+                else
+                {
+                    MethodInfo signal = typeof(GreedLastRuntimeUi).GetMethod(
+                        interruption == "focus" ? "OnApplicationFocus" : "SetAppInputAvailable", flags);
+                    signal.Invoke(ui, new object[] { false });
+                    signal.Invoke(ui, new object[] { true });
+                }
+                Vector2 frozen = scroll.content.anchoredPosition;
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 36f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 48f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 48f, TouchPhase.Ended));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                    "An interrupted scrollbar must reject its old gesture: " + interruption + ", dragging=" + alreadyDragging);
+                Canvas.ForceUpdateCanvases();
+                point = HandlePoint();
+                before = scroll.verticalNormalizedPosition;
+                TouchFrame(input, module, TouchAt(95, point, TouchPhase.Began));
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 12f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 24f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(95, point + Vector2.down * 24f, TouchPhase.Canceled));
+                Require(Mathf.Abs(scroll.verticalNormalizedPosition - before) > 0.01f,
+                    "A fresh scrollbar press after interruption must recover: " + interruption);
+            }
+        }
+
+        private static void VerifyMixedScrollContacts(GreedLastRuntimeUi ui, ScrollRect scroll,
+            GreedLastPrototypeKeyboardInput input, StandaloneInputModule module)
+        {
+            Canvas canvas = scroll.GetComponentInParent<Canvas>();
+            Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            foreach (bool handle in new[] { false, true })
+            {
+                Vector2 Point()
+                {
+                    RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                    return RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+                }
+                Vector2 delta = (handle ? Vector2.down : Vector2.up)
+                    * Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                scroll.StopMovement();
+                scroll.verticalNormalizedPosition = scroll.verticalScrollbar.value = 0.5f;
+                Canvas.ForceUpdateCanvases();
+                Vector2 point = Point();
+                input.MouseEnabled = false;
+                TouchFrame(input, module, TouchAt(96, point, TouchPhase.Began));
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.25f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.5f, TouchPhase.Moved));
+                Vector2 frozen = scroll.content.anchoredPosition;
+                Vector2 other = Point();
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.5f, TouchPhase.Stationary), TouchAt(97, other, TouchPhase.Began));
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.5f, TouchPhase.Stationary), TouchAt(97, other - delta, TouchPhase.Moved));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                    "A second finger must not take over an established menu gesture: handle=" + handle);
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.75f, TouchPhase.Moved), TouchAt(97, other - delta, TouchPhase.Stationary));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) > 1f,
+                    "Rejecting a second finger must leave the first gesture working.");
+                typeof(GreedLastRuntimeUi).GetMethod("CancelPendingUiInput", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.75f, TouchPhase.Stationary), TouchAt(97, other - delta, TouchPhase.Ended));
+                Canvas.ForceUpdateCanvases();
+                other = Point();
+                frozen = scroll.content.anchoredPosition;
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.75f, TouchPhase.Stationary), TouchAt(98, other, TouchPhase.Began));
+                TouchFrame(input, module, TouchAt(96, point + delta * 0.75f, TouchPhase.Ended), TouchAt(98, other + delta * 0.25f, TouchPhase.Moved));
+                TouchFrame(input, module, TouchAt(98, other + delta * 0.5f, TouchPhase.Moved));
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) > 1f,
+                    "Releasing a canceled old finger must not end a newer menu gesture.");
+                TouchFrame(input, module, TouchAt(98, other + delta * 0.5f, TouchPhase.Canceled));
+                input.Touches = Array.Empty<Touch>();
+                input.MouseEnabled = true;
+                scroll.StopMovement();
+                scroll.verticalNormalizedPosition = scroll.verticalScrollbar.value = 0.5f;
+                Canvas.ForceUpdateCanvases();
+                frozen = scroll.content.anchoredPosition;
+                point = Point();
+                input.MousePosition = point;
+                input.MouseDown = input.MouseHeld = true;
+                module.Process();
+                input.MouseDown = false;
+                input.MousePosition = point + delta * 0.5f;
+                module.Process();
+                input.MousePosition = point + delta;
+                module.Process();
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) > 1f,
+                    "A genuine mouse drag must still move the menu: handle=" + handle);
+                typeof(GreedLastRuntimeUi).GetMethod("CancelPendingUiInput", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
+                frozen = scroll.content.anchoredPosition;
+                input.MousePosition = point + delta * 1.25f;
+                module.Process();
+                input.MouseHeld = false;
+                input.MouseUp = true;
+                module.Process();
+                input.MouseUp = false;
+                Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                    "A canceled mouse drag must not revive before or on release.");
+            }
+            input.MouseEnabled = false;
         }
 
         private static Touch TouchAt(int id, Vector2 point, TouchPhase phase)

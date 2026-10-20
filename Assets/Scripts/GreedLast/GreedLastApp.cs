@@ -17325,7 +17325,7 @@ namespace GreedLast
         private void CreateMenuDetailScroll(Transform parent)
         {
             GameObject scrollObject = CreateRect("MenuDetailScroll", parent, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            menuDetailScroll = scrollObject.AddComponent<ScrollRect>();
+            menuDetailScroll = scrollObject.AddComponent<GreedLastMenuScrollRect>();
             menuDetailScroll.horizontal = false;
             menuDetailScroll.movementType = ScrollRect.MovementType.Clamped;
             menuDetailScroll.scrollSensitivity = 70f;
@@ -17340,7 +17340,7 @@ namespace GreedLast
             GameObject handle = CreateRect("Handle", track.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             Image handleImage = handle.AddComponent<Image>();
             handleImage.color = new Color32(171, 203, 195, 240);
-            Scrollbar scrollbar = track.AddComponent<Scrollbar>();
+            Scrollbar scrollbar = track.AddComponent<GreedLastMenuScrollbar>();
             scrollbar.handleRect = handle.GetComponent<RectTransform>();
             scrollbar.targetGraphic = handleImage;
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
@@ -28343,6 +28343,9 @@ namespace GreedLast
         internal void CancelPendingUiInput()
         {
             ClearLanePointerHolds();
+            if (menuDetailScroll is GreedLastMenuScrollRect scroll) scroll.CancelPendingGestures();
+            if (menuDetailScroll != null && menuDetailScroll.verticalScrollbar is GreedLastMenuScrollbar bar)
+                bar.CancelPendingGestures();
             if (rootPanel == null) return;
             foreach (GreedLastCommandButton button in rootPanel.GetComponentsInChildren<GreedLastCommandButton>(true))
                 button.CancelPendingPresses();

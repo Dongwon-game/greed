@@ -430,6 +430,8 @@ namespace GreedLast.Editor
                         && cycle.engineResolvedBonusCases > 0 && cycle.engineResolvedBonusThreatBoundaries > 0
                         && cycle.engineGoodFocusFeedbackCases > 0
                         && cycle.engineGoodFocusStateCases == 3
+                        && cycle.engineMenuScrollCases == 8 && cycle.engineMenuScrollbarCases == 8
+                        && cycle.engineMenuFreshRecoveries == 16 && cycle.engineMenuOrphanCases == 6
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -596,6 +598,7 @@ namespace GreedLast.Editor
             public int engineGoodFocusFeedbackCases;
             public int engineRecoveredDistanceCases;
             public int engineGoodFocusStateCases;
+            public int engineMenuScrollCases, engineMenuScrollbarCases, engineMenuFreshRecoveries, engineMenuOrphanCases;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -747,6 +750,7 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
+                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyMenuScrollGestures();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyPracticeCandidateHandoff();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyResumeBufferInputs();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyHiddenPresentation();
@@ -3215,6 +3219,111 @@ namespace GreedLast.Editor
                         "The real engine course must reach its calibrated input target before timing out.");
                     yield return null;
                 }
+            }
+
+            private IEnumerator VerifyMenuScrollGestures()
+            {
+                GreedLastMockBackend backend = Read<GreedLastMockBackend>(app, "backend");
+                bool playerControls = ui.UsePlayerRunControls;
+                Rect area = Read<Rect>(ui, "lastSafeArea");
+                int width = Read<int>(ui, "lastSafeAreaScreenWidth"), height = Read<int>(ui, "lastSafeAreaScreenHeight");
+                string detail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n");
+                try
+                {
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                        GreedLastScreenState.InfiniteRecordBoard, "기록", detail, 0));
+                    yield return null;
+                    ScrollRect scroll = Read<ScrollRect>(ui, "menuDetailScroll");
+                    Require(scroll is GreedLastMenuScrollRect && scroll.verticalScrollbar is GreedLastMenuScrollbar,
+                        "Real engine menus must use the interruption-safe scroll controls.");
+                    Canvas canvas = scroll.GetComponentInParent<Canvas>();
+                    Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+                    foreach (bool handle in new[] { false, true })
+                    {
+                        Vector2 Point()
+                        {
+                            RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                            return RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+                        }
+                        float dragPixels = Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                        Vector2 delta = (handle ? Vector2.down : Vector2.up) * dragPixels;
+                        foreach (string interruption in new[] { "focus", "app", "viewport", "command" })
+                        foreach (bool alreadyDragging in new[] { true, false })
+                        {
+                            scroll.StopMovement();
+                            scroll.verticalNormalizedPosition = 0.5f;
+                            yield return null;
+                            Vector2 point = Point();
+                            yield return TouchFrame(TouchAt(61, point, TouchPhase.Began));
+                            Vector2 before = scroll.content.anchoredPosition;
+                            if (alreadyDragging)
+                            {
+                                yield return TouchFrame(TouchAt(61, point + delta * 0.25f, TouchPhase.Moved));
+                                yield return TouchFrame(TouchAt(61, point + delta * 0.5f, TouchPhase.Moved));
+                                Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                                    "The engine scroll fixture must establish a genuine drag before interruption: handle="
+                                        + handle + ", reason=" + interruption + ", threshold=" + EventSystem.current.pixelDragThreshold);
+                            }
+                            if (interruption == "viewport")
+                            {
+                                Call(ui, "ApplySafeAreaSample", new Rect(area.x + 2f, area.y, area.width - 2f, area.height), width, height, false);
+                                Call(ui, "ApplySafeAreaSample", area, width, height, true);
+                            }
+                            else if (interruption == "command") Call(ui, "CancelPendingUiInput");
+                            else
+                            {
+                                string signal = interruption == "focus" ? "OnApplicationFocus" : "SetAppInputAvailable";
+                                Call(ui, signal, false);
+                                yield return null;
+                                Call(ui, signal, true);
+                            }
+                            Vector2 frozen = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(61, point + delta * 0.75f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(61, point + delta, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(61, point + delta, TouchPhase.Ended));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "Engine menu interruption must cancel old movement: handle=" + handle + ", reason=" + interruption);
+                            yield return TouchFrame();
+                            point = Point();
+                            before = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(61, point, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(61, point + delta * 0.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(61, point + delta, TouchPhase.Moved));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                                "A new engine touch must restore scrolling after every interruption.");
+                            yield return TouchFrame(TouchAt(61, point + delta, TouchPhase.Canceled));
+                            yield return TouchFrame();
+                            if (handle) report.engineMenuScrollbarCases++; else report.engineMenuScrollCases++;
+                            report.engineMenuFreshRecoveries++;
+                        }
+                        foreach (TouchPhase orphan in new[] { TouchPhase.Stationary, TouchPhase.Moved, TouchPhase.Ended })
+                        {
+                            scroll.StopMovement();
+                            scroll.verticalNormalizedPosition = 0.5f;
+                            yield return null;
+                            Vector2 point = Point(), frozen = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(62, point, orphan));
+                            yield return TouchFrame(TouchAt(62, point + delta * 0.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(62, point + delta, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(62, point + delta, TouchPhase.Ended));
+                            yield return TouchFrame();
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "An orphan touch first seen without Began must never page or drag an engine menu: " + orphan);
+                            report.engineMenuOrphanCases++;
+                        }
+                    }
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    Call(ui, "OnApplicationFocus", true);
+                    Call(ui, "SetAppInputAvailable", true);
+                    Call(ui, "ApplySafeAreaSample", area, width, height, true);
+                    state.SetLobbyReady(backend.LoadLobby());
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                }
+                Debug.Log("Greed engine menu scroll passed: eight body and eight scrollbar held/pending interruptions,"
+                    + " 16 fresh recoveries and six orphan phases through actual EventSystem frames. Synthetic long record text only; personal records/settings unchanged.");
             }
 
             private IEnumerator TouchFrame(params Touch[] touches)

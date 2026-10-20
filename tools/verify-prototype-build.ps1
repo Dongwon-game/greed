@@ -340,11 +340,15 @@ try {
                 'System.Boolean GreedLast.GreedLastPointerInput::IsFreshPress(UnityEngine.EventSystems.PointerEventData)'
         }).Count -gt 0
     })
-    if ($freshTouchCallers.Count -ne 2 -or @($freshTouchCallers | Where-Object {
+    if ($freshTouchCallers.Count -ne 4 -or @($freshTouchCallers | Where-Object {
         $_.DeclaringType.FullName -eq 'GreedLast.GreedLastCommandButton' -and $_.Name -eq 'OnPointerDown'
     }).Count -ne 1 -or @($freshTouchCallers | Where-Object {
         $_.DeclaringType.FullName.StartsWith('GreedLast.GreedLastRuntimeUi/') -and $_.Name -eq '<AddLanePointerDown>b__0'
-    }).Count -ne 1) { throw 'Release fresh touch command/lane callers changed.' }
+    }).Count -ne 1 -or @($freshTouchCallers | Where-Object {
+        $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastMenuScrollRect' -and $_.Name -ceq 'OnPointerDown'
+    }).Count -ne 1 -or @($freshTouchCallers | Where-Object {
+        $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastMenuScrollbar' -and $_.Name -ceq 'OnPointerDown'
+    }).Count -ne 1) { throw 'Release fresh touch command/lane/menu callers changed.' }
     foreach ($method in $freshTouchCallers) { Assert-FreshTouchGate $method }
     $appMethods = @($types.Methods | Where-Object { $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastApp' })
     $screenPolicies = @($appMethods | Where-Object { $_.Name -ceq 'get_HasUnpresentedScreenTransition' })
