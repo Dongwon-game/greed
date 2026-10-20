@@ -441,10 +441,14 @@ namespace GreedLast.Editor
                         "The gift and relic lane presses must both resolve before start confirmation.");
                     Require(backend.LoadLobby().SaveSlotLabels[2] == before,
                         "Gift and relic preparation callbacks must not consume a use before start confirmation.");
-                    Click(ui, "nextPatternButton");
+                    // Graphics and interrupted-pointer probes can outlast this short guard; verify its callback before them.
+                    float guardRemaining = Read<float>(app, "infinitePreparationInputBlockUntil") - Time.realtimeSinceStartup;
+                    Require(guardRemaining > 0f,
+                        "The immediate preparation probe requires the real published guard: remaining=" + guardRemaining);
+                    Method(app, "RequestNextRunPattern").Invoke(app, null);
                     Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady
                         && backend.LoadLobby().SaveSlotLabels[2] == before,
-                        "The relic selection must not spill into start confirmation or consume a use.");
+                        "The immediate relic callback must not spill into start confirmation or consume a use: guard=" + guardRemaining);
                     FinishPreparationTransition(app);
                     if (use == 0) VerifyPreparationReselection(app, ui, backend, before);
                     VerifyHeldManagementViewSwitch(app, ui, backend, state, "nextPatternButton");
