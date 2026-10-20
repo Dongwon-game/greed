@@ -135,6 +135,11 @@ namespace GreedLast.Editor
                     cores[1].Tick(at);
                     clock = at;
                 }
+                // Infinite entry reads real time separately; compare only after a common countdown finish.
+                TickBoth(Mathf.Max(clock, Time.realtimeSinceStartup) + 2f);
+                Require(!runs[0].CountdownActive && !runs[1].CountdownActive
+                    && !runs[0].ActivePattern && !runs[1].ActivePattern,
+                    "Paired focus fixtures must share a published countdown finish before timed comparisons.");
                 for (int step = 0; step < 24 && !runs[0].Stopped; step++)
                 {
                     for (int wait = 0; !runs[0].ActivePattern && wait < 1000; wait++)
@@ -148,7 +153,10 @@ namespace GreedLast.Editor
                     }
                     Require(runs[0].ActivePattern && runs[1].ActivePattern
                         && runs[0].Pattern.PatternId == runs[1].Pattern.PatternId,
-                        "Focus order fixtures must reach the same trap through ordinary public progression.");
+                        $"Focus order fixtures must reach the same trap through ordinary public progression: mode={mode},"
+                            + $" step={step}, gap={gap}, clock={clock}, active={runs[0].ActivePattern}/{runs[1].ActivePattern},"
+                            + $" stopped={runs[0].Stopped}/{runs[1].Stopped}, phase={runs[0].Phase}/{runs[1].Phase},"
+                            + $" pattern={runs[0].Pattern.PatternId}/{runs[1].Pattern.PatternId}.");
                     float at = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
                     if (step == 3) at += (runs[0].Pattern.SuccessWindowSeconds + runs[0].Pattern.GoodWindowSeconds) * 0.5f;
                     float before = at - gap;
@@ -223,6 +231,10 @@ namespace GreedLast.Editor
                 }
                 void TickBoth(float at)
                 { foreach (GreedLastRunCore core in cores) core.Tick(at); clock = at; }
+                TickBoth(Mathf.Max(clock, Time.realtimeSinceStartup) + 2f);
+                Require(!runs[0].CountdownActive && !runs[1].CountdownActive
+                    && !runs[0].ActivePattern && !runs[1].ActivePattern,
+                    "Paired pause fixtures must share a published countdown finish before timed comparisons.");
                 for (int wait = 0; !(runs[0].FocusStateActive && runs[0].ActivePattern) && wait < 10000; wait++)
                 {
                     Require(!runs[0].Stopped, "The pause fixture must reach a live focus state through ordinary play.");
