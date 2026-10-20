@@ -2584,10 +2584,12 @@ namespace GreedLast.Editor
             Require(hits.Count > 0 && hits[0].gameObject.transform.IsChildOf(scroll.transform),
                 "Comparison dragging must start on the scroll viewport, not an underlying slot.");
             pointer.pointerPressRaycast = hits[0];
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.pointerDownHandler);
             scroll.OnInitializePotentialDrag(pointer);
             scroll.OnBeginDrag(pointer);
             pointer.position += Vector2.up * 100f;
             scroll.OnDrag(pointer);
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.pointerUpHandler);
             scroll.OnEndDrag(pointer);
             scroll.StopMovement();
             Require(scroll.content.anchoredPosition.y > 1f,

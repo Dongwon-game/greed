@@ -17416,6 +17416,8 @@ namespace GreedLast
             }
 
             // Keep long comparison data readable in its own scrolling area, separate from selectable slots.
+            // Native OnEnable binds the scrollbar only when its scroll axis is already enabled.
+            menuDetailScroll.vertical = true;
             menuDetailScroll.gameObject.SetActive(true);
             SetAnchored(menuDetailScroll.GetComponent<RectTransform>(), 0.5f, choices || lobbyNotice ? 0.62f : 0.55f,
                 1800f, choices || lobbyNotice ? 440f : preparing ? 720f : 850f);

@@ -394,7 +394,10 @@ namespace GreedLast.Editor
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.multiTouchPatternCases == 6
                     && cycle.multiTouchChoiceCases == 2 && cycle.multiTouchFirstInputOnly
-                    && cycle.heldChoiceCannotAdvance && cycle.multiTouchFreshTapRecovered);
+                    && cycle.heldChoiceCannotAdvance && cycle.multiTouchFreshTapRecovered
+                    && cycle.engineMenuScrollCases == 8 && cycle.engineMenuScrollbarCases == 8
+                    && cycle.engineMenuFreshRecoveries == 16 && cycle.engineMenuOrphanCases == 6
+                    && cycle.engineMenuOverflowTransitions == 2);
                 if (results.succeeded && results.fullLoopIncluded)
                     results.succeeded = results.cycles.TrueForAll(cycle => cycle.consecutiveMultiTouchChoiceCases == 4
                         && cycle.multiTouchPreparationCases == 9 && cycle.multiTouchPreparationPreservedUses
@@ -430,8 +433,6 @@ namespace GreedLast.Editor
                         && cycle.engineResolvedBonusCases > 0 && cycle.engineResolvedBonusThreatBoundaries > 0
                         && cycle.engineGoodFocusFeedbackCases > 0
                         && cycle.engineGoodFocusStateCases == 3
-                        && cycle.engineMenuScrollCases == 8 && cycle.engineMenuScrollbarCases == 8
-                        && cycle.engineMenuFreshRecoveries == 16 && cycle.engineMenuOrphanCases == 6
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
@@ -599,6 +600,7 @@ namespace GreedLast.Editor
             public int engineRecoveredDistanceCases;
             public int engineGoodFocusStateCases;
             public int engineMenuScrollCases, engineMenuScrollbarCases, engineMenuFreshRecoveries, engineMenuOrphanCases;
+            public int engineMenuOverflowTransitions;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -728,6 +730,8 @@ namespace GreedLast.Editor
                 yield return null;
                 Require(module.IsActive() && !events.sendNavigationEvents,
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
+                if (SessionState.GetBool(Prefix + "fullLoop", false) || SessionState.GetBool(Prefix + "multiTouchOnly", false))
+                    yield return VerifyMenuScrollGestures();
                 if (SessionState.GetBool(Prefix + "initialChoiceOnly", false))
                 {
                     yield return VerifyInitialRunChoiceBoundary();
@@ -750,7 +754,6 @@ namespace GreedLast.Editor
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyInitialRunChoiceBoundary();
                 if (!SessionState.GetBool(Prefix + "multiTouchOnly", false)) yield return VerifyScreenKeyboardTransitions();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyRecoveredCandidateSlotChoices();
-                if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyMenuScrollGestures();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyPracticeCandidateHandoff();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyResumeBufferInputs();
                 if (SessionState.GetBool(Prefix + "fullLoop", false)) yield return VerifyHiddenPresentation();
@@ -3230,9 +3233,25 @@ namespace GreedLast.Editor
                 string detail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n");
                 try
                 {
-                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
-                        GreedLastScreenState.InfiniteRecordBoard, "기록", detail, 0));
-                    yield return null;
+                    for (int transition = 0; transition < 2; transition++)
+                    {
+                        ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                            GreedLastScreenState.InfiniteRecordBoard, "기록", "짧은 기록", 0));
+                        yield return null;
+                        Require(!Read<ScrollRect>(ui, "menuDetailScroll").vertical,
+                            "The engine menu transition must first disable scrolling for genuinely short text.");
+                        ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                            GreedLastScreenState.InfiniteRecordBoard, "기록", detail, 0));
+                        yield return null;
+                        ScrollRect transitioned = Read<ScrollRect>(ui, "menuDetailScroll");
+                        Require(transitioned.vertical, "Long text must restore the active scroll axis.");
+                        transitioned.verticalNormalizedPosition = 0.5f;
+                        yield return null;
+                        transitioned.verticalScrollbar.value = 0.25f;
+                        Require(Mathf.Abs(transitioned.verticalNormalizedPosition - 0.25f) < 0.01f,
+                            "An actual engine short-to-long menu must bind scrollbar changes before any focus interruption.");
+                        report.engineMenuOverflowTransitions++;
+                    }
                     ScrollRect scroll = Read<ScrollRect>(ui, "menuDetailScroll");
                     Require(scroll is GreedLastMenuScrollRect && scroll.verticalScrollbar is GreedLastMenuScrollbar,
                         "Real engine menus must use the interruption-safe scroll controls.");
@@ -3323,7 +3342,7 @@ namespace GreedLast.Editor
                     if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 }
                 Debug.Log("Greed engine menu scroll passed: eight body and eight scrollbar held/pending interruptions,"
-                    + " 16 fresh recoveries and six orphan phases through actual EventSystem frames. Synthetic long record text only; personal records/settings unchanged.");
+                    + " 16 fresh recoveries, six orphan phases and two short-to-long native callback transitions through actual EventSystem frames. Synthetic record text only; personal records/settings unchanged.");
             }
 
             private IEnumerator TouchFrame(params Touch[] touches)
