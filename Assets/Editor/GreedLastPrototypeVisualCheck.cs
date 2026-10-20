@@ -440,11 +440,27 @@ namespace GreedLast.Editor
                     string detail = string.Join("\n", new string[40]).Replace("\n", "비교 기록 12345 / 마지막 1회\n");
                     void ShowMenu() => ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
                         GreedLastScreenState.InfiniteRecordBoard, "기록", detail, 0));
+                    void ShowNearOverflow()
+                    {
+                        for (int lines = 1; lines <= 40; lines++)
+                        {
+                            string text = string.Join("\n", new string[lines]).Replace("\n", "비교 기록 12345 / 마지막 1회\n");
+                            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                                GreedLastScreenState.InfiniteRecordBoard, "기록", text, 0));
+                            if (Read<ScrollRect>("menuDetailScroll").vertical) return;
+                        }
+                        throw new InvalidOperationException("Near-overflow probes must find the first real overflowing text layout.");
+                    }
                     Add("107-menu-scroll-desktop", 1280, 720, ShowMenu);
                     Add("107-menu-scroll-small", 960, 540, ShowMenu);
                     Add("107-menu-scroll-tablet", 1024, 768, ShowMenu);
                     Add("107-menu-scroll-notch-left", 2340, 1080, ShowMenu, safeInsets: new Vector4(120f, 36f, 24f, 18f));
                     Add("107-menu-scroll-notch-right", 2340, 1080, ShowMenu, safeInsets: new Vector4(24f, 36f, 120f, 18f));
+                    Add("108-menu-scroll-near-desktop", 1280, 720, ShowNearOverflow);
+                    Add("108-menu-scroll-near-small", 960, 540, ShowNearOverflow);
+                    Add("108-menu-scroll-near-tablet", 1024, 768, ShowNearOverflow);
+                    Add("108-menu-scroll-near-notch-left", 2340, 1080, ShowNearOverflow, safeInsets: new Vector4(120f, 36f, 24f, 18f));
+                    Add("108-menu-scroll-near-notch-right", 2340, 1080, ShowNearOverflow, safeInsets: new Vector4(24f, 36f, 120f, 18f));
                 }
                 BeginNextFrame();
                 EditorApplication.update += Tick;
