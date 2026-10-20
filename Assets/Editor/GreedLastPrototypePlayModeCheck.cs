@@ -561,6 +561,7 @@ namespace GreedLast.Editor
             public bool calibratedLateTouchAccepted, audioResetPreservedRun, audioResetCanceledHeldCommand;
             public bool audioResetInterruptedCountdown, disabledAudioResetRecovered;
             public int simulatedAudioConfigurationCallbacks;
+            public int engineBackgroundPresentationComparisons, engineBackgroundOpeningComparisons;
             public bool blockedEngineFramePreservedRun;
             public bool presentationSettingsRestored;
             public int transitionFrameCommandCases;
@@ -3994,13 +3995,27 @@ namespace GreedLast.Editor
 
             private void VerifyPauseClockPublication(GreedLastRunSnapshot snapshot)
             {
+                bool visiblePause = snapshot.JudgementText.StartsWith("일시정지 - ", StringComparison.Ordinal)
+                    || snapshot.JudgementText.StartsWith("시작 카운트 일시정지", StringComparison.Ordinal);
+                if (!run.Paused && snapshot.Paused && !visiblePause)
+                {
+                    Require(snapshot.ActivePattern == run.ActivePattern && snapshot.Pattern.PatternId == run.Pattern.PatternId
+                        && snapshot.Health == run.Health && snapshot.Score == run.Score
+                        && snapshot.MissCount == run.MissCount && snapshot.SuccessCount == run.SuccessCount
+                        && snapshot.Distance == run.Distance && snapshot.FocusStateRemainingSeconds == run.FocusStateRemainingSeconds
+                        && Mathf.Abs(snapshot.ElapsedSeconds - run.ElapsedSeconds) < 0.0001f
+                        && Mathf.Abs(snapshot.StartCountdownRemainingSeconds - run.StartCountdownRemainingSeconds) < 0.0001f
+                        && Mathf.Abs(snapshot.StaggerRemainingSeconds - run.StaggerRemainingSeconds) < 0.0001f,
+                        "Automatic engine suspension must preserve the last published trap, opening and stagger instead of adding callback time.");
+                    report.engineBackgroundPresentationComparisons++;
+                    if (run.StartCountdownActive) report.engineBackgroundOpeningComparisons++;
+                }
                 if (!run.ActivePattern || run.Paused || run.CountdownActive || !snapshot.Paused
                     || !snapshot.ActivePattern || snapshot.Pattern.PatternId != run.Pattern.PatternId) return;
                 float elapsed = snapshot.ElapsedSeconds - run.ElapsedSeconds;
                 Require(elapsed >= -0.001f && elapsed <= 0.501f,
                     "Engine pauses must settle only the accepted interactive frame, or freeze a long gap at the previous frame.");
                 elapsed = Mathf.Max(0f, elapsed);
-                bool visiblePause = snapshot.JudgementText.StartsWith("일시정지 - ", StringComparison.Ordinal);
                 float advanced = visiblePause ? elapsed : 0f;
                 Require(snapshot.Health == run.Health && snapshot.Score == run.Score && snapshot.MissCount == run.MissCount
                     && Mathf.Abs(snapshot.Distance - run.Distance - advanced * 4.2f) < 0.02f

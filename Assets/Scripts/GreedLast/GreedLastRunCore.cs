@@ -902,6 +902,7 @@ namespace GreedLast
         private float staggerUntil;
         private float nextPatternAt;
         private float lastTickAt;
+        private float lastPresentedAt;
         private float distance;
         private bool activePattern;
         private bool autoFlow;
@@ -1610,7 +1611,7 @@ namespace GreedLast
 
             if (!startCountdownActive && !CanPauseNow()) return false;
             // Freeze at the last presented frame, not after charging the unseen wall-clock gap.
-            PauseAt(lastTickAt, "화면 갱신이 오래 멈춰 일시정지했습니다.\n재개하면 2-1-GO 뒤 같은 구간을 이어갑니다.");
+            PauseAt(lastPresentedAt, "화면 갱신이 오래 멈춰 일시정지했습니다.\n재개하면 2-1-GO 뒤 같은 구간을 이어갑니다.");
             lastTickAt = now;
             return true;
         }
@@ -1815,13 +1816,13 @@ namespace GreedLast
 
             if (!paused && startCountdownActive)
             {
-                PauseAt(now, "앱 전환으로 시작 카운트가 멈췄습니다.\n재개를 누르면 2-1-GO 뒤 이어집니다.");
+                PauseAt(lastPresentedAt, "앱 전환으로 시작 카운트가 멈췄습니다.\n재개를 누르면 2-1-GO 뒤 이어집니다.");
                 return;
             }
 
             if (!paused && CanPauseNow())
             {
-                PauseAt(now, "앱 전환으로 일시정지되었습니다.\n재개를 누르면 2-1-GO 뒤 앞 박자 여유를 둡니다.");
+                PauseAt(lastPresentedAt, "앱 전환으로 일시정지되었습니다.\n재개를 누르면 2-1-GO 뒤 앞 박자 여유를 둡니다.");
             }
         }
 
@@ -6752,6 +6753,8 @@ namespace GreedLast
                 ? Mathf.Max(0f, startCountdownEndsAt - startCountdownReferenceNow)
                 : 0f;
             float staggerRemaining = Mathf.Max(0f, staggerUntil - now);
+            // Inputs can publish a newer state before the next Tick or background callback.
+            lastPresentedAt = now;
             SnapshotChanged?.Invoke(new GreedLastRunSnapshot(
                 currentPattern,
                 lastJudgedPattern,

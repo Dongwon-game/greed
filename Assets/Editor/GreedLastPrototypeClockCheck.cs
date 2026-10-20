@@ -16,6 +16,7 @@ namespace GreedLast.Editor
             VerifyFocusInputOrder();
             VerifyPauseInputOrder();
             VerifyPausePhaseBoundaries();
+            VerifyBackgroundPresentationClock();
             VerifyCalibratedInputDeadlines();
             VerifyFrameInterruption();
             float[][] frames = { new[] { 1f / 30f }, new[] { 1f / 60f }, new[] { 1f / 120f }, new[] { 0.008f, 0.04f, 0.017f, 0.025f } };
@@ -368,6 +369,107 @@ namespace GreedLast.Editor
                 cases++;
             }
             Debug.Log($"Greed pause phase boundaries passed: {cases} paired opening/timeout/next-trap transitions. Public core time, no personal writes.");
+        }
+
+        [MenuItem("Greed Last/Run Background Presentation Clock Check")]
+        public static void VerifyBackgroundPresentationClock()
+        {
+            Require(CanRun(), "Background presentation checks require Edit mode.");
+            bool hadCalibration = PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey);
+            float calibration = PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f);
+            int cases = 0;
+            foreach (bool infinite in new[] { false, true })
+            foreach (int stage in new[] { 0, 1, 2, 3, 4, 5 })
+            foreach (float gap in new[] { 1f / 30f, 0.249f, 0.49f, 0.75f })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup + 1f;
+                typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(core, 0f);
+                if (infinite) core.EnterInfiniteRun();
+                else core.RestartPractice(clock);
+                core.Tick(clock += 0.2f);
+                if (stage > 0)
+                {
+                    core.Tick(clock += 1.5f);
+                    core.Tick(clock += 0.3f);
+                    Require(run.ActivePattern, "Background fixtures must reach a real trap before suspending it.");
+                    core.Tick(clock += 0.05f);
+                    if (stage == 2 || stage == 3)
+                    {
+                        float target = clock + run.Pattern.CoreSeconds - run.ElapsedSeconds;
+                        core.Tick(target - 0.01f);
+                        if (stage == 2) clock = target - 0.01f;
+                        else
+                        {
+                            clock = target;
+                            core.HandleInput(run.Pattern.Channel, clock);
+                            Require(!run.ActivePattern && run.SuccessCount == 1,
+                                "Post-input background loss must preserve a judgement published after the last Tick.");
+                        }
+                    }
+                    if (stage == 4)
+                    {
+                        clock += 0.01f;
+                        core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+                            ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
+                        Require(run.MissCount == 1 && run.StaggerRemainingSeconds > 0f,
+                            "The background stagger case needs one real wrong-channel miss.");
+                    }
+                    if (stage == 5)
+                    {
+                        core.TogglePause(clock);
+                        core.TogglePause(clock += 0.1f);
+                        core.Tick(clock += 0.2f);
+                        Require(run.ResumeCountdownActive, "The background resume case must have a visible countdown.");
+                    }
+                }
+                GreedLastRunSnapshot frozen = run;
+                clock += gap;
+                if (gap > 0.5f)
+                    Require(core.PauseForInterruptedFrame(clock), "A long unseen frame must use interruption recovery.");
+                else core.PauseForAppBackground(clock);
+                Require(run.Paused && !run.ResumeCountdownActive && run.ActivePattern == frozen.ActivePattern
+                    && run.Pattern.PatternId == frozen.Pattern.PatternId && run.Health == frozen.Health
+                    && run.Score == frozen.Score && run.MissCount == frozen.MissCount
+                    && run.SuccessCount == frozen.SuccessCount && run.Distance == frozen.Distance
+                    && run.FocusStateRemainingSeconds == frozen.FocusStateRemainingSeconds
+                    && Mathf.Abs(run.ElapsedSeconds - frozen.ElapsedSeconds) < 0.0001f
+                    && Mathf.Abs(run.StartCountdownRemainingSeconds - frozen.StartCountdownRemainingSeconds) < 0.0001f
+                    && Mathf.Abs(run.StaggerRemainingSeconds - frozen.StaggerRemainingSeconds) < 0.0001f,
+                    $"Background must freeze the last published gameplay, including short unshown gaps: infinite={infinite}, stage={stage}, gap={gap}, "
+                        + $"elapsed={run.ElapsedSeconds}/{frozen.ElapsedSeconds}, opening={run.StartCountdownRemainingSeconds}/{frozen.StartCountdownRemainingSeconds}, "
+                        + $"stagger={run.StaggerRemainingSeconds}/{frozen.StaggerRemainingSeconds}.");
+                core.Tick(clock += 25f);
+                core.TogglePause(clock);
+                core.Tick(clock += 1.5f);
+                Require(!run.Paused && run.Distance == frozen.Distance && run.Health == frozen.Health
+                    && run.SuccessCount == frozen.SuccessCount && run.MissCount == frozen.MissCount,
+                    "Background recovery must not charge hidden time or repeat a published judgement.");
+                if (frozen.ActivePattern)
+                {
+                    Near(run.ElapsedSeconds, frozen.ElapsedSeconds - 0.65f, "Background same-trap lead-in");
+                    float target = clock + run.Pattern.CoreSeconds - run.ElapsedSeconds;
+                    while (clock < target - 0.0001f) core.Tick(clock = Mathf.Min(target, clock + 0.01f));
+                    core.HandleInput(run.Pattern.Channel, target);
+                    Require(run.LastResult == GreedLastJudgementResult.Success
+                        && run.SuccessCount == frozen.SuccessCount + 1 && run.MissCount == frozen.MissCount,
+                        "A frozen trap must accept one fresh exact input after the ordinary resume buffer.");
+                }
+                else if (frozen.StartCountdownActive)
+                    Near(run.StartCountdownRemainingSeconds, frozen.StartCountdownRemainingSeconds, "Background opening recovery");
+                else
+                    Near(run.StaggerRemainingSeconds, frozen.StaggerRemainingSeconds, "Background resolved stagger recovery");
+                core.Exit();
+                cases++;
+            }
+            Require(PlayerPrefs.HasKey(GreedLastRunCore.InputTimingOffsetPrefsKey) == hadCalibration
+                && PlayerPrefs.GetFloat(GreedLastRunCore.InputTimingOffsetPrefsKey, 0f).Equals(calibration),
+                "Background presentation checks must not change personal calibration.");
+            Debug.Log($"Greed background presentation clock passed: {cases} opening/live/late-trap/post-input/stagger/resume cases, "
+                + "short callbacks and long post-input frames, 25-second suspension and fresh exact recovery. Public synthetic core progression; no personal writes or hardware claim.");
         }
 
         [MenuItem("Greed Last/Run Frame Interruption Check")]
