@@ -452,7 +452,14 @@ namespace GreedLast.Editor
                 {
                     Near(run.ElapsedSeconds, frozen.ElapsedSeconds - 0.65f, "Background same-trap lead-in");
                     float target = clock + run.Pattern.CoreSeconds - run.ElapsedSeconds;
-                    while (clock < target - 0.0001f) core.Tick(clock = Mathf.Min(target, clock + 0.01f));
+                    int recoveryTicks = 0;
+                    while (clock < target - 0.0001f)
+                    {
+                        float next = Mathf.Min(target, clock + 0.01f);
+                        Require(++recoveryTicks <= 2000 && next > clock,
+                            "Background recovery fixture must make bounded clock progress, not wait indefinitely.");
+                        core.Tick(clock = next);
+                    }
                     core.HandleInput(run.Pattern.Channel, target);
                     Require(run.LastResult == GreedLastJudgementResult.Success
                         && run.SuccessCount == frozen.SuccessCount + 1 && run.MissCount == frozen.MissCount,
