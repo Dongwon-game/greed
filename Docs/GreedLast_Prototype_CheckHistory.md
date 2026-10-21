@@ -1,5 +1,19 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-21 실제 플레이어 선보존 대조와 엔진 시작 진단
+
+검사 도구 `9c964a1`, 시작 감시 `c0485c3`이다. 게임 입력은 `1084cdf`, 배포 실행본은 14:15/background-results 그대로다. 실제 시험은 공개 기준 `cdda430` 사본과 각 보고서 `Inputs`/`RunnerSHA256`의 도구를 사용했다. 새 게임 기능이나 그래픽 변경으로 표시하지 않는다.
+
+- 백그라운드 옵션: `Logs/PlayerPersistenceChecks/12c5a91e6e8b40bab5c212f069aed32f/report.json`, SHA256 `DFE6DE3F6DCA0B2275D5C73D19E4C58C32005B672ABD307844DF9359DF8C8BD3`. 실제 프레임 일반 클리어/일반 실패/무한 종료는 앱 콜백에서 종료 전에 한 번 정산했고, 진행 중 일반/무한은 정지·무정산을 유지했다. 다섯 경계와 열 새 프로세스, 안전 대조 네 가지가 통과했다.
+- 기본 모드: `Logs/PlayerPersistenceChecks/cb6aff6f95b6415dad4e0eb178f59fe3/report.json`, SHA256 `D1832DCAD69925F1E09B34AB3EA67E7B2E2DAC9D0209228EF230558DD13BDC11`. 종료가 첫 정산인 기존 열 단계를 유지했고 백그라운드 경계 수는 0이다. 클리어 직전 성장 0 대 옵션의 3, 일반 실패 직전 성장 4 대 옵션의 5를 대조한 뒤 새 프로세스의 최종 값은 각각 일치했다.
+- 두 실행은 각 고유 제품이며 개인/원본 설정 불변, 소유 프로세스 28개 종료, 성공 플레이어 로그 20개의 예외 0이다. `Logs/BackgroundPlayerChecks/54a8077e2a78475eb4f98d8fedf126c9/manifest.json`의 58개 파일, SHA256 `04778179101A0C7E8A3F0E29DEEEDFCEB583465A6910BE2BFAC27D073B489F43`에 원시 근거를 보존했다. 실제 OS 중단/강제 종료·창 입력·소리·기기 검사는 아니다.
+
+**새 사본 전체 엔진 루프는 미완료**다. `Logs/EngineBackgroundChecks/0d530d50bc284197b4411713cbe2d028/report.json`의 첫 실행은 510초, 그래픽을 사용한 짧은 대조는 240초 뒤 첫 프레임 드라이버를 시작하지 못해 종료했다. 프레임 1/포커스 없음이 관찰됐으며 UnityEditor.Search 초기화 예외와 이후 편집기 정지도 기록됐다. 이들의 인과나 해결을 확정하지 않았다. 원본과 내보낸 파일의 줄바꿈 비교 준비 오류 두 건도 남겼고, 같은 Git 경로 필터를 적용한 15개 게임 입력은 HEAD와 일치했다.
+
+시험 사본의 20초 진단에서 [백그라운드 실행](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/Application-runInBackground.html)과 [플레이 루프 갱신 요청](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/EditorApplication.QueuePlayerLoopUpdate.html)을 임시 대조했으나 드라이버 시작은 회복되지 않았다. 진단 원본/변형은 별도 보존했고 해당 강제 설정은 원본 검사 코드에 넣지 않았다. 이 진단들을 게임 루프 성공으로 세지 않는다.
+
+현재 Editor 도구는 진입 후 `Driver.Start`가 15초 내 실행되지 않으면 프레임/포커스/정지/그래픽 상태를 기록하고 기존 복원 경로로 끝낸다. 실제 실패 조건의 예상 거부·복원과 정상 시작/기한 경계의 순수 대조 6개, 격리 전체 스모크가 통과했다. 정상 시작한 전체 코스의 기존 제한과 게임 동작은 바꾸지 않았다. 원시 32개 파일은 같은 루트 `manifest.json`, SHA256 `C7125DC4CC6A66EB296149DE9ED520D1537EA4D0DE8E8DA2D12560A86A129C55`에 있다. 개인 값과 14:15 실행 파일/ZIP은 유지하며 다음 실제 기획 확인은 빠른 확인의 네 단계다.
+
 ## 2026-10-21 백그라운드 결과 보존과 14:15 실행본
 
 일반 클리어/일반 실패/무한 종료 결과에서 앱의 일시중단 또는 포커스 손실 콜백이 오면 완료 결과를 한 번 보존한다. 복귀 후 저장/저장 포기/재시작/로비/종료도 같은 정산 경로를 사용한다. 진행 중 런·카운트·연습은 자동 정산하지 않고, 슬롯 자동 저장이나 사용권 추가 소모는 하지 않는다. 모바일에서는 중단 뒤 종료 콜백 없이 프로세스가 제거될 수 있다는 [Unity 6.4 공식 문서](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/MonoBehaviour.OnApplicationQuit.html)를 반영했다.
