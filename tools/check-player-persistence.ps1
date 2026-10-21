@@ -3,13 +3,15 @@ param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [switch]$CaptureFrames,
-    [switch]$InteractiveWindow
+    [switch]$InteractiveWindow,
+    [switch]$BackgroundResults
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This cross-process probe supports Windows only.' }
 if ($CaptureFrames -and $InteractiveWindow) { throw 'Choose offscreen capture or interactive window checks, not both.' }
+if ($BackgroundResults -and $InteractiveWindow) { throw 'Choose background callback checks or interactive window input, not both.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
@@ -70,6 +72,10 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     RegistryPath=$registryPath; Processes=$processes; Phases=@(); Inputs=@(); SafetyControls=@();
     OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
+$report.BackgroundResultsRequested = [bool]$BackgroundResults
+if ($BackgroundResults) {
+    $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
+}
 if ($InteractiveWindow) {
     $report.Scope = 'Interactive isolated player window phases and fresh-process persistence. External UI actions must be separately observed and recorded; this script does not identify the close trigger or claim physical timing, audible output or device performance.'
 }
@@ -230,6 +236,7 @@ try {
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
+        if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
         $timeout = if ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
@@ -238,9 +245,13 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
+        $expectedBackgroundChecks = if ($BackgroundResults -and $phase -in @('clear','first-use','last-use','live-normal','normal-fail')) { 1 } else { 0 }
+        if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
+            throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
+        }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
-            Uses=$result.uses; AutomaticResumes=$result.automaticResumes}
+            Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks}
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true

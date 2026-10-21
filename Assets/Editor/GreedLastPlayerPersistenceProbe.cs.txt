@@ -17,6 +17,7 @@ namespace GreedLast.PlayerChecks
         private string root, phase;
         private float deadline;
         private bool finished, outputValidated;
+        private bool backgroundResults;
         private bool windowAwaitingClose, windowReady;
         private readonly Result result = new Result();
 
@@ -27,6 +28,8 @@ namespace GreedLast.PlayerChecks
             public string scope = "Pre-exit assertions in an isolated Windows player. Later processes verify actual persistence. Real frames and app commands; not physical input, OS window close, process-kill recovery, audio or device performance.";
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool quitCallbackObserved;
+            public bool backgroundResultsRequested;
+            public int backgroundChecks;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
@@ -89,6 +92,10 @@ namespace GreedLast.PlayerChecks
             string id = Argument("-greed-probe-id");
             Require(Guid.TryParseExact(id, "N", out _), "A fresh probe identity is required.");
             phase = Argument("-greed-probe-phase");
+            backgroundResults = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-background-results") >= 0;
+            result.backgroundResultsRequested = backgroundResults;
+            Require(!backgroundResults || !phase.StartsWith("window-", StringComparison.Ordinal),
+                "Background callback checks cannot replace interactive window input.");
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
                 "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
                 "window-play", "window-clear", "window-verify", "window-verify-again" }, phase) >= 0,
@@ -202,6 +209,7 @@ namespace GreedLast.PlayerChecks
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
                 result.record = From(record);
+                if (backgroundResults) yield return VerifyBackgroundBoundary(clear: true);
                 if (phase == "window-clear")
                 {
                     windowAwaitingClose = windowReady = true;
@@ -267,12 +275,14 @@ namespace GreedLast.PlayerChecks
                     result.expectedInfiniteGrowthReward = (int)typeof(GreedLastMockBackend)
                         .GetMethod("BuildInfiniteGrowthReward", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { record });
                     result.terminalBeforeQuit = true;
+                    if (backgroundResults) yield return VerifyBackgroundBoundary(infinite: true);
                 }
                 else
                 {
                     yield return WaitFor(() => RunState().ActivePattern && !RunState().CountdownActive);
                     Require(Uses()[2] == 1 && !RunState().Stopped && core.CreateInfiniteRunRecord().IsValid,
                         "The first actual start must persist one use while the played run remains live.");
+                    if (backgroundResults) yield return VerifyBackgroundBoundary();
                 }
             }
             else if (phase == "verify" || phase == "verify-again")
@@ -296,9 +306,12 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.RunCoreTest);
                 yield return DriveCourse(respond: false, untilFirstTrap: phase == "live-normal");
                 if (phase == "live-normal")
+                {
                     Require(!RunState().Stopped && !core.IsPracticeRun
                         && core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned).IsValid,
                         "The live-quit control must contain real played normal progress.");
+                    if (backgroundResults) yield return VerifyBackgroundBoundary();
+                }
                 else
                 {
                     GreedLastRunAttemptRecord record = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed);
@@ -306,6 +319,7 @@ namespace GreedLast.PlayerChecks
                         "Quit must first settle the real naturally failed normal run.");
                     result.record = From(record);
                     result.terminalBeforeQuit = true;
+                    if (backgroundResults) yield return VerifyBackgroundBoundary(failure: true);
                 }
             }
             else if (phase == "verify-failure" || phase == "verify-failure-again")
@@ -313,7 +327,7 @@ namespace GreedLast.PlayerChecks
                 Result prior = Previous("normal-fail");
                 Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
                     && Count("normalFailCount") == 1 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 1
-                    && backend.LoadSelectedSaveSlotView().GrowthPoints == prior.growthPoints + 1,
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == prior.growthPoints + (backgroundResults ? 0 : 1),
                     "Normal failure must survive fresh processes with exactly one failure reward.");
                 GreedLastRunAttemptRecord saved = Read<GreedLastRunAttemptRecord>(backend, "lastRunAttemptRecord");
                 Require(saved.IsValid && saved.Outcome == GreedLastRunAttemptOutcome.Failed,
@@ -324,6 +338,55 @@ namespace GreedLast.PlayerChecks
                         "An already settled normal failure must not grant another reward on quit.");
             }
             else throw new InvalidOperationException("Unsupported persistence phase.");
+        }
+
+        private IEnumerator VerifyBackgroundBoundary(bool clear = false, bool failure = false, bool infinite = false)
+        {
+            int clears = Count("normalClearCount"), failures = Count("normalFailCount"),
+                abandons = Count("normalAbandonCount"), infiniteRuns = Count("infiniteRunCount");
+            int growth = backend.LoadSelectedSaveSlotView().GrowthPoints;
+            bool candidate = backend.HasSaveLoadoutCandidate;
+            int[] uses = Uses();
+            GreedLastRunSnapshot before = RunState();
+            bool terminal = clear || failure || infinite;
+            Require(before.Stopped == terminal, "The background boundary must use the real intended terminal/live state.");
+            int reward = clear ? 3 : failure ? 1 : infinite ? result.expectedInfiniteGrowthReward : 0;
+            void RequireSettlement()
+            {
+                Require(Count("normalClearCount") == clears + (clear ? 1 : 0)
+                    && Count("normalFailCount") == failures + (failure ? 1 : 0)
+                    && Count("normalAbandonCount") == abandons
+                    && Count("infiniteRunCount") == infiniteRuns + (infinite ? 1 : 0)
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == growth + reward
+                    && backend.HasSaveLoadoutCandidate == (clear || candidate),
+                    "Background callbacks must persist only this real terminal result exactly once before quit.");
+                int[] actual = Uses();
+                for (int slot = 0; slot < uses.Length; slot++)
+                    Require(uses[slot] == actual[slot], "Background callbacks must not consume or restore any saved use.");
+                Require(!Read<bool>(app, "applicationQuitting"), "Background persistence must not close the app.");
+            }
+            // Invoke app lifecycle handlers inside the real-frame isolated product, not OS window input.
+            Call(app, "OnApplicationFocus", false);
+            RequireSettlement();
+            Call(app, "OnApplicationPause", true);
+            RequireSettlement();
+            Call(app, "OnApplicationFocus", false);
+            Call(app, "OnApplicationPause", true);
+            RequireSettlement();
+            yield return new WaitForSecondsRealtime(0.25f);
+            GreedLastRunSnapshot suspended = RunState();
+            Require(suspended.Distance == before.Distance && suspended.Health == before.Health
+                && suspended.Score == before.Score && suspended.MissCount == before.MissCount
+                && suspended.Stopped == before.Stopped && suspended.Paused == !terminal,
+                "Suspension must preserve real result/progress and keep a live run paused.");
+            Call(app, "OnApplicationPause", false);
+            Call(app, "OnApplicationFocus", true);
+            yield return null;
+            Require((bool)Call(app, "CanAcceptPlayerInput") && RunState().Paused == !terminal,
+                "Foreground return must retain actionable results but never automatically resume a live run.");
+            RequireSettlement();
+            result.backgroundChecks++;
+            result.scope = "Real-frame isolated Windows player with explicitly invoked app pause/focus handlers and fresh-process persistence. Terminal results settle before Application.Quit; live controls remain paused and unrecorded. Not actual OS suspension/kill, native window input, audible output or physical mobile testing.";
         }
 
         private IEnumerator ObserveWindowCommands()
