@@ -10819,6 +10819,7 @@ namespace GreedLast
         private int previousQualityLevel, previousVSyncCount, previousTargetFrameRate, previousSleepTimeout;
         private bool applicationPaused;
         private bool applicationQuitting;
+        private bool runResultRegistered;
         private bool applicationHasFocus = true;
         private bool appStarted;
         private bool interruptedBootPending;
@@ -11037,20 +11038,49 @@ namespace GreedLast
             if (applicationQuitting) return;
             applicationQuitting = true;
             runtimeUi?.SetAppInputAvailable(false);
+            PersistTerminalRunResult();
+        }
+
+        private void PersistTerminalRunResult()
+        {
             if (stateMachine == null || backend == null || runCore == null
                 || runCore.IsPracticeRun) return;
 
-            // Preserve only terminal results; normal close is not a live-run autosave or a slot choice.
+            // Mobile suspension may never deliver quit; preserve terminal results without choosing a slot.
             if (stateMachine.CurrentState == GreedLastScreenState.RunCoreTest)
             {
-                if (runCore.CanExitAfterClear) backend.RegisterClear(runCore.CreateRunRecord());
+                if (runCore.CanExitAfterClear) RegisterClearOnce(runCore.CreateRunRecord());
                 else if (runCore.IsStoppedNormalRun)
-                    backend.RegisterNormalAttempt(runCore.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed));
+                    RegisterNormalAttemptOnce(runCore.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed));
             }
             else if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun && runCore.IsStoppedInfiniteRun)
             {
-                backend.RegisterInfiniteRun(runCore.CreateInfiniteRunRecord());
+                RegisterInfiniteRunOnce(runCore.CreateInfiniteRunRecord());
             }
+        }
+
+        private GreedLastLobbySnapshot RegisterClearOnce(GreedLastRunRecord record)
+        {
+            if (runResultRegistered || !record.IsValid) return backend.LoadLobby();
+            GreedLastLobbySnapshot snapshot = backend.RegisterClear(record);
+            runResultRegistered = true;
+            return snapshot;
+        }
+
+        private bool RegisterNormalAttemptOnce(GreedLastRunAttemptRecord record)
+        {
+            if (!record.IsValid) return false;
+            if (runResultRegistered) return true;
+            runResultRegistered = backend.RegisterNormalAttempt(record);
+            return runResultRegistered;
+        }
+
+        private bool RegisterInfiniteRunOnce(GreedLastInfiniteRunRecord record)
+        {
+            if (!record.IsValid) return false;
+            if (runResultRegistered) return true;
+            runResultRegistered = backend.RegisterInfiniteRun(record);
+            return runResultRegistered;
         }
 
         private void OnDestroy()
@@ -11085,6 +11115,7 @@ namespace GreedLast
 
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
+            if (!snapshot.Stopped) runResultRegistered = false;
             if (snapshot.ChoiceActive && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.ChoiceActive
                 || snapshot.ChoiceKind != latestAppRunSnapshot.ChoiceKind))
                 runChoiceTransitionFrame = Time.frameCount;
@@ -12724,6 +12755,7 @@ namespace GreedLast
             bool wasPaused = applicationPaused;
             applicationPaused = pauseStatus;
             RefreshPlayerInputAvailability();
+            if (pauseStatus && !applicationQuitting) PersistTerminalRunResult();
             ResetRotationDragTracking();
             ResetRotationTiltSensorTracking(requireNeutralRelease: true);
             PublishRotationTiltGateState();
@@ -12751,6 +12783,7 @@ namespace GreedLast
             PublishRotationTiltGateState();
             if (!hasFocus)
             {
+                if (!applicationQuitting) PersistTerminalRunResult();
                 PauseRunForAppBackground();
             }
         }
@@ -13577,7 +13610,7 @@ namespace GreedLast
                 if (runCore.IsStoppedInfiniteRun)
                 {
                     GreedLastInfiniteRunRecord record = runCore.CreateInfiniteRunRecord();
-                    bool registered = backend.RegisterInfiniteRun(record);
+                    bool registered = RegisterInfiniteRunOnce(record);
                     if (registered)
                     {
                         preferredRecordBoardPageIndex = 2;
@@ -14678,7 +14711,7 @@ namespace GreedLast
             if (stateMachine.CurrentState == GreedLastScreenState.InfiniteRun)
             {
                 GreedLastInfiniteRunRecord record = runCore.CreateInfiniteRunRecord();
-                bool registered = backend.RegisterInfiniteRun(record);
+                bool registered = RegisterInfiniteRunOnce(record);
                 if (registered)
                 {
                     preferredRecordBoardPageIndex = 2;
@@ -14728,7 +14761,7 @@ namespace GreedLast
         private string RegisterNormalAttempt(GreedLastRunAttemptOutcome outcome, bool wasRefillRun = false)
         {
             GreedLastRunAttemptRecord record = runCore.CreateNormalAttemptRecord(outcome);
-            bool registered = backend.RegisterNormalAttempt(record);
+            bool registered = RegisterNormalAttemptOnce(record);
             if (registered)
             {
                 preferredRecordBoardPageIndex = 1;
@@ -15191,7 +15224,7 @@ namespace GreedLast
         {
             bool wasRefillRun = activeNormalRunWasRefill;
             GreedLastRunRecord record = runCore.CreateRunRecord();
-            backend.RegisterClear(record);
+            RegisterClearOnce(record);
             if (record.IsValid)
             {
                 preferredRecordBoardPageIndex = 1;
@@ -15225,7 +15258,7 @@ namespace GreedLast
         {
             bool wasRefillRun = activeNormalRunWasRefill;
             GreedLastRunRecord record = runCore.CreateRunRecord();
-            GreedLastLobbySnapshot snapshot = backend.RegisterClear(record);
+            GreedLastLobbySnapshot snapshot = RegisterClearOnce(record);
             if (!record.IsValid)
             {
                 activeNormalRunWasRefill = false;

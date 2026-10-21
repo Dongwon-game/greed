@@ -18,6 +18,7 @@ namespace GreedLast.Editor
         private static bool resultBackOnly;
         private static bool infiniteRetryReviewOnly;
         private static bool clearQuitOnly;
+        private static bool backgroundResultsOnly;
         private static bool practiceCandidateOnly;
         private static bool hiddenPresentationOnly;
         private static bool heldConfirmationsOnly;
@@ -138,6 +139,16 @@ namespace GreedLast.Editor
             clearQuitOnly = true;
             try { Run(); }
             finally { clearQuitOnly = false; }
+        }
+
+        [MenuItem("Greed Last/Run Background Result Recovery Check")]
+        public static void RunBackgroundResultCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode && !usePointerModule && !backgroundResultsOnly,
+                "Background result checks require an isolated Edit-mode fixture.");
+            backgroundResultsOnly = true;
+            try { Run(); }
+            finally { backgroundResultsOnly = false; }
         }
 
         [MenuItem("Greed Last/Run Hidden Presentation Check")]
@@ -292,6 +303,11 @@ namespace GreedLast.Editor
                     VerifyClearQuitCandidate(app, ui, backend, state, core, () => run);
                     return;
                 }
+                if (backgroundResultsOnly)
+                {
+                    VerifyBackgroundResults(app, ui, backend, state, core, () => run);
+                    return;
+                }
                 if (infiniteRetryReviewOnly)
                 {
                     VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
@@ -347,6 +363,7 @@ namespace GreedLast.Editor
                 VerifyInfinitePreparationResultContinuity(app, ui, backend, state, core, () => run);
                 VerifyInfiniteCountdownAbandonment(app, ui, backend, state, core, () => run);
                 VerifyClearQuitCandidate(app, ui, backend, state, core, () => run);
+                VerifyBackgroundResults(app, ui, backend, state, core, () => run);
 
                 VerifyPracticeCandidateHandoff(app, ui, backend, state, core, () => run);
 
@@ -1567,6 +1584,167 @@ namespace GreedLast.Editor
                 Write(app, "activeNormalRunWasRefill", false);
                 Method(app, "ApplyGrowthToRunCore").Invoke(app, null);
                 state.SetLobbyReady(originalBackend.LoadLobby());
+            }
+        }
+
+        private static void VerifyBackgroundResults(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
+            Func<GreedLastRunSnapshot> latest)
+        {
+            bool playerControls = ui.UsePlayerRunControls;
+            bool hadFocus = Read<bool>(app, "applicationHasFocus");
+            bool wasPaused = Read<bool>(app, "applicationPaused");
+            int cases = 0;
+            void Focus(bool value) => Method(app, "OnApplicationFocus").Invoke(app, new object[] { value });
+            void Pause(bool value) => Method(app, "OnApplicationPause").Invoke(app, new object[] { value });
+            void Foreground() { Pause(false); Focus(true); }
+            try
+            {
+                foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
+                    for (int boundary = 0; boundary < 2; boundary++)
+                        for (int mode = 0; mode < 10; mode++)
+                        {
+                            string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "background-result-" + Guid.NewGuid().ToString("N");
+                            try
+                            {
+                                Write(app, "applicationQuitting", false);
+                                Foreground();
+                                if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                                var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                backend.RegisterClear(new GreedLastRunRecord(true, 800, 3, 0, 0, 4, 3, 0, 0, 60f,
+                                    "background-neighbor", "박자 감각", "생존 축", string.Empty, "안정 루트 / 생존 축", string.Empty));
+                                backend.SelectSaveLoadoutSlot(0);
+                                backend.ConfirmSaveLoadout();
+                                backend.RenameSelectedSaveLoadoutSlot();
+                                Write(app, "backend", backend);
+                                Method(app, "ResetInfinitePreparation").Invoke(app, null);
+                                Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
+                                Write(app, "activeNormalRunWasRefill", false);
+                                core.ConfigureGrowth(0, 0, 0);
+                                state.SetRunCoreTest();
+                                if (mode == 4 || mode == 5 || mode >= 8)
+                                {
+                                    Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord source, out _, out _),
+                                        "Background infinite controls must spend only a real source start.");
+                                    state.SetInfiniteRun(string.Empty);
+                                    core.EnterInfiniteRun(source);
+                                    if (mode <= 5) RunToFailure(core, latest);
+                                    else if (mode == 8)
+                                    {
+                                        float clock = Time.realtimeSinceStartup;
+                                        core.Tick(clock + 2f); core.Tick(clock + 3f); core.Tick(clock + 3.1f);
+                                        core.TogglePause(clock + 3.1f);
+                                        Require(latest().Paused && !latest().Stopped && core.CreateInfiniteRunRecord().IsValid,
+                                            "Background live control needs real infinite progress, not a countdown bonus.");
+                                    }
+                                }
+                                else if (mode == 7)
+                                {
+                                    core.EnterPractice();
+                                    RunToCompletion(core, latest);
+                                }
+                                else
+                                {
+                                    core.Enter();
+                                    if (mode < 2) RunToCompletion(core, latest);
+                                    else if (mode < 4) RunToFailure(core, latest);
+                                }
+                                int clears = Read<int>(backend, "normalClearCount");
+                                int failures = Read<int>(backend, "normalFailCount");
+                                int infiniteRuns = Read<int>(backend, "infiniteRunCount");
+                                int growth = Read<int>(backend, "growthPoints");
+                                var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                                var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                                string before = PlayerPrefs.GetString(key);
+                                if (boundary == 0) Pause(true); else Focus(false);
+                                var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                                int expectedClears = clears + (mode < 2 ? 1 : 0);
+                                int expectedFailures = failures + (mode == 2 || mode == 3 ? 1 : 0);
+                                int expectedInfinite = infiniteRuns + (mode == 4 || mode == 5 ? 1 : 0);
+                                int expectedGrowth = growth + (mode < 2 ? 3 : mode < 6 ? 1 : 0);
+                                void RequireCounts(GreedLastMockBackend value, string stage)
+                                {
+                                    Require(Read<int>(value, "normalClearCount") == expectedClears
+                                        && Read<int>(value, "normalFailCount") == expectedFailures
+                                        && Read<int>(value, "infiniteRunCount") == expectedInfinite
+                                        && Read<int>(value, "growthPoints") == expectedGrowth,
+                                        "Background result must settle exactly once before quit; " + stage + ", mode " + mode + ", boundary " + boundary);
+                                }
+                                RequireCounts(reloaded, "first suspension");
+                                Require(reloaded.HasSaveLoadoutCandidate == (mode < 2),
+                                    "Only a real clear may preserve an unsaved candidate on suspension.");
+                                for (int slot = 0; slot < slots.Length; slot++)
+                                {
+                                    GreedLastRunRecord actual = Read<GreedLastRunRecord[]>(reloaded, "saveLoadoutSlots")[slot];
+                                    foreach (PropertyInfo property in typeof(GreedLastRunRecord).GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                                    {
+                                        object expectedValue = property.GetValue(slots[slot]), actualValue = property.GetValue(actual);
+                                        if (property.PropertyType == typeof(string)) { expectedValue ??= string.Empty; actualValue ??= string.Empty; }
+                                        Require(Equals(expectedValue, actualValue), "Suspension must preserve every saved slot field: " + property.Name);
+                                    }
+                                    Require(Read<int[]>(reloaded, "saveLoadoutUsesRemaining")[slot] == uses[slot],
+                                        "Suspension must not consume or restore an infinite use.");
+                                }
+                                string after = PlayerPrefs.GetString(key);
+                                Require(mode < 6 || after == before, "Live/countdown/practice suspension must not settle or rewrite progress.");
+                                Pause(true); Focus(false); Pause(true); Focus(false);
+                                Require(PlayerPrefs.GetString(key) == after && !Read<bool>(app, "applicationQuitting"),
+                                    "Repeated pause/focus callbacks must not duplicate settlement or mark the app as quitting.");
+                                Foreground();
+                                Require(ui.AcceptsPlayerInput, "The settled result must remain actionable after foreground return.");
+                                if (mode == 0)
+                                {
+                                    Click(ui, "nextPatternButton");
+                                    Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                                        && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
+                                        "A suspended clear must still offer explicit slot selection.");
+                                    Click(Read<Button[]>(ui, "laneButtons")[2]);
+                                    Click(ui, "nextPatternButton");
+                                    Require(!backend.HasSaveLoadoutCandidate && backend.LoadLobby().SaveSlotOccupied[2]
+                                        && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 2,
+                                        "A foreground clear may save once to S3, never automatically to S1.");
+                                }
+                                else if (mode == 1 || mode == 2 || mode == 4) Click(ui, "returnLobbyButton");
+                                else if (mode == 3 || mode == 5) Click(ui, "nextPatternButton");
+                                RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "foreground result action");
+                                if (mode == 1) Require(!backend.HasSaveLoadoutCandidate, "Skipping a suspended clear must discard its single candidate.");
+                                if (mode < 2)
+                                {
+                                    // Equal statistics from a distinct run must not be mistaken for a replayed callback.
+                                    state.SetRunCoreTest();
+                                    core.Enter();
+                                    RunToCompletion(core, latest);
+                                    Pause(true);
+                                    expectedClears++; expectedGrowth += 3;
+                                    RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "next distinct clear");
+                                }
+                                Method(app, "OnApplicationQuit").Invoke(app, null);
+                                Method(app, "OnApplicationQuit").Invoke(app, null);
+                                RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "quit after suspension");
+                                cases++;
+                            }
+                            finally
+                            {
+                                Write(app, "applicationQuitting", false);
+                                core.Exit();
+                                state.SetLobbyReady(originalBackend.LoadLobby());
+                                Foreground();
+                                PlayerPrefs.DeleteKey(key); PlayerPrefs.Save();
+                            }
+                        }
+                Debug.Log("Greed background result recovery passed: " + cases
+                    + " isolated clean/detailed pause/focus cases; clear/failure/infinite terminal persistence before quit, repeated callbacks and result buttons without duplicate rewards, explicit S3 save/discard, equal-stat distinct clears and no live/countdown/practice settlement. Simulated callbacks and JSON reload, not a physical mobile OS kill.");
+            }
+            finally
+            {
+                Write(app, "applicationQuitting", false);
+                core.Exit();
+                Write(app, "backend", originalBackend);
+                state.SetLobbyReady(originalBackend.LoadLobby());
+                Write(app, "applicationPaused", wasPaused);
+                Write(app, "applicationHasFocus", hadFocus);
+                Method(app, "RefreshPlayerInputAvailability").Invoke(app, null);
+                if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
             }
         }
 

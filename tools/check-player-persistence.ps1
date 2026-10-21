@@ -2,12 +2,14 @@
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
-    [switch]$CaptureFrames
+    [switch]$CaptureFrames,
+    [switch]$InteractiveWindow
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This cross-process probe supports Windows only.' }
+if ($CaptureFrames -and $InteractiveWindow) { throw 'Choose offscreen capture or interactive window checks, not both.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
@@ -44,7 +46,9 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-if (!$PSCmdlet.ShouldProcess($project, 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases')) { return }
+$operation = if ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
+    else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
+if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
 $before = Read-PersonalPreferences
 $id = [Guid]::NewGuid().ToString('N')
 $root = [IO.Path]::GetFullPath((Join-Path $project ('Logs\PlayerPersistenceChecks\' + $id)))
@@ -64,7 +68,11 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
     Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
     RegistryPath=$registryPath; Processes=$processes; Phases=@(); Inputs=@(); SafetyControls=@();
-    OffscreenCaptureRequested=[bool]$CaptureFrames; PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
+    OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
+    PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
+if ($InteractiveWindow) {
+    $report.Scope = 'Interactive isolated player window phases and fresh-process persistence. External UI actions must be separately observed and recorded; this script does not identify the close trigger or claim physical timing, audible output or device performance.'
+}
 
 function Assert-CleanPlayerLog([string]$path) {
     $content = [IO.File]::ReadAllText($path)
@@ -74,8 +82,9 @@ function Assert-CleanPlayerLog([string]$path) {
         SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
 }
 
-function Invoke-OwnedProcess([string]$file, [string[]]$arguments, [int]$timeout, [string]$kind, [int]$expectedExit = 0) {
-    $p = Start-Process -FilePath $file -ArgumentList $arguments -WindowStyle Hidden -PassThru
+function Invoke-OwnedProcess([string]$file, [string[]]$arguments, [int]$timeout, [string]$kind, [int]$expectedExit = 0, [bool]$interactive = $false) {
+    $style = if ($interactive) { 'Normal' } else { 'Hidden' }
+    $p = Start-Process -FilePath $file -ArgumentList $arguments -WindowStyle $style -PassThru
     $entry = [pscustomobject]@{Kind=$kind; ProcessId=$p.Id; ExitCode=$null; ExpectedExitCode=$expectedExit; Stopped=$false; TimedOut=$false}
     $processes.Add($entry)
     try {
@@ -209,13 +218,20 @@ try {
         }
     }
 
-    foreach ($phase in @('clear','save','first-use','last-use','verify','verify-again',
-        'live-normal','normal-fail','verify-failure','verify-failure-again')) {
+    $phases = if ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
+        else { @('clear','save','first-use','last-use','verify','verify-again',
+            'live-normal','normal-fail','verify-failure','verify-failure-again') }
+    foreach ($phase in $phases) {
         $report.FailedPhase = $phase
         Write-Verbose ('Starting a fresh owned player process: ' + $phase)
         $log = Join-Path $root ($phase + '.log')
-        Invoke-OwnedProcess $exe @('-batchmode','-nographics','-logFile',('"'+$log+'"'),
-            '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"')) 180000 $phase
+        $interactive = $phase -in @('window-play','window-clear')
+        $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
+            else { @('-batchmode','-nographics') }
+        $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
+            '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
+        $timeout = if ($interactive) { 360000 } else { 180000 }
+        Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
         $path = Join-Path $root ($phase + '.json')
         $result = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json

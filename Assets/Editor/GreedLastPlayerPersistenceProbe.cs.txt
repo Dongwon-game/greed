@@ -17,6 +17,7 @@ namespace GreedLast.PlayerChecks
         private string root, phase;
         private float deadline;
         private bool finished, outputValidated;
+        private bool windowAwaitingClose, windowReady;
         private readonly Result result = new Result();
 
         [Serializable]
@@ -25,6 +26,7 @@ namespace GreedLast.PlayerChecks
             public string phase, startedUtc, completedUtc, company, product, error, screen;
             public string scope = "Pre-exit assertions in an isolated Windows player. Later processes verify actual persistence. Real frames and app commands; not physical input, OS window close, process-kill recovery, audio or device performance.";
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
+            public bool quitCallbackObserved;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
@@ -36,6 +38,7 @@ namespace GreedLast.PlayerChecks
         private sealed class Frame
         {
             public string name, pattern, graphicsDevice;
+            public string utc;
             public int width, height, sampledColors, health, misses;
             public float distance, elapsed;
             public bool paused, opening, resuming;
@@ -87,7 +90,8 @@ namespace GreedLast.PlayerChecks
             Require(Guid.TryParseExact(id, "N", out _), "A fresh probe identity is required.");
             phase = Argument("-greed-probe-phase");
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
-                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render" }, phase) >= 0,
+                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
+                "window-play", "window-clear", "window-verify", "window-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -98,7 +102,7 @@ namespace GreedLast.PlayerChecks
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
-            deadline = Time.realtimeSinceStartup + 150f;
+            deadline = Time.realtimeSinceStartup + (phase == "window-play" || phase == "window-clear" ? 330f : 150f);
             result.phase = phase;
             result.startedUtc = DateTime.UtcNow.ToString("O");
             result.company = Application.companyName;
@@ -114,11 +118,34 @@ namespace GreedLast.PlayerChecks
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
             yield return new WaitForSecondsRealtime(0.25f);
+            if (phase == "window-play" || phase == "window-clear")
+                yield return WaitFor(() => (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
-            if (phase != "clear" && phase != "render") Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
+            if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear")
+                Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
 
-            if (phase == "render")
+            if (phase == "window-play")
+            {
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0,
+                    "The interactive practice control must start in its own empty product.");
+                yield return ObserveWindowCommands();
+            }
+            else if (phase == "window-verify" || phase == "window-verify-again")
+            {
+                Result closed = Previous("window-clear");
+                Require(closed.succeeded && closed.quitCallbackObserved && closed.terminalBeforeQuit
+                    && backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
+                    "Closing the interactive clear window must restore exactly one clear/reward and its unsaved candidate.");
+                SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
+                if (phase == "window-verify-again")
+                    Require(Previous("window-verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
+                        "A second fresh process must not duplicate the interactive close settlement.");
+            }
+            else if (phase == "render")
             {
                 Require(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
                     "A real graphics device is required; headless output is not a render pass.");
@@ -155,10 +182,15 @@ namespace GreedLast.PlayerChecks
                 result.frames = frames.ToArray();
                 result.scope = "Isolated Windows-player offscreen camera renders of the live UI and real-frame practice app commands. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
-            else if (phase == "clear")
+            else if (phase == "clear" || phase == "window-clear")
             {
                 Require(Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
                     && !backend.HasSaveLoadoutCandidate && EmptySlots(), "The isolated product must start empty.");
+                if (phase == "window-clear")
+                    Require(Previous("window-play").succeeded && Previous("window-play").quitCallbackObserved
+                        && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0
+                        && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
+                        "Closing interactive practice must not create normal attempts or rewards.");
                 Call(app, "RequestPracticeRun");
                 yield return DriveCourse();
                 Require(core.IsPracticeComplete, "The real first practice must finish without developer shortcuts.");
@@ -170,6 +202,12 @@ namespace GreedLast.PlayerChecks
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
                 result.record = From(record);
+                if (phase == "window-clear")
+                {
+                    windowAwaitingClose = windowReady = true;
+                    WriteObservation("window-clear-ready");
+                    while (true) { CheckDeadline(); yield return null; }
+                }
             }
             else if (phase == "save")
             {
@@ -286,6 +324,67 @@ namespace GreedLast.PlayerChecks
                         "An already settled normal failure must not grant another reward on quit.");
             }
             else throw new InvalidOperationException("Unsupported persistence phase.");
+        }
+
+        private IEnumerator ObserveWindowCommands()
+        {
+            windowAwaitingClose = true;
+            WriteWindowFrame("ready");
+            bool started = false, pausedOnce = false, pauseStable = false, resuming = false;
+            float pauseAt = 0f;
+            GreedLastRunSnapshot pause = default;
+            while (true)
+            {
+                CheckDeadline();
+                GreedLastRunSnapshot run = RunState();
+                if (!started && core.IsPracticeRun && (run.ActivePattern || run.StartCountdownActive))
+                {
+                    started = true;
+                    WriteWindowFrame("started");
+                }
+                if (started && !pausedOnce && run.Paused && !run.ResumeCountdownActive)
+                {
+                    pausedOnce = true;
+                    pauseAt = Time.realtimeSinceStartup;
+                    pause = run;
+                    WriteWindowFrame("paused");
+                }
+                if (pausedOnce && !pauseStable && run.Paused && !run.ResumeCountdownActive
+                    && Time.realtimeSinceStartup - pauseAt >= 0.6f)
+                {
+                    Require(run.Distance == pause.Distance && run.ElapsedSeconds == pause.ElapsedSeconds
+                        && run.Health == pause.Health && run.MissCount == pause.MissCount,
+                        "The real interactive pause must freeze displayed gameplay.");
+                    pauseStable = true;
+                    WriteWindowFrame("pause-stable");
+                }
+                if (pauseStable && !resuming && run.ResumeCountdownActive)
+                {
+                    resuming = true;
+                    WriteWindowFrame("resuming");
+                }
+                if (resuming && !windowReady && !run.Paused && !run.CountdownActive && run.ActivePattern)
+                {
+                    Require(core.IsPracticeRun && run.Health == pause.Health && run.MissCount == pause.MissCount
+                        && (!pause.ActivePattern || run.Pattern.PatternId == pause.Pattern.PatternId),
+                        "The interactive recovery must retain its practice/trap without hidden countdown damage.");
+                    windowReady = true;
+                    WriteWindowFrame("resumed");
+                }
+                yield return null;
+            }
+        }
+
+        private void WriteWindowFrame(string name)
+        {
+            GreedLastRunSnapshot run = RunState();
+            var frame = new Frame { name = name, utc = DateTime.UtcNow.ToString("O"), width = Screen.width,
+                height = Screen.height, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
+                pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
+                misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
+                paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive };
+            using (var file = new FileStream(Path.Combine(root, phase + "-" + name + ".json"), FileMode.CreateNew))
+            using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(frame, true));
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames)
@@ -437,6 +536,38 @@ namespace GreedLast.PlayerChecks
         {
             if (!condition) throw new InvalidOperationException(message);
         }
+        private void WriteObservation(string name)
+        {
+            result.screen = state == null ? "unavailable" : state.CurrentState.ToString();
+            if (backend != null)
+            {
+                result.clears = Count("normalClearCount");
+                result.failures = Count("normalFailCount");
+                result.abandons = Count("normalAbandonCount");
+                result.infiniteRuns = Count("infiniteRunCount");
+                result.growthPoints = backend.LoadSelectedSaveSlotView().GrowthPoints;
+                result.candidate = backend.HasSaveLoadoutCandidate;
+                result.uses = Uses();
+                result.onboardingComplete = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1;
+            }
+            if (outputValidated)
+                using (var file = new FileStream(Path.Combine(root, name + ".json"), FileMode.CreateNew))
+                using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(result, true));
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (!windowAwaitingClose || finished) return;
+            finished = true;
+            result.succeeded = windowReady;
+            result.quitCallbackObserved = true;
+            result.completedUtc = DateTime.UtcNow.ToString("O");
+            result.error = windowReady ? string.Empty : "The interactive window closed before its required stages completed.";
+            result.scope = "Interactive isolated player OnApplicationQuit observed. The external UI evidence, not this callback, identifies the actual close trigger. Fresh processes verify persistence; not physical timing, audio or device performance.";
+            try { WriteObservation(phase); }
+            catch (Exception error) { Debug.LogException(error); }
+        }
+
         private void Finish(bool success, string error)
         {
             if (finished) return;
@@ -447,20 +578,7 @@ namespace GreedLast.PlayerChecks
             result.screen = state == null ? "unavailable" : state.CurrentState.ToString();
             try
             {
-                if (backend != null)
-                {
-                    result.clears = Count("normalClearCount");
-                    result.failures = Count("normalFailCount");
-                    result.abandons = Count("normalAbandonCount");
-                    result.infiniteRuns = Count("infiniteRunCount");
-                    result.growthPoints = backend.LoadSelectedSaveSlotView().GrowthPoints;
-                    result.candidate = backend.HasSaveLoadoutCandidate;
-                    result.uses = Uses();
-                    result.onboardingComplete = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1;
-                }
-                if (outputValidated)
-                    using (var file = new FileStream(Path.Combine(root, phase + ".json"), FileMode.CreateNew))
-                    using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(result, true));
+                WriteObservation(phase);
             }
             catch (Exception writeError) { success = false; Debug.LogException(writeError); }
             finally
