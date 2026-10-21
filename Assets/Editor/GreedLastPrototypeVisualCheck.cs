@@ -95,6 +95,7 @@ namespace GreedLast.Editor
             public string startedUtc, completedUtc, unityVersion, error;
             public bool succeeded;
             public string scope = "Real filesystem operations in an isolated evidence directory. Not disk-full, power-loss, actual scene cleanup, gameplay or hardware testing.";
+            public int transientLockRetries;
             public List<string> cases = new List<string>();
         }
 
@@ -3284,7 +3285,7 @@ namespace GreedLast.Editor
             ReplaceLatestReport(Path.Combine(directory, "latest-report.json"), bytes);
         }
 
-        private static void ReplaceLatestReport(string path, byte[] bytes)
+        private static void ReplaceLatestReport(string path, byte[] bytes, Action<int> beforeRetry = null)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
             string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
@@ -3297,7 +3298,19 @@ namespace GreedLast.Editor
                     stream.Write(bytes, 0, bytes.Length);
                 }
                 // Never truncate the old index before the replacement is fully written and closed.
-                if (File.Exists(path)) File.Replace(temporary, path, null);
+                if (File.Exists(path))
+                {
+                    for (int attempt = 0; ; attempt++)
+                    {
+                        try { File.Replace(temporary, path, null); break; }
+                        catch (IOException error) when (attempt < 2 && IsRetryableIndexLock(error)
+                            && File.Exists(temporary) && File.Exists(path))
+                        {
+                            if (beforeRetry != null) beforeRetry(attempt + 1);
+                            else System.Threading.Thread.Sleep(25 * (attempt + 1));
+                        }
+                    }
+                }
                 else File.Move(temporary, path);
                 temporaryOwned = false;
             }
@@ -3305,6 +3318,12 @@ namespace GreedLast.Editor
             {
                 if (temporaryOwned) File.Delete(temporary);
             }
+        }
+
+        private static bool IsRetryableIndexLock(IOException error)
+        {
+            int code = error.HResult & 0xffff;
+            return code == 32 || code == 33 || code == 1175;
         }
 
         private static void FinishCapture(bool succeeded, string error)
@@ -3412,6 +3431,24 @@ namespace GreedLast.Editor
                     RequireLatest(second);
                     Require(File.ReadAllText(Path.Combine(directory, "report-locked.json")) == third, "A failed index update must retain its completed new archive.");
                     check.cases.Add("windows-locked-index");
+
+                    FileStream transient = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.None);
+                    try
+                    {
+                        ReplaceLatestReport(latest, new UTF8Encoding(false).GetBytes(second), retry =>
+                        {
+                            Require(retry == 1, "Releasing the real exclusive reader must allow the first retry.");
+                            check.transientLockRetries++;
+                            transient.Dispose();
+                            transient = null;
+                        });
+                    }
+                    finally { transient?.Dispose(); }
+                    RequireLatest(second);
+                    Require(check.transientLockRetries == 1
+                        && File.ReadAllText(Path.Combine(directory, "report-first.json")) == first,
+                        "Transient lock recovery must preserve the complete index and earlier archive.");
+                    check.cases.Add("transient-index-lock-recovery");
                 }
 
                 string blocked = Path.Combine(directory, "blocked");
@@ -3431,7 +3468,7 @@ namespace GreedLast.Editor
                 Require(File.ReadAllText(Path.Combine(directory, "report-first.json")) == first
                     && File.ReadAllText(Path.Combine(directory, "report-second.json")) == second, "Recovery must preserve all previous archives.");
                 check.cases.Add("fresh-publication-recovery");
-                Require(check.cases.Count == (Application.platform == RuntimePlatform.WindowsEditor ? 8 : 7), "All capture publication cases must run.");
+                Require(check.cases.Count == (Application.platform == RuntimePlatform.WindowsEditor ? 9 : 7), "All capture publication cases must run.");
                 check.succeeded = true;
             }
             catch (Exception error) { check.error = error.ToString(); throw; }
