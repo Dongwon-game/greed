@@ -76,6 +76,19 @@ function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) 
     finally { $p.Refresh(); $entry.Stopped=$p.HasExited; $p.Dispose() }
 }
 
+function Read-OwnedEngineReport([string]$Copy) {
+    $directory = Join-Path $Copy 'Logs\PlayModeChecks'
+    $latest = Join-Path $directory 'latest-report.json'
+    if (!(Test-Path -LiteralPath $latest)) { return $null }
+    $engine = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrEmpty($engine.archivedReport) -or [IO.Path]::GetFileName($engine.archivedReport) -cne $engine.archivedReport) {
+        throw 'Unsafe archived report path.'
+    }
+    $path = Join-Path $directory $engine.archivedReport
+    if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'The archived engine report is missing.' }
+    return [pscustomobject]@{Data=$engine;Path=$path;SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
+}
+
 try {
     [IO.File]::Copy($PSCommandPath,(Join-Path $root 'runner.ps1'),$false)
     [IO.File]::WriteAllText((Join-Path $root 'prepared.json'),($report|ConvertTo-Json -Depth 8))
@@ -104,18 +117,29 @@ try {
     Invoke-OwnedEditor @('-batchmode','-force-d3d11','-projectPath',('"'+$copy+'"'),
         '-executeMethod','GreedLast.Editor.GreedLastEngineLoopBootstrap.Run','-greed-engine-id',$id,'-greed-engine-kind',$mode,
         '-logFile',('"'+(Join-Path $root 'engine.log')+'"')) $timeout 'engine'
-    $engineDirectory = Join-Path $copy 'Logs\PlayModeChecks'
-    $engine = Get-Content -LiteralPath (Join-Path $engineDirectory 'latest-report.json') -Raw | ConvertFrom-Json
+    $read = Read-OwnedEngineReport $copy
+    if ($null -eq $read) { throw 'The engine did not publish its report.' }
+    $engine = $read.Data
+    $report.EngineReport=$read.Path
+    $report.EngineReportSHA256=$read.SHA256
     if (!$engine.succeeded -or !$engine.personalPreferencesUnchanged -or $engine.practicePreferenceRestorationPending -or
         @($engine.cycles).Count -ne 2 -or $engine.trapCueOnly -ne [bool]$CueOnly -or $engine.fullLoopIncluded -eq [bool]$CueOnly) {
         throw 'Required engine coverage or fixture preference restoration did not complete.'
     }
-    if ([IO.Path]::GetFileName($engine.archivedReport) -cne $engine.archivedReport) { throw 'Unsafe archived report path.' }
-    $report.EngineReport=Join-Path $engineDirectory $engine.archivedReport
-    $report.EngineReportSHA256=(Get-FileHash -LiteralPath $report.EngineReport).Hash
     $report.Succeeded=$true
 }
-catch { $report.Error=$_.Exception.ToString() }
+catch {
+    $report.Error=$_.Exception.ToString()
+    try {
+        $failure = Read-OwnedEngineReport (Join-Path $root 'Project')
+        if ($null -ne $failure) {
+            $report.EngineReport=$failure.Path
+            $report.EngineReportSHA256=$failure.SHA256
+            if (![string]::IsNullOrEmpty($failure.Data.error)) { $report.Error += ' Engine: '+$failure.Data.error }
+        }
+    }
+    catch { $report.Error += ' Engine report read failed: '+$_.Exception.Message }
+}
 finally {
     $report.PersonalPreferencesUnchanged=$before -ceq (Read-PersonalPreferences)
     $report.ProjectSettingsUnchanged=$settingsHash -ceq (Get-FileHash -LiteralPath $settings).Hash
