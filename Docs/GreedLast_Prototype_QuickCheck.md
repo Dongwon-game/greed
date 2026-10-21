@@ -2,15 +2,23 @@
 
 시작 화면부터 대표 한 판과 저장/무한 연결을 확인하는 순서다. 현재 소스와 실행본은 아래 최신 기준으로 구분한다. 상세 근거는 [확인 이력](GreedLast_Prototype_CheckHistory.md), 세부 검사는 [전체 체크리스트](GreedLast_Prototype_Checklist.md)를 따른다.
 
-최신 기준: 2026-10-20 23:43 KST 비개발 Windows/cross-scroll. 게임 입력 소스 `af6cc47`, 편집기 시간 대역 보완 `cf91f6c`다. 연결된 본문·손잡이에서 먼저 누른 손가락의 조작을 유지한다. 실제 엔진 두 방식/827장/전체 스모크·154파일 ZIP/20초 초기 구동을 완료했다. 점수·판정·저장 한 번/실제 두 번 사용은 유지하며 아래 이전 시점 수치는 당시 이력이다.
+최신 기준: 2026-10-21 13:33 KST 비개발 Windows/player-lifecycle. 게임 입력 `af6cc47`과 기존 게임 DLL/플레이 규칙을 유지했다. 실제 종료·새 프로세스 10단계, 별도 오프스크린 7장, 전체 스모크·배포 잠금·154파일 ZIP·20초 초기 구동이 통과했다. 앞선 실제 엔진 두 방식/827장 근거는 게임 코드 불변 범위에서 유지하며 다시 실행한 것으로 세지 않는다. 아래 이전 시점 수치는 당시 이력이다.
 
 **10월 19일 첫 연습 표시 이력**: 당시 실패한 검사 뒤 완료 표시가 0으로 남았고 종료 전 원본 값/존재 여부가 확인되지 않아 추측 복원하지 않았다. 첫 연습이 다시 나오면 세 동작을 한 번 마치고 이어간다. 기존 조합/기록이나 전체 진행도를 초기화하지 않는다. 이번 검사 시작값의 복원이나 별도 시험 저장소의 성공을 이 최초 사건의 원상복구로 표시하지 않는다.
+
+## 이번에 볼 세 가지
+
+1. 기초 연습에서 ESC 정지→대기→새 재개를 누른다. 메뉴와 카운트 뒤 같은 함정이 앞 여유를 두고 이어져야 한다. 앱 전환만으로 자동 재개하면 안 된다.
+2. 일반 핵→탈출 결과에서 원하는 한 칸을 직접 골라 한 번만 저장한다. 저장 관리에 다시 들어가도 같은 후보를 또 저장하면 안 된다.
+3. 새 임시 조합으로 무한 준비 취소는 무소모, 실제 시작은 2→1→자동 비움인지 본다. 비운 뒤 현재 런은 이어지고 결과/기록/보상은 한 번만 남아야 한다.
+
+이번 추가는 게임 규칙 변경이 아닌 실행 파일 검증과 개발 도구 안정화다. 실제 `Application.Quit` 복원은 시험 제품에서 통과했지만 OS 창 X/Alt+F4·손/소리/휴대폰 성능은 직접 확인으로 남는다. 상세 개발 절차는 [실행 파일 검증](GreedLast_Prototype_PlayerChecks.md)을 따른다. 기본 전체 순서는 아래 12단계다.
 
 ## 실행
 
 1. Unity Hub에서 `C:\Projectunity\greed last`를 Unity 6.4 `6000.4.3f1`로 연다.
 2. `Assets/Scenes/GreedLast_Boot.unity`를 열고 가로 Game 뷰에서 Play한다.
-3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다. 23:43 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261020-cross-scroll.zip`이다. 이전 ZIP은 보존한다.
+3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다. 10월 21일 13:33 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261021-player-lifecycle.zip`이다. 이전 ZIP은 보존한다.
 4. 아래 순서는 **한 저장 환경**에서 진행한다. 확인용으로 보관할 조합/개인 포인트를 소모하거나 진행도를 초기화하지 않는다.
 
 에디터와 Windows 실행 파일은 [PlayerPrefs 저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)가 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 단정하거나 레지스트리를 직접 복사·초기화하지 않는다.

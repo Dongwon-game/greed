@@ -4,6 +4,10 @@
 
 [처음부터 확인하기](Docs/GreedLast_Prototype_QuickCheck.md) · [기획과 구현 범위](Docs/GreedLast_Prototype_PlanCoverage.md) · [검증 이력](Docs/GreedLast_Prototype_CheckHistory.md)
 
+![기초 연습의 직선 통로와 바닥 함정 대응](Docs/Images/GreedLast-Prototype-20261021.png)
+
+Windows 시험 플레이어의 실제 연습 상태를 오프스크린으로 그린 화면이다. OS 창 캡처나 손/휴대폰 성능 검사는 아니다.
+
 ## 시작
 
 1. Unity Hub에서 이 저장소 폴더를 Unity 6.4 `6000.4.3f1`로 연다.
