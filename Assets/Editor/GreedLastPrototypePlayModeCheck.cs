@@ -126,7 +126,21 @@ namespace GreedLast.Editor
             Require(HasImmediateBatchQuit(true, new[] { "-batchmode", "-quit" })
                 && HasImmediateBatchQuit(true, new[] { "-QUIT" }),
                 "An immediate batch quit must be rejected before creating test resources or changing play settings.");
+            DateTime now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            string deadline = now.ToString("O");
+            Require(!HasUnstartedEngineDeadline(false, false, deadline, now)
+                && !HasUnstartedEngineDeadline(true, true, deadline, now.AddSeconds(1))
+                && !HasUnstartedEngineDeadline(true, false, string.Empty, now)
+                && !HasUnstartedEngineDeadline(true, false, deadline, now.AddMilliseconds(-1))
+                && HasUnstartedEngineDeadline(true, false, deadline, now)
+                && HasUnstartedEngineDeadline(true, false, deadline, now.AddMilliseconds(1)),
+                "Only an entered, unstarted engine beyond its startup deadline may fail the bootstrap guard.");
         }
+
+        private static bool HasUnstartedEngineDeadline(bool playing, bool driverStarted, string deadlineText, DateTime now)
+            => playing && !driverStarted
+                && DateTime.TryParse(deadlineText, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime deadline)
+                && now >= deadline;
 
         public static void VerifyPreferenceCaptureCoverage()
         {
@@ -248,6 +262,8 @@ namespace GreedLast.Editor
                 ? EnterPlayModeOptions.DisableDomainReload : EnterPlayModeOptions.None;
             EditorSettings.enterPlayModeOptionsEnabled = cycle == 1;
             SessionState.SetString(Prefix + "domainBeforeEntry", DomainIdentity);
+            SessionState.SetBool(Prefix + "driverStarted", false);
+            SessionState.SetString(Prefix + "driverStartDeadline", string.Empty);
             // Added natural choice courses and resume lead-ins retain their individual state/wait bounds.
             int cycleSeconds = SessionState.GetBool(Prefix + "fullLoop", false) ? 510
                 : SessionState.GetBool(Prefix + "multiTouchOnly", false) ? 100 : 240;
@@ -279,6 +295,7 @@ namespace GreedLast.Editor
             if (!SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false)) return;
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
+                SessionState.SetString(Prefix + "driverStartDeadline", DateTime.UtcNow.AddSeconds(15).ToString("O"));
                 var driver = new GameObject("GreedLastEngineLifecycleCheck").AddComponent<Driver>();
                 UnityEngine.Object.DontDestroyOnLoad(driver.gameObject);
             }
@@ -297,6 +314,18 @@ namespace GreedLast.Editor
         private static void Watchdog()
         {
             if (!SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false)) return;
+            // A hidden fresh editor can enter Play mode without advancing the first player frame.
+            if (HasUnstartedEngineDeadline(EditorApplication.isPlaying,
+                SessionState.GetBool(Prefix + "driverStarted", false),
+                SessionState.GetString(Prefix + "driverStartDeadline", string.Empty), DateTime.UtcNow))
+            {
+                RecordFailure("Engine frame driver did not start within 15 seconds after entering Play mode."
+                    + " frames=" + Time.frameCount + ", focused=" + Application.isFocused
+                    + ", editorPaused=" + EditorApplication.isPaused + ", runInBackground=" + Application.runInBackground
+                    + ", graphics=" + SystemInfo.graphicsDeviceType);
+                EditorApplication.ExitPlaymode();
+                return;
+            }
             if (!DateTime.TryParse(SessionState.GetString(Prefix + "deadline", string.Empty),
                 null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime deadline)
                 || DateTime.UtcNow < deadline) return;
@@ -642,6 +671,7 @@ namespace GreedLast.Editor
 
             private void Start()
             {
+                SessionState.SetBool(Prefix + "driverStarted", true);
                 startedAt = Time.realtimeSinceStartup;
                 report.domainReloadDisabled = SessionState.GetInt(Prefix + "cycle", 0) == 1;
                 Application.logMessageReceived += CollectError;
