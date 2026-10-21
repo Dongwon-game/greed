@@ -1,6 +1,6 @@
 # Greed Last 프로토타입 과거 확인 기록
 
-## 2026-10-21 백그라운드 결과 보존 - 실행본 검증 중
+## 2026-10-21 백그라운드 결과 보존과 14:15 실행본
 
 일반 클리어/일반 실패/무한 종료 결과에서 앱의 일시중단 또는 포커스 손실 콜백이 오면 완료 결과를 한 번 보존한다. 복귀 후 저장/저장 포기/재시작/로비/종료도 같은 정산 경로를 사용한다. 진행 중 런·카운트·연습은 자동 정산하지 않고, 슬롯 자동 저장이나 사용권 추가 소모는 하지 않는다. 모바일에서는 중단 뒤 종료 콜백 없이 프로세스가 제거될 수 있다는 [Unity 6.4 공식 문서](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/MonoBehaviour.OnApplicationQuit.html)를 반영했다.
 
@@ -9,7 +9,9 @@
 - 같은 루트 `report.json`, SHA256 `B2BCFFC1F6FD9CA8D3CE19ADFFE2BFC77CA460557723C87DD6BB337E01BEEEF8`: 런타임 수정 전 창 옵션 확장의 기본 열 단계/안전 대조 네 가지가 통과했다. 개인 설정과 프로젝트 설정 불변이다. 이를 이번 런타임 변경의 새 실행본 검증으로 간주하지 않는다.
 - 선택적 실제 창 검사는 사용자 중단으로 미완료다. 기본 실행에는 창 조작이 추가되지 않으며 사용자 Windows 제어를 자동 재개하지 않았다.
 
-현재 배포 실행 파일은 아래 13:33 기준이다. 이번 수정의 전체 스모크와 새 배포 검증이 끝나기 전에는 새 실행본 완료로 표시하지 않는다.
+소스 `1084cdf`의 전체 스모크와 14:15 비개발 Windows/background-results 빌드가 통과했다. `Logs/PlayerReleaseChecks/ac0b9a06fbb44df6a9b204929cb0aae0/report.json`에 소유 PID 5676 정상 종료, 개인 설정/프로젝트 설정 불변을 기록했다. 새 DLL SHA256은 `0CE3C0B9843095FB5263C12773B78F6D76863B9D1EC3F5F8FA5412BE39CE4B8A`다. 새 ZIP `GreedLastPrototype-verified-20261021-background-results.zip` SHA256은 `67DE98A8C7E5597FD41376873925CA74F68D07131A473703651B1657775D300B`이며 이전 ZIP은 보존했다. 배포 해시/개발 잠금/시험 코드 제외/ZIP 전체 대조가 통과했다.
+
+같은 소스의 `Logs/PlayerPersistenceChecks/902e9c0f6af445cf8231bb1dc21452e1/report.json`, SHA256 `EEDFD349AAE7A56CE7122E87281D93E846490C3B3C869BC87CC90E83176F4752`: 실제 종료·새 프로세스 열 단계와 안전 대조 네 가지가 모두 통과했고 개인/프로젝트 설정 불변이다. 앞선 수정 전 기본 검사와 구분한다. `Logs/StandaloneChecks/report-startup-20261021-051626-7546443.json`은 20초 헤드리스 초기 구동, 예외 0, 개인 Windows 값 0→0·불변, 소유 PID 5212 정리가 통과했다. 전체 원시 파일/해시는 새 배포 루트 `manifest.json`을 따른다. 새 화면/실제 모바일 OS 종료·손/소리/기기 성능 검사를 했다는 뜻은 아니다.
 
 ## 2026-10-21 실제 실행 파일 종료와 새 프로세스 복원
 
