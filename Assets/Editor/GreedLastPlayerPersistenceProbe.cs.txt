@@ -1,0 +1,473 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using UnityEngine;
+
+namespace GreedLast.PlayerChecks
+{
+    public sealed class GreedLastPlayerPersistenceProbe : MonoBehaviour
+    {
+        private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        private GreedLastApp app;
+        private GreedLastRunCore core;
+        private GreedLastMockBackend backend;
+        private GreedLastStateMachine state;
+        private string root, phase;
+        private float deadline;
+        private bool finished, outputValidated;
+        private readonly Result result = new Result();
+
+        [Serializable]
+        private sealed class Result
+        {
+            public string phase, startedUtc, completedUtc, company, product, error, screen;
+            public string scope = "Pre-exit assertions in an isolated Windows player. Later processes verify actual persistence. Real frames and app commands; not physical input, OS window close, process-kill recovery, audio or device performance.";
+            public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
+            public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
+            public int[] uses;
+            public int expectedInfiniteGrowthReward;
+            public Record record;
+            public Frame[] frames;
+        }
+
+        [Serializable]
+        private sealed class Frame
+        {
+            public string name, pattern, graphicsDevice;
+            public int width, height, sampledColors, health, misses;
+            public float distance, elapsed;
+            public bool paused, opening, resuming;
+        }
+
+        [Serializable]
+        private sealed class Record
+        {
+            public int score, successes, good, misses;
+            public float distance;
+            public string timingProfile;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Create()
+        {
+            if (Application.isEditor || Application.companyName != "GreedLastPrototypeChecks") return;
+            new GameObject(nameof(GreedLastPlayerPersistenceProbe)).AddComponent<GreedLastPlayerPersistenceProbe>();
+        }
+
+        private IEnumerator Start()
+        {
+            var stack = new Stack<IEnumerator>();
+            stack.Push(Run());
+            while (stack.Count > 0 && !finished)
+            {
+                object current = null;
+                bool moved = false;
+                Exception failure = null;
+                try
+                {
+                    IEnumerator top = stack.Peek();
+                    moved = top.MoveNext();
+                    if (moved) current = top.Current;
+                    else { (top as IDisposable)?.Dispose(); stack.Pop(); }
+                }
+                catch (Exception error) { failure = error; }
+                if (failure != null) { Finish(false, failure.ToString()); yield break; }
+                if (!moved) continue;
+                if (current is IEnumerator nested) stack.Push(nested);
+                else yield return current;
+            }
+            if (!finished) Finish(true, string.Empty);
+        }
+
+        private IEnumerator Run()
+        {
+            string id = Argument("-greed-probe-id");
+            Require(Guid.TryParseExact(id, "N", out _), "A fresh probe identity is required.");
+            phase = Argument("-greed-probe-phase");
+            Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
+                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render" }, phase) >= 0,
+                "The output phase must be a fixed safe filename.");
+            root = Path.GetFullPath(Argument("-greed-probe-root"));
+            string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
+            Require(string.Equals(root, expected, StringComparison.OrdinalIgnoreCase)
+                && new DirectoryInfo(root).Name == id
+                && new DirectoryInfo(root).Parent.Name == "PlayerPersistenceChecks"
+                && Application.productName == "Persistence-" + id,
+                "The probe must run inside its own build and isolated product, never the personal product.");
+            outputValidated = true;
+            Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
+            deadline = Time.realtimeSinceStartup + 150f;
+            result.phase = phase;
+            result.startedUtc = DateTime.UtcNow.ToString("O");
+            result.company = Application.companyName;
+            result.product = Application.productName;
+            while (app == null)
+            {
+                app = FindFirstObjectByType<GreedLastApp>();
+                yield return null;
+                CheckDeadline();
+            }
+            core = Read<GreedLastRunCore>(app, "runCore");
+            backend = Read<GreedLastMockBackend>(app, "backend");
+            state = Read<GreedLastStateMachine>(app, "stateMachine");
+            yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+            yield return new WaitForSecondsRealtime(0.25f);
+            Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
+            if (phase != "clear" && phase != "render") Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
+                "Completing the real first practice must persist across player restarts.");
+
+            if (phase == "render")
+            {
+                Require(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
+                    "A real graphics device is required; headless output is not a render pass.");
+                Require(EmptySlots() && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
+                    && !backend.HasSaveLoadoutCandidate, "The render control must precede progression checks.");
+                var frames = new List<Frame>();
+                yield return CaptureFrame("lobby", frames);
+                Call(app, "RequestPracticeRun");
+                yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
+                yield return CaptureFrame("opening", frames);
+                yield return WaitFor(() => RunState().ActivePattern && !RunState().CountdownActive && !RunState().Paused);
+                yield return CaptureFrame("trap", frames);
+                string pattern = RunState().Pattern.PatternId;
+                Call(app, "RequestToggleRunPause");
+                yield return WaitFor(() => RunState().Paused && !RunState().ResumeCountdownActive);
+                yield return CaptureFrame("paused", frames);
+                GreedLastRunSnapshot paused = RunState();
+                yield return new WaitForSecondsRealtime(0.4f);
+                Require(RunState().Distance == paused.Distance && RunState().ElapsedSeconds == paused.ElapsedSeconds
+                    && RunState().Health == paused.Health && RunState().MissCount == paused.MissCount,
+                    "Rendering the actual pause menu must not advance gameplay.");
+                Call(app, "RequestToggleRunPause");
+                yield return WaitFor(() => RunState().ResumeCountdownActive);
+                yield return CaptureFrame("resume-countdown", frames);
+                yield return WaitFor(() => !RunState().Paused && !RunState().CountdownActive && RunState().ActivePattern);
+                Require(RunState().Pattern.PatternId == pattern && RunState().Health == paused.Health
+                    && RunState().MissCount == paused.MissCount, "The rendered recovery must retain the same trap without hidden damage.");
+                yield return CaptureFrame("resumed-trap", frames);
+                yield return DriveCourse();
+                Require(core.IsPracticeComplete && !backend.HasSaveLoadoutCandidate && EmptySlots()
+                    && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
+                    "Actual rendered practice must not create normal/infinite progression.");
+                yield return CaptureFrame("practice-result", frames);
+                result.frames = frames.ToArray();
+                result.scope = "Isolated Windows-player offscreen camera renders of the live UI and real-frame practice app commands. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
+            }
+            else if (phase == "clear")
+            {
+                Require(Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
+                    && !backend.HasSaveLoadoutCandidate && EmptySlots(), "The isolated product must start empty.");
+                Call(app, "RequestPracticeRun");
+                yield return DriveCourse();
+                Require(core.IsPracticeComplete, "The real first practice must finish without developer shortcuts.");
+                Call(app, "RequestNextRunPattern");
+                yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
+                yield return DriveCourse();
+                Require(core.CanExitAfterClear && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0,
+                    "Quit must be the first settlement of this actual normal clear.");
+                result.terminalBeforeQuit = true;
+                GreedLastRunRecord record = core.CreateRunRecord();
+                result.record = From(record);
+            }
+            else if (phase == "save")
+            {
+                Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "The prior process must preserve exactly one clear/reward and an unsaved candidate.");
+                Record expectedRecord = Previous("clear").record;
+                SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), expectedRecord);
+                Call(app, "RequestSaveLoadout");
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.SaveLoadoutDraft);
+                yield return new WaitForSecondsRealtime(0.25f);
+                Require(Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"), "Reload must still require an explicit slot choice.");
+                Call(app, "RequestNextRunPattern");
+                Require(backend.HasSaveLoadoutCandidate && EmptySlots(), "A confirmation without a slot choice must not save.");
+                yield return null;
+                Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
+                Require(!Read<bool>(app, "saveDraftRequiresExplicitSlotChoice") && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == 2,
+                    "The fresh slot-selection command must choose S3 before confirming.");
+                yield return new WaitForSecondsRealtime(0.25f);
+                Call(app, "RequestNextRunPattern");
+                Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                    "Confirming the first ordinary saved candidate must return to the lobby.");
+                yield return null;
+                Require(!backend.HasSaveLoadoutCandidate && Uses()[2] == 2 && OnlyThirdSlot(), "The recovered candidate must save once to S3.");
+                Call(app, "RequestSaveLoadout");
+                yield return new WaitForSecondsRealtime(0.25f);
+                Call(app, "RequestNextRunPattern");
+                Require(!backend.HasSaveLoadoutCandidate && Uses()[2] == 2 && Count("normalClearCount") == 1
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Management re-entry must not recreate the save chance or reward.");
+            }
+            else if (phase == "first-use" || phase == "last-use")
+            {
+                int remaining = phase == "first-use" ? 2 : 1;
+                Require(!backend.HasSaveLoadoutCandidate && OnlyThirdSlot() && Uses()[2] == remaining
+                    && Count("normalClearCount") == 1 && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Real starts and prior live quit must preserve their exact consumption boundary.");
+                yield return PrepareInfinite();
+                if (phase == "first-use")
+                {
+                    Call(app, "RequestReturnToLobby");
+                    yield return new WaitForSecondsRealtime(0.25f);
+                    Require(Uses()[2] == 2, "Canceling actual preparation must not consume a use.");
+                    yield return PrepareInfinite();
+                }
+                Call(app, "RequestNextRunPattern");
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.InfiniteRun);
+                if (phase == "last-use")
+                {
+                    Require(EmptySlots() && core.IsInfiniteRun && !RunState().Stopped,
+                        "The second real start must clear the slot without destroying its active run.");
+                    result.secondRunAliveAfterSlotClear = true;
+                    yield return WaitFor(() => RunState().Stopped);
+                    Require(core.IsStoppedInfiniteRun && Count("infiniteRunCount") == 0,
+                        "Quit must be the first settlement of the naturally ended infinite run.");
+                    GreedLastInfiniteRunRecord record = core.CreateInfiniteRunRecord();
+                    Require(record.IsValid, "The naturally ended real player must produce a record.");
+                    result.record = From(record);
+                    result.expectedInfiniteGrowthReward = (int)typeof(GreedLastMockBackend)
+                        .GetMethod("BuildInfiniteGrowthReward", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { record });
+                    result.terminalBeforeQuit = true;
+                }
+                else
+                {
+                    yield return WaitFor(() => RunState().ActivePattern && !RunState().CountdownActive);
+                    Require(Uses()[2] == 1 && !RunState().Stopped && core.CreateInfiniteRunRecord().IsValid,
+                        "The first actual start must persist one use while the played run remains live.");
+                }
+            }
+            else if (phase == "verify" || phase == "verify-again")
+            {
+                Result prior = Previous("last-use");
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
+                    && Count("infiniteRunCount") == 1 && backend.LoadSelectedSaveSlotView().GrowthPoints == 3 + prior.expectedInfiniteGrowthReward,
+                    "Fresh processes must retain the empty slot and exactly one terminal infinite record/reward.");
+                SameRecord(From(Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord")), prior.record);
+                if (phase == "verify-again") Require(Previous("verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
+                    "Closing a settled lobby must not duplicate growth rewards.");
+            }
+            else if (phase == "live-normal" || phase == "normal-fail")
+            {
+                Result prior = Previous("verify-again");
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 1
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == prior.growthPoints,
+                    "Quitting live normal play must not manufacture an attempt, candidate or reward.");
+                Call(app, "RequestNormalRun");
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.RunCoreTest);
+                yield return DriveCourse(respond: false, untilFirstTrap: phase == "live-normal");
+                if (phase == "live-normal")
+                    Require(!RunState().Stopped && !core.IsPracticeRun
+                        && core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned).IsValid,
+                        "The live-quit control must contain real played normal progress.");
+                else
+                {
+                    GreedLastRunAttemptRecord record = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed);
+                    Require(core.IsStoppedNormalRun && record.IsValid && Count("normalFailCount") == 0,
+                        "Quit must first settle the real naturally failed normal run.");
+                    result.record = From(record);
+                    result.terminalBeforeQuit = true;
+                }
+            }
+            else if (phase == "verify-failure" || phase == "verify-failure-again")
+            {
+                Result prior = Previous("normal-fail");
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 1 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 1
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == prior.growthPoints + 1,
+                    "Normal failure must survive fresh processes with exactly one failure reward.");
+                GreedLastRunAttemptRecord saved = Read<GreedLastRunAttemptRecord>(backend, "lastRunAttemptRecord");
+                Require(saved.IsValid && saved.Outcome == GreedLastRunAttemptOutcome.Failed,
+                    "The stored normal attempt must remain a failure, not an abandon.");
+                SameRecord(From(saved), prior.record);
+                if (phase == "verify-failure-again")
+                    Require(Previous("verify-failure").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
+                        "An already settled normal failure must not grant another reward on quit.");
+            }
+            else throw new InvalidOperationException("Unsupported persistence phase.");
+        }
+
+        private IEnumerator CaptureFrame(string name, List<Frame> frames)
+        {
+            yield return new WaitForSecondsRealtime(0.12f);
+            string path = Path.Combine(root, "frame-" + name + ".png");
+            Require(!File.Exists(path), "A rendered frame must never overwrite earlier evidence.");
+            GreedLastRunSnapshot run = RunState();
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            Canvas canvas = Read<Canvas>(ui, "ownedCanvasSurface");
+            Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay,
+                "The live overlay canvas must exist before temporary offscreen routing.");
+            Camera oldCamera = canvas.worldCamera;
+            float oldPlane = canvas.planeDistance;
+            RenderTexture oldActive = RenderTexture.active;
+            var cameraObject = new GameObject("GreedLastProbeRenderCamera");
+            Camera camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            var target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
+            var texture = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+            try
+            {
+                Require(texture.width >= 640 && texture.height >= 360, "The offscreen player render must have usable dimensions.");
+                target.Create();
+                camera.targetTexture = target;
+                canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                canvas.worldCamera = camera;
+                canvas.planeDistance = 1f;
+                Canvas.ForceUpdateCanvases();
+                camera.Render();
+                RenderTexture.active = target;
+                texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                texture.Apply();
+                using (var file = new FileStream(path, FileMode.CreateNew))
+                {
+                    byte[] png = texture.EncodeToPNG();
+                    file.Write(png, 0, png.Length);
+                }
+                var colors = new HashSet<int>();
+                for (int y = 0; y < texture.height; y += Mathf.Max(1, texture.height / 48))
+                    for (int x = 0; x < texture.width; x += Mathf.Max(1, texture.width / 64))
+                    {
+                        Color32 c = texture.GetPixel(x, y);
+                        colors.Add(((c.r >> 3) << 10) | ((c.g >> 3) << 5) | (c.b >> 3));
+                    }
+                Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
+                frames.Add(new Frame { name = name, width = texture.width, height = texture.height,
+                    sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
+                    pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
+                    misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
+                    paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
+            }
+            finally
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.worldCamera = oldCamera;
+                canvas.planeDistance = oldPlane;
+                camera.targetTexture = null;
+                RenderTexture.active = oldActive;
+                target.Release();
+                Destroy(texture);
+                Destroy(target);
+                Destroy(cameraObject);
+                Canvas.ForceUpdateCanvases();
+            }
+            yield return null;
+        }
+
+        private IEnumerator PrepareInfinite()
+        {
+            Call(app, "RequestInfiniteRun");
+            yield return WaitFor(() => state.CurrentState == GreedLastScreenState.InfiniteStartReady);
+            yield return new WaitForSecondsRealtime(0.25f);
+            Call(app, "HandleRunChannelInput", GreedLastRunChannel.Center);
+            yield return new WaitForSecondsRealtime(0.25f);
+            Call(app, "HandleRunChannelInput", GreedLastRunChannel.Center);
+            yield return new WaitForSecondsRealtime(0.25f);
+            Require(Read<int>(app, "infinitePreparationStep") == 2, "Both ordinary preparation choices must complete.");
+        }
+
+        private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false)
+        {
+            float nextChoice = 0f;
+            while (!RunState().Stopped)
+            {
+                CheckDeadline();
+                GreedLastRunSnapshot run = RunState();
+                if (untilFirstTrap && run.ActivePattern && !run.CountdownActive && !run.Paused) break;
+                float now = Time.realtimeSinceStartup;
+                if (run.Paused && now >= nextChoice)
+                {
+                    Require(++result.automaticResumes <= 3, "Too many real-frame interruptions for this probe.");
+                    Call(app, "RequestToggleRunPause");
+                    nextChoice = now + 0.3f;
+                }
+                else if (run.ChoiceActive && now >= nextChoice)
+                {
+                    Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                    nextChoice = now + 0.25f;
+                }
+                else if (respond && run.ActivePattern && !run.CountdownActive && !run.Paused
+                    && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds
+                    && run.LastResult == GreedLastJudgementResult.None)
+                    Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                yield return null;
+            }
+            yield return null;
+        }
+
+        private IEnumerator WaitFor(Func<bool> condition)
+        {
+            while (!condition()) { CheckDeadline(); yield return null; }
+            yield return null;
+        }
+
+        private GreedLastRunSnapshot RunState() => Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
+        private int Count(string field) => Read<int>(backend, field);
+        private int[] Uses() => (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+        private bool EmptySlots() => Array.TrueForAll(backend.LoadSelectedSaveSlotView().SaveSlotOccupied, occupied => !occupied);
+        private bool OnlyThirdSlot()
+        {
+            bool[] slots = backend.LoadSelectedSaveSlotView().SaveSlotOccupied;
+            return slots.Length == 3 && !slots[0] && !slots[1] && slots[2];
+        }
+        private Result Previous(string name) => JsonUtility.FromJson<Result>(File.ReadAllText(Path.Combine(root, name + ".json")));
+        private static Record From(GreedLastRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
+        private static Record From(GreedLastInfiniteRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
+        private static Record From(GreedLastRunAttemptRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
+        private static void SameRecord(Record a, Record b) => Require(a.score == b.score && a.successes == b.successes
+            && a.good == b.good && a.misses == b.misses && a.distance == b.distance && a.timingProfile == b.timingProfile,
+            "The reloaded record must match the actual prior process, not a manufactured sample.");
+        private static T Read<T>(object target, string field) => (T)target.GetType().GetField(field, Fields).GetValue(target);
+        private static object Call(object target, string method, params object[] args)
+            => target.GetType().GetMethod(method, Fields).Invoke(target, args);
+        private static string Argument(string key)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            int index = Array.IndexOf(args, key);
+            if (index < 0 || index + 1 >= args.Length) throw new InvalidOperationException("Missing " + key);
+            return args[index + 1];
+        }
+        private void CheckDeadline() => Require(Time.realtimeSinceStartup <= deadline, "Real-player persistence phase timed out.");
+        private static void Require(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
+        }
+        private void Finish(bool success, string error)
+        {
+            if (finished) return;
+            finished = true;
+            result.succeeded = success;
+            result.error = error;
+            result.completedUtc = DateTime.UtcNow.ToString("O");
+            result.screen = state == null ? "unavailable" : state.CurrentState.ToString();
+            try
+            {
+                if (backend != null)
+                {
+                    result.clears = Count("normalClearCount");
+                    result.failures = Count("normalFailCount");
+                    result.abandons = Count("normalAbandonCount");
+                    result.infiniteRuns = Count("infiniteRunCount");
+                    result.growthPoints = backend.LoadSelectedSaveSlotView().GrowthPoints;
+                    result.candidate = backend.HasSaveLoadoutCandidate;
+                    result.uses = Uses();
+                    result.onboardingComplete = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1;
+                }
+                if (outputValidated)
+                    using (var file = new FileStream(Path.Combine(root, phase + ".json"), FileMode.CreateNew))
+                    using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(result, true));
+            }
+            catch (Exception writeError) { success = false; Debug.LogException(writeError); }
+            finally
+            {
+                if (!success) Debug.LogError(error);
+                Application.Quit(success ? 0 : 1);
+            }
+        }
+    }
+}

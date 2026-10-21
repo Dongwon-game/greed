@@ -25,6 +25,7 @@
 - `Greed Last > Build Verified Windows Prototype`은 스모크 후 비개발 Windows 실행본과 식별 자료를 만든다. Windows Build Support가 필요하다.
 - 로컬 실행 경로는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`다. 검증 범위와 최신 실행본 식별은 [확인 이력](Docs/GreedLast_Prototype_CheckHistory.md)을 따른다.
 - 무적·바로가기·위협 조절은 에디터/개발 빌드 전용이다. 확인용으로 개인 진행도나 보관할 조합을 초기화·소모하지 않는다.
+- 실제 종료/새 프로세스의 저장 검사는 [실행 파일 검증](Docs/GreedLast_Prototype_PlayerChecks.md)을 따른다. 시험 전용 복사본/제품을 쓰며 정식 실행본에 시험 코드를 넣지 않는다.
 
 ## 저장소 구성
 

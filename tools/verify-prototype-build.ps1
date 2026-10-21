@@ -305,6 +305,8 @@ try {
     $editorRefs = @($assembly.MainModule.AssemblyReferences | Where-Object { $_.Name -like 'UnityEditor*' })
     $editorTypes = @($types | Where-Object { $_.Namespace -eq 'GreedLast.Editor' -or $_.FullName -match 'GreedLast\.Editor\.' })
     $inputFixtureTypes = @($types | Where-Object { $_.FullName -eq 'GreedLast.GreedLastPrototypeKeyboardInput' })
+    $playerPersistenceFixtures = @($types | Where-Object { $_.FullName.StartsWith('GreedLast.PlayerChecks.', [StringComparison]::Ordinal) })
+    if ($playerPersistenceFixtures.Count -ne 0) { throw 'The isolated player-persistence fixture must never ship in the user release.' }
     $resetApis = @($types.Methods | Where-Object { $_.Name -in @('CreatePersistenceTestBackendForEditor', 'ClearPersistedProgressForEditor', 'ResetPrototypeProgressForEditor') })
     $connectionMethods = @($types.Methods | Where-Object { $_.Name -eq 'ToggleOfflineForEditorCheck' })
     if ($editorRefs.Count -ne 0 -or $editorTypes.Count -ne 0 -or $inputFixtureTypes.Count -ne 0 -or $resetApis.Count -ne 0 -or $connectionMethods.Count -ne 2) { throw 'Unexpected release assembly surface.' }
@@ -408,6 +410,7 @@ if ($PackagePath) {
     EditorReferences = $editorRefs.Count
     EditorTestTypes = $editorTypes.Count
     InputFixtureTypes = $inputFixtureTypes.Count
+    PlayerPersistenceFixtureTypes = $playerPersistenceFixtures.Count
     EditorResetApis = $resetApis.Count
     VerifiedDevelopmentPolicies = $policies.Count
     VerifiedDevelopmentModeGetters = $modeGetters.Count

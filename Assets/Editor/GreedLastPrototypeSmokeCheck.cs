@@ -113,6 +113,7 @@ namespace GreedLast.Editor
 
         private static void RunChecks()
         {
+            GreedLastPlayerPersistenceBuilder.VerifyFixtureIsolation();
             GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
             GreedLastPrototypePlayModeCheck.VerifyPreferenceCaptureCoverage();
             GreedLastPrototypeKeyboardCheck.VerifyShortcutModifiers();
