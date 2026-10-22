@@ -1,6 +1,6 @@
 # Greed Last 프로토타입 과거 확인 기록
 
-## 2026-10-22 저장 후보의 기프트 전용 예고 보완 - 검증 중
+## 2026-10-22 저장 후보 예고와 13:51 실행본 완료
 
 소스 `5b5b26d`는 저장 후보의 이름/구성·보너스·비교 차이와 추천을 실제 기프트 전용 저장 레코드 기준으로 맞춘다. 원래 일반 클리어 기록의 유물/이름은 유지한다. 저장 기회 한 번·실제 무한 두 번과 자동 비움, 점수·피해·판정 폭은 바꾸지 않았다.
 
@@ -10,7 +10,15 @@
 
 사용자는 10월 22일 Windows 제어 재개를 직접 허용했다. 별도 `166d71c7832e44feb765b0a821700f20`의 실제 창 검사는 도구 활성화 두 번 모두 `failed to activate captured window`여서 입력 0회로 중단했다. 소유 시험 PID 30728만 정리했고 개인/원본 설정 불변이다. `report.json`과 `native-window-activation-failure.json`을 실패/미완료로 유지하며 오프스크린 성공으로 바꾸지 않는다. 원인이나 잠금/권한 문제를 확정하지 않았다.
 
-두 재로딩 방식의 새 전체 엔진 검사와 플레이용 새 배포는 진행 중이다. 아직 개인용 실행 기준은 아래 10월 21일 14:15/background-results이며 새 개인 배포/ZIP/초기 구동 완료로 표시하지 않는다.
+두 재로딩 방식의 새 전체 엔진 검사가 통과했다. `Logs/EngineLoopChecks/6ec13ae2ae314121b6bdd0a18017a1e7/report.json`의 SHA256은 `2B468AB9D2BC9CEF767AD9A786BDDD181CDA9D0B02B136AD258C3AEC79C1AD87`이다. 각 439.35/440.58초·25,980/25,998프레임, S2/S3 직접 한 번 저장·실제 무한 두 번/자동 비움·현재 런 유지, 메뉴 교차 4·일반 종료 후보 보존·무한 종료 보존 2가 포함된다. 개인/원본 설정 불변이다. 보존 엔진 아카이브 SHA256은 `F8957444251563F1FEE9A2DBEFC97EAC814B8077F9BF301EF9C7021C310ACC9B`다.
+
+같은 게임 입력의 새 정상 종료/재실행 검사는 `Logs/PlayerPersistenceChecks/cb76a84362764d1fb77bb3ac259348ca/report.json`, SHA256 `30AD911014448C872583F620FDDAA0E8C656510666DA88433D0CEA2CDE1BC8E6`다. 열 새 프로세스·네 안전 대조, 개인/원본 설정 불변이 통과했다. 실제 OS 창 닫기 검사의 성공으로 확대하지 않는다.
+
+게임 입력 `5b5b26d`, 발행 소스 `8875bd0`의 **10월 22일 13:51 KST 비개발 Windows/saved-gifts**가 전체 스모크·빌드·배포 잠금/시험 타입 0·154파일 ZIP 대조를 통과했다. `Logs/PlayerReleaseChecks/d20d6a8869c94d3f8f5d26d800b4d402/report.json`, SHA256 `65451A9E34B38EBD52F09656409FC99818178F7EF2B5FEA59EA3A1109BF84870`이다. DLL은 `EF5E53E96E81C2B7A74521BA7D810AB184A4DF5335F13D7D8EED01532610B0A9`, 새 ZIP `GreedLastPrototype-verified-20261022-saved-gifts.zip`은 58,433,128바이트/154파일, SHA256 `E863C8BFDDAA34D53DC94697DA0D2E1193CA8A0AC51009D8705D768C913438E5`다. 소유 빌드 PID 24352 정상 종료, 개인 설정/원본 PlayerSettings 불변이다.
+
+`Logs/StandaloneChecks/report-startup-20261022-045156-7178075.json`의 20초 헤드리스 초기 구동은 예외 0·개인 Windows 값 0→0/불변·소유 PID 25496 정리가 통과했다. SHA256 `85970260CC2B43D0D0CDC20649E86C5607947F8378712F9C430E96EAD6BF5C26`이다. 새 화면·실제 창 입력/종료·가청 소리·실기기 성능 검사는 아니다.
+
+이전 실행본 전체는 발행 루트의 `previous-release`에 복사/해시 대조해 보존했고 기존 10월 21일 ZIP도 그대로다. 이전 35파일 목록에 들어 있던 변경 가능한 발행 메타데이터는 `previous-metadata-alias.json`이 그 보존본을 가리키며 원래 목록은 고치지 않았다. 이 대응으로 이전 35항목도 확인했다. 새 134파일 근거는 `Logs/SavedGiftPreviewChecks/88bad69b9a5a4e7f9ea6e2ddc42d7f09/manifest.json`, SHA256 `123E610A14F0D85C4C0B3B0A14F0D087C6A7D07F3C9B72AC977022C5727DEC17`이다. 새 목록은 변경 가능한 발행 메타데이터 대신 고정 복사본/날짜별 ZIP을 사용한다.
 
 ## 2026-10-21 전용 엔진 도구 완료
 
