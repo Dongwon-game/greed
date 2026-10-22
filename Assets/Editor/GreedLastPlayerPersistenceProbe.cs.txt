@@ -37,6 +37,7 @@ namespace GreedLast.PlayerChecks
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public Record record;
+            public Record nativeLastInfiniteRecord;
             public Frame[] frames;
         }
 
@@ -164,13 +165,18 @@ namespace GreedLast.PlayerChecks
                 Result closed = Previous("window-loadout");
                 Require(closed.succeeded && closed.quitCallbackObserved && closed.nativeSlotChoiceObserved
                     && closed.nativeSlotSaved && closed.nativePreparationCanceled && closed.nativeFirstStartObserved
-                    && closed.nativeSecondStartObserved && closed.nativeLoopCompleted,
+                    && closed.nativeSecondStartObserved && closed.secondRunAliveAfterSlotClear
+                    && closed.nativeLoopCompleted,
                     "The native saved-loadout loop must finish before fresh-process verification.");
                 Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 2
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 3 + closed.expectedInfiniteGrowthReward,
                     "Native S3 save/cancel/two-start/auto-empty must persist once with its actual rewards.");
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
+                Require(closed.nativeLastInfiniteRecord != null,
+                    "The native loop must retain the actual last infinite record before closing.");
+                result.nativeLastInfiniteRecord = From(Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord"));
+                SameRecord(result.nativeLastInfiniteRecord, closed.nativeLastInfiniteRecord);
                 if (phase == "window-loadout-verify-again")
                     Require(Previous("window-loadout-verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
                         "A repeated fresh native-loop verification must not settle rewards again.");
@@ -532,6 +538,7 @@ namespace GreedLast.PlayerChecks
                         Require(firstEnded && Count("infiniteRunCount") == 1,
                             "The second native start must settle the first once and keep running after auto-empty.");
                         result.nativeSecondStartObserved = true;
+                        result.secondRunAliveAfterSlotClear = true;
                         stage = 3;
                         WriteObservation("window-loadout-second-start");
                     }
@@ -541,7 +548,9 @@ namespace GreedLast.PlayerChecks
                     if (core.IsInfiniteRun && run.Stopped && !secondEnded)
                     {
                         Require(run.Health == 0 && !run.DevInvincible, "The second native infinite run must end naturally.");
-                        result.expectedInfiniteGrowthReward += InfiniteGrowthReward(core.CreateInfiniteRunRecord());
+                        GreedLastInfiniteRunRecord last = core.CreateInfiniteRunRecord();
+                        result.nativeLastInfiniteRecord = From(last);
+                        result.expectedInfiniteGrowthReward += InfiniteGrowthReward(last);
                         secondEnded = true;
                         WriteObservation("window-loadout-second-ended");
                     }
