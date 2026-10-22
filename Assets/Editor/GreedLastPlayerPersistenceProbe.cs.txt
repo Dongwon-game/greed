@@ -31,6 +31,7 @@ namespace GreedLast.PlayerChecks
             public bool backgroundResultsRequested;
             public int backgroundChecks;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
+            public int inputUnavailableWaitFrames, resumeCountdownWaitFrames;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public Record record;
@@ -126,7 +127,8 @@ namespace GreedLast.PlayerChecks
             yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
             yield return new WaitForSecondsRealtime(0.25f);
             if (phase == "window-play" || phase == "window-clear")
-                yield return WaitFor(() => (bool)Call(app, "CanAcceptPlayerInput"));
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady
+                    && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear")
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
@@ -538,12 +540,24 @@ namespace GreedLast.PlayerChecks
                 CheckDeadline();
                 GreedLastRunSnapshot run = RunState();
                 if (untilFirstTrap && run.ActivePattern && !run.CountdownActive && !run.Paused) break;
-                float now = Time.realtimeSinceStartup;
-                if (run.Paused && now >= nextChoice)
+                // Foreground waits and an in-flight countdown are not new interruptions.
+                if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {
-                    Require(++result.automaticResumes <= 3, "Too many real-frame interruptions for this probe.");
-                    Call(app, "RequestToggleRunPause");
-                    nextChoice = now + 0.3f;
+                    result.inputUnavailableWaitFrames++;
+                    yield return null;
+                    continue;
+                }
+                float now = Time.realtimeSinceStartup;
+                if (run.Paused)
+                {
+                    if (run.ResumeCountdownActive) result.resumeCountdownWaitFrames++;
+                    else if (now >= nextChoice)
+                    {
+                        Call(app, "RequestToggleRunPause");
+                        if (RunState().ResumeCountdownActive)
+                            Require(++result.automaticResumes <= 3, "Too many real-frame interruptions for this probe.");
+                        nextChoice = now + 0.3f;
+                    }
                 }
                 else if (run.ChoiceActive && now >= nextChoice)
                 {
