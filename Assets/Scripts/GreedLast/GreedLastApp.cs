@@ -1247,7 +1247,7 @@ namespace GreedLast
                 + (prepared ? " - " : "\n") + record.LoadoutName;
             string bonus = GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview);
             string start = BuildInfiniteLoadoutStartStatePreview(preview);
-            string storedDetail = "\n성향: " + BuildLoadoutAndRouteProfile(record)
+            string storedDetail = "\n성향: " + BuildLoadoutAndRouteProfile(preview)
                 + "\n기프트 누적: " + BuildStoredGiftStackSummary(record)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m";
             return identity
@@ -1418,7 +1418,7 @@ namespace GreedLast
             GreedLastRunRecord preview = BuildInfinitePreviewLoadout(record, preparationGift, preparationRelic);
             detail = "슬롯 " + (usedSlotIndex + 1) + " 조합으로 진입\n"
                 + record.LoadoutName
-                + "\n성향: " + BuildLoadoutAndRouteProfile(record)
+                + "\n성향: " + BuildLoadoutAndRouteProfile(preview)
                 + $"\n기록 기준 {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + BuildSaveLoadoutQualitySummary(record)
                 + "\n" + GreedLastRunCore.BuildInfiniteLoadoutBonusPreview(preview)

@@ -21,12 +21,90 @@ namespace GreedLast.Editor
                     CheckCase(gift, relic, gifts[gift], relics[relic], ref mismatches);
             Require(mismatches == 0, "Prepared entry previews must match actual start bonuses. Mismatches=" + mismatches);
             RunGrowthStartPreview();
+            RunPreparedProfilePreviewCheck();
             Debug.Log("Greed infinite preparation previews passed: nine isolated keys/gift-relic combinations, three selected slots, real UI callbacks/waits, partial/complete/rewound previews, distinct stored loadout switch/return, cancel/new preparation, two actual starts and auto-empty, named neighbor/original record preservation. No personal keys, private clock edits, full gameplay or physical input testing.");
         }
 
         [MenuItem("Greed Last/Run Infinite Preparation Preview Check", true)]
         [MenuItem("Greed Last/Run Growth Infinite Start Preview Check", true)]
+        [MenuItem("Greed Last/Run Prepared Profile Preview Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        [MenuItem("Greed Last/Run Prepared Profile Preview Check")]
+        public static void RunPreparedProfilePreviewCheck()
+        {
+            Require(CanRun(), "Prepared profile checks require Edit mode.");
+            string[] summaries = {
+                "박자 감각 / 안정 루트 / 생존 축 / 변주 루트 / 생존 축 / 압박 루트 / 집중 축",
+                "안정 호흡 / 변주 루트 / 집중 축 / 안정 루트 / 집중 축 / 압박 루트 / 생존 축",
+                "고점 본능 / 안정 루트 / 연쇄 축 / 안정 루트 / 생존 축 / 변주 루트 / 연쇄 축"
+            };
+            string[] starts = { "박자 감각", "안정 호흡", "고점 본능" };
+            string[] primaryGifts = { "집중 축", "생존 축", "연쇄 축" };
+            string[] gifts = { "생존 축", "집중 축", "연쇄 축" };
+            string[] relics = { "사막의 잔상", "황금 박동", "파라오의 각인" };
+            int cases = 0, changedProfiles = 0, mismatches = 0;
+            foreach (string gift in gifts)
+                foreach (string relic in relics)
+                    for (int profile = 0; profile < summaries.Length; profile++)
+                    {
+                        var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                        var original = new GreedLastRunRecord(true, 800, 3, 0, 0, 4, 3, 1, 0, 60f,
+                            "정비 성향 " + profile, starts[profile], primaryGifts[profile], string.Empty,
+                            summaries[profile], string.Empty);
+                        int slot = cases % 3;
+                        backend.RegisterClear(original);
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.ConfirmSaveLoadout();
+                        var stored = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot];
+                        var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(stored, gift, relic);
+                        var core = new GreedLastRunCore();
+                        GreedLastRunSnapshot run = default;
+                        core.SnapshotChanged += value => run = value;
+                        try
+                        {
+                            core.EnterInfiniteRun(stored);
+                            string storedProfile = run.ActiveInfiniteLoadoutProfile;
+                            Require(backend.BuildActiveLoadoutText().Contains("\n성향: " + storedProfile + "\n", StringComparison.Ordinal),
+                                "An unprepared preview must retain the stored profile and route.");
+                            string active = backend.BuildActiveLoadoutText(gift, relic);
+                            string ready = backend.BuildInfiniteStartReadyText(gift, relic);
+                            Require(Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 2
+                                && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(stored),
+                                "Reading prepared previews must not consume or modify the saved direction.");
+                            for (int use = 0; use < 2; use++)
+                            {
+                                Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord consumed,
+                                    out string detail, out string error, gift, relic) && string.IsNullOrEmpty(error)
+                                    && consumed.Equals(stored), "A prepared start must consume the chosen stored direction only.");
+                                core.EnterInfiniteRun(prepared);
+                                string expectedLine = "\n성향: " + run.ActiveInfiniteLoadoutProfile + "\n";
+                                if (use == 0 && run.ActiveInfiniteLoadoutProfile != storedProfile) changedProfiles++;
+                                if (!active.Contains(expectedLine, StringComparison.Ordinal)
+                                    || !ready.Contains(expectedLine, StringComparison.Ordinal)
+                                    || !detail.Contains(expectedLine, StringComparison.Ordinal))
+                                {
+                                    mismatches++;
+                                    Debug.Log("Greed prepared profile mismatch: stored=" + storedProfile
+                                        + ", actual=" + run.ActiveInfiniteLoadoutProfile + ", gift=" + gift
+                                        + ", relic=" + relic + ", use=" + use);
+                                }
+                                Require(run.StartCountdownActive && !run.Stopped && run.InfiniteMode
+                                    && run.ActiveRelic == relic && run.ActiveInfiniteLoadoutName == stored.LoadoutName
+                                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == 1 - use
+                                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].IsValid == (use == 0)
+                                    && Read<GreedLastRunRecord>(backend, "lastRunRecord").Equals(original),
+                                    "Preview labels must preserve actual starts, two-use auto-empty, run-local relic and normal history.");
+                            }
+                            cases++;
+                        }
+                        finally { core.Exit(); }
+                    }
+            Require(changedProfiles > 0, "Profile cases must genuinely change a stored direction after preparation.");
+            Require(mismatches == 0, "Prepared profile previews must match the actual run after the new gift. Mismatches=" + mismatches);
+            Debug.Log("Greed prepared profile previews passed: " + cases + " in-memory directions/gift/relic cases, "
+                + changedProfiles + " changed profiles, preparation and both start notices match actual core profiles; stored identity/history, two uses and auto-empty preserved. No personal saves, engine-frame gameplay or physical input testing.");
+        }
 
         [MenuItem("Greed Last/Run Growth Infinite Start Preview Check")]
         public static void RunGrowthStartPreview()
