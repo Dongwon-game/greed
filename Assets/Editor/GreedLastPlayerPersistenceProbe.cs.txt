@@ -32,6 +32,8 @@ namespace GreedLast.PlayerChecks
             public int backgroundChecks;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
             public int inputUnavailableWaitFrames, resumeCountdownWaitFrames;
+            public bool nativeSlotChoiceObserved, nativeSlotSaved, nativePreparationCanceled;
+            public bool nativeFirstStartObserved, nativeSecondStartObserved, nativeLoopCompleted;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public Record record;
@@ -99,7 +101,8 @@ namespace GreedLast.PlayerChecks
                 "Background callback checks cannot replace interactive window input.");
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
                 "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
-                "window-play", "window-clear", "window-verify", "window-verify-again" }, phase) >= 0,
+                "window-play", "window-clear", "window-verify", "window-verify-again",
+                "window-loadout", "window-loadout-verify", "window-loadout-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -110,7 +113,8 @@ namespace GreedLast.PlayerChecks
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
-            deadline = Time.realtimeSinceStartup + (phase == "window-play" || phase == "window-clear" ? 330f : 150f);
+            deadline = Time.realtimeSinceStartup + (phase == "window-loadout" ? 600f
+                : phase == "window-play" || phase == "window-clear" ? 330f : 150f);
             result.phase = phase;
             result.startedUtc = DateTime.UtcNow.ToString("O");
             result.company = Application.companyName;
@@ -126,11 +130,12 @@ namespace GreedLast.PlayerChecks
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
             yield return new WaitForSecondsRealtime(0.25f);
-            if (phase == "window-play" || phase == "window-clear")
+            if (phase == "window-play" || phase == "window-clear" || phase == "window-loadout")
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady
                     && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
-            if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear")
+            if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
+                && phase != "window-loadout")
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
 
@@ -153,6 +158,23 @@ namespace GreedLast.PlayerChecks
                 if (phase == "window-verify-again")
                     Require(Previous("window-verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
                         "A second fresh process must not duplicate the interactive close settlement.");
+            }
+            else if (phase == "window-loadout-verify" || phase == "window-loadout-verify-again")
+            {
+                Result closed = Previous("window-loadout");
+                Require(closed.succeeded && closed.quitCallbackObserved && closed.nativeSlotChoiceObserved
+                    && closed.nativeSlotSaved && closed.nativePreparationCanceled && closed.nativeFirstStartObserved
+                    && closed.nativeSecondStartObserved && closed.nativeLoopCompleted,
+                    "The native saved-loadout loop must finish before fresh-process verification.");
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 2
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3 + closed.expectedInfiniteGrowthReward,
+                    "Native S3 save/cancel/two-start/auto-empty must persist once with its actual rewards.");
+                SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
+                if (phase == "window-loadout-verify-again")
+                    Require(Previous("window-loadout-verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
+                        "A repeated fresh native-loop verification must not settle rewards again.");
+                result.nativeLoopCompleted = true;
             }
             else if (phase == "render")
             {
@@ -191,7 +213,7 @@ namespace GreedLast.PlayerChecks
                 result.frames = frames.ToArray();
                 result.scope = "Isolated Windows-player offscreen camera renders of the live UI and real-frame practice app commands. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
-            else if (phase == "clear" || phase == "window-clear")
+            else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout")
             {
                 Require(Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
                     && !backend.HasSaveLoadoutCandidate && EmptySlots(), "The isolated product must start empty.");
@@ -206,12 +228,21 @@ namespace GreedLast.PlayerChecks
                 Call(app, "RequestNextRunPattern");
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
                 yield return DriveCourse();
-                Require(core.CanExitAfterClear && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0,
-                    "Quit must be the first settlement of this actual normal clear.");
+                bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
+                bool settledNativeClear = phase == "window-loadout" && backend.HasSaveLoadoutCandidate
+                    && Count("normalClearCount") == 1;
+                Require(core.CanExitAfterClear && (unsettledClear || settledNativeClear),
+                    "The actual clear must be unsettled, or already settled once in the native loadout mode only.");
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
                 result.record = From(record);
                 if (backgroundResults) yield return VerifyBackgroundBoundary(clear: true);
+                if (phase == "window-loadout")
+                {
+                    windowAwaitingClose = true;
+                    WriteObservation("window-loadout-clear-ready");
+                    yield return ObserveNativeLoadoutCommands();
+                }
                 if (phase == "window-clear")
                 {
                     windowAwaitingClose = windowReady = true;
@@ -439,6 +470,101 @@ namespace GreedLast.PlayerChecks
                 yield return null;
             }
         }
+
+        private IEnumerator ObserveNativeLoadoutCommands()
+        {
+            int stage = 0;
+            bool preparationEntered = false, firstEnded = false, secondEnded = false;
+            while (true)
+            {
+                CheckDeadline();
+                GreedLastRunSnapshot run = RunState();
+                int remaining = Read<int[]>(backend, "saveLoadoutUsesRemaining")[2];
+                if (stage == 0)
+                {
+                    if (!result.nativeSlotChoiceObserved && backend.HasSaveLoadoutCandidate
+                        && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                        && Read<int>(backend, "selectedSaveSlotIndex") == 2
+                        && !Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"))
+                    {
+                        result.nativeSlotChoiceObserved = true;
+                        WriteObservation("window-loadout-slot-chosen");
+                    }
+                    if (!backend.HasSaveLoadoutCandidate && remaining == 2 && OnlyThirdSlot())
+                    {
+                        Require(result.nativeSlotChoiceObserved && Count("normalClearCount") == 1
+                            && string.IsNullOrEmpty(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2].Relic),
+                            "The native save must explicitly choose S3 once and retain gifts without its old relic.");
+                        result.nativeSlotSaved = true;
+                        stage = 1;
+                        WriteObservation("window-loadout-saved");
+                    }
+                }
+                else if (stage == 1)
+                {
+                    if (state.CurrentState == GreedLastScreenState.InfiniteStartReady) preparationEntered = true;
+                    if (preparationEntered && !result.nativePreparationCanceled
+                        && state.CurrentState == GreedLastScreenState.LobbyReady && remaining == 2)
+                    {
+                        result.nativePreparationCanceled = true;
+                        WriteObservation("window-loadout-canceled");
+                    }
+                    if (core.IsInfiniteRun && !run.Stopped)
+                    {
+                        Require(result.nativePreparationCanceled && remaining == 1 && OnlyThirdSlot(),
+                            "The first native start must follow a free preparation cancel and consume only S3 once.");
+                        result.nativeFirstStartObserved = true;
+                        stage = 2;
+                        WriteObservation("window-loadout-first-start");
+                    }
+                }
+                else if (stage == 2)
+                {
+                    if (core.IsInfiniteRun && run.Stopped && !firstEnded)
+                    {
+                        Require(run.Health == 0 && !run.DevInvincible, "The first native infinite run must end naturally.");
+                        result.expectedInfiniteGrowthReward = InfiniteGrowthReward(core.CreateInfiniteRunRecord());
+                        firstEnded = true;
+                        WriteObservation("window-loadout-first-ended");
+                    }
+                    if (core.IsInfiniteRun && !run.Stopped && remaining == 0 && EmptySlots())
+                    {
+                        Require(firstEnded && Count("infiniteRunCount") == 1,
+                            "The second native start must settle the first once and keep running after auto-empty.");
+                        result.nativeSecondStartObserved = true;
+                        stage = 3;
+                        WriteObservation("window-loadout-second-start");
+                    }
+                }
+                else if (stage == 3)
+                {
+                    if (core.IsInfiniteRun && run.Stopped && !secondEnded)
+                    {
+                        Require(run.Health == 0 && !run.DevInvincible, "The second native infinite run must end naturally.");
+                        result.expectedInfiniteGrowthReward += InfiniteGrowthReward(core.CreateInfiniteRunRecord());
+                        secondEnded = true;
+                        WriteObservation("window-loadout-second-ended");
+                    }
+                    if (secondEnded && state.CurrentState == GreedLastScreenState.LobbyReady)
+                    {
+                        Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 1
+                            && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0
+                            && Count("infiniteRunCount") == 2
+                            && backend.LoadSelectedSaveSlotView().GrowthPoints == 3 + result.expectedInfiniteGrowthReward,
+                            "Returning from the second native run must preserve exactly one clear, two results and empty slots.");
+                        result.nativeLoopCompleted = windowReady = true;
+                        result.terminalBeforeQuit = false;
+                        stage = 4;
+                        WriteObservation("window-loadout-ready");
+                    }
+                }
+                yield return null;
+            }
+        }
+
+        private static int InfiniteGrowthReward(GreedLastInfiniteRunRecord record)
+            => (int)typeof(GreedLastMockBackend).GetMethod("BuildInfiniteGrowthReward",
+                BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { record });
 
         private void WriteWindowFrame(string name)
         {

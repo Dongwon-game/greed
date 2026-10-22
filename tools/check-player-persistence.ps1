@@ -4,6 +4,7 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [switch]$CaptureFrames,
     [switch]$InteractiveWindow,
+    [switch]$InteractiveLoadout,
     [switch]$BackgroundResults
 )
 
@@ -12,11 +13,14 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This cross-process probe supports Windows only.' }
 if ($CaptureFrames -and $InteractiveWindow) { throw 'Choose offscreen capture or interactive window checks, not both.' }
 if ($BackgroundResults -and $InteractiveWindow) { throw 'Choose background callback checks or interactive window input, not both.' }
+if ($InteractiveLoadout -and ($CaptureFrames -or $InteractiveWindow -or $BackgroundResults)) {
+    throw 'Choose the native loadout loop separately from capture, close-only and background modes.'
+}
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
-$runtimeInputs = @('Assets/Scripts', 'Assets/Scenes', 'Assets/Resources', 'Packages', 'ProjectSettings')
+$runtimeInputs = @('Assets/Scripts', 'Assets/Editor', 'Assets/Scenes', 'Assets/Resources', 'Packages', 'ProjectSettings')
 $dirty = @(git -C $project status --porcelain --untracked-files=all -- $runtimeInputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Commit or review changed game inputs before exporting a probe.' }
 $head = (git -C $project rev-parse HEAD).Trim()
@@ -48,7 +52,8 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-$operation = if ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
+$operation = if ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
+    elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
 $before = Read-PersonalPreferences
@@ -73,11 +78,15 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
+$report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 if ($BackgroundResults) {
     $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
 }
 if ($InteractiveWindow) {
     $report.Scope = 'Interactive isolated player window phases and fresh-process persistence. External UI actions must be separately observed and recorded; this script does not identify the close trigger or claim physical timing, audible output or device performance.'
+}
+if ($InteractiveLoadout) {
+    $report.Scope = 'Private SDK-driven practice/normal setup, then external native S3 save, preparation cancel, two infinite starts/natural ends and OS close; fresh processes verify persistence. External UI evidence is required. Not manual rhythm timing, audible output or phone performance.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
@@ -224,20 +233,21 @@ try {
         }
     }
 
-    $phases = if ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
+    $phases = if ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
+        elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
         else { @('clear','save','first-use','last-use','verify','verify-again',
             'live-normal','normal-fail','verify-failure','verify-failure-again') }
     foreach ($phase in $phases) {
         $report.FailedPhase = $phase
         Write-Verbose ('Starting a fresh owned player process: ' + $phase)
         $log = Join-Path $root ($phase + '.log')
-        $interactive = $phase -in @('window-play','window-clear')
+        $interactive = $phase -in @('window-play','window-clear','window-loadout')
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
-        $timeout = if ($interactive) { 360000 } else { 180000 }
+        $timeout = if ($phase -eq 'window-loadout') { 630000 } elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
         $path = Join-Path $root ($phase + '.json')
@@ -251,7 +261,9 @@ try {
         }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
-            Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks}
+            Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
+            InputUnavailableWaitFrames=$result.inputUnavailableWaitFrames; ResumeCountdownWaitFrames=$result.resumeCountdownWaitFrames;
+            NativeLoadoutLoopCompleted=$result.nativeLoopCompleted}
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true
