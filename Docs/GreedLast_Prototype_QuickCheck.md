@@ -2,7 +2,7 @@
 
 시작 화면부터 대표 한 판과 저장/무한 연결을 확인하는 순서다. 현재 소스와 실행본은 아래 최신 기준으로 구분한다. 상세 근거는 [확인 이력](GreedLast_Prototype_CheckHistory.md), 세부 검사는 [전체 체크리스트](GreedLast_Prototype_Checklist.md)를 따른다.
 
-최신 실행본: 2026-10-22 14:53 KST 비개발 Windows/prepared-profile, 게임 소스 `dbbfdc9`. 기프트 전용 저장 후보와 정비 후 실제 성향을 예고하며 한 번 저장/실제 두 번 사용·자동 비움과 게임 수치는 유지한다. 27조건·전체 스모크·두 방식 전체 엔진·154파일 ZIP·초기 구동을 통과했다. 후속 저녁 시험 제품에서 실제 연습 ESC/재개·Alt+F4·결과 X 종료, S3 직접 한 번 저장→정비 취소 무소모→실제 2→1→0/자동 비움·현재 런 유지→두 자연 종료·재실행 보존도 확인했다. 시험 도구 보완 `c37d649`/`0a01015`/`3b9b976`는 새 게임 배포가 아니며 마지막 무한 기록 내용도 재실행과 대조했다. 앞선 활성화/시험 실패는 이력으로 보존하며 사람의 리듬·가청 소리·휴대폰/강제 종료·창 크기 변경은 별도 확인이다. 상세 범위는 확인 이력/실행 파일 검증을 따른다.
+최신 실행본: 2026-10-22 20:08 KST 비개발 Windows/result-action, 게임 소스 `bfbd8dc`. 무한 종료 버튼을 `정산 후 재준비`로 맞춰 기록 보드가 아닌 실제 정비 목적지를 분명히 했다. 세 문자열만 바꿨고 한 번 저장/실제 두 번 사용·자동 비움과 게임 수치는 유지한다. 두 방식 전체 엔진·827장 프리뷰 렌더·전체 스모크/빌드·154파일 ZIP·20초 초기 구동이 통과했다. 앞선 실제 Windows 저장/재개/종료 검사는 14:53 게임의 근거이며 새 손/가청 소리·휴대폰 검사는 아니다. 이전 실행본/ZIP과 실패 이력은 보존한다. 상세 범위는 확인 이력/실행 파일 검증을 따른다.
 
 **10월 19일 첫 연습 표시 이력**: 당시 실패한 검사 뒤 완료 표시가 0으로 남았고 종료 전 원본 값/존재 여부가 확인되지 않아 추측 복원하지 않았다. 첫 연습이 다시 나오면 세 동작을 한 번 마치고 이어간다. 기존 조합/기록이나 전체 진행도를 초기화하지 않는다. 이번 검사 시작값의 복원이나 별도 시험 저장소의 성공을 이 최초 사건의 원상복구로 표시하지 않는다.
 
@@ -43,7 +43,7 @@
 
 1. Unity Hub에서 `C:\Projectunity\greed last`를 Unity 6.4 `6000.4.3f1`로 연다.
 2. `Assets/Scenes/GreedLast_Boot.unity`를 열고 가로 Game 뷰에서 Play한다.
-3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다. 10월 22일 14:53 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261022-prepared-profile.zip`이다. 이전 실행본/ZIP은 보존한다.
+3. Unity 없이 볼 때는 `Builds/GreedLastPrototype/GreedLastPrototype.exe`를 연다. 10월 22일 20:08 빌드의 보존 패키지는 `Builds/GreedLastPrototype-verified-20261022-result-action.zip`이다. 이전 실행본/ZIP은 보존한다.
 4. 아래 순서는 **한 저장 환경**에서 진행한다. 확인용으로 보관할 조합/개인 포인트를 소모하거나 진행도를 초기화하지 않는다.
 
 에디터와 Windows 실행 파일은 [PlayerPrefs 저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)가 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 단정하거나 레지스트리를 직접 복사·초기화하지 않는다.
