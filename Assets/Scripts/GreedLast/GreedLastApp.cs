@@ -902,11 +902,12 @@ namespace GreedLast
                     + "\n선택: " + CompactText(slotRecord.ChoiceSummary, 42);
             }
 
+            GreedLastRunRecord candidate = BuildSaveLoadoutRecord(lastRunRecord);
             string text = slotHeader
-                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ")
-                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(lastRunRecord)
-                + " / " + BuildInfiniteLoadoutStartStatePreview(lastRunRecord)
-                + "\n후보 타이밍: " + FormatTimingProfile(lastRunRecord.TimingProfile);
+                + "\n후보: " + FormatSaveCandidateSummary(candidate).Replace("\n", " / ")
+                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(candidate)
+                + " / " + BuildInfiniteLoadoutStartStatePreview(candidate)
+                + "\n후보 타이밍: " + FormatTimingProfile(candidate.TimingProfile);
 
             if (!slotRecord.IsValid)
             {
@@ -921,13 +922,13 @@ namespace GreedLast
                 + " / " + BuildInfiniteLoadoutStartStatePreview(slotRecord).Replace("\n", " / ")
                 + "\n현재 구성: " + FormatLoadoutCombo(slotRecord)
                 + "\n현재 타이밍: " + FormatTimingProfile(slotRecord.TimingProfile)
-                + "\n차이: " + FormatSaveLoadoutQualityDelta(lastRunRecord, slotRecord)
-                + " / 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
-                + $" / 거리 {FormatSigned(lastRunRecord.Distance - slotRecord.Distance)}m"
-                + $" / 체력 {FormatSigned(lastRunRecord.Health - slotRecord.Health)}"
-                + $" / 집중 {FormatSigned(lastRunRecord.Focus - slotRecord.Focus)}"
-                + $" / 콤보 {FormatSigned(lastRunRecord.MaxCombo - slotRecord.MaxCombo)}"
-                + $" / 실수 {FormatSigned(lastRunRecord.MissCount - slotRecord.MissCount)}";
+                + "\n차이: " + FormatSaveLoadoutQualityDelta(candidate, slotRecord)
+                + " / 점수 " + FormatSigned(candidate.Score - slotRecord.Score)
+                + $" / 거리 {FormatSigned(candidate.Distance - slotRecord.Distance)}m"
+                + $" / 체력 {FormatSigned(candidate.Health - slotRecord.Health)}"
+                + $" / 집중 {FormatSigned(candidate.Focus - slotRecord.Focus)}"
+                + $" / 콤보 {FormatSigned(candidate.MaxCombo - slotRecord.MaxCombo)}"
+                + $" / 실수 {FormatSigned(candidate.MissCount - slotRecord.MissCount)}";
             return text;
         }
 
@@ -941,23 +942,24 @@ namespace GreedLast
                 return "덮어쓰기 후보 없음\n새 클리어 기록이 있어야 슬롯을 갱신할 수 있습니다.";
             }
 
+            GreedLastRunRecord candidate = BuildSaveLoadoutRecord(lastRunRecord);
             string text = "덮어쓰기 확인"
                 + "\n대상: 슬롯 " + (selectedSaveSlotIndex + 1)
                 + "\n현재: " + FormatSaveSlotCompact(slotRecord, usesRemaining)
-                + "\n후보: " + FormatSaveCandidateSummary(lastRunRecord).Replace("\n", " / ")
-                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(lastRunRecord)
-                + " / " + BuildInfiniteLoadoutStartStatePreview(lastRunRecord).Replace("\n", " / ");
+                + "\n후보: " + FormatSaveCandidateSummary(candidate).Replace("\n", " / ")
+                + "\n후보 보너스: " + GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(candidate)
+                + " / " + BuildInfiniteLoadoutStartStatePreview(candidate).Replace("\n", " / ");
 
             if (slotRecord.IsValid)
             {
                 text += "\n현재 품질: " + BuildSaveLoadoutQualitySummary(slotRecord)
-                    + "\n차이: " + FormatSaveLoadoutQualityDelta(lastRunRecord, slotRecord)
-                    + " / 점수 " + FormatSigned(lastRunRecord.Score - slotRecord.Score)
-                    + " / 거리 " + FormatSigned(lastRunRecord.Distance - slotRecord.Distance) + "m"
-                    + " / 체력 " + FormatSigned(lastRunRecord.Health - slotRecord.Health)
-                    + " / 집중 " + FormatSigned(lastRunRecord.Focus - slotRecord.Focus)
-                    + " / 콤보 " + FormatSigned(lastRunRecord.MaxCombo - slotRecord.MaxCombo)
-                    + " / 실수 " + FormatSigned(lastRunRecord.MissCount - slotRecord.MissCount);
+                    + "\n차이: " + FormatSaveLoadoutQualityDelta(candidate, slotRecord)
+                    + " / 점수 " + FormatSigned(candidate.Score - slotRecord.Score)
+                    + " / 거리 " + FormatSigned(candidate.Distance - slotRecord.Distance) + "m"
+                    + " / 체력 " + FormatSigned(candidate.Health - slotRecord.Health)
+                    + " / 집중 " + FormatSigned(candidate.Focus - slotRecord.Focus)
+                    + " / 콤보 " + FormatSigned(candidate.MaxCombo - slotRecord.MaxCombo)
+                    + " / 실수 " + FormatSigned(candidate.MissCount - slotRecord.MissCount);
             }
 
             return text
@@ -9097,7 +9099,7 @@ namespace GreedLast
                 return -1;
             }
 
-            return IsBetterSaveLoadoutRecord(lastRunRecord, saveLoadoutSlots[weakestSlotIndex])
+            return IsBetterSaveLoadoutRecord(BuildSaveLoadoutRecord(lastRunRecord), saveLoadoutSlots[weakestSlotIndex])
                 ? weakestSlotIndex
                 : -1;
         }
@@ -9274,13 +9276,14 @@ namespace GreedLast
 
         private string BuildSaveLoadoutRecommendationText()
         {
+            GreedLastRunRecord candidate = BuildSaveLoadoutRecord(lastRunRecord);
             int recommendedSlotIndex = FindRecommendedSaveLoadoutSlotForCandidate();
             if (recommendedSlotIndex < 0)
             {
                 int weakestSlotIndex = FindWeakestSaveLoadoutSlot();
                 string qualityText = weakestSlotIndex >= 0
-                    ? " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
-                        + " / 최약 대비 " + FormatSaveLoadoutQualityDelta(lastRunRecord, saveLoadoutSlots[weakestSlotIndex])
+                    ? " / 후보 " + BuildSaveLoadoutProfileShort(candidate)
+                        + " / 최약 대비 " + FormatSaveLoadoutQualityDelta(candidate, saveLoadoutSlots[weakestSlotIndex])
                     : string.Empty;
                 return "추천: 보류 / 기존 슬롯 유지" + qualityText;
             }
@@ -9289,14 +9292,14 @@ namespace GreedLast
             if (!currentRecord.IsValid)
             {
                 return "추천: 슬롯 " + (recommendedSlotIndex + 1) + " 빈 슬롯에 저장"
-                    + " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
-                    + " / " + BuildSaveLoadoutRecommendationReason(lastRunRecord, currentRecord);
+                    + " / 후보 " + BuildSaveLoadoutProfileShort(candidate)
+                    + " / " + BuildSaveLoadoutRecommendationReason(candidate, currentRecord);
             }
 
             return "추천: 슬롯 " + (recommendedSlotIndex + 1) + " 교체 / "
-                + FormatSaveLoadoutQualityDelta(lastRunRecord, currentRecord)
-                + " / 후보 " + BuildSaveLoadoutProfileShort(lastRunRecord)
-                + " / " + BuildSaveLoadoutRecommendationReason(lastRunRecord, currentRecord);
+                + FormatSaveLoadoutQualityDelta(candidate, currentRecord)
+                + " / 후보 " + BuildSaveLoadoutProfileShort(candidate)
+                + " / " + BuildSaveLoadoutRecommendationReason(candidate, currentRecord);
         }
 
         private static string BuildSaveLoadoutProfileShort(GreedLastRunRecord record)
@@ -9677,6 +9680,7 @@ namespace GreedLast
                 return "후보 없음";
             }
 
+            record = BuildSaveLoadoutRecord(record);
             return record.LoadoutName
                 + $" / {BuildRunGrade(record)} / {BuildLoadoutAndRouteProfileCompact(record)} / {record.Score}점 / {record.Distance:0.0}m"
                 + "\n" + CompactText(BuildSaveLoadoutQualitySummary(record), 88)

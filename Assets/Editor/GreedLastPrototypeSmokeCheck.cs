@@ -29,6 +29,71 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Saved Gift Preview Check")]
+        public static void RunSavedGiftPreviewCheck()
+        {
+            Require(CanRun(), "Saved-gift preview checks require an idle Edit-mode editor.");
+            int cases = 0;
+            foreach (string relic in new[] { string.Empty, "사막의 잔상", "황금 박동", "파라오의 각인" })
+                foreach (bool customName in new[] { false, true })
+                {
+                    var backend = CreateIsolatedBackend();
+                    var source = new GreedLastRunRecord(true, 800, 3, 2, 0, 4, 3, 1, 0, 60f,
+                        customName ? "직접 지은 조합" : "집중 축" + (relic.Length == 0 ? string.Empty : " + " + relic),
+                        "박자 감각", "집중 축", relic,
+                        "박자 감각 / 안정 루트 / 집중 축" + (relic.Length == 0 ? string.Empty : " / " + relic),
+                        "정박 최고 3 / 집중 발동 1회");
+                    backend.RegisterClear(source);
+                    backend.SelectSaveLoadoutSlot(2);
+                    string draft = backend.BuildSaveLoadoutDraftText();
+                    string comparison = backend.BuildSelectedSaveLoadoutComparisonText();
+                    string overwrite = backend.BuildSelectedSaveLoadoutOverwritePreviewText();
+                    backend.ConfirmSaveLoadout();
+                    var slots = (GreedLastRunRecord[])typeof(GreedLastMockBackend)
+                        .GetField("saveLoadoutSlots", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(backend);
+                    GreedLastRunRecord stored = slots[2];
+                    string summary = InvokeMockBackendStaticLabel("FormatSaveCandidateSummary", stored);
+                    string bonus = GreedLastRunCore.BuildInfiniteLoadoutBonusGrade(stored);
+                    string opening = InvokeMockBackendLabel(backend, "BuildInfiniteLoadoutStartStatePreview", stored);
+                    Require(draft.Contains(summary, StringComparison.Ordinal)
+                        && comparison.Contains(summary.Replace("\n", " / "), StringComparison.Ordinal)
+                        && overwrite.Contains(summary.Replace("\n", " / "), StringComparison.Ordinal),
+                        "Candidate summaries must describe the gift-only record that will actually be saved, not its run-local relic. Relic: " + relic);
+                    Require(comparison.Contains("후보 보너스: " + bonus + " / " + opening, StringComparison.Ordinal)
+                        && overwrite.Contains("후보 보너스: " + bonus + " / " + opening.Replace("\n", " / "), StringComparison.Ordinal),
+                        "Comparison and overwrite bonuses must match the stored gift-only start state.");
+                    Require(string.IsNullOrEmpty(stored.Relic) && stored.Score == source.Score
+                        && stored.PrimaryGift == source.PrimaryGift && !backend.HasSaveLoadoutCandidate
+                        && ((int[])typeof(GreedLastMockBackend).GetField("saveLoadoutUsesRemaining",
+                            BindingFlags.Instance | BindingFlags.NonPublic).GetValue(backend))[2] == 2,
+                        "Preview normalization must preserve a single S3 save, its gifts, score and two uses.");
+                    var last = (GreedLastRunRecord)typeof(GreedLastMockBackend)
+                        .GetField("lastRunRecord", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(backend);
+                    Require(last.Relic == source.Relic && last.LoadoutName == source.LoadoutName,
+                        "A saved-gift preview must not strip the actual clear history's relic or original name.");
+                    for (int slot = 0; slot < 2; slot++)
+                    {
+                        backend.RegisterClear(source);
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.ConfirmSaveLoadout();
+                    }
+                    backend.RegisterClear(source);
+                    string occupiedComparison = backend.BuildSelectedSaveLoadoutComparisonText();
+                    string occupiedOverwrite = backend.BuildSelectedSaveLoadoutOverwritePreviewText();
+                    Require(occupiedComparison.Contains(summary.Replace("\n", " / "), StringComparison.Ordinal)
+                        && occupiedOverwrite.Contains(summary.Replace("\n", " / "), StringComparison.Ordinal)
+                        && occupiedComparison.Contains("차이: 품질 +0", StringComparison.Ordinal)
+                        && occupiedOverwrite.Contains("차이: 품질 +0", StringComparison.Ordinal),
+                        "Occupied-slot comparisons must not gain a quality delta from a relic that will not be stored.");
+                    Require(InvokeMockBackendLabel(backend, "BuildSaveLoadoutRecommendationText")
+                        .Contains("기존 슬롯 유지", StringComparison.Ordinal),
+                        "A full set of identical stored gifts must not recommend a relic-only replacement.");
+                    cases++;
+                }
+            Debug.Log("Greed saved-gift preview passed: " + cases
+                + " in-memory relic/custom-name cases; draft/comparison/overwrite match actual stored gifts and start bonuses, clear history retained, one save/two uses unchanged.");
+        }
+
         [MenuItem("Greed Last/Run Resume Input Boundary Check")]
         public static void RunResumeInputBoundaryCheck()
         {
@@ -1652,6 +1717,7 @@ namespace GreedLast.Editor
                 string.IsNullOrEmpty(InvokeMockBackendStaticLabel("BuildAvoidanceWeaknessSummary", fullRunRecord.TimingProfile)),
                 "A full exact clear must not invent an avoidance weakness.");
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
+            RunSavedGiftPreviewCheck();
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
             GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();
