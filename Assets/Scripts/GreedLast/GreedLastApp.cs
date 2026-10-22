@@ -17921,7 +17921,7 @@ namespace GreedLast
 
                 if (snapshot.InfiniteMode)
                 {
-                    return "기록 정산";
+                    return "정산 후 재준비";
                 }
 
                 return snapshot.RefillRun ? "보충 재시작" : "다시 시작";
@@ -20989,7 +20989,7 @@ namespace GreedLast
                     + BuildStoppedReviewTargetResultLine(snapshot)
                     + BuildRoutePayoffSettlementLine(snapshot)
                     + BuildThreeActionExactHudResultLine(snapshot)
-                    + "기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다.";
+                    + "정산 후 재준비하거나 로비로 돌아갈 수 있습니다.";
             }
 
             string sectionText = snapshot.Stopped
@@ -24110,7 +24110,7 @@ namespace GreedLast
                 detailText.text = snapshot.Stopped
                     ? "무한모드 종료\n"
                         + $"등급 {BuildInfiniteSnapshotGrade(snapshot)}  점수 {snapshot.Score}  구간 {snapshot.InfiniteSectionsCleared}  거리 {snapshot.Distance:0.0}m\n"
-                        + "기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다."
+                        + "정산 후 재준비하거나 로비로 돌아갈 수 있습니다."
                     : "저장 조합으로 함정을 계속 돌파합니다.";
                 return;
             }

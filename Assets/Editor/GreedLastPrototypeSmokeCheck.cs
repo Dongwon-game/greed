@@ -9575,6 +9575,13 @@ namespace GreedLast.Editor
                     && infiniteSnapshot.JudgementText.Contains("폭·보상 확인", StringComparison.Ordinal),
                 "The threat-down test must explain the reduced danger width and precision reward. Actual: "
                     + infiniteSnapshot.JudgementText);
+
+            infiniteCore.ForceStopInfiniteRunForTest();
+            Require(infiniteSnapshot.Stopped && infiniteSnapshot.InfiniteMode
+                && InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", infiniteSnapshot, false) == "정산 후 재준비"
+                && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", infiniteSnapshot, false, true) == "정산 후 재준비"
+                && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", infiniteSnapshot, false, false) == "정산 후 재준비",
+                "A stopped infinite run must name its preparation destination, not imply that it opens the record board.");
         }
 
         private static void VerifyDevSectionShortcutTargets(float now)
