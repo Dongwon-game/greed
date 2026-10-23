@@ -127,6 +127,57 @@ namespace GreedLast.Editor
                 + "and legacy goal evaluation preserved. No stored data, native input or device verification.");
         }
 
+        [MenuItem("Greed Last/Run Prepared Summary Priority Check")]
+        public static void RunPreparedSummaryPriorityCheck()
+        {
+            Require(CanRun(), "Prepared summary checks require an idle Edit-mode editor.");
+            int cases = 0;
+            foreach (string profile in new[] { "생존형", "집중형", "균형형" })
+                foreach (string gift in new[] { "생존 축", "집중 축", "연쇄 축" })
+                    foreach (bool withGoal in new[] { false, true })
+                    {
+                        string selections = "기프트: " + gift + " / 유물: 황금 박동";
+                        string identity = "성향: " + profile + " / 안정 루트";
+                        string start = "시작 상태: 체력 4/4 / 집중 상태 5.0초 / 콤보 2 / 점수 300";
+                        string goal = "목표: 다음 구간 무실수 / 종료 구간 실수 2회";
+                        string detail = "황금 박동 정비 선택 완료\n\n시작 정비 완료\n" + selections
+                            + "\n이제 시작 확정 시에만 사용 횟수 1회가 차감됩니다.\n좌 기프트 다시 / 중 유물 다시 / 우 선택 유지"
+                            + "\n\n복기: 이전 구간 설명\n" + (withGoal ? goal + "\n" : string.Empty)
+                            + "슬롯 3 조합으로 진입\n" + start + "\n무한 루트: 정박 패턴으로 안정 진입\n" + identity
+                            + "\n사용 상태: 1/2 · 마지막 1회\n이번 시작 후 이 슬롯은 자동으로 비워집니다.";
+                        foreach (string newline in new[] { "\n", "\r\n" })
+                        {
+                            string input = detail.Replace("\n", newline);
+                            string display = InvokeRuntimeUiLabel("BuildPreparedInfiniteDisplayDetail", input);
+                            string expected = "시작 정비 완료\n" + selections + "\n" + identity + "\n" + start
+                                + (withGoal ? "\n" + goal : string.Empty);
+                            Require(display.StartsWith(expected + "\n\n", StringComparison.Ordinal),
+                                "Prepared identity/start state and optional goal must be visible before verbose review and use guidance.");
+                            GreedLastStateSnapshot snapshot = BuildUiScreenSnapshot(
+                                GreedLastScreenState.InfiniteStartReady, "무한모드 준비", input, 0);
+                            Require(InvokeRuntimeUiLabel("BuildDetail", snapshot) == display && snapshot.Detail == input,
+                                "Only rendered preparation order may change; the app's full detail must remain original.");
+                            var before = new List<string>(detail.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries));
+                            var after = new List<string>(display.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries));
+                            before.Sort(StringComparer.Ordinal);
+                            after.Sort(StringComparer.Ordinal);
+                            Require(string.Join("\n", before) == string.Join("\n", after)
+                                && InvokeRuntimeUiLabel("BuildPreparedInfiniteDisplayDetail", display) == display,
+                                "Presentation must retain every nonempty line exactly once and remain stable on repeated renders.");
+                            cases++;
+                        }
+                    }
+            foreach (string untouched in new[] { string.Empty, "시작 정비 완료\n기프트: 생존 축 / 유물: 황금 박동",
+                GreedLastApp.BuildInfinitePreparationDetailForStep(0, string.Empty, string.Empty),
+                GreedLastApp.BuildInfinitePreparationDetailForStep(1, "생존 축", string.Empty),
+                "선택 슬롯: 슬롯 3\n비어 있음\n무한 시작 전 저장 조합 보충이 필요합니다." })
+                Require(InvokeRuntimeUiLabel("BuildPreparedInfiniteDisplayDetail", untouched) == untouched,
+                    "Gift/relic selection, refill and incomplete legacy details must keep their existing display.");
+            Require(cases == 36, "Cover every profile/gift, optional goal and newline format.");
+            Debug.Log("Greed prepared summary priority passed: 36 display-only cases, unchanged selection/refill controls, "
+                + "complete line preservation and stable rendering. No backend, record, use-count or gameplay changes.");
+        }
+
         [MenuItem("Greed Last/Run Saved Gift Preview Check")]
         public static void RunSavedGiftPreviewCheck()
         {
@@ -1818,6 +1869,7 @@ namespace GreedLast.Editor
             RunSavedGiftPreviewCheck();
             RunInfiniteResultActionCheck();
             RunInfiniteReviewCountCheck();
+            RunPreparedSummaryPriorityCheck();
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
             GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();

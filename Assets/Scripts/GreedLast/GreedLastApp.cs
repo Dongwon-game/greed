@@ -24695,7 +24695,45 @@ namespace GreedLast
                 return snapshot.Detail;
             }
 
+            if (snapshot.State == GreedLastScreenState.InfiniteStartReady)
+            {
+                return BuildPreparedInfiniteDisplayDetail(snapshot.Detail);
+            }
+
             return snapshot.Detail;
+        }
+
+        private static string BuildPreparedInfiniteDisplayDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail) || !detail.Contains("시작 정비 완료", StringComparison.Ordinal))
+                return detail;
+
+            string[] lines = detail.Replace("\r", string.Empty).Split('\n');
+            string[] prefixes = { "시작 정비 완료", "기프트: ", "성향: ", "시작 상태: ", "목표: " };
+            var priority = new List<string>();
+            var moved = new bool[lines.Length];
+            for (int prefix = 0; prefix < prefixes.Length; prefix++)
+            {
+                bool found = false;
+                for (int line = 0; line < lines.Length; line++)
+                {
+                    bool match = prefix == 0 ? lines[line] == prefixes[prefix]
+                        : lines[line].StartsWith(prefixes[prefix], StringComparison.Ordinal);
+                    if (!match) continue;
+                    priority.Add(lines[line]);
+                    moved[line] = true;
+                    found = true;
+                    break;
+                }
+                if (!found && prefix < 4) return detail;
+            }
+
+            // Keep the complete detail below the ready summary; only presentation order changes.
+            var remainder = new List<string>();
+            for (int line = 0; line < lines.Length; line++)
+                if (!moved[line]) remainder.Add(lines[line]);
+            string tail = string.Join("\n", remainder).Trim();
+            return string.Join("\n", priority) + (tail.Length == 0 ? string.Empty : "\n\n" + tail);
         }
 
         private void UpdateDebugText(GreedLastStateSnapshot snapshot)
