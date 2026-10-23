@@ -1373,9 +1373,19 @@ namespace GreedLast.Editor
                 {
                     if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                     ui.Render(screen);
-                    Require(Read<Text>("detailText").text.Contains(expectedBonus, StringComparison.Ordinal)
-                        && Read<Text>("detailText").text.Contains(expectedStart, StringComparison.Ordinal),
-                        "The visible preparation body must retain its applied bonus and starting state.");
+                    string body = Read<Text>("detailText").text;
+                    foreach (string line in (expectedBonus + "\n" + expectedStart).Replace("\r", string.Empty)
+                        .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        Require(body.Contains(line, StringComparison.Ordinal),
+                            "The visible preparation body must retain every applied bonus and starting-state line.");
+                    if (screen.Detail.Contains("시작 정비 완료", StringComparison.Ordinal))
+                    {
+                        string ready = body.Split(new[] { "\n\n" }, 2, StringSplitOptions.None)[0];
+                        Require(ready.StartsWith("시작 정비 완료\n", StringComparison.Ordinal)
+                            && ready.Contains("\n성향: ", StringComparison.Ordinal)
+                            && ready.Contains("\n시작 상태: ", StringComparison.Ordinal),
+                            "The completed preparation must put its actual profile and starting state in the first block.");
+                    }
                 }
                 string name = growth ? "97-growth-start-complete"
                     : "96-preparation-S" + (slot + 1) + (slot == 0 ? "-gift" : "-complete");
