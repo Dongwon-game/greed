@@ -55,6 +55,7 @@ namespace GreedLast.Editor
             public bool resolvedBonusPreviewOnly;
             public bool goodFocusPreviewOnly;
             public bool textClippingRejectionOnly, expectedClippingRejected, lowHealthInputOnly, menuScrollInputOnly;
+            public bool infiniteResultOnly;
             public int wrongChannelAlternatesRejected;
             public int pointerLoopCases;
             public int pointerLoopClicks;
@@ -203,10 +204,17 @@ namespace GreedLast.Editor
             Begin(false, menuScrollInputOnly: true);
         }
 
+        [MenuItem("Greed Last/Capture Infinite Result Actions")]
+        public static void RunInfiniteResultOnly()
+        {
+            Begin(false, infiniteResultOnly: true);
+        }
+
         private static void Begin(bool includePointerLoop, bool scoreBoundaryOnly = false, bool progressBoundaryOnly = false,
             bool textClippingRejectionOnly = false, bool lowHealthInputOnly = false, bool preparationPreviewOnly = false,
             bool rewardPreviewOnly = false, bool recoveryPreviewOnly = false, bool choicePreviewOnly = false, bool liveFocusPreviewOnly = false,
-            bool resolvedBonusPreviewOnly = false, bool goodFocusPreviewOnly = false, bool menuScrollInputOnly = false)
+            bool resolvedBonusPreviewOnly = false, bool goodFocusPreviewOnly = false, bool menuScrollInputOnly = false,
+            bool infiniteResultOnly = false)
         {
             if (running || EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -239,6 +247,7 @@ namespace GreedLast.Editor
                 textClippingRejectionOnly = textClippingRejectionOnly,
                 lowHealthInputOnly = lowHealthInputOnly,
                 menuScrollInputOnly = menuScrollInputOnly,
+                infiniteResultOnly = infiniteResultOnly,
             };
             try
             {
@@ -317,6 +326,7 @@ namespace GreedLast.Editor
                 Add("08-resume-tablet", 1024, 768, () => ShowRun(resume));
                 AddCalibratedPauseFrames();
                 AddSavedRunLoopFrames();
+                AddNaturalInfiniteResultFrames();
                 GreedLastRunSnapshot practiceResult = GreedLastPrototypeSmokeCheck.RunPracticeReviewSample(
                     Time.realtimeSinceStartup,
                     new[] { GreedLastJudgementResult.Good, GreedLastJudgementResult.Good, GreedLastJudgementResult.Good });
@@ -388,6 +398,16 @@ namespace GreedLast.Editor
                     int guidanceFrames = (choicePreviewOnly ? 30 : 0) + (liveFocusPreviewOnly ? 24 : 0) + (resolvedBonusPreviewOnly ? 12 : 0) + (goodFocusPreviewOnly ? 18 : 0);
                     Require(Frames.Count == (guidanceFrames > 0 ? guidanceFrames : recoveryPreviewOnly ? 36 : rewardPreviewOnly ? 18 : preparationPreviewOnly ? 78 : progressBoundaryOnly ? 12 : 24),
                         "The focused capture must include only its assigned frames.");
+                }
+                if (infiniteResultOnly)
+                {
+                    int count = Frames.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        Frame frame = Frames.Dequeue();
+                        if (frame.Name.StartsWith("107-infinite-terminal-", StringComparison.Ordinal)) Frames.Enqueue(frame);
+                    }
+                    Require(Frames.Count == 12, "Natural infinite result captures require both phases, modes and three sizes.");
                 }
                 if (textClippingRejectionOnly)
                 {
@@ -664,6 +684,42 @@ namespace GreedLast.Editor
         {
             ShowScreen(snapshot.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest, "피라미드 질주");
             ui.RenderRun(snapshot);
+        }
+
+        private static void AddNaturalInfiniteResultFrames()
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.EnterInfiniteRun();
+            float clock = Time.realtimeSinceStartup;
+            for (int tick = 0; !run.Stopped && tick < 10000; tick++) core.Tick(clock += 0.05f);
+            Require(run.Stopped && run.Health == 0 && !run.DevInvincible,
+                "Natural infinite result frames need a real no-input failure without shortcuts.");
+            AddResult(run, "end");
+            core.HandleInput(GreedLastRunChannel.Left, clock += 0.05f);
+            Require(run.Stopped && run.JudgementText.Contains("정산 후 재준비", StringComparison.Ordinal),
+                "Ignored result input must preserve the current preparation action.");
+            AddResult(run, "ignored");
+            core.Exit();
+
+            void AddResult(GreedLastRunSnapshot snapshot, string phase)
+            {
+                foreach (bool detailed in new[] { false, true })
+                {
+                    void Show()
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        ShowRun(snapshot);
+                        Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "정산 후 재준비",
+                            "Every natural infinite result frame must retain its actual preparation button.");
+                    }
+                    string name = "107-infinite-terminal-" + phase + (detailed ? "-detail" : "-brief");
+                    Add(name + "-small", 960, 540, Show, settleSeconds: 0.16);
+                    Add(name + "-tablet", 1024, 768, Show, settleSeconds: 0.16);
+                    Add(name + "-wide", 2340, 1080, Show, 96f, 0.16);
+                }
+            }
         }
 
         private static void AddGameplayChoiceFrames()

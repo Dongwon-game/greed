@@ -29,6 +29,53 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Infinite Result Action Check")]
+        public static void RunInfiniteResultActionCheck()
+        {
+            Require(CanRun(), "Infinite result action checks require an idle Edit-mode editor.");
+            int naturalEnds = 0, stoppedInputs = 0;
+            foreach (string gift in new[] { "생존 축", "집중 축", "연쇄 축" })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.EnterInfiniteRun(BuildStoredGiftRecord(gift, gift));
+                float clock = Time.realtimeSinceStartup;
+                for (int tick = 0; !run.Stopped && tick < 10000; tick++) core.Tick(clock += 0.05f);
+                Require(run.Stopped && run.Health == 0 && !run.DevInvincible,
+                    "The result action check must reach a natural infinite failure without shortcuts.");
+                Require(run.JudgementText.Contains("정산 후 재준비", StringComparison.Ordinal),
+                    "A natural infinite end must name the current preparation action.");
+                GreedLastInfiniteRunRecord ended = core.CreateInfiniteRunRecord();
+                Require(ended.IsValid, "A naturally ended infinite run must have an actual played record.");
+                foreach (GreedLastRunChannel channel in new[] { GreedLastRunChannel.Left,
+                    GreedLastRunChannel.Center, GreedLastRunChannel.Right })
+                {
+                    core.HandleInput(channel, clock += 0.05f);
+                    GreedLastInfiniteRunRecord after = core.CreateInfiniteRunRecord();
+                    Require(run.Stopped && run.Health == 0 && !run.AutoFlow && !run.ActivePattern
+                        && run.JudgementText.Contains("정산 후 재준비", StringComparison.Ordinal)
+                        && !run.JudgementText.Contains("기록 정산", StringComparison.Ordinal),
+                        "Input after an infinite result must keep its current action name without restarting play.");
+                    Require(after.Score == ended.Score && after.Distance == ended.Distance
+                        && after.SuccessCount == ended.SuccessCount && after.GoodCount == ended.GoodCount
+                        && after.MissCount == ended.MissCount && after.TimingProfile == ended.TimingProfile,
+                        "Ignored terminal input must preserve the actual record and its timing profile.");
+                    Require(InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", run, false) == "정산 후 재준비"
+                        && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", run, false, true) == "정산 후 재준비"
+                        && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", run, false, false) == "정산 후 재준비",
+                        "Core guidance and every infinite result button mode must name the same preparation action.");
+                    stoppedInputs++;
+                }
+                naturalEnds++;
+                core.Exit();
+            }
+            Require(naturalEnds == 3 && stoppedInputs == 9, "Cover every stored gift direction and terminal channel.");
+            Debug.Log("Greed infinite result actions passed: three natural ends and nine ignored terminal inputs, "
+                + "record/timing data preserved and all button modes aligned. Transient cores only; no save data, "
+                + "native input, audible output or mobile performance verification.");
+        }
+
         [MenuItem("Greed Last/Run Saved Gift Preview Check")]
         public static void RunSavedGiftPreviewCheck()
         {
@@ -1718,6 +1765,7 @@ namespace GreedLast.Editor
                 "A full exact clear must not invent an avoidance weakness.");
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
             RunSavedGiftPreviewCheck();
+            RunInfiniteResultActionCheck();
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
             GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();

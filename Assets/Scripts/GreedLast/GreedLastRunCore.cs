@@ -2667,7 +2667,7 @@ namespace GreedLast
                         phase = GreedLastRunPhase.FailResolving;
                         saveEligible = false;
                         judgementText = infiniteMode
-                            ? "무한모드 종료 - 체력 0\n기록 정산으로 재준비하거나 정산 후 로비로 돌아갈 수 있습니다."
+                            ? "무한모드 종료 - 체력 0\n정산 후 재준비하거나 로비로 돌아갈 수 있습니다."
                             : "탈출 실패 - 체력 0\n로비로 돌아가거나 다시 시작하세요.";
                     }
                     else
@@ -6353,7 +6353,7 @@ namespace GreedLast
         {
             if (infiniteMode)
             {
-                return "무한모드 종료 - 기록 정산 또는 정산 후 로비를 선택하세요.";
+                return "무한모드 종료 - 정산 후 재준비 또는 로비를 선택하세요.";
             }
 
             return saveEligible
