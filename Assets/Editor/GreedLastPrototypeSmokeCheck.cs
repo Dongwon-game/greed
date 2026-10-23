@@ -100,8 +100,8 @@ namespace GreedLast.Editor
                         Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine", "[S] 520점 / 목표: " + label + " / 콤4")
                             == "[S] 520점 / 콤4", "Review count guidance must not leak into record rows.");
                         Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine", "[S] 520점 / 실수 " + count + " / 콤4")
-                            .Contains("실수 " + count, StringComparison.Ordinal),
-                            "Filtering goal guidance must preserve a record's actual miss metric.");
+                            == "[S] 520점 / 콤4",
+                            "Goal filtering must preserve the existing compact-board treatment of plain miss annotations.");
                         var backend = CreateIsolatedBackend();
                         string message = backend.BuildInfiniteRunResultMessage(record);
                         Require(message.Contains("목표: " + expected, StringComparison.Ordinal),
