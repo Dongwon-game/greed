@@ -76,6 +76,52 @@ namespace GreedLast.Editor
                 + "native input, audible output or mobile performance verification.");
         }
 
+        [MenuItem("Greed Last/Run Infinite Review Count Check")]
+        public static void RunInfiniteReviewCountCheck()
+        {
+            Require(CanRun(), "Infinite review count checks require an idle Edit-mode editor.");
+            int cases = 0;
+            foreach (int count in new[] { 1, 3, 12 })
+                foreach (bool terminal in new[] { true, false })
+                    foreach (bool missed in new[] { true, false })
+                    {
+                        string segment = terminal ? "종료 구간" : "최근 구간";
+                        string metric = missed ? "실수" : "보정";
+                        string profile = segment + " 무한 7구간 / " + segment + " " + metric + " " + count + "회";
+                        if (terminal) profile += " / 최근 구간 실수 9회";
+                        var record = new GreedLastInfiniteRunRecord(true, 520, 96f, 6, 2,
+                            "임시 조합", "집중형", 2, missed ? 0 : count, missed ? count : 0, 4,
+                            string.Empty, profile);
+                        string prefix = missed ? "다음 구간 무실수" : "다음 구간 보정 0회";
+                        string location = terminal ? "종료 구간" : "직전";
+                        string expected = prefix + " / " + location + " " + metric + " " + count + "회";
+                        string label = InvokeMockBackendStaticLabel("BuildInfiniteRunNextTargetText", record);
+                        Require(label == expected, "Infinite review counts must name the metric and count unit.");
+                        var backend = CreateIsolatedBackend();
+                        string message = backend.BuildInfiniteRunResultMessage(record);
+                        Require(message.Contains("목표: " + expected, StringComparison.Ordinal),
+                            "The result must preserve the explicit review count instead of a section-number-like label.");
+                        string context = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(message);
+                        var core = new GreedLastRunCore();
+                        GreedLastRunSnapshot run = default;
+                        core.SnapshotChanged += value => run = value;
+                        core.EnterInfiniteRun(BuildStoredGiftRecord("집중 축", "집중 축"), context);
+                        Require(run.ReviewTargetText == expected, "The preparation handoff must retain the count unit.");
+                        string legacy = prefix + " / " + location + " " + count;
+                        MethodInfo evaluate = typeof(GreedLastRunCore).GetMethod("BuildReviewTargetResultText",
+                            BindingFlags.Instance | BindingFlags.NonPublic);
+                        Require((string)evaluate.Invoke(core, new object[] { expected })
+                            == (string)evaluate.Invoke(core, new object[] { legacy }),
+                            "Explicit and legacy review count wording must evaluate the same goal.");
+                        core.Exit();
+                        Require(record.TimingProfile == profile, "Presentation must not rewrite stored timing data.");
+                        cases++;
+                    }
+            Require(cases == 12, "Cover terminal/recent misses and Good counts at one and two digits.");
+            Debug.Log("Greed infinite review counts passed: 12 in-memory metric/unit labels, result/preparation handoff "
+                + "and legacy goal evaluation preserved. No stored data, native input or device verification.");
+        }
+
         [MenuItem("Greed Last/Run Saved Gift Preview Check")]
         public static void RunSavedGiftPreviewCheck()
         {
@@ -1766,6 +1812,7 @@ namespace GreedLast.Editor
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
             RunSavedGiftPreviewCheck();
             RunInfiniteResultActionCheck();
+            RunInfiniteReviewCountCheck();
             VerifyLiveRunCoachLines(now + 720f);
             VerifyResponsiveDetailPanelSizing();
             GreedLastPrototypeAudioCheck.VerifyOwnedClipLifecycle();
@@ -12432,7 +12479,7 @@ namespace GreedLast.Editor
                 goodInfiniteMessage.Contains("복기: 무한 1구간 3/3 / 정확 2 · 보정 1 · 실수 0 / 정확 보상 복기", StringComparison.Ordinal),
                 "A Good-only infinite review line must keep the missed exact-payoff review purpose visible.");
             Require(
-                goodInfiniteMessage.Contains("목표: 다음 구간 보정 0회 / 직전 1", StringComparison.Ordinal),
+                goodInfiniteMessage.Contains("목표: 다음 구간 보정 0회 / 직전 보정 1회", StringComparison.Ordinal),
                 "A Good-only infinite section must target correction-free conversion on the next section.");
         }
 
@@ -15749,7 +15796,7 @@ namespace GreedLast.Editor
                         .Contains(infiniteAvoidanceWeakness, StringComparison.Ordinal),
                     "Infinite result training hints must carry the weakest avoidance drill.");
                 Require(coachedInfiniteMessage.Contains("힌트: 무한 1구간 / 정확 0", StringComparison.Ordinal), "A real infinite stop must coach from its latest completed section first.");
-                Require(coachedInfiniteMessage.Contains("목표: 다음 구간 무실수 / 직전 2", StringComparison.Ordinal), "A miss-heavy latest section must become the next infinite target.");
+                Require(coachedInfiniteMessage.Contains("목표: 다음 구간 무실수 / 직전 실수 2회", StringComparison.Ordinal), "A miss-heavy latest section must become the next infinite target.");
                 Require(coachedInfiniteMessage.Contains("다음: 무한 복기 재도전으로 실수 구간 보완", StringComparison.Ordinal), "A miss-heavy infinite result should prioritize an infinite review retry.");
                 var cleanBestHintBackend = CreateIsolatedBackend();
                 var cleanBestHintRecord = new GreedLastInfiniteRunRecord(
@@ -16422,7 +16469,7 @@ namespace GreedLast.Editor
             Require(resultMessage.Contains("종료 구간: 무한 1구간 3/3 / 정확 0 · 보정 0 · 실수 3", StringComparison.Ordinal), "Infinite results must prioritize the section where the player actually died.");
             Require(resultMessage.Contains("힌트: 무한 1구간 3/3 / 정확 0", StringComparison.Ordinal), "Infinite coaching must start from the terminal section instead of an older completed section.");
             Require(resultMessage.Contains("복기: 무한 1구간 3/3 / 정확 0", StringComparison.Ordinal), "Infinite review must prioritize the terminal death section.");
-            Require(resultMessage.Contains("목표: 다음 구간 무실수 / 종료 구간 3", StringComparison.Ordinal), "The next target must use terminal-section misses.");
+            Require(resultMessage.Contains("목표: 다음 구간 무실수 / 종료 구간 실수 3회", StringComparison.Ordinal), "The next target must use terminal-section misses.");
         }
 
         private static void VerifyRecordBoardMinimalText(

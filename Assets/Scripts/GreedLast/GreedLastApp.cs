@@ -7155,25 +7155,25 @@ namespace GreedLast
             int terminalSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 실수 ");
             if (terminalSegmentMissCount > 0)
             {
-                return "다음 구간 무실수 / 종료 구간 " + terminalSegmentMissCount;
+                return "다음 구간 무실수 / 종료 구간 실수 " + terminalSegmentMissCount + "회";
             }
 
             int terminalSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "종료 구간 보정 ");
             if (terminalSegmentGoodCount > 0)
             {
-                return "다음 구간 보정 0회 / 종료 구간 " + terminalSegmentGoodCount;
+                return "다음 구간 보정 0회 / 종료 구간 보정 " + terminalSegmentGoodCount + "회";
             }
 
             int latestSegmentMissCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 실수 ");
             if (latestSegmentMissCount > 0)
             {
-                return "다음 구간 무실수 / 직전 " + latestSegmentMissCount;
+                return "다음 구간 무실수 / 직전 실수 " + latestSegmentMissCount + "회";
             }
 
             int latestSegmentGoodCount = ExtractTimingProfileCount(record.TimingProfile, "최근 구간 보정 ");
             if (latestSegmentGoodCount > 0)
             {
-                return "다음 구간 보정 0회 / 직전 " + latestSegmentGoodCount;
+                return "다음 구간 보정 0회 / 직전 보정 " + latestSegmentGoodCount + "회";
             }
 
             int focusActivationCount = ExtractTimingProfileCount(record.TimingProfile, "집중 발동 ");
