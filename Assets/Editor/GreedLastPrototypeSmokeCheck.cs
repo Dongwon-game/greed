@@ -97,6 +97,11 @@ namespace GreedLast.Editor
                         string expected = prefix + " / " + location + " " + metric + " " + count + "회";
                         string label = InvokeMockBackendStaticLabel("BuildInfiniteRunNextTargetText", record);
                         Require(label == expected, "Infinite review counts must name the metric and count unit.");
+                        Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine", "[S] 520점 / 목표: " + label + " / 콤4")
+                            == "[S] 520점 / 콤4", "Review count guidance must not leak into record rows.");
+                        Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine", "[S] 520점 / 실수 " + count + " / 콤4")
+                            .Contains("실수 " + count, StringComparison.Ordinal),
+                            "Filtering goal guidance must preserve a record's actual miss metric.");
                         var backend = CreateIsolatedBackend();
                         string message = backend.BuildInfiniteRunResultMessage(record);
                         Require(message.Contains("목표: " + expected, StringComparison.Ordinal),

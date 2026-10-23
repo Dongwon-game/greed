@@ -3975,6 +3975,12 @@ namespace GreedLast
 
         private static bool IsRecordBoardCoachingPart(string part)
         {
+            if (part.StartsWith("종료 구간 실수 ", StringComparison.Ordinal)
+                || part.StartsWith("종료 구간 보정 ", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             if (!part.StartsWith("복기 목표", StringComparison.Ordinal) && !part.StartsWith("재도전 목표", StringComparison.Ordinal) && !part.StartsWith("목표:", StringComparison.Ordinal) && !part.StartsWith("복기:", StringComparison.Ordinal) && !part.StartsWith("힌트:", StringComparison.Ordinal) && !part.StartsWith("훈련 힌트", StringComparison.Ordinal) && !part.StartsWith("정산 종료", StringComparison.Ordinal) && !part.StartsWith("정산 종료 확인 완료", StringComparison.Ordinal) && !(part == "기록 없음") && !(part == "결과") && !part.StartsWith("결과 ", StringComparison.Ordinal) && !part.StartsWith("클리어 요약", StringComparison.Ordinal) && !part.StartsWith("기록 저장", StringComparison.Ordinal) && !part.StartsWith("기록 보드", StringComparison.Ordinal) && !part.StartsWith("기록 보기", StringComparison.Ordinal) && !part.StartsWith("기록 버튼", StringComparison.Ordinal) && !part.StartsWith("기록 확인", StringComparison.Ordinal))
             {
                 switch (part)
