@@ -10878,6 +10878,7 @@ namespace GreedLast
         private bool hasLatestAppRunSnapshot;
         private int runCommandTransitionFrame = -1;
         private int runChoiceTransitionFrame = -1;
+        private int runPatternTransitionFrame = -1;
         private int screenInputTransitionFrame = -1;
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
@@ -11126,6 +11127,9 @@ namespace GreedLast
         private void HandleRunSnapshotChanged(GreedLastRunSnapshot snapshot)
         {
             if (!snapshot.Stopped) runResultRegistered = false;
+            if (snapshot.ActivePattern && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.ActivePattern
+                || !string.Equals(snapshot.Pattern.PatternId, latestAppRunSnapshot.Pattern.PatternId, StringComparison.Ordinal)))
+                runPatternTransitionFrame = Time.frameCount;
             if (snapshot.ChoiceActive && (!hasLatestAppRunSnapshot || !latestAppRunSnapshot.ChoiceActive
                 || snapshot.ChoiceKind != latestAppRunSnapshot.ChoiceKind))
                 runChoiceTransitionFrame = Time.frameCount;
@@ -13706,6 +13710,10 @@ namespace GreedLast
                 // A lane key sampled during play cannot select a choice that has not been presented yet.
                 if (Application.isPlaying && hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive
                     && runChoiceTransitionFrame == Time.frameCount) return;
+
+                // Update and EventSystem order must not judge a trap before its first rendered frame.
+                if (Application.isPlaying && hasLatestAppRunSnapshot && latestAppRunSnapshot.ActivePattern
+                    && runPatternTransitionFrame == Time.frameCount) return;
 
                 float now = Time.realtimeSinceStartup;
                 // EventSystem can process a queued tap before this app's Update after a stall.

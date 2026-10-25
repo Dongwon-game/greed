@@ -357,7 +357,7 @@ namespace GreedLast.Editor
             if (results.inputSystemOnly)
                 results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
             if (results.trapCueOnly)
-                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, real-time public core input followed by a same-frame next-pattern command after UI Update, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
+                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, natural and late-update trap publication-frame input protection, subsequent visible first-input-only judgement, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic app/pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.practicePreferenceBackup = SessionState.GetString(Prefix + "practiceBackup", string.Empty);
@@ -1767,7 +1767,7 @@ namespace GreedLast.Editor
                 }
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 report.trapCueEngineRecovery = report.trapCueEngineCases == 2;
-                Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, no intermediate UI Update, recovered entry/target states, unchanged redraw deduplication and same-trap pause/countdown/resume recovery with preserved values and timing buffer. Real time with synthetic public core/pointer commands, not hardware audio or FPS measurement.");
+                Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, six unseen trap presses ignored, two subsequent visible first wrong inputs preserved, recovered entry/target states, unchanged redraw deduplication and same-trap pause/countdown/resume recovery. Real time with synthetic app/pointer commands, not hardware audio or FPS measurement.");
             }
 
             private bool ProbeUnseenTrapPress(string context)
