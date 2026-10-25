@@ -4,6 +4,8 @@
 
 [처음부터 확인하기](Docs/GreedLast_Prototype_QuickCheck.md) · [기획과 구현 범위](Docs/GreedLast_Prototype_PlanCoverage.md) · [검증 이력](Docs/GreedLast_Prototype_CheckHistory.md)
 
+[움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md): 세 회피·Good/오입력·회전·정지/재개·탈출부터 한 번 저장/실제 두 번 사용·자동 비움까지 무음 애니메이션으로 본다. 자동 앱 명령/렌더 표본이며 사람의 리듬·소리·기기 성능 검사는 아니다.
+
 ![기초 연습의 직선 통로와 바닥 함정 대응](Docs/Images/GreedLast-Prototype-20261021.png)
 
 Windows 시험 플레이어의 실제 연습 상태를 오프스크린으로 그린 화면이다. OS 창 캡처나 손/휴대폰 성능 검사는 아니다.

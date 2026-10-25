@@ -2,6 +2,8 @@
 
 기획서의 **직선 주행·함정 회피·정확 타이밍 보상·제한된 회전·한 판 마무리**를 확인하는 순서다. 처음에는 아래 12단계만 본다. 상세 개발 검사와 지난 결과는 [확인 이력](GreedLast_Prototype_CheckHistory.md)에 분리한다.
 
+실행 전에 장면만 훑어보려면 [움직임 미리보기](GreedLast_Prototype_MotionPreview.md)를 본다. 무음 자동 진행 자료이며 아래 직접 확인을 대신하지 않는다.
+
 ## 실행
 
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.

@@ -1,0 +1,138 @@
+{
+  "sourceCommit": "19f17b04c6714a5dfa57e292fc4bc60f129c4cee",
+  "runtimeInputCommit": "ac98d1edf3b08655da842106bee927fbece23bf9",
+  "silent": true,
+  "scope": "Sampled live-player UI camera renders with automatic app commands. Not native window capture, human rhythm, audible output, phone sensors, actual device FPS or latency validation. Frame intervals rounded to 10 ms; final frame holds one second; looping enabled.",
+  "clips": [
+    {
+      "file": "Greed-Practice.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 7610,
+      "sourceSamples": 43,
+      "encodedFrames": 43,
+      "uniqueDecodedFrames": 43,
+      "bytes": 962488,
+      "sha256": "D38FE85B95EC435E875A6B0A5A8512721D46E9FBD4F6FDB985EC1C2E2F52CB9B"
+    },
+    {
+      "file": "Greed-Normal-Run.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 34310,
+      "sourceSamples": 216,
+      "encodedFrames": 215,
+      "uniqueDecodedFrames": 215,
+      "bytes": 4579048,
+      "sha256": "6ADDD48EDF5C1509AFA5DEEC6E3154B9D2231720B32CF5E9D1157E6BD4E9C69B"
+    },
+    {
+      "file": "Greed-Rotation.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 3640,
+      "sourceSamples": 18,
+      "encodedFrames": 18,
+      "uniqueDecodedFrames": 18,
+      "bytes": 355764,
+      "sha256": "C32C393D80C2066E407D120A7CC6C3174E452A3EEDD8F7E40C4C4141CF868585"
+    },
+    {
+      "file": "Greed-Escape.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 8020,
+      "sourceSamples": 46,
+      "encodedFrames": 46,
+      "uniqueDecodedFrames": 46,
+      "bytes": 1102472,
+      "sha256": "6DB7A36BA0F6709AD0F11E6727248D64E8B1E190F0A1668123EA3B094339E008"
+    },
+    {
+      "file": "Greed-Good.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 8320,
+      "sourceSamples": 48,
+      "encodedFrames": 48,
+      "uniqueDecodedFrames": 48,
+      "bytes": 1102192,
+      "sha256": "4BAD049040361578FB50BFBA10AAD8A91CD0BC7BB09D2A6B52F2923F20A49191"
+    },
+    {
+      "file": "Greed-Wrong-Channel.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 8000,
+      "sourceSamples": 46,
+      "encodedFrames": 46,
+      "uniqueDecodedFrames": 46,
+      "bytes": 1015288,
+      "sha256": "CCB8A7C3F35A869251313FE73217D395DE1984D4B377586E15852AA9B67C7428"
+    },
+    {
+      "file": "Greed-Pause-Resume.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 3120,
+      "sourceSamples": 15,
+      "encodedFrames": 8,
+      "uniqueDecodedFrames": 8,
+      "bytes": 58180,
+      "sha256": "1882BEC4F615FC0BBC1A640861647110B828961810FBA1E37B7DDA3E1A43E503"
+    },
+    {
+      "file": "Greed-Save-Prepare.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 11350,
+      "sourceSamples": 66,
+      "encodedFrames": 34,
+      "uniqueDecodedFrames": 34,
+      "bytes": 365032,
+      "sha256": "5AD309457022F38815FCFA17D53A3B6770216DD928C2CBE04E9E87EFBBEB1BF5"
+    },
+    {
+      "file": "Greed-Two-Uses.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 36090,
+      "sourceSamples": 224,
+      "encodedFrames": 182,
+      "uniqueDecodedFrames": 182,
+      "bytes": 3707062,
+      "sha256": "1125B16F104881211B8DF67F11AFC7AFCF61540084AD63299515C9FAEC927A3D"
+    },
+    {
+      "file": "Greed-Prepared-Retry.webp",
+      "format": "WEBP",
+      "width": 640,
+      "height": 360,
+      "durationMs": 4770,
+      "sourceSamples": 25,
+      "encodedFrames": 15,
+      "uniqueDecodedFrames": 15,
+      "bytes": 158044,
+      "sha256": "375540C73E80A078488210574A3B855C2B58952466E84A3EFB9F9208D02D8A83"
+    }
+  ],
+  "stills": [
+    {
+      "file": "Greed-Prepared-Summary.png",
+      "format": "PNG",
+      "width": 640,
+      "height": 360,
+      "bytes": 21538,
+      "sha256": "B893D0B733A97D8F144B746567223458A51110E7E8F1E889E0AF91AEE9F88E5B"
+    }
+  ]
+}
