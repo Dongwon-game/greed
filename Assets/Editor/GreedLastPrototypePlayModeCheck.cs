@@ -357,7 +357,7 @@ namespace GreedLast.Editor
             if (results.inputSystemOnly)
                 results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
             if (results.trapCueOnly)
-                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, natural and late-update trap publication-frame input protection, subsequent visible first-input-only judgement, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic app/pointer commands and in-memory calibration only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
+                results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, natural and late-update trap publication-frame input protection, actual pointer hold/release after repeat gates expire, subsequent visible first-input-only judgement, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic app/pointer commands, in-memory calibration and transient publication-frame-guard-disabled negative controls only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.practicePreferenceBackup = SessionState.GetString(Prefix + "practiceBackup", string.Empty);
@@ -406,7 +406,7 @@ namespace GreedLast.Editor
                     && cycle.trapCueEngineRecovery && cycle.trapCueResumeCases == 2
                     && cycle.unseenTrapInputCases == 6 && cycle.visibleTrapFirstInputCases == 2
                     && cycle.unseenTrapPointerCases == 4 && cycle.unseenTrapHeldReleaseCases == 4
-                    && cycle.unseenTrapPointerFreshRecovered);
+                    && cycle.unseenTrapPointerFreshRecovered && cycle.unseenTrapPointerNegativeControls == 4);
                 if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
             }
             if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
@@ -536,7 +536,7 @@ namespace GreedLast.Editor
         [Serializable] private sealed class Results
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
-            public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration changes only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
+            public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration and transient publication-frame-guard-disabled negative controls change only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
             public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly, trapCueOnly;
             public List<Cycle> cycles = new List<Cycle>();
             public List<string> personalPreferenceKeys = new List<string>();
@@ -617,6 +617,7 @@ namespace GreedLast.Editor
             public int unseenTrapPointerCases;
             public int unseenTrapHeldReleaseCases;
             public bool unseenTrapPointerFreshRecovered;
+            public int unseenTrapPointerNegativeControls;
             public bool trapCueEngineRecovery;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
@@ -1785,6 +1786,7 @@ namespace GreedLast.Editor
                     {
                         if (ui.UsePlayerRunControls != (mode == 0)) ui.ToggleDevCleanView();
                         for (int device = 0; device < 2; device++)
+                        for (int control = 0; control < 2; control++)
                         {
                             Require(state.CurrentState == GreedLastScreenState.LobbyReady,
                                 "Trap pointer boundaries must begin in the lobby.");
@@ -1799,6 +1801,9 @@ namespace GreedLast.Editor
                             Call(app, "HandleRunChannelInput", run.Pattern.Channel);
                             Require(run.SuccessCount == 1 && !run.ActivePattern,
                                 "The pointer boundary needs the actual gap after a resolved first trap.");
+                            yield return WaitSeconds(0.12f);
+                            Require(!run.ActivePattern && !run.Paused,
+                                "The repeat block must expire inside the real between-trap gap.");
                             Canvas.ForceUpdateCanvases();
                             Button[] lanes = Read<Button[]>(ui, "laneButtons");
                             Vector2 point = ScreenPoint(lanes[0]);
@@ -1807,6 +1812,12 @@ namespace GreedLast.Editor
                             Action spawn = () =>
                             {
                                 callbacks++;
+                                float now = Time.realtimeSinceStartup;
+                                Require(now - Read<float>(app, "lastRunAnyLaneInputAt") >= 0.1f
+                                    && now - Read<float>(app, "lastRunLaneInputAt") >= 0.1f
+                                    && now >= Read<float>(app, "runEntryLaneInputBlockUntil")
+                                    && now >= Read<float>(app, "runChoiceInputBlockUntil"),
+                                    "No entry, choice or repeat gate may substitute for the trap publication-frame protection.");
                                 core.RequestNextPattern(Time.realtimeSinceStartup);
                                 Canvas.ForceUpdateCanvases();
                                 born = run;
@@ -1814,6 +1825,12 @@ namespace GreedLast.Editor
                                 Require(run.ActivePattern && !run.Stopped && run.SuccessCount == 1
                                     && Read<int>(app, "runPatternTransitionFrame") == birthFrame,
                                     "The actual input-module read must publish a fresh trap before its pointer Down.");
+                                if (control == 1)
+                                {
+                                    // The negative control disables only this transient guard, never a core clock or saved setting.
+                                    typeof(GreedLastApp).GetField("runPatternTransitionFrame", BindingFlags.Instance | BindingFlags.NonPublic)
+                                        .SetValue(app, birthFrame - 1);
+                                }
                             };
                             if (device == 0)
                             {
@@ -1833,42 +1850,62 @@ namespace GreedLast.Editor
                                 yield return null;
                             }
                             var held = Read<HashSet<int>[]>(ui, "laneHeldPointers");
-                            Require(callbacks == 1 && birthFrame >= 0 && held[0].Contains(device == 0 ? 130 : -1),
-                                "The actual EventSystem must deliver and register the birth-frame pointer, not skip its raycast.");
-                            Require(run.ActivePattern && run.Pattern.PatternId == born.Pattern.PatternId
-                                && run.Health == born.Health && run.Score == born.Score && run.MissCount == born.MissCount,
-                                "A held pointer begun on the trap's publication frame must not become a later judgement.");
-                            report.unseenTrapPointerCases++;
+                            Require(callbacks == 1 && birthFrame >= 0,
+                                "The actual EventSystem must execute exactly one input-read trap publication.");
+                            if (control == 0)
+                            {
+                                Require(held[0].Contains(device == 0 ? 130 : -1),
+                                    "The actual EventSystem must register the protected pointer, not skip its raycast.");
+                                Require(run.ActivePattern && run.Pattern.PatternId == born.Pattern.PatternId
+                                    && run.Health == born.Health && run.Score == born.Score && run.MissCount == born.MissCount,
+                                    "A held pointer begun on the trap's publication frame must not become a later judgement.");
+                                report.unseenTrapPointerCases++;
+                            }
+                            else
+                            {
+                                Require(run.LastJudgedPattern.PatternId == born.Pattern.PatternId
+                                    && run.MissCount == born.MissCount + 1 && run.Health == born.Health - 1
+                                    && run.SuccessCount == born.SuccessCount,
+                                    "Without only the one-frame guard, the same actual pointer must reproduce the unseen-trap damage.");
+                                report.unseenTrapPointerNegativeControls++;
+                            }
                             if (device == 0)
                             {
                                 yield return TouchFrame(TouchAt(130, point, TouchPhase.Ended));
                                 yield return TouchFrame();
                             }
                             else yield return ReleaseMouse();
-                            Require(!held[0].Contains(device == 0 ? 130 : -1) && run.ActivePattern
-                                && run.Pattern.PatternId == born.Pattern.PatternId && run.Health == born.Health
-                                && run.Score == born.Score && run.MissCount == born.MissCount,
-                                "Releasing an ignored publication-frame pointer must clear its hold without consuming the trap.");
-                            report.unseenTrapHeldReleaseCases++;
-                            deadline = Time.realtimeSinceStartup + 5f;
-                            while (run.CoreDeltaSeconds < -0.04f)
+                            Require(!held[0].Contains(device == 0 ? 130 : -1),
+                                "Both protected and negative-control pointers must release their registered hold.");
+                            if (control == 0)
                             {
-                                Require(run.ActivePattern && Time.realtimeSinceStartup < deadline,
-                                    "The untouched trap must reach its fresh pointer input window.");
-                                yield return null;
+                                Require(run.ActivePattern
+                                    && run.Pattern.PatternId == born.Pattern.PatternId && run.Health == born.Health
+                                    && run.Score == born.Score && run.MissCount == born.MissCount,
+                                    "Releasing an ignored publication-frame pointer must clear its hold without consuming the trap.");
+                                report.unseenTrapHeldReleaseCases++;
+                                deadline = Time.realtimeSinceStartup + 5f;
+                                while (run.CoreDeltaSeconds < -0.04f)
+                                {
+                                    Require(run.ActivePattern && Time.realtimeSinceStartup < deadline,
+                                        "The untouched trap must reach its fresh pointer input window.");
+                                    yield return null;
+                                }
+                                Button correct = lanes[(int)run.Pattern.Channel - 1];
+                                if (device == 0) yield return TapTouch(correct, 131);
+                                else yield return ClickMouse(correct);
+                                Require(run.SuccessCount == 2 && run.MissCount == 0 && run.Health == born.Health,
+                                    "A fresh actual module pointer must judge the same trap once after the ignored hold/release.");
                             }
-                            Button correct = lanes[(int)run.Pattern.Channel - 1];
-                            if (device == 0) yield return TapTouch(correct, 131);
-                            else yield return ClickMouse(correct);
-                            Require(run.SuccessCount == 2 && run.MissCount == 0 && run.Health == born.Health,
-                                "A fresh actual module pointer must judge the same trap once after the ignored hold/release.");
+                            else Require(run.MissCount == born.MissCount + 1 && run.Health == born.Health - 1,
+                                "Releasing a negative-control pointer must not add a second judgement.");
                             Call(app, "RequestToggleRunPause");
                             yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
                         }
                     }
                     report.unseenTrapPointerFreshRecovered = report.unseenTrapPointerCases == 4
                         && report.unseenTrapHeldReleaseCases == 4;
-                    Debug.Log("Greed unseen trap pointer boundaries passed: four clean/detailed touch/mouse module-read spawns, registered holds, safe releases and fresh exact pointer recovery. Actual EventSystem in engine frames, not OS input or hardware latency.");
+                    Debug.Log("Greed unseen trap pointer boundaries passed: four clean/detailed touch/mouse module-read spawns after repeat gates expired, registered holds, safe releases and fresh exact pointer recovery; four transient frame-guard-disabled controls reproduced one damage each. No core clocks or saved settings edited; not OS input or hardware latency.");
                 }
                 finally
                 {
