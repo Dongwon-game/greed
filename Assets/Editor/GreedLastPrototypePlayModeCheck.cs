@@ -404,7 +404,9 @@ namespace GreedLast.Editor
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.trapCueEngineCases == 2
                     && cycle.trapCueEngineRecovery && cycle.trapCueResumeCases == 2
-                    && cycle.unseenTrapInputCases == 6 && cycle.visibleTrapFirstInputCases == 2);
+                    && cycle.unseenTrapInputCases == 6 && cycle.visibleTrapFirstInputCases == 2
+                    && cycle.unseenTrapPointerCases == 4 && cycle.unseenTrapHeldReleaseCases == 4
+                    && cycle.unseenTrapPointerFreshRecovered);
                 if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
             }
             if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
@@ -612,6 +614,9 @@ namespace GreedLast.Editor
             public int trapCueResumeCases;
             public int unseenTrapInputCases;
             public int visibleTrapFirstInputCases;
+            public int unseenTrapPointerCases;
+            public int unseenTrapHeldReleaseCases;
+            public bool unseenTrapPointerFreshRecovered;
             public bool trapCueEngineRecovery;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
@@ -1767,7 +1772,111 @@ namespace GreedLast.Editor
                 }
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 report.trapCueEngineRecovery = report.trapCueEngineCases == 2;
+                yield return VerifyTrapPublicationPointers();
                 Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, six unseen trap presses ignored, two subsequent visible first wrong inputs preserved, recovered entry/target states, unchanged redraw deduplication and same-trap pause/countdown/resume recovery. Real time with synthetic app/pointer commands, not hardware audio or FPS measurement.");
+            }
+
+            private IEnumerator VerifyTrapPublicationPointers()
+            {
+                bool playerControls = ui.UsePlayerRunControls;
+                try
+                {
+                    for (int mode = 0; mode < 2; mode++)
+                    {
+                        if (ui.UsePlayerRunControls != (mode == 0)) ui.ToggleDevCleanView();
+                        for (int device = 0; device < 2; device++)
+                        {
+                            Require(state.CurrentState == GreedLastScreenState.LobbyReady,
+                                "Trap pointer boundaries must begin in the lobby.");
+                            yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                            float deadline = Time.realtimeSinceStartup + 8f;
+                            while (!run.ActivePattern || run.CoreDeltaSeconds < -0.04f)
+                            {
+                                Require(!run.Stopped && !run.Paused && Time.realtimeSinceStartup < deadline,
+                                    "Pointer boundary setup must reach a visible trap through real engine frames.");
+                                yield return null;
+                            }
+                            Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                            Require(run.SuccessCount == 1 && !run.ActivePattern,
+                                "The pointer boundary needs the actual gap after a resolved first trap.");
+                            Canvas.ForceUpdateCanvases();
+                            Button[] lanes = Read<Button[]>(ui, "laneButtons");
+                            Vector2 point = ScreenPoint(lanes[0]);
+                            int callbacks = 0, birthFrame = -1;
+                            GreedLastRunSnapshot born = default;
+                            Action spawn = () =>
+                            {
+                                callbacks++;
+                                core.RequestNextPattern(Time.realtimeSinceStartup);
+                                Canvas.ForceUpdateCanvases();
+                                born = run;
+                                birthFrame = Time.frameCount;
+                                Require(run.ActivePattern && !run.Stopped && run.SuccessCount == 1
+                                    && Read<int>(app, "runPatternTransitionFrame") == birthFrame,
+                                    "The actual input-module read must publish a fresh trap before its pointer Down.");
+                            };
+                            if (device == 0)
+                            {
+                                input.BeforeTouchRead = spawn;
+                                yield return TouchFrame(TouchAt(130, point, TouchPhase.Began));
+                                yield return TouchFrame(TouchAt(130, point, TouchPhase.Stationary));
+                            }
+                            else
+                            {
+                                input.Touches = Array.Empty<Touch>();
+                                input.MouseEnabled = input.MouseDown = input.MouseHeld = true;
+                                input.MouseUp = false;
+                                input.MousePosition = point;
+                                input.BeforeMouseRead = spawn;
+                                yield return null;
+                                input.MouseDown = false;
+                                yield return null;
+                            }
+                            var held = Read<HashSet<int>[]>(ui, "laneHeldPointers");
+                            Require(callbacks == 1 && birthFrame >= 0 && held[0].Contains(device == 0 ? 130 : -1),
+                                "The actual EventSystem must deliver and register the birth-frame pointer, not skip its raycast.");
+                            Require(run.ActivePattern && run.Pattern.PatternId == born.Pattern.PatternId
+                                && run.Health == born.Health && run.Score == born.Score && run.MissCount == born.MissCount,
+                                "A held pointer begun on the trap's publication frame must not become a later judgement.");
+                            report.unseenTrapPointerCases++;
+                            if (device == 0)
+                            {
+                                yield return TouchFrame(TouchAt(130, point, TouchPhase.Ended));
+                                yield return TouchFrame();
+                            }
+                            else yield return ReleaseMouse();
+                            Require(!held[0].Contains(device == 0 ? 130 : -1) && run.ActivePattern
+                                && run.Pattern.PatternId == born.Pattern.PatternId && run.Health == born.Health
+                                && run.Score == born.Score && run.MissCount == born.MissCount,
+                                "Releasing an ignored publication-frame pointer must clear its hold without consuming the trap.");
+                            report.unseenTrapHeldReleaseCases++;
+                            deadline = Time.realtimeSinceStartup + 5f;
+                            while (run.CoreDeltaSeconds < -0.04f)
+                            {
+                                Require(run.ActivePattern && Time.realtimeSinceStartup < deadline,
+                                    "The untouched trap must reach its fresh pointer input window.");
+                                yield return null;
+                            }
+                            Button correct = lanes[(int)run.Pattern.Channel - 1];
+                            if (device == 0) yield return TapTouch(correct, 131);
+                            else yield return ClickMouse(correct);
+                            Require(run.SuccessCount == 2 && run.MissCount == 0 && run.Health == born.Health,
+                                "A fresh actual module pointer must judge the same trap once after the ignored hold/release.");
+                            Call(app, "RequestToggleRunPause");
+                            yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
+                        }
+                    }
+                    report.unseenTrapPointerFreshRecovered = report.unseenTrapPointerCases == 4
+                        && report.unseenTrapHeldReleaseCases == 4;
+                    Debug.Log("Greed unseen trap pointer boundaries passed: four clean/detailed touch/mouse module-read spawns, registered holds, safe releases and fresh exact pointer recovery. Actual EventSystem in engine frames, not OS input or hardware latency.");
+                }
+                finally
+                {
+                    input.BeforeTouchRead = input.BeforeMouseRead = null;
+                    input.Touches = Array.Empty<Touch>();
+                    input.MouseDown = input.MouseUp = input.MouseHeld = false;
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                }
             }
 
             private bool ProbeUnseenTrapPress(string context)
