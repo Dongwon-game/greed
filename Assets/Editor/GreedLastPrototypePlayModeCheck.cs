@@ -403,7 +403,8 @@ namespace GreedLast.Editor
             if (results.succeeded && (results.trapCueOnly || results.fullLoopIncluded))
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.trapCueEngineCases == 2
-                    && cycle.trapCueEngineRecovery && cycle.trapCueResumeCases == 2);
+                    && cycle.trapCueEngineRecovery && cycle.trapCueResumeCases == 2
+                    && cycle.unseenTrapInputCases == 6 && cycle.visibleTrapFirstInputCases == 2);
                 if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
             }
             if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
@@ -609,6 +610,8 @@ namespace GreedLast.Editor
             public bool inputSystemReenableRecovered;
             public int trapCueEngineCases;
             public int trapCueResumeCases;
+            public int unseenTrapInputCases;
+            public int visibleTrapFirstInputCases;
             public bool trapCueEngineRecovery;
             public int initialChoiceBoundaryCases;
             public bool initialChoiceFreshInputRecovered;
@@ -1631,7 +1634,27 @@ namespace GreedLast.Editor
                     if (ui.UsePlayerRunControls != (mode == 0)) ui.ToggleDevCleanView();
                     typeof(GreedLastRunCore).GetField("inputTimingOffsetSeconds", BindingFlags.Instance | BindingFlags.NonPublic)
                         .SetValue(core, 0f);
-                    yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                    bool spawnObserved = false, spawnInputIgnored = false;
+                    Action<GreedLastRunSnapshot> onSpawn = value =>
+                    {
+                        if (spawnObserved || !value.ActivePattern || value.Paused || value.CountdownActive || value.Stopped) return;
+                        spawnObserved = true;
+                        spawnInputIgnored = ProbeUnseenTrapPress("natural-spawn");
+                    };
+                    core.SnapshotChanged += onSpawn;
+                    try
+                    {
+                        yield return ClickMouse(Read<Button>(ui, "practiceRunButton"));
+                        float spawnDeadline = Time.realtimeSinceStartup + 8f;
+                        while (!spawnObserved)
+                        {
+                            Require(Time.realtimeSinceStartup < spawnDeadline, "The initial trap must spawn in real engine Update.");
+                            yield return null;
+                        }
+                    }
+                    finally { core.SnapshotChanged -= onSpawn; }
+                    Require(spawnInputIgnored, "A lane press in a newly published trap's frame must not judge an unseen trap.");
+                    report.unseenTrapInputCases++;
                     float deadline = Time.realtimeSinceStartup + 10f;
                     while (!run.ActivePattern || !Read<bool>(ui, "targetCuePlayed") || run.CoreDeltaSeconds < -0.025f)
                     {
@@ -1645,7 +1668,7 @@ namespace GreedLast.Editor
                         int frame = Time.frameCount;
                         Require(Read<bool>(ui, "lastActivePatternVisual") && Read<bool>(ui, "targetCuePlayed"),
                             "The first engine trap must have presented both cue states before LateUpdate.");
-                        core.HandleInput(run.Pattern.Channel, Time.realtimeSinceStartup);
+                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
                         Require(!run.ActivePattern && run.SuccessCount == 1 && !run.Stopped,
                             "Real-time engine input must resolve the first exact judgement.");
                         Require(!Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
@@ -1654,6 +1677,9 @@ namespace GreedLast.Editor
                         Require(Time.frameCount == frame && run.ActivePattern
                             && !Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
                             "Same-frame next-pattern command must not inherit the previous trap's cue state.");
+                        Require(ProbeUnseenTrapPress("late-update-spawn"),
+                            "A same-frame lane press must not consume a trap published after UI Update.");
+                        report.unseenTrapInputCases++;
                         observed = true;
                     };
                     yield return null;
@@ -1699,13 +1725,65 @@ namespace GreedLast.Editor
                     Require(Read<bool>(ui, "lastActivePatternVisual") && run.Pattern.PatternId == pausedRun.Pattern.PatternId,
                         "The same resumed trap must present its entry and target again.");
                     report.trapCueResumeCases++;
-                    Call(app, "RequestToggleRunPause");
+                    while (run.CoreDeltaSeconds < -0.025f)
+                    {
+                        Require(run.ActivePattern && Time.realtimeSinceStartup < deadline,
+                            "The resumed trap must reach its ordinary fresh-input window.");
+                        yield return null;
+                    }
+                    spawnObserved = false;
+                    spawnInputIgnored = false;
+                    core.SnapshotChanged += onSpawn;
+                    try
+                    {
+                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                        Require(run.SuccessCount == 2 && run.MissCount == 0,
+                            "A fresh visible-trap press must remain exact after the ignored spawn-frame press.");
+                        deadline = Time.realtimeSinceStartup + 6f;
+                        while (!spawnObserved)
+                        {
+                            Require(!run.Stopped && Time.realtimeSinceStartup < deadline,
+                                "Auto flow must publish the following trap without a manual Tick or next command.");
+                            yield return null;
+                        }
+                    }
+                    finally { core.SnapshotChanged -= onSpawn; }
+                    Require(spawnInputIgnored, "An auto-flow trap must also ignore its unseen publication-frame press.");
+                    report.unseenTrapInputCases++;
+                    yield return null;
+                    GreedLastRunSnapshot visible = run;
+                    GreedLastRunChannel wrong = visible.Pattern.Channel == GreedLastRunChannel.Left
+                        ? GreedLastRunChannel.Center : GreedLastRunChannel.Left;
+                    Call(app, "HandleRunChannelInput", wrong);
+                    Require(run.MissCount == visible.MissCount + 1 && run.Health == visible.Health - 1,
+                        "Once the trap has been presented, its first wrong press must retain the existing damage rule.");
+                    Call(app, "HandleRunChannelInput", visible.Pattern.Channel);
+                    Require(run.MissCount == visible.MissCount + 1 && run.SuccessCount == visible.SuccessCount
+                        && run.Health == visible.Health - 1,
+                        "A later correct press must not overwrite the visible trap's first wrong input.");
+                    report.visibleTrapFirstInputCases++;
                     yield return TapTouch(Read<Button>(ui, "returnLobbyButton"));
                     report.trapCueEngineCases++;
                 }
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 report.trapCueEngineRecovery = report.trapCueEngineCases == 2;
                 Debug.Log("Greed engine trap cue boundaries passed: two clean/detailed LateUpdate input-to-next-pattern publications, no intermediate UI Update, recovered entry/target states, unchanged redraw deduplication and same-trap pause/countdown/resume recovery with preserved values and timing buffer. Real time with synthetic public core/pointer commands, not hardware audio or FPS measurement.");
+            }
+
+            private bool ProbeUnseenTrapPress(string context)
+            {
+                GreedLastRunSnapshot before = run;
+                GreedLastRunChannel wrong = before.Pattern.Channel == GreedLastRunChannel.Left
+                    ? GreedLastRunChannel.Center : GreedLastRunChannel.Left;
+                Call(app, "HandleRunChannelInput", wrong);
+                bool ignored = run.ActivePattern && run.Pattern.PatternId == before.Pattern.PatternId
+                    && run.Health == before.Health && run.Score == before.Score && run.Combo == before.Combo
+                    && run.Focus == before.Focus && run.MissCount == before.MissCount
+                    && run.SuccessCount == before.SuccessCount && run.GoodCount == before.GoodCount;
+                Debug.Log("Greed unseen trap press: context=" + context + ", frame=" + Time.frameCount
+                    + ", ignored=" + ignored + ", health=" + before.Health + "->" + run.Health
+                    + ", miss=" + before.MissCount + "->" + run.MissCount + ", reason=" + run.MissReason);
+                return ignored;
             }
 
             private IEnumerator VerifyInputSystemOwnership()
