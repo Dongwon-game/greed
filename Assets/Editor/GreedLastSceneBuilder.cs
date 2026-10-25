@@ -12,6 +12,7 @@ namespace GreedLast.Editor
         private const string ScenePath = "Assets/Scenes/GreedLast_Boot.unity";
         private const string ResetProgressMenuPath = "Greed Last/Reset Prototype Progress (Keep Settings)";
         private const string VerifiedBuildMenuPath = "Greed Last/Build Verified Windows Prototype";
+        private const string ChecksumNoticeMenuPath = "Greed Last/Run Build Checksum Notice Check";
         private const string WindowsBuildDirectory = "Builds/GreedLastPrototype";
         private const string WindowsBuildPath = WindowsBuildDirectory + "/GreedLastPrototype.exe";
 
@@ -122,6 +123,7 @@ namespace GreedLast.Editor
         }
 
         [MenuItem(VerifiedBuildMenuPath, true)]
+        [MenuItem(ChecksumNoticeMenuPath, true)]
         private static bool ValidateBuildVerifiedWindowsPrototype()
         {
             return !EditorApplication.isPlayingOrWillChangePlaymode;
@@ -157,6 +159,59 @@ namespace GreedLast.Editor
             };
             // Hash game code as well as Unity's reusable launcher; its timestamp alone is not a build ID.
             File.WriteAllText(Path.Combine(WindowsBuildDirectory, "VerifiedBuildInfo.json"), JsonUtility.ToJson(info, true));
+            WriteBuildChecksumNotice(WindowsBuildDirectory, info);
+        }
+
+        private static void WriteBuildChecksumNotice(string directory, VerifiedBuildInfo info)
+        {
+            string text = info.executablePath + "\nSHA256 " + info.executableSha256
+                + "\n" + info.runtimeAssemblyPath + "\nSHA256 " + info.runtimeAssemblySha256
+                + "\nUnity " + info.unityVersion + "\nVerified UTC " + info.verifiedAtUtc + "\n";
+            File.WriteAllText(Path.Combine(directory, "SHA256.txt"), text);
+        }
+
+        [MenuItem(ChecksumNoticeMenuPath)]
+        public static void RunBuildChecksumNoticeCheck()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                throw new InvalidOperationException("Checksum notice checks require an idle Edit-mode editor.");
+            string directory = Path.Combine(Application.temporaryCachePath, "GreedLastBuildNotice-" + Guid.NewGuid().ToString("N"));
+            if (Directory.Exists(directory)) throw new IOException("A fresh checksum fixture is required.");
+            Directory.CreateDirectory(directory);
+            string notice = Path.Combine(directory, "SHA256.txt");
+            string metadata = Path.Combine(directory, "VerifiedBuildInfo.json");
+            try
+            {
+                File.WriteAllText(notice, "Project commit old\nSHA256 obsolete\n");
+                File.WriteAllText(metadata, "keep unrelated metadata");
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    var info = new VerifiedBuildInfo
+                    {
+                        executablePath = "GreedLastPrototype.exe",
+                        executableSha256 = new string(sample < 2 ? 'A' : 'D', 64),
+                        runtimeAssemblyPath = "GreedLastPrototype_Data/Managed/Assembly-CSharp.dll",
+                        runtimeAssemblySha256 = new string(sample == 0 ? 'B' : 'C', 64),
+                        unityVersion = "6000.4.3f1",
+                        verifiedAtUtc = "2026-10-25T06:00:0" + sample + ".0000000Z",
+                    };
+                    WriteBuildChecksumNotice(directory, info);
+                    string text = File.ReadAllText(notice);
+                    if (!text.StartsWith(info.executablePath + "\nSHA256 " + info.executableSha256
+                            + "\n" + info.runtimeAssemblyPath + "\nSHA256 " + info.runtimeAssemblySha256 + "\n", StringComparison.Ordinal)
+                        || !text.EndsWith("Unity " + info.unityVersion + "\nVerified UTC " + info.verifiedAtUtc + "\n", StringComparison.Ordinal)
+                        || text.Contains("Project commit", StringComparison.Ordinal)
+                        || File.ReadAllText(metadata) != "keep unrelated metadata")
+                        throw new InvalidOperationException("Checksum notices must replace stale content and include the actual launcher and runtime identities.");
+                }
+            }
+            finally
+            {
+                if (File.Exists(notice)) File.Delete(notice);
+                if (File.Exists(metadata)) File.Delete(metadata);
+                Directory.Delete(directory);
+            }
+            Debug.Log("Greed build checksum notices passed: three stale/runtime-only/launcher-change temporary-file cases; unrelated metadata preserved. No build or personal progress changed.");
         }
 
         private static string HashFile(string path)

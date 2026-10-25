@@ -327,6 +327,7 @@ namespace GreedLast.Editor
 
         private static void RunChecks()
         {
+            GreedLastSceneBuilder.RunBuildChecksumNoticeCheck();
             GreedLastPlayerPersistenceBuilder.VerifyFixtureIsolation();
             GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
             GreedLastPrototypePlayModeCheck.VerifyPreferenceCaptureCoverage();
