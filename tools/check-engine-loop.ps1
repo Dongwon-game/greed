@@ -2,11 +2,13 @@
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
-    [switch]$CueOnly
+    [switch]$CueOnly,
+    [switch]$MenuOnly
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($CueOnly -and $MenuOnly) { throw 'Choose only one focused engine check.' }
 if ($env:OS -ne 'Windows_NT') { throw 'This isolated editor runner supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
@@ -15,7 +17,7 @@ $dirty = @(git -C $project status --porcelain --untracked-files=all -- $inputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Review and commit changed game/editor inputs before exporting a check.' }
 $head = (git -C $project rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'A committed source identity is required.' }
-$mode = if ($CueOnly) { 'cue' } else { 'full' }
+$mode = if ($MenuOnly) { 'menu' } elseif ($CueOnly) { 'cue' } else { 'full' }
 if (!$PSCmdlet.ShouldProcess($project, ('Export a private test product, seed its asset index and run the '+$mode+' engine check'))) { return }
 $projectArgument = '(?i)(?:^|\s)-projectPath\s+(?:"'+[regex]::Escape($project.Replace('\','/'))+'"|'+[regex]::Escape($project.Replace('\','/'))+'(?=\s|$))'
 $existing = @(Get-CimInstance Win32_Process | Where-Object {
@@ -113,7 +115,7 @@ try {
     if ($prepared.id -cne $id -or $prepared.company -cne 'GreedLastPrototypeChecks' -or $prepared.product -cne $product) {
         throw 'Prepared identity mismatch.'
     }
-    $timeout = if ($CueOnly) { 600000 } else { 1200000 }
+    $timeout = if ($CueOnly -or $MenuOnly) { 600000 } else { 1200000 }
     Invoke-OwnedEditor @('-batchmode','-force-d3d11','-projectPath',('"'+$copy+'"'),
         '-executeMethod','GreedLast.Editor.GreedLastEngineLoopBootstrap.Run','-greed-engine-id',$id,'-greed-engine-kind',$mode,
         '-logFile',('"'+(Join-Path $root 'engine.log')+'"')) $timeout 'engine'
@@ -123,7 +125,8 @@ try {
     $report.EngineReport=$read.Path
     $report.EngineReportSHA256=$read.SHA256
     if (!$engine.succeeded -or !$engine.personalPreferencesUnchanged -or $engine.practicePreferenceRestorationPending -or
-        @($engine.cycles).Count -ne 2 -or $engine.trapCueOnly -ne [bool]$CueOnly -or $engine.fullLoopIncluded -eq [bool]$CueOnly) {
+        @($engine.cycles).Count -ne 2 -or $engine.trapCueOnly -ne [bool]$CueOnly -or
+        $engine.menuComparisonOnly -ne [bool]$MenuOnly -or $engine.fullLoopIncluded -ne (!$CueOnly -and !$MenuOnly)) {
         throw 'Required engine coverage or fixture preference restoration did not complete.'
     }
     $report.Succeeded=$true

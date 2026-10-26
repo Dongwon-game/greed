@@ -51,13 +51,14 @@ namespace GreedLast.Editor
             string[] args = Environment.GetCommandLineArgs();
             int index = Array.IndexOf(args, "-greed-engine-kind");
             string kind = index >= 0 && index + 1 < args.Length ? args[index + 1] : string.Empty;
-            if (kind != "full" && kind != "cue") throw new InvalidOperationException("Choose a fixed full or cue engine check.");
+            if (kind != "full" && kind != "cue" && kind != "menu") throw new InvalidOperationException("Choose a fixed full, cue or menu engine check.");
             if (!File.Exists(Path.Combine(root, "prepared-engine-project.json"))
                 || !File.Exists(Path.Combine(Path.GetDirectoryName(Application.dataPath), "UserSettings/Search.index"))
                 || PlayerSettings.companyName != Company || Application.companyName != Company
                 || PlayerSettings.productName != "EngineLoop-" + id || Application.productName != PlayerSettings.productName)
                 throw new InvalidOperationException("Start a fresh editor with its prepared isolated identity and asset index.");
             if (kind == "full") GreedLastPrototypePlayModeCheck.RunFullLoop();
+            else if (kind == "menu") GreedLastPrototypePlayModeCheck.RunMenuComparison();
             else GreedLastPrototypePlayModeCheck.RunTrapCueBoundary();
         }
     }

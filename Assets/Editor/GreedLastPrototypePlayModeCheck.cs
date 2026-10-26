@@ -59,8 +59,11 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Trap Cue Boundary Check")]
         public static void RunTrapCueBoundary() => BeginCheck(false, false, false, false, false, true);
 
+        [MenuItem("Greed Last/Run Engine Saved Comparison Menu Check")]
+        public static void RunMenuComparison() => BeginCheck(false, menuComparisonOnly: true);
+
         private static void BeginCheck(bool fullLoop, bool multiTouchOnly = false, bool audioListenerOnly = false,
-            bool initialChoiceOnly = false, bool inputSystemOnly = false, bool trapCueOnly = false)
+            bool initialChoiceOnly = false, bool inputSystemOnly = false, bool trapCueOnly = false, bool menuComparisonOnly = false)
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode
                 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false),
@@ -87,6 +90,7 @@ namespace GreedLast.Editor
             SessionState.SetBool(Prefix + "initialChoiceOnly", initialChoiceOnly);
             SessionState.SetBool(Prefix + "inputSystemOnly", inputSystemOnly);
             SessionState.SetBool(Prefix + "trapCueOnly", trapCueOnly);
+            SessionState.SetBool(Prefix + "menuComparisonOnly", menuComparisonOnly);
             SessionState.SetBool(GreedLastApp.EditorPlayModeCheckKey, true);
             EditorSceneManager.playModeStartScene = scene;
             try { PreparePracticePreference(); BeginCycle(); }
@@ -104,6 +108,7 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Engine Initial Choice Boundary Check", true)]
         [MenuItem("Greed Last/Run Engine Input System Ownership Check", true)]
         [MenuItem("Greed Last/Run Engine Trap Cue Boundary Check", true)]
+        [MenuItem("Greed Last/Run Engine Saved Comparison Menu Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode
             && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false);
 
@@ -347,6 +352,7 @@ namespace GreedLast.Editor
             results.initialChoiceOnly = SessionState.GetBool(Prefix + "initialChoiceOnly", false);
             results.inputSystemOnly = SessionState.GetBool(Prefix + "inputSystemOnly", false);
             results.trapCueOnly = SessionState.GetBool(Prefix + "trapCueOnly", false);
+            results.menuComparisonOnly = SessionState.GetBool(Prefix + "menuComparisonOnly", false);
             results.multiTouchIncluded = results.fullLoopIncluded || results.multiTouchOnly;
             if (results.multiTouchOnly)
                 results.scope = "Actual engine frames and EventSystem synthetic multi-touch: growth command repeat/held-release protection, six save-management held-confirmation paths, six held-command slot-change paths, first-input-only across three practice actions, held fingers across opening choice/countdown, fresh tap recovery and UI cleanup in two domain-reload modes. No manual Tick, clock edits, hardware touch, rendered-image, audio-latency or device FPS testing.";
@@ -358,6 +364,8 @@ namespace GreedLast.Editor
                 results.scope = "Actual engine input-system ownership in two domain-reload modes: disabled external event system, disabled/missing external module, usable borrowed input, two real scene handoffs, UI re-enable after borrowed input loss and mouse/touch command recovery. External settings and personal preferences preserved; isolated non-persisting progress. No hardware input, rendered-image or latency testing.";
             if (results.trapCueOnly)
                 results.scope = "Actual engine Update/LateUpdate in two domain-reload modes: clean/detailed practice, natural and late-update trap publication-frame input protection, actual pointer hold/release after repeat gates expire, subsequent visible first-input-only judgement, entry/target cue-state recovery, unchanged redraw deduplication and pause/resume recovery on the same trap. Synthetic app/pointer commands, in-memory calibration and transient publication-frame-guard-disabled negative controls only. No manual core Tick, clock edits, audible output, hardware input or FPS measurement.";
+            if (results.menuComparisonOnly)
+                results.scope = "Actual occupied S3 plus distinct unsaved-clear candidate comparison content, clean/detailed controls and EventSystem synthetic touch in two domain-reload modes. Body/handle drags, focus/safe-area callback interruption, held release over save, fresh recovery and full saved-record/candidate/use/reward preservation. In-memory fixture records, not played courses, native desktop gestures, rendered-image, device input or process-restart coverage. No personal save writes or core clock edits.";
             results.error = SessionState.GetString(Prefix + "error", string.Empty);
             var before = JsonUtility.FromJson<Preferences>(SessionState.GetString(Prefix + "preferences", "{}"));
             results.practicePreferenceBackup = SessionState.GetString(Prefix + "practiceBackup", string.Empty);
@@ -409,7 +417,14 @@ namespace GreedLast.Editor
                     && cycle.unseenTrapPointerFreshRecovered && cycle.unseenTrapPointerNegativeControls == 4);
                 if (!results.succeeded) results.error = "Required engine trap cue coverage did not complete.";
             }
-            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
+            if (results.succeeded && (results.menuComparisonOnly || results.fullLoopIncluded))
+            {
+                results.succeeded = results.cycles.TrueForAll(cycle => cycle.savedComparisonGestureCases == 8
+                    && cycle.savedComparisonFreshRecoveries == 8 && cycle.savedComparisonViews == 2
+                    && cycle.savedComparisonMinimumTravelPixels > 1f && cycle.savedComparisonDataPreserved);
+                if (!results.succeeded) results.error = "Required actual saved-comparison menu coverage did not complete.";
+            }
+            if (results.succeeded && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly && !results.menuComparisonOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.growthCommandCases == 3
                     && cycle.growthFirstCommandOnly && cycle.growthHeldReleaseCanceled && cycle.growthFreshTapRecovered
@@ -468,7 +483,7 @@ namespace GreedLast.Editor
                         && cycle.savedSlotIndex == (cycle.domainReloadDisabled ? 2 : 1));
                 if (!results.succeeded) results.error = "Required engine multi-touch coverage did not complete.";
             }
-            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly)
+            if (results.succeeded && !results.multiTouchOnly && !results.audioListenerOnly && !results.initialChoiceOnly && !results.inputSystemOnly && !results.trapCueOnly && !results.menuComparisonOnly)
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.transitionFrameCommandCases == 4
                     && cycle.transitionFrameCommandsPreservedRun && cycle.transitionFrameFreshTapRecovered
@@ -485,7 +500,7 @@ namespace GreedLast.Editor
             {
                 string directory = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Logs", "PlayModeChecks");
                 Directory.CreateDirectory(directory);
-                results.archivedReport = "report-" + (results.trapCueOnly ? "trap-cue-" : results.inputSystemOnly ? "input-system-" : results.audioListenerOnly ? "audio-listener-"
+                results.archivedReport = "report-" + (results.menuComparisonOnly ? "saved-comparison-" : results.trapCueOnly ? "trap-cue-" : results.inputSystemOnly ? "input-system-" : results.audioListenerOnly ? "audio-listener-"
                     : results.initialChoiceOnly ? "initial-choice-" : results.multiTouchOnly ? "multi-touch-"
                     : results.fullLoopIncluded ? "full-loop-" : "lifecycle-")
                     + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + ".json";
@@ -537,7 +552,7 @@ namespace GreedLast.Editor
         {
             public string startedUtc, completedUtc, unityVersion, error, archivedReport;
             public string scope = "Actual engine lifecycle, core/UI/EventSystem frame progression and optional full game loop. Synthetic mouse/touch, focus/audio-callback simulation and a bounded 750ms main-thread stall; no manual core Tick, UI Update, request-draining or private clock edits. Calibration and transient publication-frame-guard-disabled negative controls change only in-memory fixture state. No OS audio reset, hardware input/capture, rendered-image, device FPS or audio-latency testing.";
-            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly, trapCueOnly;
+            public bool succeeded, personalPreferencesUnchanged, fullLoopIncluded, multiTouchIncluded, multiTouchOnly, audioListenerOnly, initialChoiceOnly, inputSystemOnly, trapCueOnly, menuComparisonOnly;
             public List<Cycle> cycles = new List<Cycle>();
             public List<string> personalPreferenceKeys = new List<string>();
             public bool practicePreferenceExistedBefore, practicePreferenceExistsAfter;
@@ -640,6 +655,9 @@ namespace GreedLast.Editor
             public int engineMenuScrollCases, engineMenuScrollbarCases, engineMenuFreshRecoveries, engineMenuOrphanCases;
             public int engineMenuOverflowTransitions;
             public int engineMenuCrossControlCases;
+            public int savedComparisonGestureCases, savedComparisonFreshRecoveries, savedComparisonViews;
+            public float savedComparisonMinimumTravelPixels;
+            public bool savedComparisonDataPreserved;
             public bool recoveredCandidateSlotsPreserved;
             public bool screenKeyboardFreshInputRecovered;
             public int audioBackgroundOrderCases;
@@ -772,6 +790,17 @@ namespace GreedLast.Editor
                     "The actual engine EventSystem must own the test input without Submit/Move activation.");
                 if (SessionState.GetBool(Prefix + "fullLoop", false) || SessionState.GetBool(Prefix + "multiTouchOnly", false))
                     yield return VerifyMenuScrollGestures();
+                if (SessionState.GetBool(Prefix + "fullLoop", false) || SessionState.GetBool(Prefix + "menuComparisonOnly", false))
+                    yield return VerifySavedComparisonMenuGestures();
+                if (SessionState.GetBool(Prefix + "menuComparisonOnly", false))
+                {
+                    UnityEngine.Object.Destroy(app.gameObject);
+                    yield return null;
+                    yield return null;
+                    Require(CountNamed<Canvas>("GreedLastCanvas") == 0 && Count<GreedLastApp>() == 0,
+                        "The saved-comparison check must release its isolated app and menu.");
+                    yield break;
+                }
                 if (SessionState.GetBool(Prefix + "initialChoiceOnly", false))
                 {
                     yield return VerifyInitialRunChoiceBoundary();
@@ -3477,6 +3506,128 @@ namespace GreedLast.Editor
                         "The real engine course must reach its calibrated input target before timing out.");
                     yield return null;
                 }
+            }
+
+            private IEnumerator VerifySavedComparisonMenuGestures()
+            {
+                GreedLastMockBackend original = Read<GreedLastMockBackend>(app, "backend");
+                FieldInfo backendField = typeof(GreedLastApp).GetField("backend", BindingFlags.Instance | BindingFlags.NonPublic);
+                bool playerControls = ui.UsePlayerRunControls;
+                Rect area = Read<Rect>(ui, "lastSafeArea");
+                int width = Read<int>(ui, "lastSafeAreaScreenWidth"), height = Read<int>(ui, "lastSafeAreaScreenHeight");
+                report.savedComparisonMinimumTravelPixels = float.MaxValue;
+                try
+                {
+                    core.Exit();
+                    foreach (bool detailed in new[] { false, true })
+                    {
+                        if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
+                        var backend = new GreedLastMockBackend(false, false);
+                        var saved = new GreedLastRunRecord(true, 900, 3, 1, 2, 6, 12, 2, 1, 91.25f,
+                            "engine-saved-comparison", "박자 감각", "집중 축", "황금 박동", "안정 루트 / 집중 축 / 황금 박동", string.Empty);
+                        backend.RegisterClear(saved);
+                        backend.SelectSaveLoadoutSlot(2);
+                        backend.ConfirmSaveLoadout();
+                        var candidate = new GreedLastRunRecord(true, 1200, 2, 3, 3, 9, 14, 1, 0, 100.5f,
+                            "engine-new-comparison", "박자 감각", "집중 축", "황금 박동", "변주 루트 / 집중 축 / 황금 박동", string.Empty);
+                        backend.RegisterClear(candidate);
+                        var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
+                        var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+                        backendField.SetValue(app, backend);
+                        state.SetLobbyReady(backend.LoadLobby());
+                        yield return null;
+                        yield return TapTouch(Read<Button>(ui, "saveLoadoutButton"));
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[2]);
+                        yield return TapTouch(Read<Button>(ui, "saveSlotDetailButton"));
+                        Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                            && Read<bool>(app, "saveSlotDetailViewActive")
+                            && state.CurrentDetail == backend.BuildSelectedSaveLoadoutComparisonText(),
+                            "The menu fixture must display actual occupied-S3/candidate comparison text, not a fabricated long paragraph.");
+                        ScrollRect scroll = Read<ScrollRect>(ui, "menuDetailScroll");
+                        Require(scroll is GreedLastMenuScrollRect && scroll.vertical && scroll.content.rect.height > scroll.viewport.rect.height + 1f
+                            && scroll.verticalScrollbar is GreedLastMenuScrollbar && scroll.verticalScrollbar.IsActive(),
+                            "Actual saved-versus-candidate content must genuinely overflow and expose both scroll controls.");
+                        Canvas canvas = scroll.GetComponentInParent<Canvas>();
+                        Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+                        void AssertPreserved()
+                        {
+                            Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                                && Read<bool>(app, "saveSlotDetailViewActive") && !Read<bool>(app, "saveDraftOverwriteConfirmPending")
+                                && backend.HasSaveLoadoutCandidate && Read<GreedLastRunRecord>(backend, "lastRunRecord").Equals(candidate)
+                                && Read<int>(backend, "normalClearCount") == 2 && Read<int>(backend, "growthPoints") == 6,
+                                "Menu movement/canceled release must not confirm overwrite, consume the candidate or duplicate rewards.");
+                            for (int slot = 0; slot < 3; slot++)
+                                Require(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot].Equals(slots[slot])
+                                    && Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot],
+                                    "Every saved record and use count must survive comparison gestures: slot=" + slot);
+                        }
+                        AssertPreserved();
+                        report.savedComparisonViews++;
+                        foreach (bool handle in new[] { false, true })
+                        foreach (bool viewport in new[] { false, true })
+                        {
+                            scroll.StopMovement();
+                            scroll.verticalNormalizedPosition = 0.5f;
+                            yield return null;
+                            Vector2 Point()
+                            {
+                                RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                                return RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+                            }
+                            Vector2 delta = (handle ? Vector2.down : Vector2.up)
+                                * Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                            Vector2 point = Point(), before = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(65, point, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(65, point + delta * 0.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(65, point + delta, TouchPhase.Moved));
+                            float travel = Vector2.Distance(scroll.content.anchoredPosition, before);
+                            Require(travel > 1f, "The actual comparison menu must establish a genuine drag: handle=" + handle);
+                            report.savedComparisonMinimumTravelPixels = Mathf.Min(report.savedComparisonMinimumTravelPixels, travel);
+                            AssertPreserved();
+                            if (viewport)
+                            {
+                                Call(ui, "ApplySafeAreaSample", new Rect(area.x + 2f, area.y, area.width - 2f, area.height), width, height, false);
+                                Call(ui, "ApplySafeAreaSample", area, width, height, true);
+                            }
+                            else
+                            {
+                                Call(ui, "OnApplicationFocus", false);
+                                yield return null;
+                                Call(ui, "OnApplicationFocus", true);
+                            }
+                            Vector2 frozen = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(65, point + delta * 1.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(65, ScreenPoint(Read<Button>(ui, "nextPatternButton")), TouchPhase.Ended));
+                            yield return TouchFrame();
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                                "An interrupted comparison drag must not continue moving on a held save-button release.");
+                            AssertPreserved();
+                            report.savedComparisonGestureCases++;
+                            point = Point();
+                            before = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(65, point, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(65, point - delta * 0.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(65, point - delta, TouchPhase.Moved));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                                "Fresh comparison-menu touches must recover after cancellation without another data command.");
+                            yield return TouchFrame(TouchAt(65, point - delta, TouchPhase.Canceled));
+                            yield return TouchFrame();
+                            AssertPreserved();
+                            report.savedComparisonFreshRecoveries++;
+                        }
+                    }
+                    report.savedComparisonDataPreserved = true;
+                }
+                finally
+                {
+                    input.Touches = Array.Empty<Touch>();
+                    Call(ui, "OnApplicationFocus", true);
+                    Call(ui, "ApplySafeAreaSample", area, width, height, true);
+                    backendField.SetValue(app, original);
+                    state.SetLobbyReady(original.LoadLobby());
+                    if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
+                }
+                Debug.Log("Greed actual saved-comparison menu passed: clean/detailed occupied S3 plus unsaved candidate, eight body/handle interruptions and fresh recoveries, canceled release over save, full records/uses/candidate/rewards unchanged. In-memory fixtures and synthetic EventSystem only; no desktop or personal-save interaction.");
             }
 
             private IEnumerator VerifyMenuScrollGestures()
