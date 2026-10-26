@@ -6202,8 +6202,7 @@ namespace GreedLast
         {
             for (int i = 0; i < normalRunRankings.Length; i += 1)
             {
-                if (IsSameRunRecord(record, normalRunRankings[i])
-                    && record.LoadoutName == normalRunRankings[i].LoadoutName)
+                if (IsSameNormalRankingRecord(record, normalRunRankings[i]))
                 {
                     return true;
                 }
@@ -6265,8 +6264,7 @@ namespace GreedLast
             int safeCount = Mathf.Clamp(count, 0, records.Length);
             for (int i = 0; i < safeCount; i += 1)
             {
-                if (IsSameRunRecord(record, records[i])
-                    && record.LoadoutName == records[i].LoadoutName)
+                if (IsSameNormalRankingRecord(record, records[i]))
                 {
                     return true;
                 }
@@ -7370,6 +7368,19 @@ namespace GreedLast
                 && left.MissCount == right.MissCount;
         }
 
+        private static bool IsSameNormalRankingRecord(GreedLastRunRecord left, GreedLastRunRecord right)
+        {
+            // Equal performance is not a duplicate when the run's choices or timing evidence differ.
+            return IsSameRunRecord(left, right)
+                && left.Combo == right.Combo
+                && left.LoadoutName == right.LoadoutName
+                && left.StartGift == right.StartGift
+                && left.PrimaryGift == right.PrimaryGift
+                && left.Relic == right.Relic
+                && left.ChoiceSummary == right.ChoiceSummary
+                && left.TimingProfile == right.TimingProfile;
+        }
+
         private static string FormatInfiniteRecordDelta(GreedLastInfiniteRunRecord candidate, GreedLastInfiniteRunRecord baseline)
         {
             if (!candidate.IsValid || !baseline.IsValid)
@@ -7424,6 +7435,13 @@ namespace GreedLast
                 && left.LoadoutProfile == right.LoadoutProfile;
         }
 
+        private static bool IsSameInfiniteRankingRecord(GreedLastInfiniteRunRecord left, GreedLastInfiniteRunRecord right)
+        {
+            return IsSameInfiniteRecordIdentity(left, right)
+                && left.MissReason == right.MissReason
+                && left.TimingProfile == right.TimingProfile;
+        }
+
         private void InsertInfiniteRanking(GreedLastInfiniteRunRecord record)
         {
             if (HasInfiniteRankingRecord(record))
@@ -7458,7 +7476,7 @@ namespace GreedLast
         {
             for (int i = 0; i < infiniteRunRankings.Length; i += 1)
             {
-                if (IsSameInfiniteRecordIdentity(record, infiniteRunRankings[i]))
+                if (IsSameInfiniteRankingRecord(record, infiniteRunRankings[i]))
                 {
                     return true;
                 }
@@ -7513,7 +7531,7 @@ namespace GreedLast
             int safeCount = Mathf.Clamp(count, 0, records.Length);
             for (int i = 0; i < safeCount; i += 1)
             {
-                if (IsSameInfiniteRecordIdentity(record, records[i]))
+                if (IsSameInfiniteRankingRecord(record, records[i]))
                 {
                     return true;
                 }
