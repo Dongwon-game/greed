@@ -64,7 +64,7 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-$operation = if ($PracticeQuit) { 'Verify incomplete and completed first practice across normal quit and four fresh private player processes, without advancing gameplay records' }
+$operation = if ($PracticeQuit) { 'Verify incomplete, short review and completed first practice across normal quit and five fresh private player processes, without advancing gameplay records' }
     elseif ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
     elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
@@ -98,7 +98,7 @@ $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
 if ($PracticeQuit) {
-    $report.Scope = 'Four fresh private players: incomplete practice quit, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
+    $report.Scope = 'Five fresh private players: incomplete practice quit, two-action review from a synthetic lobby notice, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
 }
 if ($UnreadableSave) {
     $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
@@ -260,7 +260,7 @@ try {
         }
     }
 
-    $phases = if ($PracticeQuit) { @('practice-live','practice-complete','practice-verify','practice-verify-again') }
+    $phases = if ($PracticeQuit) { @('practice-live','practice-review','practice-complete','practice-verify','practice-verify-again') }
         elseif ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
@@ -301,6 +301,7 @@ try {
             $result.infiniteRuns -ne 0 -or $result.growthPoints -ne 0 -or $result.candidate -or
             @($result.uses | Where-Object { $_ -ne 0 }).Count -or
             ($phase -eq 'practice-live' -and ($result.onboardingComplete -or $result.terminalBeforeQuit)) -or
+            ($phase -eq 'practice-review' -and (!$result.practiceReviewCompleted -or !$result.terminalBeforeQuit -or $result.onboardingComplete)) -or
             ($phase -eq 'practice-complete' -and (!$result.practiceIncompletePreserved -or !$result.practiceCompletedBeforeQuit -or !$result.practiceForegroundActionPreserved)) -or
             ($phase -in @('practice-verify','practice-verify-again') -and (!$result.onboardingComplete -or !$result.practiceNormalEntryRestored)))) {
             throw ('Real practice-quit completion/zero-progression coverage is incomplete: ' + $phase)
@@ -323,6 +324,7 @@ try {
             OnboardingComplete=$result.onboardingComplete; PracticeCompletedBeforeQuit=$result.practiceCompletedBeforeQuit;
             PracticeIncompletePreserved=$result.practiceIncompletePreserved; PracticeForegroundActionPreserved=$result.practiceForegroundActionPreserved;
             PracticeNormalEntryRestored=$result.practiceNormalEntryRestored;
+            PracticeReviewCompleted=$result.practiceReviewCompleted;
             LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
             AttemptRecordComparisons=$result.attemptRecordComparisons}

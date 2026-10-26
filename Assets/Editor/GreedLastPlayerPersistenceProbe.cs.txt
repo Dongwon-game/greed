@@ -45,6 +45,7 @@ namespace GreedLast.PlayerChecks
             public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
             public bool unreadableSaveSeeded, unreadableSavePreserved, unreadableRetryPreserved;
             public bool practiceCompletedBeforeQuit, practiceIncompletePreserved, practiceForegroundActionPreserved, practiceNormalEntryRestored;
+            public bool practiceReviewCompleted;
             public int unreadableBlockedCommands;
             public Record record;
             public Record savedSlot;
@@ -124,7 +125,7 @@ namespace GreedLast.PlayerChecks
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
                 "unreadable-seed", "unreadable-blocked", "unreadable-verify",
-                "practice-live", "practice-complete", "practice-verify", "practice-verify-again" }, phase) >= 0,
+                "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -178,14 +179,21 @@ namespace GreedLast.PlayerChecks
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
                     "Practice-quit checks must retain an empty private product without gameplay records or rewards.");
-                if (phase == "practice-live" || phase == "practice-complete")
+                if (phase == "practice-live" || phase == "practice-review" || phase == "practice-complete")
                 {
                     Require(PlayerPrefs.GetInt(practiceKey, 0) == 0, "Unfinished practice must not complete onboarding on quit.");
                     if (phase == "practice-complete")
                     {
                         Require(Previous("practice-live").succeeded && !Previous("practice-live").terminalBeforeQuit,
                             "The incomplete-practice normal-quit control must complete first.");
+                        Require(Previous("practice-review").succeeded && Previous("practice-review").practiceReviewCompleted,
+                            "A normally closed partial review must not mark full first-practice completion.");
                         result.practiceIncompletePreserved = true;
+                    }
+                    if (phase == "practice-review")
+                    {
+                        Require(Previous("practice-live").succeeded, "The initial incomplete-practice control must precede review.");
+                        state.ShowLocalNotice("탈출 실패 기록 저장\n복기: 기초연습 숙이기 단계");
                     }
                     Call(app, "RequestPracticeRun");
                     if (phase == "practice-live")
@@ -193,6 +201,14 @@ namespace GreedLast.PlayerChecks
                         yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
                         Require(!core.IsPracticeComplete && !RunState().Stopped,
                             "The incomplete control must quit before its first practice action.");
+                    }
+                    else if (phase == "practice-review")
+                    {
+                        yield return DriveCourse();
+                        Require(core.IsPracticeComplete && RunState().SuccessCount == 2 && RunState().GoodCount == 0
+                            && RunState().MissCount == 0 && PlayerPrefs.GetInt(practiceKey, 0) == 0,
+                            "The real two-action review must finish without claiming the complete three-axis course.");
+                        result.practiceReviewCompleted = result.terminalBeforeQuit = true;
                     }
                     else
                     {
@@ -226,7 +242,7 @@ namespace GreedLast.PlayerChecks
                         "The ordinary first lobby action must enter normal start-gift choice, not require completed practice again.");
                     result.practiceNormalEntryRestored = true;
                 }
-                result.scope = "Private real-frame practice, actual normal Application.Quit and fresh-process onboarding restoration; partial quit remains incomplete, full quit restores normal entry, no gameplay record/reward. Not desktop input/capture, original data recovery, forced kill, audio or phone testing.";
+                result.scope = "Private real-frame practice and two-action review entered through a synthetic lobby review notice, actual normal Application.Quit and fresh-process onboarding restoration; incomplete/review quit remains incomplete, full quit restores normal entry, no gameplay record/reward. Not desktop input/capture, original data recovery, forced kill, audio or phone testing.";
             }
             else if (phase == "unreadable-seed")
             {
