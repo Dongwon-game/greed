@@ -57,7 +57,7 @@ function Read-PersonalPreferences {
 }
 
 $operation = if ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
-    elseif ($InteractiveMenus) { 'Build private native menu gestures; await body/handle drags and focus recovery without saving, then verify the candidate in fresh processes' }
+    elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
@@ -95,7 +95,7 @@ if ($InteractiveLoadout) {
     $report.Scope = 'Private SDK-driven practice/normal setup, then external native S3 save, preparation cancel, two infinite starts/natural ends and OS close; fresh processes verify persistence. External UI evidence is required. Not manual rhythm timing, audible output or phone performance.'
 }
 if ($InteractiveMenus) {
-    $report.Scope = 'Private SDK practice/normal preparation, then observed native comparison body/handle drags and post-focus fresh handle recovery; candidate remains unsaved across normal close and fresh processes. External input evidence required. Not physical rhythm, audio or phone testing.'
+    $report.Scope = 'Private SDK practice/two normal courses and one S3 save, then native comparison body/handle drags and post-focus fresh handle recovery without overwriting; original slot and new candidate remain across normal close and fresh processes. External input evidence required. Not physical rhythm, audio or phone testing.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
