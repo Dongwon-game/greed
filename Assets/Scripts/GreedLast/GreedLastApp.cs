@@ -52,6 +52,7 @@ namespace GreedLast
         Maintenance = 2,
         VersionMismatch = 3,
         SessionInvalid = 4,
+        SaveDataUnavailable = 5,
     }
 
     public readonly struct GreedLastRequestToken
@@ -352,6 +353,7 @@ namespace GreedLast
         private bool maintenance;
         private bool versionMatched = true;
         private bool sessionValid = true;
+        private bool saveDataReadBlocked;
         private bool firstSaveCompleted;
         private bool saveLoadoutUnlocked;
         private bool savedLoadoutConfirmed;
@@ -448,6 +450,12 @@ namespace GreedLast
 
         public GreedLastConnectResult CheckConnect()
         {
+            if (saveDataReadBlocked)
+            {
+                return new GreedLastConnectResult(false, GreedLastConnectBlockReason.SaveDataUnavailable,
+                    "저장 자료를 읽을 수 없어 시작을 보류했습니다.\n기존 저장은 변경하지 않았습니다.\n앱을 닫고 저장 자료와 게임 버전을 확인하세요.");
+            }
+
             if (!online)
             {
                 return new GreedLastConnectResult(false, GreedLastConnectBlockReason.NetworkUnavailable, "네트워크 연결을 확인할 수 없습니다.");
@@ -9906,6 +9914,8 @@ namespace GreedLast
             }
 
             string json = PlayerPrefs.GetString(persistenceKey, string.Empty);
+            // A known key is writable only after its current schema has been read successfully.
+            saveDataReadBlocked = true;
             if (string.IsNullOrWhiteSpace(json))
             {
                 return;
@@ -9925,6 +9935,8 @@ namespace GreedLast
             {
                 return;
             }
+
+            saveDataReadBlocked = false;
 
             firstSaveCompleted = data.firstSaveCompleted;
             saveLoadoutUnlocked = data.saveLoadoutUnlocked;
@@ -10119,7 +10131,7 @@ namespace GreedLast
 
         private void SavePersistedData()
         {
-            if (!persistData)
+            if (!persistData || saveDataReadBlocked)
             {
                 return;
             }
@@ -25233,6 +25245,8 @@ namespace GreedLast
                     return "버전";
                 case GreedLastConnectBlockReason.SessionInvalid:
                     return "세션";
+                case GreedLastConnectBlockReason.SaveDataUnavailable:
+                    return "저장 자료";
                 default:
                     return "없음";
             }

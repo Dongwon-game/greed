@@ -2436,12 +2436,13 @@ namespace GreedLast.Editor
                     && visited[2] == GreedLastScreenState.LobbyLoading
                     && visited[3] == GreedLastScreenState.LobbyReady && !gate.Busy,
                     "The real boot routines must visit title, connection, lobby loading and ready exactly once.");
-                string[] fields = { "online", "maintenance", "versionMatched", "sessionValid" };
+                string[] fields = { "online", "maintenance", "versionMatched", "sessionValid", "saveDataReadBlocked" };
                 var reasons = new[] { GreedLastConnectBlockReason.NetworkUnavailable, GreedLastConnectBlockReason.Maintenance,
-                    GreedLastConnectBlockReason.VersionMismatch, GreedLastConnectBlockReason.SessionInvalid };
+                    GreedLastConnectBlockReason.VersionMismatch, GreedLastConnectBlockReason.SessionInvalid,
+                    GreedLastConnectBlockReason.SaveDataUnavailable };
                 for (int test = 0; test < fields.Length; test++)
                 {
-                    bool healthy = fields[test] != "maintenance";
+                    bool healthy = fields[test] != "maintenance" && fields[test] != "saveDataReadBlocked";
                     Write(backend, fields[test], !healthy);
                     try
                     {
@@ -2515,7 +2516,7 @@ namespace GreedLast.Editor
                 for (int slot = 0; slot < original.SaveSlotLabels.Length; slot++)
                     Require(backend.LoadLobby().SaveSlotLabels[slot] == original.SaveSlotLabels[slot],
                         "Boot failures and retries must not consume or change a saved loadout.");
-                Debug.Log("Greed Last boot/reconnect checks passed: ordered boot, duplicate request lock, four simulated failure reasons, locked app commands, fresh warning snapshot and preserved saved slots. Coroutine waits are advanced without real network traffic.");
+                Debug.Log("Greed Last boot/reconnect checks passed: ordered boot, duplicate request lock, five simulated failure reasons including unreadable storage, locked app commands, fresh warning snapshot and preserved saved slots. Coroutine waits are advanced without real network traffic.");
             }
             finally { state.StateChanged -= observe; }
         }

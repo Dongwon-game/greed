@@ -30,7 +30,9 @@ namespace GreedLast.Editor
                     blocked.SelectSaveLoadoutSlot(2);
                     Require(PlayerPrefs.GetString(key) == original,
                         "Selecting an empty slot must not replace unreadable or unsupported saved data.");
-                    Require(!blocked.CheckConnect().Success,
+                    GreedLastConnectResult connection = blocked.CheckConnect();
+                    Require(!connection.Success && connection.Reason == GreedLastConnectBlockReason.SaveDataUnavailable
+                        && connection.Message.Contains("기존 저장"),
                         "Unreadable saved data must block ordinary game entry before new progress can be mistaken for saved progress.");
                     blocked.RegisterClear(record);
                     blocked.SelectSaveLoadoutSlot(2);
