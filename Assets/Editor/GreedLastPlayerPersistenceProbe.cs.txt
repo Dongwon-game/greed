@@ -11,6 +11,7 @@ namespace GreedLast.PlayerChecks
     public sealed class GreedLastPlayerPersistenceProbe : MonoBehaviour
     {
         private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const string UnreadableFixtureValue = "not-json-private-save-guard-fixture";
         private GreedLastApp app;
         private GreedLastRunCore core;
         private GreedLastMockBackend backend;
@@ -42,6 +43,8 @@ namespace GreedLast.PlayerChecks
             public int expectedInfiniteGrowthReward;
             public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots, recordInvalidControls;
             public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
+            public bool unreadableSaveSeeded, unreadableSavePreserved, unreadableRetryPreserved;
+            public int unreadableBlockedCommands;
             public Record record;
             public Record savedSlot;
             public Record nativeLastInfiniteRecord;
@@ -118,7 +121,8 @@ namespace GreedLast.PlayerChecks
                 "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
                 "window-play", "window-clear", "window-verify", "window-verify-again",
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
-                "window-menu", "window-menu-verify", "window-menu-verify-again" }, phase) >= 0,
+                "window-menu", "window-menu-verify", "window-menu-verify-again",
+                "unreadable-seed", "unreadable-blocked", "unreadable-verify" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -145,6 +149,13 @@ namespace GreedLast.PlayerChecks
             core = Read<GreedLastRunCore>(app, "runCore");
             backend = Read<GreedLastMockBackend>(app, "backend");
             state = Read<GreedLastStateMachine>(app, "stateMachine");
+            bool unreadablePhase = phase.StartsWith("unreadable-", StringComparison.Ordinal);
+            Require(!unreadablePhase || !backgroundResults, "Unreadable-storage checks must run separately from result settlement.");
+            if (unreadablePhase && phase != "unreadable-seed")
+            {
+                yield return VerifyUnreadableSaveEntry();
+                yield break;
+            }
             yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
             yield return new WaitForSecondsRealtime(0.25f);
             if (phase == "window-play" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
@@ -152,11 +163,24 @@ namespace GreedLast.PlayerChecks
                     && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
-                && phase != "window-loadout" && phase != "window-menu")
+                && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase)
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
 
-            if (phase == "window-play")
+            if (phase == "unreadable-seed")
+            {
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
+                    && Count("normalFailCount") == 0 && Count("infiniteRunCount") == 0,
+                    "Seed unreadable data only in a fresh private product, never over existing progress.");
+                string key = Read<string>(backend, "persistenceKey");
+                Require(key == "GreedLast.MockBackend.SaveData.v1" && !PlayerPrefs.HasKey(key),
+                    "The unique private product must not already have backend data.");
+                PlayerPrefs.SetString(key, UnreadableFixtureValue);
+                PlayerPrefs.Save();
+                result.unreadableSaveSeeded = result.unreadableSavePreserved = true;
+                result.scope = "Intentionally seed an unreadable value only in the verified new private test product, then Application.Quit. Later processes check real blocked boot and preservation. Never personal data or recovery.";
+            }
+            else if (phase == "window-play")
             {
                 Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0,
@@ -438,6 +462,41 @@ namespace GreedLast.PlayerChecks
                         "An already settled normal failure must not grant another reward on quit.");
             }
             else throw new InvalidOperationException("Unsupported persistence phase.");
+        }
+
+        private IEnumerator VerifyUnreadableSaveEntry()
+        {
+            Require(Previous("unreadable-seed").succeeded && Previous("unreadable-seed").unreadableSaveSeeded,
+                "The private unreadable baseline must be produced by the earlier normally ended seed process.");
+            yield return WaitFor(() => state.CurrentState == GreedLastScreenState.ConnectBlocked);
+            string key = Read<string>(backend, "persistenceKey");
+            Require(state.BlockReason == GreedLastConnectBlockReason.SaveDataUnavailable && !state.CoreActionsEnabled
+                && PlayerPrefs.GetString(key) == UnreadableFixtureValue,
+                "A fresh real player must block unreadable storage before ordinary game entry, preserving its original bytes.");
+            GreedLastRuntimeUi ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            foreach (string button in new[] { "normalRunButton", "practiceRunButton", "saveLoadoutButton", "infiniteButton" })
+                Require(!Read<Button>(ui, button).IsInteractable(), "Blocked storage must disable the real UI command: " + button);
+            foreach (string command in new[] { "RequestNormalRun", "RequestPracticeRun", "RequestSaveLoadout", "RequestInfiniteRun" })
+            {
+                Call(app, command);
+                yield return null;
+                Require(state.CurrentState == GreedLastScreenState.ConnectBlocked && !state.CoreActionsEnabled
+                    && PlayerPrefs.GetString(key) == UnreadableFixtureValue && EmptySlots() && !backend.HasSaveLoadoutCandidate
+                    && Count("normalClearCount") == 0 && Count("normalFailCount") == 0 && Count("infiniteRunCount") == 0,
+                    "Even direct blocked app commands must not enter play or replace the private unreadable baseline.");
+                result.unreadableBlockedCommands++;
+            }
+            Call(app, "RequestRetrySync");
+            yield return WaitFor(() => state.CurrentState == GreedLastScreenState.ReSyncPending
+                && !Read<GreedLastRequestGate>(app, "requestGate").Busy);
+            Require(state.BlockReason == GreedLastConnectBlockReason.SaveDataUnavailable && !state.CoreActionsEnabled
+                && PlayerPrefs.GetString(key) == UnreadableFixtureValue,
+                "A real retry must retain the storage-specific block and original value, not turn it into an empty writable lobby.");
+            if (phase == "unreadable-verify")
+                Require(Previous("unreadable-blocked").succeeded && Previous("unreadable-blocked").unreadableSavePreserved,
+                    "A second fresh blocked process must preserve the normally closed blocked-process baseline.");
+            result.unreadableSavePreserved = result.unreadableRetryPreserved = true;
+            result.scope = "Real fresh-player boot from intentionally unreadable private test data, four disabled UI/app commands, asynchronous retry, normal quit and repeated process preservation. No OS window input/capture, personal reset/recovery, forced kill, audio or phone testing.";
         }
 
         private IEnumerator VerifyBackgroundBoundary(bool clear = false, bool failure = false, bool infinite = false)

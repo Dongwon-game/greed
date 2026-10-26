@@ -6,11 +6,15 @@ param(
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
-    [switch]$BackgroundResults
+    [switch]$BackgroundResults,
+    [switch]$UnreadableSave
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($UnreadableSave -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults)) {
+    throw 'Choose the private unreadable-save check separately from all other modes.'
+}
 if ($env:OS -ne 'Windows_NT') { throw 'This cross-process probe supports Windows only.' }
 if ($CaptureFrames -and $InteractiveWindow) { throw 'Choose offscreen capture or interactive window checks, not both.' }
 if ($BackgroundResults -and $InteractiveWindow) { throw 'Choose background callback checks or interactive window input, not both.' }
@@ -56,7 +60,8 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-$operation = if ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
+$operation = if ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
+    elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
@@ -85,6 +90,10 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
+$report.UnreadableSaveRequested = [bool]$UnreadableSave
+if ($UnreadableSave) {
+    $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
+}
 if ($BackgroundResults) {
     $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
 }
@@ -242,7 +251,8 @@ try {
         }
     }
 
-    $phases = if ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
+    $phases = if ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
+        elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
         elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
         else { @('clear','save','first-use','last-use','verify','verify-again',
@@ -272,6 +282,11 @@ try {
         if ($phase -in @('first-use','last-use') -and $result.savedSlotComparisons -lt 1) {
             throw ('Fresh-process saved-slot metadata comparison is missing: ' + $phase)
         }
+        if ($UnreadableSave -and (!$result.unreadableSavePreserved -or
+            ($phase -eq 'unreadable-seed' -and !$result.unreadableSaveSeeded) -or
+            ($phase -ne 'unreadable-seed' -and (!$result.unreadableRetryPreserved -or $result.unreadableBlockedCommands -ne 4)))) {
+            throw ('Real unreadable-save boot/command/preservation coverage is incomplete: ' + $phase)
+        }
         $expectedBackgroundChecks = if ($BackgroundResults -and $phase -in @('clear','first-use','last-use','live-normal','normal-fail')) { 1 } else { 0 }
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
@@ -286,6 +301,7 @@ try {
             NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved;
             RecordSchemaVersion=$result.recordSchemaVersion; RecordComparatorControls=$result.recordComparatorControls;
             RecordInvalidControls=$result.recordInvalidControls;
+            UnreadableSavePreserved=$result.unreadableSavePreserved; UnreadableBlockedCommands=$result.unreadableBlockedCommands;
             LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
             AttemptRecordComparisons=$result.attemptRecordComparisons}
