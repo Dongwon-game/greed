@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace GreedLast.PlayerChecks
 {
@@ -34,6 +35,9 @@ namespace GreedLast.PlayerChecks
             public int inputUnavailableWaitFrames, resumeCountdownWaitFrames;
             public bool nativeSlotChoiceObserved, nativeSlotSaved, nativePreparationCanceled;
             public bool nativeFirstStartObserved, nativeSecondStartObserved, nativeLoopCompleted;
+            public bool nativeMenuComparisonObserved, nativeMenuBodyDragObserved, nativeMenuHandleBeforeFocus;
+            public bool nativeMenuFocusLossObserved, nativeMenuHandleAfterFocus, nativeMenuCandidatePreserved;
+            public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public Record record;
@@ -103,7 +107,8 @@ namespace GreedLast.PlayerChecks
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
                 "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
                 "window-play", "window-clear", "window-verify", "window-verify-again",
-                "window-loadout", "window-loadout-verify", "window-loadout-verify-again" }, phase) >= 0,
+                "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
+                "window-menu", "window-menu-verify", "window-menu-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -114,7 +119,7 @@ namespace GreedLast.PlayerChecks
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
-            deadline = Time.realtimeSinceStartup + (phase == "window-loadout" ? 600f
+            deadline = Time.realtimeSinceStartup + (phase == "window-loadout" || phase == "window-menu" ? 600f
                 : phase == "window-play" || phase == "window-clear" ? 330f : 150f);
             result.phase = phase;
             result.startedUtc = DateTime.UtcNow.ToString("O");
@@ -131,12 +136,12 @@ namespace GreedLast.PlayerChecks
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
             yield return new WaitForSecondsRealtime(0.25f);
-            if (phase == "window-play" || phase == "window-clear" || phase == "window-loadout")
+            if (phase == "window-play" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady
                     && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
-                && phase != "window-loadout")
+                && phase != "window-loadout" && phase != "window-menu")
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
 
@@ -182,6 +187,21 @@ namespace GreedLast.PlayerChecks
                         "A repeated fresh native-loop verification must not settle rewards again.");
                 result.nativeLoopCompleted = true;
             }
+            else if (phase == "window-menu-verify" || phase == "window-menu-verify-again")
+            {
+                Result closed = Previous("window-menu");
+                Require(closed.succeeded && closed.quitCallbackObserved && closed.nativeMenuCandidatePreserved
+                    && closed.nativeMenuComparisonObserved && closed.nativeMenuBodyDragObserved
+                    && closed.nativeMenuHandleBeforeFocus && closed.nativeMenuFocusLossObserved && closed.nativeMenuHandleAfterFocus,
+                    "Native comparison gestures and post-focus recovery must precede candidate verification.");
+                Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
+                    "Menu browsing must preserve exactly one clear/reward and its unsaved candidate across processes.");
+                SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
+                result.record = closed.record;
+                result.nativeMenuCandidatePreserved = true;
+            }
             else if (phase == "render")
             {
                 Require(SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
@@ -219,7 +239,7 @@ namespace GreedLast.PlayerChecks
                 result.frames = frames.ToArray();
                 result.scope = "Isolated Windows-player offscreen camera renders of the live UI and real-frame practice app commands. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
-            else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout")
+            else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
             {
                 Require(Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
                     && !backend.HasSaveLoadoutCandidate && EmptySlots(), "The isolated product must start empty.");
@@ -235,14 +255,20 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
                 yield return DriveCourse();
                 bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
-                bool settledNativeClear = phase == "window-loadout" && backend.HasSaveLoadoutCandidate
+                bool settledNativeClear = (phase == "window-loadout" || phase == "window-menu") && backend.HasSaveLoadoutCandidate
                     && Count("normalClearCount") == 1;
                 Require(core.CanExitAfterClear && (unsettledClear || settledNativeClear),
-                    "The actual clear must be unsettled, or already settled once in the native loadout mode only.");
+                    "The actual clear must be unsettled, or already settled once in a native menu mode only.");
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
                 result.record = From(record);
                 if (backgroundResults) yield return VerifyBackgroundBoundary(clear: true);
+                if (phase == "window-menu")
+                {
+                    Call(app, "RequestNextRunPattern");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.SaveLoadoutDraft);
+                    yield return ObserveNativeMenuGestures();
+                }
                 if (phase == "window-loadout")
                 {
                     windowAwaitingClose = true;
@@ -475,6 +501,72 @@ namespace GreedLast.PlayerChecks
                 }
                 yield return null;
             }
+        }
+
+        private IEnumerator ObserveNativeMenuGestures()
+        {
+            GreedLastRuntimeUi ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            ScrollRect scroll = Read<ScrollRect>(ui, "menuDetailScroll");
+            var bar = scroll.verticalScrollbar as GreedLastMenuScrollbar;
+            var body = scroll as GreedLastMenuScrollRect;
+            Require(bar != null && body != null, "The actual guarded body and handle must be present.");
+            windowAwaitingClose = true;
+            WriteObservation("window-menu-ready");
+            int previousGesture = 0;
+            float previousPosition = scroll.verticalNormalizedPosition, previousY = scroll.content.anchoredPosition.y;
+            float startPosition = previousPosition, startY = previousY;
+            while (true)
+            {
+                CheckDeadline();
+                Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
+                    "Native menu gestures must not save, consume, discard or duplicate progression.");
+                bool comparison = state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                    && Read<bool>(app, "saveSlotDetailViewActive");
+                result.nativeMenuComparisonObserved |= comparison;
+                result.nativeSlotChoiceObserved |= comparison && Read<int>(backend, "selectedSaveSlotIndex") == 2;
+                int gesture = comparison && scroll.vertical ? bar.HasActiveGesture ? 1 : body.HasActiveGesture ? 2 : 0 : 0;
+                float position = scroll.verticalNormalizedPosition, y = scroll.content.anchoredPosition.y;
+                if (gesture != 0 && gesture != previousGesture)
+                { startPosition = previousPosition; startY = previousY; }
+                float travel = Mathf.Abs(y - startY);
+                if (gesture != 0 && Mathf.Abs(position - startPosition) > 0.15f && travel > 10f)
+                {
+                    if (gesture == 2)
+                    {
+                        result.nativeMenuBodyDragObserved = true;
+                        result.nativeMenuBodyTravelPixels = Mathf.Max(result.nativeMenuBodyTravelPixels, travel);
+                    }
+                    else if (!result.nativeMenuFocusLossObserved)
+                    {
+                        result.nativeMenuHandleBeforeFocus = true;
+                        result.nativeMenuHandleBeforePixels = Mathf.Max(result.nativeMenuHandleBeforePixels, travel);
+                    }
+                    else
+                    {
+                        result.nativeMenuHandleAfterFocus = true;
+                        result.nativeMenuHandleAfterPixels = Mathf.Max(result.nativeMenuHandleAfterPixels, travel);
+                    }
+                }
+                if (!windowReady && result.nativeSlotChoiceObserved && result.nativeMenuComparisonObserved
+                    && result.nativeMenuBodyDragObserved && result.nativeMenuHandleBeforeFocus
+                    && result.nativeMenuFocusLossObserved && result.nativeMenuHandleAfterFocus)
+                {
+                    windowReady = result.nativeMenuCandidatePreserved = true;
+                    WriteObservation("window-menu-completed");
+                }
+                previousGesture = gesture;
+                previousPosition = position;
+                previousY = y;
+                yield return null;
+            }
+        }
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (windowAwaitingClose && phase == "window-menu" && result.nativeMenuHandleBeforeFocus && !focused)
+                result.nativeMenuFocusLossObserved = true;
         }
 
         private IEnumerator ObserveNativeLoadoutCommands()

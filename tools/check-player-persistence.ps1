@@ -5,6 +5,7 @@ param(
     [switch]$CaptureFrames,
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
+    [switch]$InteractiveMenus,
     [switch]$BackgroundResults
 )
 
@@ -13,8 +14,11 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This cross-process probe supports Windows only.' }
 if ($CaptureFrames -and $InteractiveWindow) { throw 'Choose offscreen capture or interactive window checks, not both.' }
 if ($BackgroundResults -and $InteractiveWindow) { throw 'Choose background callback checks or interactive window input, not both.' }
-if ($InteractiveLoadout -and ($CaptureFrames -or $InteractiveWindow -or $BackgroundResults)) {
+if ($InteractiveLoadout -and ($CaptureFrames -or $InteractiveWindow -or $BackgroundResults -or $InteractiveMenus)) {
     throw 'Choose the native loadout loop separately from capture, close-only and background modes.'
+}
+if ($InteractiveMenus -and ($CaptureFrames -or $InteractiveWindow -or $BackgroundResults)) {
+    throw 'Choose native menu gestures separately from capture, close-only and background modes.'
 }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
@@ -53,6 +57,7 @@ function Read-PersonalPreferences {
 }
 
 $operation = if ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
+    elseif ($InteractiveMenus) { 'Build private native menu gestures; await body/handle drags and focus recovery without saving, then verify the candidate in fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
@@ -79,6 +84,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
+$report.InteractiveMenusRequested = [bool]$InteractiveMenus
 if ($BackgroundResults) {
     $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
 }
@@ -87,6 +93,9 @@ if ($InteractiveWindow) {
 }
 if ($InteractiveLoadout) {
     $report.Scope = 'Private SDK-driven practice/normal setup, then external native S3 save, preparation cancel, two infinite starts/natural ends and OS close; fresh processes verify persistence. External UI evidence is required. Not manual rhythm timing, audible output or phone performance.'
+}
+if ($InteractiveMenus) {
+    $report.Scope = 'Private SDK practice/normal preparation, then observed native comparison body/handle drags and post-focus fresh handle recovery; candidate remains unsaved across normal close and fresh processes. External input evidence required. Not physical rhythm, audio or phone testing.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
@@ -234,6 +243,7 @@ try {
     }
 
     $phases = if ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
+        elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
         elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
         else { @('clear','save','first-use','last-use','verify','verify-again',
             'live-normal','normal-fail','verify-failure','verify-failure-again') }
@@ -241,13 +251,13 @@ try {
         $report.FailedPhase = $phase
         Write-Verbose ('Starting a fresh owned player process: ' + $phase)
         $log = Join-Path $root ($phase + '.log')
-        $interactive = $phase -in @('window-play','window-clear','window-loadout')
+        $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu')
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
-        $timeout = if ($phase -eq 'window-loadout') { 630000 } elseif ($interactive) { 360000 } else { 180000 }
+        $timeout = if ($phase -in @('window-loadout','window-menu')) { 630000 } elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
         $path = Join-Path $root ($phase + '.json')
@@ -259,11 +269,14 @@ try {
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
         }
+        if ($InteractiveMenus -and !$result.nativeMenuCandidatePreserved) {
+            throw ('Required native menu/candidate coverage did not complete: ' + $phase)
+        }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
             InputUnavailableWaitFrames=$result.inputUnavailableWaitFrames; ResumeCountdownWaitFrames=$result.resumeCountdownWaitFrames;
-            NativeLoadoutLoopCompleted=$result.nativeLoopCompleted}
+            NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved}
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true
