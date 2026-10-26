@@ -7,11 +7,15 @@ param(
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
     [switch]$BackgroundResults,
-    [switch]$UnreadableSave
+    [switch]$UnreadableSave,
+    [switch]$PracticeQuit
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($PracticeQuit -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave)) {
+    throw 'Choose the private practice-quit check separately from all other modes.'
+}
 if ($UnreadableSave -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults)) {
     throw 'Choose the private unreadable-save check separately from all other modes.'
 }
@@ -60,7 +64,8 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-$operation = if ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
+$operation = if ($PracticeQuit) { 'Verify incomplete and completed first practice across normal quit and four fresh private player processes, without advancing gameplay records' }
+    elseif ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
     elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
@@ -91,6 +96,10 @@ $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
+$report.PracticeQuitRequested = [bool]$PracticeQuit
+if ($PracticeQuit) {
+    $report.Scope = 'Four fresh private players: incomplete practice quit, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
+}
 if ($UnreadableSave) {
     $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
 }
@@ -251,7 +260,8 @@ try {
         }
     }
 
-    $phases = if ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
+    $phases = if ($PracticeQuit) { @('practice-live','practice-complete','practice-verify','practice-verify-again') }
+        elseif ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
         elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
@@ -287,6 +297,14 @@ try {
             ($phase -ne 'unreadable-seed' -and (!$result.unreadableRetryPreserved -or $result.unreadableBlockedCommands -ne 4)))) {
             throw ('Real unreadable-save boot/command/preservation coverage is incomplete: ' + $phase)
         }
+        if ($PracticeQuit -and ($result.clears -ne 0 -or $result.failures -ne 0 -or $result.abandons -ne 0 -or
+            $result.infiniteRuns -ne 0 -or $result.growthPoints -ne 0 -or $result.candidate -or
+            @($result.uses | Where-Object { $_ -ne 0 }).Count -or
+            ($phase -eq 'practice-live' -and ($result.onboardingComplete -or $result.terminalBeforeQuit)) -or
+            ($phase -eq 'practice-complete' -and (!$result.practiceIncompletePreserved -or !$result.practiceCompletedBeforeQuit -or !$result.practiceForegroundActionPreserved)) -or
+            ($phase -in @('practice-verify','practice-verify-again') -and (!$result.onboardingComplete -or !$result.practiceNormalEntryRestored)))) {
+            throw ('Real practice-quit completion/zero-progression coverage is incomplete: ' + $phase)
+        }
         $expectedBackgroundChecks = if ($BackgroundResults -and $phase -in @('clear','first-use','last-use','live-normal','normal-fail')) { 1 } else { 0 }
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
@@ -302,6 +320,9 @@ try {
             RecordSchemaVersion=$result.recordSchemaVersion; RecordComparatorControls=$result.recordComparatorControls;
             RecordInvalidControls=$result.recordInvalidControls;
             UnreadableSavePreserved=$result.unreadableSavePreserved; UnreadableBlockedCommands=$result.unreadableBlockedCommands;
+            OnboardingComplete=$result.onboardingComplete; PracticeCompletedBeforeQuit=$result.practiceCompletedBeforeQuit;
+            PracticeIncompletePreserved=$result.practiceIncompletePreserved; PracticeForegroundActionPreserved=$result.practiceForegroundActionPreserved;
+            PracticeNormalEntryRestored=$result.practiceNormalEntryRestored;
             LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
             AttemptRecordComparisons=$result.attemptRecordComparisons}

@@ -44,6 +44,7 @@ namespace GreedLast.PlayerChecks
             public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots, recordInvalidControls;
             public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
             public bool unreadableSaveSeeded, unreadableSavePreserved, unreadableRetryPreserved;
+            public bool practiceCompletedBeforeQuit, practiceIncompletePreserved, practiceForegroundActionPreserved, practiceNormalEntryRestored;
             public int unreadableBlockedCommands;
             public Record record;
             public Record savedSlot;
@@ -122,7 +123,8 @@ namespace GreedLast.PlayerChecks
                 "window-play", "window-clear", "window-verify", "window-verify-again",
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
-                "unreadable-seed", "unreadable-blocked", "unreadable-verify" }, phase) >= 0,
+                "unreadable-seed", "unreadable-blocked", "unreadable-verify",
+                "practice-live", "practice-complete", "practice-verify", "practice-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -150,6 +152,8 @@ namespace GreedLast.PlayerChecks
             backend = Read<GreedLastMockBackend>(app, "backend");
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             bool unreadablePhase = phase.StartsWith("unreadable-", StringComparison.Ordinal);
+            bool practiceQuitPhase = phase.StartsWith("practice-", StringComparison.Ordinal);
+            Require(!practiceQuitPhase || !backgroundResults, "Practice-quit checks must run separately from background result settlement.");
             Require(!unreadablePhase || !backgroundResults, "Unreadable-storage checks must run separately from result settlement.");
             if (unreadablePhase && phase != "unreadable-seed")
             {
@@ -163,11 +167,68 @@ namespace GreedLast.PlayerChecks
                     && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
-                && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase)
+                && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase && !practiceQuitPhase)
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
 
-            if (phase == "unreadable-seed")
+            if (practiceQuitPhase)
+            {
+                const string practiceKey = "GreedLast.Onboarding.PracticeCompleted";
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
+                    "Practice-quit checks must retain an empty private product without gameplay records or rewards.");
+                if (phase == "practice-live" || phase == "practice-complete")
+                {
+                    Require(PlayerPrefs.GetInt(practiceKey, 0) == 0, "Unfinished practice must not complete onboarding on quit.");
+                    if (phase == "practice-complete")
+                    {
+                        Require(Previous("practice-live").succeeded && !Previous("practice-live").terminalBeforeQuit,
+                            "The incomplete-practice normal-quit control must complete first.");
+                        result.practiceIncompletePreserved = true;
+                    }
+                    Call(app, "RequestPracticeRun");
+                    if (phase == "practice-live")
+                    {
+                        yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
+                        Require(!core.IsPracticeComplete && !RunState().Stopped,
+                            "The incomplete control must quit before its first practice action.");
+                    }
+                    else
+                    {
+                        yield return DriveCourse();
+                        Require(core.IsPracticeComplete && RunState().SuccessCount == 3 && RunState().GoodCount == 0
+                            && RunState().MissCount == 0 && PlayerPrefs.GetInt(practiceKey, 0) == 0,
+                            "Finish the actual three-axis first practice, but do not confirm its result action before quitting.");
+                        result.practiceCompletedBeforeQuit = result.terminalBeforeQuit = true;
+                        Call(app, "OnApplicationFocus", false);
+                        Call(app, "OnApplicationPause", true);
+                        Call(app, "OnApplicationPause", false);
+                        Call(app, "OnApplicationFocus", true);
+                        yield return null;
+                        Require(core.IsPracticeComplete && PlayerPrefs.GetInt(practiceKey, 0) == 0
+                            && GreedLastApp.ShouldContinuePracticeToFirstNormal(RunState(), false),
+                            "Nonclosing focus/pause callbacks must preserve the first-practice continue action until normal quit.");
+                        result.practiceForegroundActionPreserved = true;
+                    }
+                }
+                else
+                {
+                    Require(Previous("practice-complete").succeeded && Previous("practice-complete").practiceCompletedBeforeQuit,
+                        "The completed first-practice process must finish before checking restoration.");
+                    Require(PlayerPrefs.GetInt(practiceKey, 0) == 1,
+                        "A completed first practice must stay completed after normal quit before its result action.");
+                    if (phase == "practice-verify-again") Require(Previous("practice-verify").succeeded,
+                        "Repeat restoration only after a successful fresh completion check.");
+                    Call(app, "HandleLobbyPrimaryKeyboardInput");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.RunCoreTest);
+                    Require(!core.IsPracticeRun && RunState().ChoiceActive && RunState().ChoiceKind == GreedLastChoiceKind.StartGift,
+                        "The ordinary first lobby action must enter normal start-gift choice, not require completed practice again.");
+                    result.practiceNormalEntryRestored = true;
+                }
+                result.scope = "Private real-frame practice, actual normal Application.Quit and fresh-process onboarding restoration; partial quit remains incomplete, full quit restores normal entry, no gameplay record/reward. Not desktop input/capture, original data recovery, forced kill, audio or phone testing.";
+            }
+            else if (phase == "unreadable-seed")
             {
                 Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
                     && Count("normalFailCount") == 0 && Count("infiniteRunCount") == 0,
