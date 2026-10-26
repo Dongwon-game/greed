@@ -40,7 +40,7 @@ namespace GreedLast.PlayerChecks
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
-            public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots;
+            public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots, recordInvalidControls;
             public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
             public Record record;
             public Record savedSlot;
@@ -867,6 +867,8 @@ namespace GreedLast.PlayerChecks
             outcome = (int)r.Outcome, chapterIndex = r.ChapterIndex, chapterProgress = r.ChapterProgress,
             chapterTarget = r.ChapterTarget, coreRetrieved = r.CoreRetrieved, missReason = r.MissReason, choiceSummary = r.ChoiceSummary };
         private static bool RecordsEqual(Record a, Record b) => a != null && b != null
+            && a.valid && b.valid && a.distance >= 0f && b.distance >= 0f
+            && !float.IsInfinity(a.distance) && !float.IsInfinity(b.distance)
             && (a.kind == "normal" || a.kind == "infinite" || a.kind == "attempt")
             && JsonUtility.ToJson(a) == JsonUtility.ToJson(b);
 
@@ -903,8 +905,27 @@ namespace GreedLast.PlayerChecks
                 && attempt.missReason == "wrong_channel" && attempt.choiceSummary == "attempt-choices",
                 "Record projection controls must retain every metadata property, not silently fill them with defaults.");
             FieldInfo[] fields = typeof(Record).GetFields(BindingFlags.Instance | BindingFlags.Public);
-            Require(fields.Length == 26 && !RecordsEqual(null, normal) && !RecordsEqual(normal, null)
-                && !RecordsEqual(normal, infinite), "The complete probe-record schema and kind boundaries must be explicit.");
+            Require(fields.Length == 26, "The complete probe-record schema must be explicit.");
+            void Reject(Record a, Record b)
+            {
+                Require(!RecordsEqual(a, b), "Invalid, missing, mismatched or non-finite DTO records must never match.");
+                result.recordInvalidControls++;
+            }
+            Reject(null, normal);
+            Reject(normal, null);
+            Reject(normal, infinite);
+            Record invalid = JsonUtility.FromJson<Record>(JsonUtility.ToJson(normal));
+            invalid.valid = false;
+            Reject(invalid, invalid);
+            invalid.valid = true;
+            invalid.kind = "unknown";
+            Reject(invalid, invalid);
+            invalid.kind = "normal";
+            foreach (float distance in new[] { -1f, float.NaN, float.PositiveInfinity, float.NegativeInfinity })
+            {
+                invalid.distance = distance;
+                Reject(invalid, invalid);
+            }
             foreach (Record sample in new[] { normal, infinite, attempt })
             {
                 string json = JsonUtility.ToJson(sample);
@@ -927,7 +948,7 @@ namespace GreedLast.PlayerChecks
             }
             result.recordSchemaVersion = 2;
             result.recordFieldCount = fields.Length;
-            Require(result.recordComparatorControls == 78 && result.legacyRecordComparisonBlindSpots == 60,
+            Require(result.recordComparatorControls == 78 && result.legacyRecordComparisonBlindSpots == 60 && result.recordInvalidControls == 9,
                 "All field mutations must be rejected; the old six-stat comparison intentionally misses 60 metadata mutations.");
         }
         private static T Read<T>(object target, string field) => (T)target.GetType().GetField(field, Fields).GetValue(target);

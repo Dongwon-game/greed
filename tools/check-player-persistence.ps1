@@ -266,7 +266,7 @@ try {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
         if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
-            $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60) {
+            $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60 -or $result.recordInvalidControls -ne 9) {
             throw ('Full-record comparison controls are incomplete: ' + $phase)
         }
         if ($phase -in @('first-use','last-use') -and $result.savedSlotComparisons -lt 1) {
@@ -285,6 +285,7 @@ try {
             InputUnavailableWaitFrames=$result.inputUnavailableWaitFrames; ResumeCountdownWaitFrames=$result.resumeCountdownWaitFrames;
             NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved;
             RecordSchemaVersion=$result.recordSchemaVersion; RecordComparatorControls=$result.recordComparatorControls;
+            RecordInvalidControls=$result.recordInvalidControls;
             LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
             AttemptRecordComparisons=$result.attemptRecordComparisons}
