@@ -421,6 +421,7 @@ namespace GreedLast.Editor
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.savedComparisonGestureCases == 8
                     && cycle.savedComparisonFreshRecoveries == 8 && cycle.savedComparisonViews == 2
+                    && cycle.savedComparisonSlotHandoffs == 4
                     && cycle.savedComparisonMinimumTravelPixels > 1f && cycle.savedComparisonDataPreserved);
                 if (!results.succeeded) results.error = "Required actual saved-comparison menu coverage did not complete.";
             }
@@ -655,7 +656,7 @@ namespace GreedLast.Editor
             public int engineMenuScrollCases, engineMenuScrollbarCases, engineMenuFreshRecoveries, engineMenuOrphanCases;
             public int engineMenuOverflowTransitions;
             public int engineMenuCrossControlCases;
-            public int savedComparisonGestureCases, savedComparisonFreshRecoveries, savedComparisonViews;
+            public int savedComparisonGestureCases, savedComparisonFreshRecoveries, savedComparisonViews, savedComparisonSlotHandoffs;
             public float savedComparisonMinimumTravelPixels;
             public bool savedComparisonDataPreserved;
             public bool recoveredCandidateSlotsPreserved;
@@ -3549,10 +3550,11 @@ namespace GreedLast.Editor
                             "Actual saved-versus-candidate content must genuinely overflow and expose both scroll controls.");
                         Canvas canvas = scroll.GetComponentInParent<Canvas>();
                         Camera camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-                        void AssertPreserved()
+                        void AssertPreserved(bool requireDetail = true)
                         {
                             Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
-                                && Read<bool>(app, "saveSlotDetailViewActive") && !Read<bool>(app, "saveDraftOverwriteConfirmPending")
+                                && (!requireDetail || Read<bool>(app, "saveSlotDetailViewActive"))
+                                && !Read<bool>(app, "saveDraftOverwriteConfirmPending")
                                 && backend.HasSaveLoadoutCandidate && Read<GreedLastRunRecord>(backend, "lastRunRecord").Equals(candidate)
                                 && Read<int>(backend, "normalClearCount") == 2 && Read<int>(backend, "growthPoints") == 6,
                                 "Menu movement/canceled release must not confirm overwrite, consume the candidate or duplicate rewards.");
@@ -3615,6 +3617,44 @@ namespace GreedLast.Editor
                             AssertPreserved();
                             report.savedComparisonFreshRecoveries++;
                         }
+                        foreach (bool handle in new[] { false, true })
+                        {
+                            scroll.StopMovement();
+                            scroll.verticalNormalizedPosition = 0.5f;
+                            yield return null;
+                            RectTransform rect = handle ? scroll.verticalScrollbar.handleRect : scroll.viewport;
+                            Vector2 point = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.center));
+                            Vector2 delta = (handle ? Vector2.down : Vector2.up)
+                                * Mathf.Max(48f, (EventSystem.current.pixelDragThreshold + 1f) * 4f);
+                            Vector2 before = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(65, point, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(65, point + delta * 0.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(65, point + delta, TouchPhase.Moved));
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                                "A saved-comparison slot handoff requires an established drag, not just a pending contact.");
+                            Vector2 slotPoint = ScreenPoint(Read<Button[]>(ui, "laneButtons")[0]);
+                            yield return TouchFrame(TouchAt(65, point + delta, TouchPhase.Stationary), TouchAt(66, slotPoint, TouchPhase.Began));
+                            yield return TouchFrame(TouchAt(65, point + delta, TouchPhase.Stationary), TouchAt(66, slotPoint, TouchPhase.Stationary));
+                            yield return TouchFrame(TouchAt(65, point + delta, TouchPhase.Stationary), TouchAt(66, slotPoint, TouchPhase.Ended));
+                            Require(backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == 0
+                                && !Read<bool>(app, "saveSlotDetailViewActive"),
+                                "A fresh second finger must select the requested empty slot and leave the old detail view.");
+                            AssertPreserved(false);
+                            Vector2 frozen = scroll.content.anchoredPosition;
+                            yield return TouchFrame(TouchAt(65, point + delta * 1.5f, TouchPhase.Moved));
+                            yield return TouchFrame(TouchAt(65, ScreenPoint(Read<Button>(ui, "nextPatternButton")), TouchPhase.Ended));
+                            yield return TouchFrame();
+                            Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f
+                                && backend.LoadSelectedSaveSlotView().SelectedSaveSlotIndex == 0,
+                                "The old drag must not move the new slot page or save a candidate on release.");
+                            AssertPreserved(false);
+                            yield return TapTouch(Read<Button[]>(ui, "laneButtons")[2]);
+                            yield return TapTouch(Read<Button>(ui, "saveSlotDetailButton"));
+                            Require(scroll.vertical && state.CurrentDetail == backend.BuildSelectedSaveLoadoutComparisonText(),
+                                "Fresh S3/detail commands must restore the same actual comparison after the short empty-slot page.");
+                            AssertPreserved();
+                            report.savedComparisonSlotHandoffs++;
+                        }
                     }
                     report.savedComparisonDataPreserved = true;
                 }
@@ -3627,7 +3667,7 @@ namespace GreedLast.Editor
                     state.SetLobbyReady(original.LoadLobby());
                     if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 }
-                Debug.Log("Greed actual saved-comparison menu passed: clean/detailed occupied S3 plus unsaved candidate, eight body/handle interruptions and fresh recoveries, canceled release over save, full records/uses/candidate/rewards unchanged. In-memory fixtures and synthetic EventSystem only; no desktop or personal-save interaction.");
+                Debug.Log("Greed actual saved-comparison menu passed: clean/detailed occupied S3 plus unsaved candidate, eight body/handle interruptions and fresh recoveries, four two-finger slot handoffs, canceled release over save, full records/uses/candidate/rewards unchanged. In-memory fixtures and synthetic EventSystem only; no desktop or personal-save interaction.");
             }
 
             private IEnumerator VerifyMenuScrollGestures()
