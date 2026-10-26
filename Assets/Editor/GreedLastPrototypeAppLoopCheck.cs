@@ -1605,6 +1605,13 @@ namespace GreedLast.Editor
             Func<GreedLastRunSnapshot> latest)
         {
             bool playerControls = ui.UsePlayerRunControls;
+            bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
+            int practiceValue = PlayerPrefs.GetInt(PracticeKey, 0);
+            void RestorePracticeBaseline()
+            {
+                if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practiceValue);
+                else PlayerPrefs.DeleteKey(PracticeKey);
+            }
             bool hadFocus = Read<bool>(app, "applicationHasFocus");
             bool wasPaused = Read<bool>(app, "applicationPaused");
             int cases = 0;
@@ -1703,6 +1710,10 @@ namespace GreedLast.Editor
                                 Pause(true); Focus(false); Pause(true); Focus(false);
                                 Require(PlayerPrefs.GetString(key) == after && !Read<bool>(app, "applicationQuitting"),
                                     "Repeated pause/focus callbacks must not duplicate settlement or mark the app as quitting.");
+                                if (mode == 7)
+                                    Require(PlayerPrefs.HasKey(PracticeKey) == hadPractice
+                                        && PlayerPrefs.GetInt(PracticeKey, 0) == practiceValue,
+                                        "Nonclosing practice pause/focus callbacks must retain the existing completion baseline.");
                                 Foreground();
                                 Require(ui.AcceptsPlayerInput, "The settled result must remain actionable after foreground return.");
                                 if (mode == 0)
@@ -1733,6 +1744,9 @@ namespace GreedLast.Editor
                                 }
                                 Method(app, "OnApplicationQuit").Invoke(app, null);
                                 Method(app, "OnApplicationQuit").Invoke(app, null);
+                                if (mode == 7 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
+                                    Require(PlayerPrefs.GetInt(PracticeKey, 0) == 1,
+                                        "Normal quit after practice focus return must preserve completed onboarding once.");
                                 RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "quit after suspension");
                                 cases++;
                             }
@@ -1742,6 +1756,7 @@ namespace GreedLast.Editor
                                 core.Exit();
                                 state.SetLobbyReady(originalBackend.LoadLobby());
                                 Foreground();
+                                RestorePracticeBaseline();
                                 PlayerPrefs.DeleteKey(key); PlayerPrefs.Save();
                             }
                         }
@@ -1752,6 +1767,8 @@ namespace GreedLast.Editor
             {
                 Write(app, "applicationQuitting", false);
                 core.Exit();
+                RestorePracticeBaseline();
+                PlayerPrefs.Save();
                 Write(app, "backend", originalBackend);
                 state.SetLobbyReady(originalBackend.LoadLobby());
                 Write(app, "applicationPaused", wasPaused);
