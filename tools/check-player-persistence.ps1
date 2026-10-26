@@ -265,6 +265,13 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
+        if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
+            $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60) {
+            throw ('Full-record comparison controls are incomplete: ' + $phase)
+        }
+        if ($phase -in @('first-use','last-use') -and $result.savedSlotComparisons -lt 1) {
+            throw ('Fresh-process saved-slot metadata comparison is missing: ' + $phase)
+        }
         $expectedBackgroundChecks = if ($BackgroundResults -and $phase -in @('clear','first-use','last-use','live-normal','normal-fail')) { 1 } else { 0 }
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
@@ -276,7 +283,11 @@ try {
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
             InputUnavailableWaitFrames=$result.inputUnavailableWaitFrames; ResumeCountdownWaitFrames=$result.resumeCountdownWaitFrames;
-            NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved}
+            NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved;
+            RecordSchemaVersion=$result.recordSchemaVersion; RecordComparatorControls=$result.recordComparatorControls;
+            LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
+            NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
+            AttemptRecordComparisons=$result.attemptRecordComparisons}
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true

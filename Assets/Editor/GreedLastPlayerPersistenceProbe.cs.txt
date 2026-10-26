@@ -40,7 +40,10 @@ namespace GreedLast.PlayerChecks
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
+            public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots;
+            public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
             public Record record;
+            public Record savedSlot;
             public Record nativeLastInfiniteRecord;
             public Record nativeMenuSavedSlot;
             public Frame[] frames;
@@ -65,6 +68,9 @@ namespace GreedLast.PlayerChecks
             public string loadoutName, startGift, primaryGift, relic, choiceSummary;
             public float distance;
             public string timingProfile;
+            public string kind, missReason, loadoutProfile;
+            public int sectionsCleared, maxThreatLevel, chapterIndex, chapterProgress, chapterTarget, outcome;
+            public bool coreRetrieved;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -129,6 +135,7 @@ namespace GreedLast.PlayerChecks
             result.startedUtc = DateTime.UtcNow.ToString("O");
             result.company = Application.companyName;
             result.product = Application.productName;
+            VerifyRecordComparisonCoverage();
             while (app == null)
             {
                 app = FindFirstObjectByType<GreedLastApp>();
@@ -331,6 +338,9 @@ namespace GreedLast.PlayerChecks
                 Call(app, "RequestNextRunPattern");
                 Require(!backend.HasSaveLoadoutCandidate && Uses()[2] == 2 && Count("normalClearCount") == 1
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Management re-entry must not recreate the save chance or reward.");
+                result.savedSlot = From(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2]);
+                Require(result.savedSlot.valid && string.IsNullOrEmpty(result.savedSlot.relic),
+                    "The actual saved-slot baseline must contain the gift-only saved record, not the ordinary clear relic.");
             }
             else if (phase == "first-use" || phase == "last-use")
             {
@@ -338,12 +348,15 @@ namespace GreedLast.PlayerChecks
                 Require(!backend.HasSaveLoadoutCandidate && OnlyThirdSlot() && Uses()[2] == remaining
                     && Count("normalClearCount") == 1 && Count("infiniteRunCount") == 0
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Real starts and prior live quit must preserve their exact consumption boundary.");
+                VerifySavedSlotRecord();
+                SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), Previous("clear").record);
                 yield return PrepareInfinite();
                 if (phase == "first-use")
                 {
                     Call(app, "RequestReturnToLobby");
                     yield return new WaitForSecondsRealtime(0.25f);
                     Require(Uses()[2] == 2, "Canceling actual preparation must not consume a use.");
+                    VerifySavedSlotRecord();
                     yield return PrepareInfinite();
                 }
                 Call(app, "RequestNextRunPattern");
@@ -839,18 +852,84 @@ namespace GreedLast.PlayerChecks
             return slots.Length == 3 && !slots[0] && !slots[1] && slots[2];
         }
         private Result Previous(string name) => JsonUtility.FromJson<Result>(File.ReadAllText(Path.Combine(root, name + ".json")));
-        private static Record From(GreedLastRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
+        private static Record From(GreedLastRunRecord r) => new Record { kind = "normal", score = r.Score, successes = r.SuccessCount,
             good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile,
             valid = r.IsValid, health = r.Health, combo = r.Combo, focus = r.Focus, maxCombo = r.MaxCombo,
             loadoutName = r.LoadoutName, startGift = r.StartGift, primaryGift = r.PrimaryGift, relic = r.Relic,
             choiceSummary = r.ChoiceSummary };
-        private static Record From(GreedLastInfiniteRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
-            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
-        private static Record From(GreedLastRunAttemptRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
-            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
-        private static void SameRecord(Record a, Record b) => Require(a.score == b.score && a.successes == b.successes
-            && a.good == b.good && a.misses == b.misses && a.distance == b.distance && a.timingProfile == b.timingProfile,
-            "The reloaded record must match the actual prior process, not a manufactured sample.");
+        private static Record From(GreedLastInfiniteRunRecord r) => new Record { kind = "infinite", score = r.Score, successes = r.SuccessCount,
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile,
+            valid = r.IsValid, maxCombo = r.MaxCombo, sectionsCleared = r.SectionsCleared, maxThreatLevel = r.MaxThreatLevel,
+            loadoutName = r.LoadoutName, loadoutProfile = r.LoadoutProfile, missReason = r.MissReason };
+        private static Record From(GreedLastRunAttemptRecord r) => new Record { kind = "attempt", score = r.Score, successes = r.SuccessCount,
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile,
+            valid = r.IsValid, health = r.Health, combo = r.Combo, focus = r.Focus, maxCombo = r.MaxCombo,
+            outcome = (int)r.Outcome, chapterIndex = r.ChapterIndex, chapterProgress = r.ChapterProgress,
+            chapterTarget = r.ChapterTarget, coreRetrieved = r.CoreRetrieved, missReason = r.MissReason, choiceSummary = r.ChoiceSummary };
+        private static bool RecordsEqual(Record a, Record b) => a != null && b != null
+            && (a.kind == "normal" || a.kind == "infinite" || a.kind == "attempt")
+            && JsonUtility.ToJson(a) == JsonUtility.ToJson(b);
+
+        private void SameRecord(Record a, Record b)
+        {
+            Require(RecordsEqual(a, b), "The complete reloaded record must match the actual prior process, including metadata.");
+            if (a.kind == "normal") result.normalRecordComparisons++;
+            else if (a.kind == "infinite") result.infiniteRecordComparisons++;
+            else result.attemptRecordComparisons++;
+        }
+
+        private void VerifySavedSlotRecord()
+        {
+            SameRecord(From(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2]), Previous("save").savedSlot);
+            result.savedSlotComparisons++;
+        }
+
+        private void VerifyRecordComparisonCoverage()
+        {
+            var normal = From(new GreedLastRunRecord(true, 71, 3, 2, 1, 8, 9, 4, 2, 12.25f,
+                "normal-name", "start", "primary", "relic", "choices", "normal-timing"));
+            var infinite = From(new GreedLastInfiniteRunRecord(true, 83, 24.5f, 3, 4, "infinite-name", "balanced",
+                10, 5, 3, 9, "too_late", "infinite-timing"));
+            var attempt = From(new GreedLastRunAttemptRecord(true, GreedLastRunAttemptOutcome.Failed, 97, 2, 3, 1,
+                7, 11, 6, 4, 35.75f, 2, 7, 10, true, "wrong_channel", "attempt-choices", "attempt-timing"));
+            Require(normal.valid && normal.health == 3 && normal.combo == 2 && normal.focus == 1 && normal.maxCombo == 8
+                && normal.loadoutName == "normal-name" && normal.startGift == "start" && normal.primaryGift == "primary"
+                && normal.relic == "relic" && normal.choiceSummary == "choices"
+                && infinite.valid && infinite.sectionsCleared == 3 && infinite.maxThreatLevel == 4 && infinite.maxCombo == 9
+                && infinite.loadoutName == "infinite-name" && infinite.loadoutProfile == "balanced" && infinite.missReason == "too_late"
+                && attempt.valid && attempt.health == 2 && attempt.combo == 3 && attempt.focus == 1 && attempt.maxCombo == 7
+                && attempt.outcome == (int)GreedLastRunAttemptOutcome.Failed && attempt.chapterIndex == 2
+                && attempt.chapterProgress == 7 && attempt.chapterTarget == 10 && attempt.coreRetrieved
+                && attempt.missReason == "wrong_channel" && attempt.choiceSummary == "attempt-choices",
+                "Record projection controls must retain every metadata property, not silently fill them with defaults.");
+            FieldInfo[] fields = typeof(Record).GetFields(BindingFlags.Instance | BindingFlags.Public);
+            Require(fields.Length == 26 && !RecordsEqual(null, normal) && !RecordsEqual(normal, null)
+                && !RecordsEqual(normal, infinite), "The complete probe-record schema and kind boundaries must be explicit.");
+            foreach (Record sample in new[] { normal, infinite, attempt })
+            {
+                string json = JsonUtility.ToJson(sample);
+                Require(RecordsEqual(sample, JsonUtility.FromJson<Record>(json)), "An intact DTO JSON round-trip must match.");
+                foreach (FieldInfo field in fields)
+                {
+                    Record changed = JsonUtility.FromJson<Record>(json);
+                    if (field.FieldType == typeof(int)) field.SetValue(changed, (int)field.GetValue(changed) + 1);
+                    else if (field.FieldType == typeof(float)) field.SetValue(changed, (float)field.GetValue(changed) + 0.25f);
+                    else if (field.FieldType == typeof(bool)) field.SetValue(changed, !(bool)field.GetValue(changed));
+                    else if (field.FieldType == typeof(string)) field.SetValue(changed, (string)field.GetValue(changed) + "-changed");
+                    else throw new InvalidOperationException("Add an explicit control for the new record field type.");
+                    bool legacyEqual = sample.score == changed.score && sample.successes == changed.successes
+                        && sample.good == changed.good && sample.misses == changed.misses
+                        && sample.distance == changed.distance && sample.timingProfile == changed.timingProfile;
+                    if (legacyEqual) result.legacyRecordComparisonBlindSpots++;
+                    Require(!RecordsEqual(sample, changed), "A changed DTO field must fail full-record comparison: " + field.Name);
+                    result.recordComparatorControls++;
+                }
+            }
+            result.recordSchemaVersion = 2;
+            result.recordFieldCount = fields.Length;
+            Require(result.recordComparatorControls == 78 && result.legacyRecordComparisonBlindSpots == 60,
+                "All field mutations must be rejected; the old six-stat comparison intentionally misses 60 metadata mutations.");
+        }
         private static T Read<T>(object target, string field) => (T)target.GetType().GetField(field, Fields).GetValue(target);
         private static object Call(object target, string method, params object[] args)
             => target.GetType().GetMethod(method, Fields).Invoke(target, args);
