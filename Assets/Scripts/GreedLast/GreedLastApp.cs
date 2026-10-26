@@ -11079,6 +11079,7 @@ namespace GreedLast
             if (applicationQuitting) return;
             applicationQuitting = true;
             runtimeUi?.SetAppInputAvailable(false);
+            if (runCore != null) MarkPracticeCompletedIfNeeded();
             PersistTerminalRunResult();
         }
 
