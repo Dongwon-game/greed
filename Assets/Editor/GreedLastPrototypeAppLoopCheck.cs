@@ -1415,6 +1415,13 @@ namespace GreedLast.Editor
             Func<GreedLastRunSnapshot> latest)
         {
             bool playerControls = ui.UsePlayerRunControls;
+            bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
+            int practiceValue = PlayerPrefs.GetInt(PracticeKey, 0);
+            void RestorePracticeBaseline()
+            {
+                if (hadPractice) PlayerPrefs.SetInt(PracticeKey, practiceValue);
+                else PlayerPrefs.DeleteKey(PracticeKey);
+            }
             bool available = Read<bool>(ui, "appInputAvailable");
             void SetAvailable(bool value) => Method(ui, "SetAppInputAvailable").Invoke(ui, new object[] { value });
             FieldInfo quitting = typeof(GreedLastApp).GetField("applicationQuitting", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -1497,6 +1504,9 @@ namespace GreedLast.Editor
                             var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
                             var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
                             quit?.Invoke(app, null);
+                            if (mode == 6 && !SessionState.GetBool(GreedLastApp.EditorPlayModeCheckKey, false))
+                                Require(PlayerPrefs.GetInt(PracticeKey, 0) == 1,
+                                    "A completed full practice must mark onboarding on normal quit without a result action.");
                             var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                             bool rawClear = mode <= 1;
                             bool rawFailure = mode == 5;
@@ -1568,6 +1578,7 @@ namespace GreedLast.Editor
                             SetAvailable(true);
                             core.Exit();
                             PlayerPrefs.DeleteKey(key);
+                            RestorePracticeBaseline();
                             PlayerPrefs.Save();
                         }
                     }
@@ -1578,6 +1589,8 @@ namespace GreedLast.Editor
             {
                 quitting?.SetValue(app, false);
                 core.Exit();
+                RestorePracticeBaseline();
+                PlayerPrefs.Save();
                 SetAvailable(available);
                 if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 Write(app, "backend", originalBackend);
