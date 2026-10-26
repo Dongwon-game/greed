@@ -42,6 +42,7 @@ namespace GreedLast.PlayerChecks
             public int expectedInfiniteGrowthReward;
             public Record record;
             public Record nativeLastInfiniteRecord;
+            public Record nativeMenuSavedSlot;
             public Frame[] frames;
         }
 
@@ -59,6 +60,9 @@ namespace GreedLast.PlayerChecks
         private sealed class Record
         {
             public int score, successes, good, misses;
+            public int health, combo, focus, maxCombo;
+            public bool valid;
+            public string loadoutName, startGift, primaryGift, relic, choiceSummary;
             public float distance;
             public string timingProfile;
         }
@@ -194,10 +198,13 @@ namespace GreedLast.PlayerChecks
                     && closed.nativeMenuComparisonObserved && closed.nativeMenuBodyDragObserved
                     && closed.nativeMenuHandleBeforeFocus && closed.nativeMenuFocusLossObserved && closed.nativeMenuHandleAfterFocus,
                     "Native comparison gestures and post-focus recovery must precede candidate verification.");
-                Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                Require(backend.HasSaveLoadoutCandidate && OnlyThirdSlot() && Uses()[2] == 2 && Count("normalClearCount") == 2
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
-                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
-                    "Menu browsing must preserve exactly one clear/reward and its unsaved candidate across processes.");
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 6,
+                    "Menu browsing must preserve two setup clears, the original two-use S3 and the new unsaved candidate.");
+                Require(JsonUtility.ToJson(From(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2]))
+                    == JsonUtility.ToJson(closed.nativeMenuSavedSlot),
+                    "The complete original saved-slot record must survive comparison and fresh processes unchanged.");
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
                 result.record = closed.record;
                 result.nativeMenuCandidatePreserved = true;
@@ -267,7 +274,22 @@ namespace GreedLast.PlayerChecks
                 {
                     Call(app, "RequestNextRunPattern");
                     yield return WaitFor(() => state.CurrentState == GreedLastScreenState.SaveLoadoutDraft);
-                    yield return ObserveNativeMenuGestures();
+                    Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
+                    yield return new WaitForSecondsRealtime(0.25f);
+                    Call(app, "RequestNextRunPattern");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+                    GreedLastRunRecord saved = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2];
+                    Require(OnlyThirdSlot() && Uses()[2] == 2 && !backend.HasSaveLoadoutCandidate,
+                        "The long comparison needs one real saved slot before the second ordinary course.");
+                    result.nativeMenuSavedSlot = From(saved);
+                    Call(app, "RequestNormalRun");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.RunCoreTest && !core.IsPracticeRun);
+                    yield return DriveCourse();
+                    Require(core.CanExitAfterClear, "The second setup course must reach its real escape result.");
+                    result.record = From(core.CreateRunRecord());
+                    Call(app, "RequestNextRunPattern");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.SaveLoadoutDraft);
+                    yield return ObserveNativeMenuGestures(saved);
                 }
                 if (phase == "window-loadout")
                 {
@@ -503,7 +525,7 @@ namespace GreedLast.PlayerChecks
             }
         }
 
-        private IEnumerator ObserveNativeMenuGestures()
+        private IEnumerator ObserveNativeMenuGestures(GreedLastRunRecord saved)
         {
             GreedLastRuntimeUi ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
             ScrollRect scroll = Read<ScrollRect>(ui, "menuDetailScroll");
@@ -518,9 +540,10 @@ namespace GreedLast.PlayerChecks
             while (true)
             {
                 CheckDeadline();
-                Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                Require(backend.HasSaveLoadoutCandidate && OnlyThirdSlot() && Uses()[2] == 2 && Count("normalClearCount") == 2
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
-                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == 6
+                    && Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2].Equals(saved),
                     "Native menu gestures must not save, consume, discard or duplicate progression.");
                 bool comparison = state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                     && Read<bool>(app, "saveSlotDetailViewActive");
@@ -817,7 +840,10 @@ namespace GreedLast.PlayerChecks
         }
         private Result Previous(string name) => JsonUtility.FromJson<Result>(File.ReadAllText(Path.Combine(root, name + ".json")));
         private static Record From(GreedLastRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
-            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
+            good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile,
+            valid = r.IsValid, health = r.Health, combo = r.Combo, focus = r.Focus, maxCombo = r.MaxCombo,
+            loadoutName = r.LoadoutName, startGift = r.StartGift, primaryGift = r.PrimaryGift, relic = r.Relic,
+            choiceSummary = r.ChoiceSummary };
         private static Record From(GreedLastInfiniteRunRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
             good = r.GoodCount, misses = r.MissCount, distance = r.Distance, timingProfile = r.TimingProfile };
         private static Record From(GreedLastRunAttemptRecord r) => new Record { score = r.Score, successes = r.SuccessCount,
