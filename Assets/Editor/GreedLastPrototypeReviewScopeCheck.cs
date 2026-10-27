@@ -170,8 +170,10 @@ namespace GreedLast.Editor
                 if (!firstError)
                     Require(prep.Contains("목표: " + (noGood ? "정박 3연속" : "다음 구간 보정 0회"), StringComparison.Ordinal),
                         "A completed first-section goal must advance through the actual preparation context.");
-                Require(!backend.RegisterInfiniteRun(record) && backend.LoadLobby().GrowthPoints == points,
-                    "Reading or repeating the scoped result must not award growth twice.");
+                string repeatedMessage = backend.BuildInfiniteRunResultMessage(record);
+                string repeatedPrep = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(repeatedMessage);
+                Require(repeatedMessage == message && repeatedPrep == prep && backend.LoadLobby().GrowthPoints == points,
+                    "Repeated result reads must preserve the same handoff without awarding more growth.");
                 core.EnterInfiniteRun(stored, context);
                 if (Settlement(run) != "진행 구간 대기") failures.Add("infinite-restart/" + noGood + "/" + firstError);
                 core.Exit();
