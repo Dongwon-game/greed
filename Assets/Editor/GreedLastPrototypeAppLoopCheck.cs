@@ -1430,7 +1430,7 @@ namespace GreedLast.Editor
             try
             {
                 foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
-                    for (int mode = 0; mode < 16; mode++)
+                    for (int mode = 0; mode < 20; mode++)
                     {
                         string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "clear-quit-" + Guid.NewGuid().ToString("N");
                         try
@@ -1451,7 +1451,7 @@ namespace GreedLast.Editor
                             Write(app, "activeNormalRunWasRefill", mode == 1);
                             core.ConfigureGrowth(0, 0, 0);
                             state.SetRunCoreTest();
-                            if (mode == 7 || mode >= 8 && mode <= 10 || mode >= 12)
+                            if (mode == 7 || mode >= 8 && mode <= 10 || mode >= 12 && mode < 16)
                             {
                                 Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord source, out _, out _),
                                     "The quit infinite control must spend an actual source use first.");
@@ -1472,6 +1472,11 @@ namespace GreedLast.Editor
                                     Require(latest().Paused && !latest().Stopped && core.CreateInfiniteRunRecord().IsValid,
                                         "The live-quit control must contain real played progress, not only a countdown bonus.");
                                 }
+                            }
+                            else if (mode >= 16)
+                            {
+                                core.Enter("복기 재도전\n재도전 목표: 1장 " + (mode % 2 == 1 ? "보정 0회" : "무실수"));
+                                RunScopedNormalToCompletion(core, latest, mode % 2 == 1, mode >= 18);
                             }
                             else if (mode == 6)
                             {
@@ -1504,6 +1509,7 @@ namespace GreedLast.Editor
                             int infiniteRuns = Read<int>(backend, "infiniteRunCount");
                             int growth = Read<int>(backend, "growthPoints");
                             GreedLastInfiniteRunRecord infiniteResult = core.CreateInfiniteRunRecord();
+                            GreedLastRunRecord normalResult = mode >= 16 ? core.CreateRunRecord() : GreedLastRunRecord.Empty;
                             var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
                             var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
                             quit?.Invoke(app, null);
@@ -1511,9 +1517,9 @@ namespace GreedLast.Editor
                                 Require(PlayerPrefs.GetInt(PracticeKey, 0) == 1,
                                     "A completed full practice must mark onboarding on normal quit without a result action.");
                             var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
-                            bool rawClear = mode <= 1;
+                            bool rawClear = mode <= 1 || mode >= 16;
                             bool rawFailure = mode == 5;
-                            bool rawInfinite = mode == 8 || mode >= 12;
+                            bool rawInfinite = mode == 8 || mode >= 12 && mode < 16;
                             int infiniteReward = rawInfinite ? 1 + Mathf.Min(2, infiniteResult.SectionsCleared / 2) : 0;
                             Require(reloaded.HasSaveLoadoutCandidate == (rawClear || mode == 2)
                                 && Read<int>(reloaded, "normalClearCount") == clears + (rawClear ? 1 : 0)
@@ -1521,6 +1527,17 @@ namespace GreedLast.Editor
                                 && Read<int>(reloaded, "infiniteRunCount") == infiniteRuns + (rawInfinite ? 1 : 0)
                                 && Read<int>(reloaded, "growthPoints") == growth + (rawClear ? 3 : rawFailure ? 1 : infiniteReward),
                                 "Normal quit must preserve an unsettled terminal result once, without replaying a saved/discarded result or settling a live run. Mode " + mode);
+                            if (mode >= 16)
+                            {
+                                string expected = mode >= 18 ? mode % 2 == 1 ? "실패 보정 1" : "실패 실수 1"
+                                    : mode % 2 == 1 ? "달성 보정 0" : "달성 무실수";
+                                GreedLastRunRecord saved = Read<GreedLastRunRecord>(reloaded, "lastRunRecord");
+                                Require(saved.IsValid && saved.Score == normalResult.Score && saved.Distance == normalResult.Distance
+                                    && saved.GoodCount == normalResult.GoodCount && saved.MissCount == normalResult.MissCount
+                                    && saved.TimingProfile == normalResult.TimingProfile
+                                    && saved.TimingProfile.Contains("복기 결과 " + expected, StringComparison.Ordinal),
+                                    "Quit/reload must preserve the named normal chapter outcome independently of errors in another chapter. Mode " + mode);
+                            }
                             if (rawInfinite)
                             {
                                 GreedLastInfiniteRunRecord saved = Read<GreedLastInfiniteRunRecord>(reloaded, "lastInfiniteRunRecord");
@@ -1600,7 +1617,7 @@ namespace GreedLast.Editor
                         }
                     }
                 Debug.Log("Greed clear quit recovery passed: " + cases
-                    + " isolated persisted clean/detailed normal/refill clear, terminal normal/infinite failures, first-section review outcomes, already settled/preparing and live/paused/practice controls; one terminal record/reward, no slot auto-save, repeated quit/late command protection and explicit S3 recovery. Simulated normal-quit callback and JSON reload, not process kill or mobile suspension.");
+                    + " isolated persisted clean/detailed normal/refill clear, terminal normal/infinite failures, named normal chapter and first-infinite-section review outcomes, already settled/preparing and live/paused/practice controls; one terminal record/reward, no slot auto-save, repeated quit/late command protection and explicit S3 recovery. Simulated normal-quit callback and JSON reload, not process kill or mobile suspension.");
             }
             finally
             {
@@ -4071,6 +4088,41 @@ namespace GreedLast.Editor
                 }
             }
             Require(latest().Stopped, "The bounded callback fixture must reach a terminal result.");
+        }
+
+        private static void RunScopedNormalToCompletion(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest,
+            bool noGood, bool inside)
+        {
+            float clock = Time.realtimeSinceStartup;
+            bool injected = false;
+            for (int step = 0; step < 100 && !latest().Stopped; step++)
+            {
+                GreedLastRunSnapshot run = latest();
+                if (run.ChoiceActive) core.HandleInput(GreedLastRunChannel.Center, clock += 0.1f);
+                else if (run.StartCountdownActive)
+                {
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                }
+                else if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                else
+                {
+                    bool bad = !injected && run.Phase == GreedLastRunPhase.RunPlaying
+                        && run.ChapterIndex == (inside ? 1 : 2);
+                    float delta = bad && noGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                    clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds + delta;
+                    GreedLastRunChannel channel = bad && !noGood
+                        ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
+                        : run.Pattern.Channel;
+                    core.HandleInput(channel, clock);
+                    Require(latest().LastResult == (bad ? noGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss
+                        : GreedLastJudgementResult.Success), "The normal quit scope fixture must produce the requested actual judgement.");
+                    injected |= bad;
+                }
+            }
+            Require(injected && latest().EscapeSucceeded && latest().Stopped && latest().SuccessCount == 14
+                && latest().GoodCount == (noGood ? 1 : 0) && latest().MissCount == (noGood ? 0 : 1),
+                "A scoped normal quit control must complete the full actual fifteen-judgement course.");
         }
 
         private static void RunScopedInfiniteToFailure(GreedLastRunCore core, Func<GreedLastRunSnapshot> latest,
