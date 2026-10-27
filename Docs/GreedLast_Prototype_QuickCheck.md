@@ -8,7 +8,7 @@
 
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
-- 현재 배포: **2026-10-27 20:06 KST / review-completion**, 게임·빌드 `9d26141` / 후속 Editor 검사 `0454a40`. 첫 무한 구간의 목표 결과를 보존하고 미완료 구간은 진행 상태로 남긴다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-review-completion.zip`이며 이전 실행본/ZIP과 개인 저장은 보존했다.
+- 현재 배포: **2026-10-27 20:06 KST / review-completion**, 게임·빌드 `9d26141` / 강화 엔진 검사 `74572bf` / 후속 Editor 검사 `797cc63`. 첫 무한 구간의 목표 결과를 보존하고 미완료 구간은 진행 상태로 남긴다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-review-completion.zip`이며 이전 실행본/ZIP과 개인 저장은 보존했다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 [저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
@@ -34,7 +34,7 @@
 
 새 코어 완주/자연 종료·결과/정비 전달과 기존 전체 스모크·Windows 빌드/초기 구동을 확인했다. 이전 기록의 잘못된 목표 문자열을 소급 변환하거나 사람 손/소리·휴대폰 확인을 대신한 작업은 아니다.
 
-후속 Editor 검사에서는 종료/재읽기 32개, 앱 전환/복귀 56개와 기존 전체 스모크가 통과했다. 복귀 후 마지막 사용권으로 새 런을 시작한 여덟 경우도 목표 집계 초기화·자동 비움·중복 정산 없음을 확인했다. 평소 결과에서 정상 종료 또는 앱 전환 뒤 같은 목표 결과가 남는지만 추가로 보면 된다. 콜백/JSON 재읽기 검사이며 새 OS 창 조작·강제 종료/전원 단절·휴대폰 회수 보장은 아니다. 게임 입력과 실행본은 바꾸지 않았다.
+후속 종료/재읽기 40개와 앱 전환/복귀 56개, 마지막 사용권의 실제 재시작 여덟 경우를 확인했다. 두 재로딩 방식의 새 전체 엔진 검사도 통과했고, 강화판은 실제 첫 세 정확 입력으로 목표 구간 완료→후속 자연 실패→달성 결과/종료 저장 보존을 각각 확인했다. 평소 결과에서 정상 종료 또는 앱 전환 뒤 같은 목표 결과가 남는지만 추가로 보면 된다. 새 OS 창 조작·강제 종료/전원 단절·휴대폰 회수 보장은 아니며 게임 입력과 실행본은 바꾸지 않았다. 앞선 전체 스모크와 각 후속 검사 입력은 [확인 이력](GreedLast_Prototype_CheckHistory.md)에서 구분한다.
 
 ## 앞선 표시와 할당 보완
 
