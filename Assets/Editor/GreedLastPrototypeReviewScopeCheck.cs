@@ -89,10 +89,12 @@ namespace GreedLast.Editor
             }
             CheckIncompleteNormalScopes(failures);
             CheckInfiniteScopes(failures);
+            CheckWholeRunAndPracticeControls();
             Require(failures.Count == 0, "Chapter review goals must ignore other segments: " + string.Join(" | ", failures));
             Debug.Log("Greed chapter review scope passed: " + cases + " actual full normal clears, live HUD/feedback/failure state"
                 + " and final profile/result agree with the named chapter or escape; partial normal/infinite scopes stay pending,"
-                + " four first-infinite-section goals survive later natural failure and reset. No preferences, desktop input or device proof.");
+                + " four first-infinite-section goals survive later natural failure, result/preparation handoff and reset;"
+                + " whole-run and practice controls remain global. No preferences, desktop input or device proof.");
         }
 
         private static void CheckIncompleteNormalScopes(List<string> failures)
@@ -154,11 +156,48 @@ namespace GreedLast.Editor
                     "The infinite goal must settle after natural failure, not an artificial test stop.");
                 string expected = firstError ? noGood ? "실패 보정 1" : "실패 실수 1"
                     : noGood ? "달성 보정 0" : "달성 무실수";
-                if (!core.CreateInfiniteRunRecord().TimingProfile.Contains("복기 결과 " + expected, StringComparison.Ordinal)
+                GreedLastInfiniteRunRecord record = core.CreateInfiniteRunRecord();
+                if (!record.TimingProfile.Contains("복기 결과 " + expected, StringComparison.Ordinal)
                     || !GreedLastRuntimeUi.BuildStoppedReviewTargetResultLine(run).Contains(expected, StringComparison.Ordinal))
                     failures.Add("infinite-natural-result/" + noGood + "/" + firstError);
+                var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                Require(backend.RegisterInfiniteRun(record), "A naturally played scoped result must register once.");
+                int points = backend.LoadLobby().GrowthPoints;
+                string message = backend.BuildInfiniteRunResultMessage(record);
+                string prep = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(message);
+                Require(message.Contains(" / " + expected, StringComparison.Ordinal) && prep.Contains(" / " + expected, StringComparison.Ordinal),
+                    "The actual backend result and next preparation must retain the same scoped outcome.");
+                if (!firstError)
+                    Require(prep.Contains("목표: " + (noGood ? "정박 3연속" : "다음 구간 보정 0회"), StringComparison.Ordinal),
+                        "A completed first-section goal must advance through the actual preparation context.");
+                Require(!backend.RegisterInfiniteRun(record) && backend.LoadLobby().GrowthPoints == points,
+                    "Reading or repeating the scoped result must not award growth twice.");
                 core.EnterInfiniteRun(stored, context);
                 if (Settlement(run) != "진행 구간 대기") failures.Add("infinite-restart/" + noGood + "/" + firstError);
+                core.Exit();
+            }
+        }
+
+        private static void CheckWholeRunAndPracticeControls()
+        {
+            foreach (bool practice in new[] { false, true })
+            foreach (bool noGood in new[] { false, true })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                float clock = Time.realtimeSinceStartup;
+                string goal = (noGood ? "보정 0회" : "무실수");
+                if (practice) core.EnterPractice("복기 연습\n재도전 목표: 1장 " + goal);
+                else core.EnterInfiniteRun(new GreedLastRunRecord(true, 100, 3, 0, 0, 3, 3, 0, 0, 20f,
+                    "global-scope-control", "박자 감각", "집중 축", string.Empty, "집중 축", string.Empty), "무한 복기 재도전\n목표: " + goal);
+                core.Tick(clock += 2f);
+                core.Tick(clock += 1f);
+                Tap(core, ref run, ref clock, true, noGood);
+                string expected = noGood ? "실패 보정 1" : "실패 실수 1";
+                Require(!run.ReviewTargetScoped && run.ReviewTargetGoodCount == run.GoodCount
+                    && run.ReviewTargetMissCount == run.MissCount && Settlement(run) == expected,
+                    "Short practice and unscoped infinite goals must retain their actual whole-run counters.");
                 core.Exit();
             }
         }
