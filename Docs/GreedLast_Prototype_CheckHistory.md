@@ -1,5 +1,18 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-27 현재 숫자 형식의 기존 기록 호환 유지
+
+앞선 점/쉼표 보완은 원래 현재 문화권 파서가 읽던 사용자 지정 소수점 형식을 놓쳤다. OS 설정을 바꾸지 않은 별도 시험 프로세스의 문화권 복제본에서 `/`와 U+066B를 사용했고, 기존 파서가 읽는 값임을 먼저 확인했다. 이 작업은 새로운 언어 지원이 아니라 결과 요약의 읽기 호환 회귀 수정이다.
+
+- 수정 전 `dfbd0bc`: 기존 16조합에 같은 사용자 지정 형식으로 쓰고 읽는 네 조합을 더하자 일반/무한 요약 여덟 개의 유지 시간이 0으로 표시됐다. `Logs/EngineLoopChecks/c738670a226d43d38aa63ec74af45192/report.json`, SHA256 `E4F7A92490C5A8EF79AE28B921A12341C9877BDE007C1586896CDCC414F2477C`의 예상 실패/재현 성공을 보존한다.
+- 수정 `7bdc044`는 천 단위 구분을 허용하지 않는 현재 숫자 형식을 먼저 읽고, 점/쉼표를 보조로 읽는다. 비유한 값/음수의 0 처리와 저장 원문/형식·점수/보상·횟수는 유지한다. `Logs/EngineLoopChecks/a0d2ab8ddd3b4151a73a5d7182d2e00a/report.json`, SHA256 `9B9CD4A2C37E8FF42A503C68157352F6B9AD1B5F36DEC0A73A70AB9122CC5CD2`에서 20조합/40요약과 기존 잘못된 값/음수 40대조가 통과했다. 원본 JSON/기록/보상/누적 횟수도 같았다.
+- **13:39 KST/custom-decimal 비개발 Windows**가 현재 배포다. `Logs/PlayerReleaseChecks/611ee4b54be4481f9aee4bc1cc19410d/report.json` SHA256 `197971770DB29703241BA91D570F91330704ABEDBD854D7BD2E3FAF1FA035C5D`에서 격리 전체 스모크 후 원래 제품으로 빌드했고 101개 입력 blob·Editor/시험/초기화 API 제외를 대조했다. DLL `417ED5B54CC853867B5BFF4B652F14E39B5873493A8E2535A50831458535EFE0`, ZIP `Builds/GreedLastPrototype-verified-20261027-custom-decimal.zip` 58,434,144바이트/154파일·SHA256 `B5D2E28C8CB02E984C60D2CC5A14CB4363235D7E9903E943B1B7E4E3481AE4AE`다.
+- 20초 초기 구동은 예외 0/소유 종료·개인 값 0→0/불변이었다. `Logs/StandaloneChecks/report-startup-20261027-043938-2237977.json` SHA256 `80008B5B639CB446078EDA6675F9746EFA263DBB5F084D6602EDBBE200ABD8A0`다. 이전 13:07 실행본 전체/ZIP과 개인/원본/격리 설정을 보존했다.
+
+20조합은 기존 점/쉼표 교차 읽기 16개와 같은 현재 사용자 지정 형식의 네 개다. 서로 다른 임의의 사용자 지정 형식 사이 이동까지 보장하지 않는다. 이번에는 새 전체 엔진/새 프로세스 게임 플레이·OS 언어/화면 조작·폰트·가청 소리·휴대폰 성능 검사를 반복하지 않았다. 아래 13:07 전체 엔진/할당 성공은 당시 입력의 근거로 구분한다. 사용자가 PC 지역 설정을 바꾸거나 개인 진행도를 초기화할 필요는 없다.
+
+빌드 후 여유가 2GB 보호 기준 아래로 내려가 새 검사를 시작하지 않았다. 완료된 이번 두 사본의 `Project/Library`만 241,954,462바이트 정리하고 551개 보존 파일을 대조했다. `Logs/CacheMaintenanceChecks/219627abdbe24e9cb97c63c08cb0a6c6/report.json` SHA256 `288DE297CA099688EA00A6330FD655FD2BFC796708FE2EFE4E6303FC83FF0869`다. 이어 기존 비대화형 성공 사본 두 개의 캐시 323,113,309바이트를 정리하고 702파일 불변을 확인했다. `Logs/CacheMaintenanceChecks/7e4ccd4a8f5c4225852a61eabc5aad3b/report.json` SHA256 `F00CECA72120BC90B973F6B94F6AFC97932A4D220032239616681EBC6D3965DF`다. 절대 경로/링크 부재·고유 제품·프로세스 종료·각 커밋의 ZIP 스트림을 먼저 대조했으며 모든 소스/아카이브/실행본/보고서/로그·원본 Library와 Native/Menu/Trap 근거는 보존했다. 기준을 낮추거나 실패 검사를 통과로 바꾸지 않았다.
+
 ## 2026-10-27 주행 성향과 HUD의 임시 배열 제거
 
 매 프레임 읽히는 조합 성향/타이밍 우세 계산에서 세 개 이상 인자의 `Mathf.Max`가 임시 배열을 만들었다. 게임 규칙이나 새 콘텐츠가 아니라, 기존 계산 결과를 유지하는 좁은 관리 메모리 할당 보완이다. 새 Editor 전용 검사는 실제 코어 선택/무한 네 정확 입력으로 만든 상태와 미선택/캐시 반환 대조를 사용한다.
@@ -13,7 +26,7 @@
 
 후속 공개 `Tick` 계측의 첫 시도는 시작 카운트 뒤 앞 여유를 기다리지 않은 검사 준비 문제로 중단됐다. `Logs/PlayerReleaseChecks/83468363287b4b179e555caca1c7c28c/report.json` SHA256 `F9B25EB90058B71648E0587D48532789C1E427570229A33629079F377BC28829`와 실패 시점의 두 검사기 원문을 보존한다. 당시 게임/개인 실행본은 바꾸지 않았고 제안 ZIP도 생성하지 않았다. 검사기의 시간 진행 한 줄만 기존 준비 여유에 맞춘 뒤, 세 실제 시작 기프트 각각 공개 `Tick`/스냅샷 발행 1,024회가 거리·경과 시간만 진행하고 체력/점수/판정을 보존하면서 할당 0회였다. 이 추가 측정은 별도 Editor 검사기이며 앱/UI Update나 전체 프레임을 실행한 것은 아니다.
 
-**13:07 KST/profile-allocation 비개발 Windows**가 현재 배포다. `Logs/PlayerReleaseChecks/c48094ea7ef242d5bc0d4bd05f32c4de/report.json` SHA256 `CE3DFF3D5C9E6875FEA81722764508392419F648302DA38EB091C3E88EAADCDD`다. 게임/Editor 입력 `17baffd`의 공개 Tick 계측·격리 전체 스모크 후 원래 제품으로 빌드했고 101개 입력 blob·Editor/시험/초기화 API 제외를 확인했다. DLL `345DFE52E6533E4DCCE62DB3C58A24AD79DBA3C5A015DA5E31B9D498E946DA96`, ZIP `Builds/GreedLastPrototype-verified-20261027-profile-allocation.zip` 58,434,157바이트/154파일·SHA256 `78E6A0E31E69AAE7D166DD7A613F38C3280940DDA98E79837B50DE86BA5B74D7`이다. 초기 20초 구동은 예외 0/소유 종료·개인 값 0→0/불변이며 초기 보고서 SHA256 `3A8FADF891DC21573CD569420699B7896FC6071303742AB71FEB65D9A8F743F1`다. 이전 12:30 실행본 전체/ZIP·개인/원본/격리 설정과 실패 근거는 보존했다.
+**13:07 KST/profile-allocation 비개발 Windows**는 당시 배포다. `Logs/PlayerReleaseChecks/c48094ea7ef242d5bc0d4bd05f32c4de/report.json` SHA256 `CE3DFF3D5C9E6875FEA81722764508392419F648302DA38EB091C3E88EAADCDD`다. 게임/Editor 입력 `17baffd`의 공개 Tick 계측·격리 전체 스모크 후 원래 제품으로 빌드했고 101개 입력 blob·Editor/시험/초기화 API 제외를 확인했다. DLL `345DFE52E6533E4DCCE62DB3C58A24AD79DBA3C5A015DA5E31B9D498E946DA96`, ZIP `Builds/GreedLastPrototype-verified-20261027-profile-allocation.zip` 58,434,157바이트/154파일·SHA256 `78E6A0E31E69AAE7D166DD7A613F38C3280940DDA98E79837B50DE86BA5B74D7`이다. 초기 20초 구동은 예외 0/소유 종료·개인 값 0→0/불변이며 초기 보고서 SHA256 `3A8FADF891DC21573CD569420699B7896FC6071303742AB71FEB65D9A8F743F1`다. 이전 12:30 실행본 전체/ZIP·개인/원본/격리 설정과 실패 근거는 보존했다.
 
 할당 값은 따뜻해진 순수 계산 또는 별도 코어 갱신의 이벤트 수다. 바이트 크기, 전체 프레임 할당 0, 실제 기기 FPS/끊김·가청 지연 개선을 보장하지 않는다. 실제 Windows 종료/새 프로세스 게임 플레이·사람 손/소리·휴대폰을 새로 검사한 것도 아니다. 사용자가 화면을 사용하는 동안 실제 창/입력/캡처는 하지 않았다.
 

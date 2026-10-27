@@ -8,7 +8,7 @@
 
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
-- 현재 배포: **2026-10-27 13:07 KST / profile-allocation**, 게임·Editor 입력 `17baffd`. 성향/HUD 반복 계산의 임시 배열을 제거했고, 앞선 집중 유지 시간 소수점 읽기 보완도 포함한다. 원문/저장 형식·주행/판정·점수/보상과 한 번 저장/두 번 사용은 유지한다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-profile-allocation.zip`이며 이전 12:30 실행본 전체/ZIP과 10월 26일 보존본도 유지한다.
+- 현재 배포: **2026-10-27 13:39 KST / custom-decimal**, 게임·Editor 입력 `7bdc044`. 집중 유지 시간의 기존 현재 숫자 형식 호환을 유지했고, 앞선 점/쉼표 읽기와 성향/HUD 임시 배열 제거도 포함한다. 원문/저장 형식·주행/판정·점수/보상과 한 번 저장/두 번 사용은 유지한다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-custom-decimal.zip`이며 이전 13:07 실행본 전체/ZIP과 앞선 보존본도 유지한다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 [저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
@@ -30,7 +30,9 @@
 
 ## 이번 보완에서 볼 곳
 
-이번 보완은 평소 연습/일반 런의 성향과 결과·정비 요약이 기존처럼 읽히는지만 보면 된다. PC 지역 설정 변경이나 개인 저장 삭제는 필요 없다. 별도 16쓰기/읽기 조합·40개 잘못된 값 대조와 일곱 계산 경로/세 기프트 공개 Tick의 할당 대조, 두 방식 전체 엔진·전체 스모크·비개발 Windows/ZIP/초기 구동이 통과했다. 할당 계측의 첫 실패와 시작 여유를 기다리지 않은 검사 준비 실패도 보존한다. 계산 결과를 유지하는 작업이며 전체 프레임 할당 0이나 실제 기기 끊김/소리 지연 개선으로 표시하지 않는다.
+이번 보완은 평소 결과·정비 요약의 집중 유지 시간이 기존처럼 읽히는지만 보면 된다. PC 지역 설정 변경이나 개인 저장 삭제는 필요 없다. 점/쉼표 교차 읽기 16조합과 같은 현재 사용자 지정 형식의 네 조합, 40개 잘못된 값/음수 대조·전체 스모크·새 비개발 Windows/ZIP/초기 구동이 통과했다. 임의의 다른 사용자 지정 형식 사이 이동이나 OS 언어/폰트 검증은 아니다.
+
+앞선 `17baffd`의 일곱 계산 경로/세 기프트 공개 Tick 할당 대조와 두 방식 전체 엔진 성공도 보존한다. 이를 이번 `7bdc044`의 새 전체 주행 검사로 세지 않으며, 전체 프레임 할당 0이나 실제 기기 끊김/소리 지연 개선을 뜻하지 않는다. 실패 근거와 검사 범위는 [확인 이력](GreedLast_Prototype_CheckHistory.md)에 분리한다.
 
 아래 연습 정상 종료 보존과 기록/저장 원본 보호는 앞선 변경이며 현재 실행본에도 유지한다.
 
