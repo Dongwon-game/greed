@@ -507,7 +507,8 @@ namespace GreedLast
             int? reviewTargetGoodCount = null,
             int? reviewTargetMissCount = null,
             bool reviewTargetScoped = false,
-            bool reviewTargetHasProgress = true)
+            bool reviewTargetHasProgress = true,
+            bool reviewTargetScopeCompleted = true)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -610,6 +611,7 @@ namespace GreedLast
             ReviewTargetMissCount = reviewTargetMissCount ?? missCount;
             ReviewTargetScoped = reviewTargetScoped;
             ReviewTargetHasProgress = reviewTargetHasProgress;
+            ReviewTargetScopeCompleted = reviewTargetScopeCompleted;
             RecentPatternFlow = recentPatternFlow ?? string.Empty;
             TimingProfile = timingProfile ?? string.Empty;
             LastJudgementScoreGain = Mathf.Max(0, lastJudgementScoreGain);
@@ -749,6 +751,7 @@ namespace GreedLast
         public int ReviewTargetMissCount { get; }
         public bool ReviewTargetScoped { get; }
         public bool ReviewTargetHasProgress { get; }
+        public bool ReviewTargetScopeCompleted { get; }
         public string RecentPatternFlow { get; }
         public string TimingProfile { get; }
     }
@@ -905,6 +908,9 @@ namespace GreedLast
         private bool timingRecommendationApplied;
         private int appliedTimingRecommendationMilliseconds;
         private int infiniteSectionsCleared;
+        private bool firstInfiniteReviewSectionCaptured;
+        private int firstInfiniteReviewSectionGoodCount;
+        private int firstInfiniteReviewSectionMissCount;
         private int infiniteThreatTestOffset;
         private int maxInfiniteThreatLevel;
         private float timingSignedErrorTotal;
@@ -1099,6 +1105,9 @@ namespace GreedLast
             focusStateActiveSeconds = 0f;
             runTimeAdvancedAt = 0f;
             infiniteSectionsCleared = 0;
+            firstInfiniteReviewSectionCaptured = false;
+            firstInfiniteReviewSectionGoodCount = 0;
+            firstInfiniteReviewSectionMissCount = 0;
             infiniteThreatTestOffset = 0;
             maxInfiniteThreatLevel = 1;
             patternBundleBreakCount = 0;
@@ -2838,6 +2847,12 @@ namespace GreedLast
 
         private void CaptureCompletedInfiniteSectionPerformance()
         {
+            if (!firstInfiniteReviewSectionCaptured)
+            {
+                firstInfiniteReviewSectionCaptured = true;
+                firstInfiniteReviewSectionGoodCount = currentBundleGoodCount;
+                firstInfiniteReviewSectionMissCount = currentBundleMissCount;
+            }
             lastCompletedSegment = "무한 " + infiniteSectionsCleared + "구간";
             lastCompletedSegmentExactCount = currentBundleExactCount;
             lastCompletedSegmentGoodCount = currentBundleGoodCount;
@@ -3499,6 +3514,9 @@ namespace GreedLast
                 currentBundleExactCount = 0;
                 currentBundleGoodCount = 0;
                 currentBundleMissCount = 0;
+                firstInfiniteReviewSectionCaptured = false;
+                firstInfiniteReviewSectionGoodCount = 0;
+                firstInfiniteReviewSectionMissCount = 0;
                 PrepareStartCountdown(
                     now,
                     "테스트 무한 목표 직전 - " + target + "\n정확 입력 한 번 뒤 End 정산 종료로 정산을 확인합니다.");
@@ -6469,11 +6487,12 @@ namespace GreedLast
 
         private string BuildReviewTargetResultText(string target)
         {
-            bool scoped = TryGetReviewTargetCounts(target, out int targetGood, out int targetMiss, out bool hasProgress);
+            bool scoped = TryGetReviewTargetCounts(target, out int targetGood, out int targetMiss, out bool hasProgress, out bool completed);
             if (scoped && !hasProgress) return "진행 구간 대기";
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return targetMiss <= 0 ? "달성 무실수" : "실패 실수 " + targetMiss;
+                return targetMiss > 0 ? "실패 실수 " + targetMiss
+                    : scoped && !completed ? "진행 구간 미완료" : "달성 무실수";
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
@@ -6483,7 +6502,8 @@ namespace GreedLast
                     return "실패 보정 " + targetGood;
                 }
 
-                return targetMiss > 0 ? "실패 실수 " + targetMiss : "달성 보정 0";
+                return targetMiss > 0 ? "실패 실수 " + targetMiss
+                    : scoped && !completed ? "진행 구간 미완료" : "달성 보정 0";
             }
 
             if (target.Contains("입력 없음", StringComparison.Ordinal))
@@ -6586,20 +6606,31 @@ namespace GreedLast
             return "기록됨";
         }
 
-        private bool TryGetReviewTargetCounts(string target, out int good, out int miss, out bool hasProgress)
+        private bool TryGetReviewTargetCounts(string target, out int good, out int miss, out bool hasProgress, out bool completed)
         {
             good = goodCount;
             miss = missCount;
             hasProgress = true;
-            if (practiceMode || infiniteMode || string.IsNullOrWhiteSpace(target)
+            completed = true;
+            if (practiceMode || string.IsNullOrWhiteSpace(target)
                 || (!target.Contains("무실수", StringComparison.Ordinal) && !target.Contains("보정 0회", StringComparison.Ordinal)))
                 return false;
-            // Reuse normal segment totals; practice and unscoped/infinite goals retain whole-run counts.
+            // Freeze the first reviewed infinite section before later sections replace the live bundle.
+            if (infiniteMode)
+            {
+                if (!target.StartsWith("다음 구간 ", StringComparison.Ordinal)) return false;
+                good = firstInfiniteReviewSectionCaptured ? firstInfiniteReviewSectionGoodCount : currentBundleGoodCount;
+                miss = firstInfiniteReviewSectionCaptured ? firstInfiniteReviewSectionMissCount : currentBundleMissCount;
+                completed = firstInfiniteReviewSectionCaptured;
+                hasProgress = completed || currentBundleExactCount > 0 || good > 0 || miss > 0;
+                return true;
+            }
             if (target.StartsWith("탈출 ", StringComparison.Ordinal))
             {
                 good = escapeGoodCount;
                 miss = escapeMissCount;
                 hasProgress = escapeExactCount > 0 || good > 0 || miss > 0;
+                completed = escapeExactCount + good + miss >= ChapterTargetPatterns;
                 return true;
             }
             if (target.Length < 3 || target[0] < '1' || target[0] > '4' || target[1] != '장' || !char.IsWhiteSpace(target[2]))
@@ -6608,6 +6639,7 @@ namespace GreedLast
             good = chapterGoodCounts[slot];
             miss = chapterMissCounts[slot];
             hasProgress = chapterExactCounts[slot] > 0 || good > 0 || miss > 0;
+            completed = chapterExactCounts[slot] + good + miss >= ChapterTargetPatterns;
             return true;
         }
 
@@ -6779,7 +6811,7 @@ namespace GreedLast
         private void Publish(float realtimeNow, bool reuseTimingProfile)
         {
             if (!reuseTimingProfile) cachedTimingProfileText = null;
-            bool scopedReview = TryGetReviewTargetCounts(reviewTargetText, out int reviewGood, out int reviewMiss, out bool reviewProgress);
+            bool scopedReview = TryGetReviewTargetCounts(reviewTargetText, out int reviewGood, out int reviewMiss, out bool reviewProgress, out bool reviewCompleted);
             float now = paused ? pausedAt : realtimeNow;
             float elapsedSeconds = activePattern ? now - patternStartedAt : 0f;
             float hitSeconds = Mathf.Max(0.01f, currentPattern.HitSeconds);
@@ -6916,7 +6948,8 @@ namespace GreedLast
                 reviewGood,
                 reviewMiss,
                 scopedReview,
-                reviewProgress));
+                reviewProgress,
+                reviewCompleted));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)

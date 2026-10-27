@@ -110,7 +110,7 @@ namespace GreedLast.Editor
                 Tap(core, ref run, ref clock, false, noGood);
                 Require(run.ChapterProgress == 1 && !run.Stopped, "The normal partial control must play exactly one trap.");
                 string profile = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned).TimingProfile;
-                if (!profile.Contains("복기 결과 진행 구간 진행", StringComparison.Ordinal) || Settlement(run) != "진행 구간 진행")
+                if (!profile.Contains("복기 결과 진행 구간 미완료", StringComparison.Ordinal) || Settlement(run) != "진행 구간 미완료")
                     failures.Add("partial-normal/" + noGood);
                 core.Exit();
             }
@@ -138,7 +138,7 @@ namespace GreedLast.Editor
                     if (i == 0 && !firstError)
                     {
                         string partial = core.CreateInfiniteRunRecord().TimingProfile;
-                        if (!partial.Contains("복기 결과 진행 구간 진행", StringComparison.Ordinal) || Settlement(run) != "진행 구간 진행")
+                        if (!partial.Contains("복기 결과 진행 구간 미완료", StringComparison.Ordinal) || Settlement(run) != "진행 구간 미완료")
                             failures.Add("partial-infinite/" + noGood);
                     }
                 }

@@ -21207,7 +21207,8 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText ?? string.Empty;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.ReviewTargetMissCount <= 0 ? "달성 무실수" : "실패 실수 " + snapshot.ReviewTargetMissCount;
+                return snapshot.ReviewTargetMissCount > 0 ? "실패 실수 " + snapshot.ReviewTargetMissCount
+                    : snapshot.ReviewTargetScoped && !snapshot.ReviewTargetScopeCompleted ? "진행 구간 미완료" : "달성 무실수";
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
@@ -21217,7 +21218,8 @@ namespace GreedLast
                     return "실패 보정 " + snapshot.ReviewTargetGoodCount;
                 }
 
-                return snapshot.ReviewTargetMissCount > 0 ? "실패 실수 " + snapshot.ReviewTargetMissCount : "달성 보정 0";
+                return snapshot.ReviewTargetMissCount > 0 ? "실패 실수 " + snapshot.ReviewTargetMissCount
+                    : snapshot.ReviewTargetScoped && !snapshot.ReviewTargetScopeCompleted ? "진행 구간 미완료" : "달성 보정 0";
             }
 
             if (target.Contains("입력 없음", StringComparison.Ordinal))
@@ -46491,7 +46493,7 @@ namespace GreedLast
 
         private static bool IsReviewTargetAchievementSnapshot(GreedLastRunSnapshot snapshot)
         {
-            if (snapshot.ReviewTargetScoped && !snapshot.ReviewTargetHasProgress) return false;
+            if (snapshot.ReviewTargetScoped && !snapshot.ReviewTargetScopeCompleted) return false;
             if (string.IsNullOrWhiteSpace(snapshot.ReviewTargetText)
                 || snapshot.LastResult == GreedLastJudgementResult.None
                 || snapshot.LastResult == GreedLastJudgementResult.Miss)
