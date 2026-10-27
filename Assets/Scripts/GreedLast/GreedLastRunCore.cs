@@ -3745,7 +3745,7 @@ namespace GreedLast
                 return infiniteMode ? "저장 조합" : "루트 미정";
             }
 
-            int topScore = Mathf.Max(survivalScore, focusScore, comboScore, scoreScore);
+            int topScore = Mathf.Max(Mathf.Max(survivalScore, focusScore), Mathf.Max(comboScore, scoreScore));
             int topCount = 0;
             topCount += survivalScore == topScore ? 1 : 0;
             topCount += focusScore == topScore ? 1 : 0;
@@ -3899,7 +3899,7 @@ namespace GreedLast
                 return string.Empty;
             }
 
-            int topScore = Mathf.Max(survivalScore, focusScore, comboScore, scoreScore);
+            int topScore = Mathf.Max(Mathf.Max(survivalScore, focusScore), Mathf.Max(comboScore, scoreScore));
             int topCount = 0;
             topCount += survivalScore == topScore ? 1 : 0;
             topCount += focusScore == topScore ? 1 : 0;

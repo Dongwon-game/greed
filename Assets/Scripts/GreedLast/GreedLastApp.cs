@@ -22689,7 +22689,7 @@ namespace GreedLast
                 return string.Empty;
             }
 
-            int top = Mathf.Max(snapshot.PerfectSuccessCount, snapshot.ClutchSuccessCount, snapshot.OffbeatSuccessCount);
+            int top = Mathf.Max(Mathf.Max(snapshot.PerfectSuccessCount, snapshot.ClutchSuccessCount), snapshot.OffbeatSuccessCount);
             int second = snapshot.PerfectSuccessCount == top
                 ? Mathf.Max(snapshot.ClutchSuccessCount, snapshot.OffbeatSuccessCount)
                 : snapshot.ClutchSuccessCount == top
