@@ -27,6 +27,16 @@ namespace GreedLast.Editor
                     CheckReload(writer, reader, seconds, failures);
                     cases++;
                 }
+                foreach (string separator in new[] { "/", "\u066b" })
+                {
+                    var customCulture = (CultureInfo)CultureInfo.GetCultureInfo("ko-KR").Clone();
+                    customCulture.NumberFormat.NumberDecimalSeparator = separator;
+                    foreach (float seconds in new[] { 1.5f, 12.3f })
+                    {
+                        CheckReload("ko-KR", "ko-KR", seconds, failures, customCulture);
+                        cases++;
+                    }
+                }
                 foreach (string reader in new[] { "ko-KR", "en-US", "de-DE", "fr-FR" })
                 {
                     CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(reader);
@@ -49,12 +59,13 @@ namespace GreedLast.Editor
                 + " invalid/negative parser controls retain zero. Dedicated test keys only; no personal data or device-language proof.");
         }
 
-        private static void CheckReload(string writer, string reader, float seconds, List<string> failures)
+        private static void CheckReload(string writer, string reader, float seconds, List<string> failures,
+            CultureInfo formatOverride = null)
         {
             string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "record-culture-" + Guid.NewGuid().ToString("N");
             try
             {
-                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(writer);
+                CultureInfo.CurrentCulture = formatOverride ?? CultureInfo.GetCultureInfo(writer);
                 string timing = "집중 발동 1회 / 집중 성공 2회 / 집중 유지 " + seconds.ToString("0.0") + "초";
                 var normal = new GreedLastRunRecord(true, 900, 3, 0, 2, 6, 12, 1, 2, 90f,
                     "culture-record", "박자 감각", "집중 축", "황금 박동", "안정 루트 / 집중 축", timing);
@@ -68,12 +79,14 @@ namespace GreedLast.Editor
                 string originalJson = PlayerPrefs.GetString(key);
                 int points = Read<int>(backend, "growthPoints");
 
-                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(reader);
+                CultureInfo.CurrentCulture = formatOverride ?? CultureInfo.GetCultureInfo(reader);
                 backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                 var restoredNormal = Read<GreedLastRunRecord>(backend, "lastRunRecord");
                 var restoredInfinite = Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord");
                 string expected = "집중: 발동 1회 / 집중 중 정확 2회 / 유지 " + seconds.ToString("0.0") + "초";
-                string label = writer + "->" + reader + "/" + seconds.ToString("0.0", CultureInfo.InvariantCulture);
+                string label = writer + "->" + reader
+                    + (formatOverride == null ? string.Empty : " [decimal " + formatOverride.NumberFormat.NumberDecimalSeparator + "]")
+                    + "/" + seconds.ToString("0.0", CultureInfo.InvariantCulture);
                 if (!backend.BuildRunClearResultMessage(restoredNormal).Contains(expected, StringComparison.Ordinal))
                     failures.Add(label + "/normal");
                 if (!backend.BuildInfiniteRunSavedPrepMessage(restoredInfinite).Contains(expected, StringComparison.Ordinal))
