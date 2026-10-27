@@ -21093,17 +21093,17 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText ?? string.Empty;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.MissCount <= 0 ? " / 목표 유지" : " / 목표 실패 실수 " + snapshot.MissCount;
+                return snapshot.ReviewTargetMissCount <= 0 ? " / 목표 유지" : " / 목표 실패 실수 " + snapshot.ReviewTargetMissCount;
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                if (snapshot.GoodCount > 0)
+                if (snapshot.ReviewTargetGoodCount > 0)
                 {
-                    return " / 목표 실패 보정 " + snapshot.GoodCount;
+                    return " / 목표 실패 보정 " + snapshot.ReviewTargetGoodCount;
                 }
 
-                return snapshot.MissCount > 0 ? " / 목표 실패 실수 " + snapshot.MissCount : " / 목표 유지";
+                return snapshot.ReviewTargetMissCount > 0 ? " / 목표 실패 실수 " + snapshot.ReviewTargetMissCount : " / 목표 유지";
             }
 
             if (target.Contains("입력 없음", StringComparison.Ordinal))
@@ -21206,17 +21206,17 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText ?? string.Empty;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.MissCount <= 0 ? "달성 무실수" : "실패 실수 " + snapshot.MissCount;
+                return snapshot.ReviewTargetMissCount <= 0 ? "달성 무실수" : "실패 실수 " + snapshot.ReviewTargetMissCount;
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                if (snapshot.GoodCount > 0)
+                if (snapshot.ReviewTargetGoodCount > 0)
                 {
-                    return "실패 보정 " + snapshot.GoodCount;
+                    return "실패 보정 " + snapshot.ReviewTargetGoodCount;
                 }
 
-                return snapshot.MissCount > 0 ? "실패 실수 " + snapshot.MissCount : "달성 보정 0";
+                return snapshot.ReviewTargetMissCount > 0 ? "실패 실수 " + snapshot.ReviewTargetMissCount : "달성 보정 0";
             }
 
             if (target.Contains("입력 없음", StringComparison.Ordinal))
@@ -21425,20 +21425,20 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0
-                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.MissCount)
+                return (!snapshot.ReviewTargetScoped && snapshot.LastResult == GreedLastJudgementResult.Miss) || snapshot.ReviewTargetMissCount > 0
+                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.ReviewTargetMissCount)
                     : "목표 유지: 무실수";
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                if (snapshot.LastResult == GreedLastJudgementResult.Good || snapshot.GoodCount > 0)
+                if ((!snapshot.ReviewTargetScoped && snapshot.LastResult == GreedLastJudgementResult.Good) || snapshot.ReviewTargetGoodCount > 0)
                 {
-                    return "목표 실패: 보정 " + Mathf.Max(1, snapshot.GoodCount);
+                    return "목표 실패: 보정 " + Mathf.Max(1, snapshot.ReviewTargetGoodCount);
                 }
 
-                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0
-                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.MissCount)
+                return (!snapshot.ReviewTargetScoped && snapshot.LastResult == GreedLastJudgementResult.Miss) || snapshot.ReviewTargetMissCount > 0
+                    ? "목표 실패: 실수 " + Mathf.Max(1, snapshot.ReviewTargetMissCount)
                     : "목표 유지: 보정 0";
             }
 
@@ -22169,12 +22169,12 @@ namespace GreedLast
 
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.MissCount <= 0 ? "무실수 목표 유지" : string.Empty;
+                return snapshot.ReviewTargetMissCount <= 0 ? "무실수 목표 유지" : string.Empty;
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                return snapshot.GoodCount <= 0 && snapshot.MissCount <= 0
+                return snapshot.ReviewTargetGoodCount <= 0 && snapshot.ReviewTargetMissCount <= 0
                     ? "보정 0회 목표 유지"
                     : string.Empty;
             }
@@ -46462,15 +46462,14 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.LastResult == GreedLastJudgementResult.Miss || snapshot.MissCount > 0;
+                return (!snapshot.ReviewTargetScoped && snapshot.LastResult == GreedLastJudgementResult.Miss) || snapshot.ReviewTargetMissCount > 0;
             }
 
             if (target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                return snapshot.LastResult == GreedLastJudgementResult.Good
-                    || snapshot.GoodCount > 0
-                    || snapshot.LastResult == GreedLastJudgementResult.Miss
-                    || snapshot.MissCount > 0;
+                return (!snapshot.ReviewTargetScoped && (snapshot.LastResult == GreedLastJudgementResult.Good
+                    || snapshot.LastResult == GreedLastJudgementResult.Miss))
+                    || snapshot.ReviewTargetGoodCount > 0 || snapshot.ReviewTargetMissCount > 0;
             }
 
             if (target.Contains("입력 없음", StringComparison.Ordinal))
@@ -46501,12 +46500,12 @@ namespace GreedLast
             string target = snapshot.ReviewTargetText;
             if (snapshot.Stopped && target.Contains("무실수", StringComparison.Ordinal))
             {
-                return snapshot.MissCount <= 0;
+                return snapshot.ReviewTargetMissCount <= 0;
             }
 
             if (snapshot.Stopped && target.Contains("보정 0회", StringComparison.Ordinal))
             {
-                return snapshot.GoodCount <= 0 && snapshot.MissCount <= 0;
+                return snapshot.ReviewTargetGoodCount <= 0 && snapshot.ReviewTargetMissCount <= 0;
             }
 
             if (snapshot.Stopped && target.Contains("입력 없음", StringComparison.Ordinal))
