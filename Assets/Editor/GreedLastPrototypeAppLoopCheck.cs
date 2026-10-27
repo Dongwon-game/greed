@@ -1639,7 +1639,7 @@ namespace GreedLast.Editor
             {
                 foreach (bool detailed in usePointerModule ? new[] { false } : new[] { false, true })
                     for (int boundary = 0; boundary < 2; boundary++)
-                        for (int mode = 0; mode < 10; mode++)
+                        for (int mode = 0; mode < 14; mode++)
                         {
                             string key = GreedLastMockBackend.PersistenceTestKeyPrefix + "background-result-" + Guid.NewGuid().ToString("N");
                             try
@@ -1664,8 +1664,11 @@ namespace GreedLast.Editor
                                     Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord source, out _, out _),
                                         "Background infinite controls must spend only a real source start.");
                                     state.SetInfiniteRun(string.Empty);
-                                    core.EnterInfiniteRun(source);
+                                    string reviewContext = mode >= 10 ? "무한 복기 재도전\n목표: 다음 구간 "
+                                        + (mode % 2 == 1 ? "보정 0회" : "무실수") : string.Empty;
+                                    core.EnterInfiniteRun(source, reviewContext);
                                     if (mode <= 5) RunToFailure(core, latest);
+                                    else if (mode >= 10) RunScopedInfiniteToFailure(core, latest, mode % 2 == 1, mode >= 12);
                                     else if (mode == 8)
                                     {
                                         float clock = Time.realtimeSinceStartup;
@@ -1693,12 +1696,15 @@ namespace GreedLast.Editor
                                 var slots = (GreedLastRunRecord[])Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots").Clone();
                                 var uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
                                 string before = PlayerPrefs.GetString(key);
+                                GreedLastInfiniteRunRecord infiniteResult = core.CreateInfiniteRunRecord();
                                 if (boundary == 0) Pause(true); else Focus(false);
                                 var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
                                 int expectedClears = clears + (mode < 2 ? 1 : 0);
                                 int expectedFailures = failures + (mode == 2 || mode == 3 ? 1 : 0);
-                                int expectedInfinite = infiniteRuns + (mode == 4 || mode == 5 ? 1 : 0);
-                                int expectedGrowth = growth + (mode < 2 ? 3 : mode < 6 ? 1 : 0);
+                                bool terminalInfinite = mode == 4 || mode == 5 || mode >= 10;
+                                int expectedInfinite = infiniteRuns + (terminalInfinite ? 1 : 0);
+                                int expectedGrowth = growth + (mode < 2 ? 3 : mode < 4 ? 1
+                                    : terminalInfinite ? 1 + Mathf.Min(2, infiniteResult.SectionsCleared / 2) : 0);
                                 void RequireCounts(GreedLastMockBackend value, string stage)
                                 {
                                     Require(Read<int>(value, "normalClearCount") == expectedClears
@@ -1708,6 +1714,17 @@ namespace GreedLast.Editor
                                         "Background result must settle exactly once before quit; " + stage + ", mode " + mode + ", boundary " + boundary);
                                 }
                                 RequireCounts(reloaded, "first suspension");
+                                if (mode >= 10)
+                                {
+                                    GreedLastInfiniteRunRecord saved = Read<GreedLastInfiniteRunRecord>(reloaded, "lastInfiniteRunRecord");
+                                    string expected = mode >= 12 ? mode % 2 == 1 ? "실패 보정 1" : "실패 실수 1"
+                                        : mode % 2 == 1 ? "달성 보정 0" : "달성 무실수";
+                                    Require(saved.IsValid && saved.Score == infiniteResult.Score
+                                        && saved.Distance == infiniteResult.Distance && saved.SectionsCleared == infiniteResult.SectionsCleared
+                                        && saved.TimingProfile == infiniteResult.TimingProfile
+                                        && saved.TimingProfile.Contains("복기 결과 " + expected, StringComparison.Ordinal),
+                                        "Background persistence must retain the actual completed first-section review outcome. Mode " + mode);
+                                }
                                 Require(reloaded.HasSaveLoadoutCandidate == (mode < 2),
                                     "Only a real clear may preserve an unsaved candidate on suspension.");
                                 for (int slot = 0; slot < slots.Length; slot++)
@@ -1723,7 +1740,7 @@ namespace GreedLast.Editor
                                         "Suspension must not consume or restore an infinite use.");
                                 }
                                 string after = PlayerPrefs.GetString(key);
-                                Require(mode < 6 || after == before, "Live/countdown/practice suspension must not settle or rewrite progress.");
+                                Require(mode < 6 || terminalInfinite || after == before, "Live/countdown/practice suspension must not settle or rewrite progress.");
                                 Pause(true); Focus(false); Pause(true); Focus(false);
                                 Require(PlayerPrefs.GetString(key) == after && !Read<bool>(app, "applicationQuitting"),
                                     "Repeated pause/focus callbacks must not duplicate settlement or mark the app as quitting.");
@@ -1745,9 +1762,16 @@ namespace GreedLast.Editor
                                         && Read<int[]>(backend, "saveLoadoutUsesRemaining")[2] == 2,
                                         "A foreground clear may save once to S3, never automatically to S1.");
                                 }
-                                else if (mode == 1 || mode == 2 || mode == 4) Click(ui, "returnLobbyButton");
-                                else if (mode == 3 || mode == 5) Click(ui, "nextPatternButton");
+                                else if (mode == 1 || mode == 2 || mode == 4 || mode >= 10 && mode % 2 == 0) Click(ui, "returnLobbyButton");
+                                else if (mode == 3 || mode == 5 || mode >= 10 && mode % 2 == 1) Click(ui, "nextPatternButton");
                                 RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "foreground result action");
+                                if (mode >= 10)
+                                {
+                                    Require(state.CurrentState == (mode % 2 == 0 ? GreedLastScreenState.LobbyReady : GreedLastScreenState.InfiniteStartReady),
+                                        "A foreground scoped result must still support its actual lobby or next-preparation action.");
+                                    Require(Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord").TimingProfile == infiniteResult.TimingProfile,
+                                        "Foreground result buttons must not replace the settled review profile with a cleared core snapshot.");
+                                }
                                 if (mode == 1) Require(!backend.HasSaveLoadoutCandidate, "Skipping a suspended clear must discard its single candidate.");
                                 if (mode < 2)
                                 {
@@ -1778,7 +1802,7 @@ namespace GreedLast.Editor
                             }
                         }
                 Debug.Log("Greed background result recovery passed: " + cases
-                    + " isolated clean/detailed pause/focus cases; clear/failure/infinite terminal persistence before quit, repeated callbacks and result buttons without duplicate rewards, explicit S3 save/discard, equal-stat distinct clears and no live/countdown/practice settlement. Simulated callbacks and JSON reload, not a physical mobile OS kill.");
+                    + " isolated clean/detailed pause/focus cases; clear/failure/infinite terminal persistence and first-section review outcomes before quit, repeated callbacks and result buttons without duplicate rewards, explicit S3 save/discard, equal-stat distinct clears and no live/countdown/practice settlement. Simulated callbacks and JSON reload, not a physical mobile OS kill.");
             }
             finally
             {
