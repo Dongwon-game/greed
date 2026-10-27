@@ -506,7 +506,8 @@ namespace GreedLast
             bool lastJudgementScoreLimited = false,
             int? reviewTargetGoodCount = null,
             int? reviewTargetMissCount = null,
-            bool reviewTargetScoped = false)
+            bool reviewTargetScoped = false,
+            bool reviewTargetHasProgress = true)
         {
             Pattern = pattern;
             LastJudgedPattern = lastJudgedPattern;
@@ -608,6 +609,7 @@ namespace GreedLast
             ReviewTargetGoodCount = reviewTargetGoodCount ?? goodCount;
             ReviewTargetMissCount = reviewTargetMissCount ?? missCount;
             ReviewTargetScoped = reviewTargetScoped;
+            ReviewTargetHasProgress = reviewTargetHasProgress;
             RecentPatternFlow = recentPatternFlow ?? string.Empty;
             TimingProfile = timingProfile ?? string.Empty;
             LastJudgementScoreGain = Mathf.Max(0, lastJudgementScoreGain);
@@ -746,6 +748,7 @@ namespace GreedLast
         public int ReviewTargetGoodCount { get; }
         public int ReviewTargetMissCount { get; }
         public bool ReviewTargetScoped { get; }
+        public bool ReviewTargetHasProgress { get; }
         public string RecentPatternFlow { get; }
         public string TimingProfile { get; }
     }
@@ -3426,6 +3429,8 @@ namespace GreedLast
             if (target.Contains("무실수", StringComparison.Ordinal)
                 || target.Contains("보정 0회", StringComparison.Ordinal))
             {
+                if (target.Length >= 3 && target[0] >= '1' && target[0] <= '4' && target[1] == '장' && char.IsWhiteSpace(target[2]))
+                    chapterExactCounts[target[0] - '1'] = ChapterTargetPatterns;
                 chapterIndex = 4;
                 chapterProgress = ChapterTargetPatterns - 1;
                 coreRetrieved = true;
@@ -6464,7 +6469,8 @@ namespace GreedLast
 
         private string BuildReviewTargetResultText(string target)
         {
-            TryGetReviewTargetCounts(target, out int targetGood, out int targetMiss);
+            bool scoped = TryGetReviewTargetCounts(target, out int targetGood, out int targetMiss, out bool hasProgress);
+            if (scoped && !hasProgress) return "진행 구간 대기";
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
                 return targetMiss <= 0 ? "달성 무실수" : "실패 실수 " + targetMiss;
@@ -6580,10 +6586,11 @@ namespace GreedLast
             return "기록됨";
         }
 
-        private bool TryGetReviewTargetCounts(string target, out int good, out int miss)
+        private bool TryGetReviewTargetCounts(string target, out int good, out int miss, out bool hasProgress)
         {
             good = goodCount;
             miss = missCount;
+            hasProgress = true;
             if (practiceMode || infiniteMode || string.IsNullOrWhiteSpace(target)
                 || (!target.Contains("무실수", StringComparison.Ordinal) && !target.Contains("보정 0회", StringComparison.Ordinal)))
                 return false;
@@ -6592,6 +6599,7 @@ namespace GreedLast
             {
                 good = escapeGoodCount;
                 miss = escapeMissCount;
+                hasProgress = escapeExactCount > 0 || good > 0 || miss > 0;
                 return true;
             }
             if (target.Length < 3 || target[0] < '1' || target[0] > '4' || target[1] != '장' || !char.IsWhiteSpace(target[2]))
@@ -6599,6 +6607,7 @@ namespace GreedLast
             int slot = target[0] - '1';
             good = chapterGoodCounts[slot];
             miss = chapterMissCounts[slot];
+            hasProgress = chapterExactCounts[slot] > 0 || good > 0 || miss > 0;
             return true;
         }
 
@@ -6770,7 +6779,7 @@ namespace GreedLast
         private void Publish(float realtimeNow, bool reuseTimingProfile)
         {
             if (!reuseTimingProfile) cachedTimingProfileText = null;
-            bool scopedReview = TryGetReviewTargetCounts(reviewTargetText, out int reviewGood, out int reviewMiss);
+            bool scopedReview = TryGetReviewTargetCounts(reviewTargetText, out int reviewGood, out int reviewMiss, out bool reviewProgress);
             float now = paused ? pausedAt : realtimeNow;
             float elapsedSeconds = activePattern ? now - patternStartedAt : 0f;
             float hitSeconds = Mathf.Max(0.01f, currentPattern.HitSeconds);
@@ -6906,7 +6915,8 @@ namespace GreedLast
                 lastJudgementScoreLimited,
                 reviewGood,
                 reviewMiss,
-                scopedReview));
+                scopedReview,
+                reviewProgress));
         }
 
         private string GetPublishedTimingProfileText(bool reuse)

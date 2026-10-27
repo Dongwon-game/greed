@@ -57,6 +57,14 @@ namespace GreedLast.Editor
                     if (bad)
                     {
                         injected = true;
+                        if (!inside && segment != "1장")
+                        {
+                            string earlyProfile = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned).TimingProfile;
+                            string earlyResult = (string)typeof(GreedLastRuntimeUi).GetMethod("BuildReviewTargetSettlementText",
+                                BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { run });
+                            Require(earlyProfile.Contains("복기 결과 진행 구간 대기", StringComparison.Ordinal)
+                                && earlyResult == "진행 구간 대기", "An unvisited named segment must not settle as achieved.");
+                        }
                         string hud = GreedLastRuntimeUi.BuildReviewTargetHudLine(run);
                         string feedback = GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(run);
                         bool failure = (bool)typeof(GreedLastRuntimeUi).GetMethod("IsReviewTargetFailureSnapshot",

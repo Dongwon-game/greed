@@ -21203,6 +21203,7 @@ namespace GreedLast
 
         private static string BuildReviewTargetSettlementText(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.ReviewTargetScoped && !snapshot.ReviewTargetHasProgress) return "진행 구간 대기";
             string target = snapshot.ReviewTargetText ?? string.Empty;
             if (target.Contains("무실수", StringComparison.Ordinal))
             {
@@ -46490,6 +46491,7 @@ namespace GreedLast
 
         private static bool IsReviewTargetAchievementSnapshot(GreedLastRunSnapshot snapshot)
         {
+            if (snapshot.ReviewTargetScoped && !snapshot.ReviewTargetHasProgress) return false;
             if (string.IsNullOrWhiteSpace(snapshot.ReviewTargetText)
                 || snapshot.LastResult == GreedLastJudgementResult.None
                 || snapshot.LastResult == GreedLastJudgementResult.Miss)
