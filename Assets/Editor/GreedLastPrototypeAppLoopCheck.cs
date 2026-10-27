@@ -1771,6 +1771,31 @@ namespace GreedLast.Editor
                                         "A foreground scoped result must still support its actual lobby or next-preparation action.");
                                     Require(Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord").TimingProfile == infiniteResult.TimingProfile,
                                         "Foreground result buttons must not replace the settled review profile with a cleared core snapshot.");
+                                    if (mode % 2 == 1)
+                                    {
+                                        string expectedContext = Read<string>(app, "pendingInfinitePreparationReviewContext");
+                                        Require(!string.IsNullOrEmpty(expectedContext), "A scoped foreground result must prepare a fresh review context.");
+                                        FinishPreparationTransition(app);
+                                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                                        FinishPreparationTransition(app);
+                                        Click(Read<Button[]>(ui, "laneButtons")[1]);
+                                        FinishPreparationTransition(app);
+                                        Click(ui, "nextPatternButton");
+                                        GreedLastRunSnapshot fresh = latest();
+                                        Require(state.CurrentState == GreedLastScreenState.InfiniteRun && fresh.StartCountdownActive
+                                            && !fresh.Stopped && fresh.SuccessCount == 0 && fresh.GoodCount == 0 && fresh.MissCount == 0
+                                            && fresh.JudgementText.Contains(expectedContext, StringComparison.Ordinal)
+                                            && (!fresh.ReviewTargetScoped || !fresh.ReviewTargetHasProgress && !fresh.ReviewTargetScopeCompleted)
+                                            && !Read<bool>(app, "runResultRegistered")
+                                            && Read<int[]>(backend, "saveLoadoutUsesRemaining")[0] == 0
+                                            && !backend.LoadLobby().SaveSlotOccupied[0],
+                                            "A resumed result's actual second start must carry only the new goal, clear old scope/registration and consume its final use exactly once.");
+                                        RequireCounts(GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key), "next paid start");
+                                        string started = PlayerPrefs.GetString(key);
+                                        Pause(true); Focus(false); Foreground();
+                                        Require(PlayerPrefs.GetString(key) == started,
+                                            "Suspending a fresh review countdown must not settle its previous result or restore its depleted source.");
+                                    }
                                 }
                                 if (mode == 1) Require(!backend.HasSaveLoadoutCandidate, "Skipping a suspended clear must discard its single candidate.");
                                 if (mode < 2)
@@ -1802,7 +1827,7 @@ namespace GreedLast.Editor
                             }
                         }
                 Debug.Log("Greed background result recovery passed: " + cases
-                    + " isolated clean/detailed pause/focus cases; clear/failure/infinite terminal persistence and first-section review outcomes before quit, repeated callbacks and result buttons without duplicate rewards, explicit S3 save/discard, equal-stat distinct clears and no live/countdown/practice settlement. Simulated callbacks and JSON reload, not a physical mobile OS kill.");
+                    + " isolated clean/detailed pause/focus cases; clear/failure/infinite terminal persistence and first-section review outcomes before quit, fresh paid review retry/depleted source, repeated callbacks and result buttons without duplicate rewards, explicit S3 save/discard, equal-stat distinct clears and no live/countdown/practice settlement. Simulated callbacks and JSON reload, not a physical mobile OS kill.");
             }
             finally
             {
