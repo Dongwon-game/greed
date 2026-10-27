@@ -8,7 +8,7 @@
 
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
-- 현재 배포: **2026-10-27 14:08 KST / review-pending**, 게임·Editor 입력 `8b3c350`. 지정한 장/탈출의 복기 목표는 해당 구간의 판정만 평가하고, 미도달 종료는 대기로 남긴다. 이전 소수점 호환·할당 보완도 포함한다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-review-pending.zip`이며 이전 실행본/ZIP과 개인 저장은 보존했다.
+- 현재 배포: **2026-10-27 20:06 KST / review-completion**, 게임·빌드 `9d26141` / 후속 Editor 검사 `e0defbf`. 첫 무한 구간의 목표 결과를 보존하고 미완료 구간은 진행 상태로 남긴다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-review-completion.zip`이며 이전 실행본/ZIP과 개인 저장은 보존했다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 [저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
@@ -28,7 +28,13 @@
 
 보관할 조합/개인 포인트를 확인용으로 소모하지 않는다. 9~11번은 이번 확인을 위해 새로 만든 임시 조합만 쓴다. 더 자세한 기획 범위는 [기획 체감 범위](GreedLast_Prototype_PlanCoverage.md)를 따른다.
 
-## 이번 보완에서 볼 곳
+## 이번 우선 확인
+
+활성 복기 목표가 있을 때만 추가로 본다. 특정 장 목표는 다른 장의 실수로 깨지지 않고, 그 장의 실수/Good는 실패로 표시되어야 한다. 깨끗하게 일부만 진행하고 끝내면 미완료이며, 목표 구간 전 종료는 대기다. 무한의 다음 구간 목표는 첫 대상 구간 완료 뒤의 후속 실수와 별개로 유지되어야 한다. 결과에서 다음 정비로 이어지는 목표와 보상도 한 번만 반영된다. 이 확인 때문에 개인 진행도를 초기화하거나 보관 조합을 소모하지 않는다.
+
+새 코어 완주/자연 종료·결과/정비 전달과 기존 전체 스모크·Windows 빌드/초기 구동을 확인했다. 이전 기록의 잘못된 목표 문자열을 소급 변환하거나 사람 손/소리·휴대폰 확인을 대신한 작업은 아니다.
+
+## 앞선 표시와 할당 보완
 
 이번 보완은 평소 결과·정비 요약의 집중 유지 시간이 기존처럼 읽히는지만 보면 된다. PC 지역 설정 변경이나 개인 저장 삭제는 필요 없다. 점/쉼표 교차 읽기 16조합과 같은 현재 사용자 지정 형식의 네 조합, 40개 잘못된 값/음수 대조·전체 스모크·새 비개발 Windows/ZIP/초기 구동이 통과했다. 임의의 다른 사용자 지정 형식 사이 이동이나 OS 언어/폰트 검증은 아니다.
 
