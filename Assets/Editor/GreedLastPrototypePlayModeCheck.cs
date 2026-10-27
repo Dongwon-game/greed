@@ -455,6 +455,7 @@ namespace GreedLast.Editor
                         && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
                         && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
+                        && cycle.engineFirstReviewSectionCompleted && cycle.engineScopedReviewGoalPreserved
                         && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
                         && cycle.engineClearQuitCandidatePreserved
                         && cycle.engineInfiniteQuitResultsPreserved == 2
@@ -571,6 +572,7 @@ namespace GreedLast.Editor
             public bool growthEntryHeldTapCanceled;
             public int heldSaveConfirmationCases, terminalBackSettlements;
             public bool directInfiniteRetryPrepared, directInfiniteRetryGoalStarted;
+            public bool engineFirstReviewSectionCompleted, engineScopedReviewGoalPreserved;
             public bool directInfiniteResultRetainedAfterChoices;
             public int infiniteCountdownRecordBoundaryCases;
             public bool engineClearQuitCandidatePreserved;
@@ -4125,21 +4127,44 @@ namespace GreedLast.Editor
                     report.multiTouchConfirmationCases++;
                     report.actualInfiniteStarts++;
                     if (run.DevInvincible) core.ToggleDevInvincible();
-                    bool inputOnce = false;
+                    int inputs = 0;
+                    int targetInputs = use == 0 ? 1 : 3;
                     deadline = Time.realtimeSinceStartup + 35f;
                     while (!run.Stopped)
                     {
                         Require(Time.realtimeSinceStartup < deadline, "The real-time infinite run must reach natural health-zero failure.");
-                        if (!inputOnce && run.ActivePattern && !run.CountdownActive
+                        if (inputs < targetInputs && run.ActivePattern && !run.CountdownActive
                             && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
                         {
                             yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
-                            inputOnce = true;
+                            inputs++;
+                            Require(run.LastResult == GreedLastJudgementResult.Success,
+                                "The real-time review fixture must earn exact responses through actual EventSystem input.");
+                            if (use == 1 && inputs == 3)
+                            {
+                                Require(run.ReviewTargetScoped && run.ReviewTargetText.StartsWith("다음 구간 ", StringComparison.Ordinal)
+                                    && run.InfiniteSectionsCleared == 1 && run.ReviewTargetScopeCompleted
+                                    && run.ReviewTargetGoodCount == 0 && run.ReviewTargetMissCount == 0,
+                                    "The actual retry must complete its first named review section before later natural failure.");
+                                report.engineFirstReviewSectionCompleted = true;
+                            }
                         }
                         yield return null;
                     }
-                    Require(inputOnce && run.Health == 0 && !run.DevInvincible && !backend.HasSaveLoadoutCandidate,
+                    Require(inputs == targetInputs && run.Health == 0 && !run.DevInvincible && !backend.HasSaveLoadoutCandidate,
                         "A consumed source must support its live run until actual natural failure, without a new normal-save opportunity.");
+                    if (use == 1)
+                    {
+                        string expectedGoalResult = run.ReviewTargetText.Contains("보정 0회", StringComparison.Ordinal)
+                            ? "달성 보정 0" : "달성 무실수";
+                        Require(run.MissCount > 0 && run.ReviewTargetScopeCompleted
+                            && run.ReviewTargetGoodCount == 0 && run.ReviewTargetMissCount == 0
+                            && core.CreateInfiniteRunRecord().TimingProfile.Contains("복기 결과 " + expectedGoalResult, StringComparison.Ordinal)
+                            && GreedLastRuntimeUi.BuildStoppedReviewTargetResultLine(run).Contains(" / " + expectedGoalResult, StringComparison.Ordinal),
+                            "Later engine-driven misses must not reverse the first completed review section in the final profile or UI result.");
+                        report.engineScopedReviewGoalPreserved = true;
+                        Debug.Log("Greed engine scoped review preserved: three actual exact inputs completed the first retry section; later natural health-zero failure retained the same achieved goal in profile and result UI.");
+                    }
                     VerifyInfiniteQuitFromEngineResult();
                     int settledBefore = Read<int>(backend, "infiniteRunCount");
                     yield return null;
@@ -4265,6 +4290,7 @@ namespace GreedLast.Editor
                     GreedLastInfiniteRunRecord actual = Read<GreedLastInfiniteRunRecord>(reloaded, "lastInfiniteRunRecord");
                     Require(actual.IsValid && actual.Score == earned.Score && actual.Distance == earned.Distance
                         && actual.MissCount == earned.MissCount && actual.SuccessCount == earned.SuccessCount
+                        && actual.TimingProfile == earned.TimingProfile
                         && Read<int>(reloaded, "infiniteRunCount") == 1
                         && Read<int>(reloaded, "growthPoints") == Read<int>(expected, "growthPoints")
                         && !reloaded.HasSaveLoadoutCandidate,
