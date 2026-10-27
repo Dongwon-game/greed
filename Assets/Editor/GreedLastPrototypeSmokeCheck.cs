@@ -332,6 +332,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeSaveDataGuardCheck.Run();
             GreedLastPrototypeRankingIdentityCheck.Run();
             GreedLastPrototypeRecordCultureCheck.Run();
+            GreedLastPrototypeProfileAllocationCheck.Run();
             GreedLastPrototypePlayModeCheck.VerifyAsyncBatchArguments();
             GreedLastPrototypePlayModeCheck.VerifyPreferenceCaptureCoverage();
             GreedLastPrototypeKeyboardCheck.VerifyShortcutModifiers();
