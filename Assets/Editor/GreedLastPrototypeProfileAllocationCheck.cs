@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Unity.Profiling;
 using UnityEditor;
 using UnityEngine;
 
@@ -16,6 +17,7 @@ namespace GreedLast.Editor
             Require(!EditorApplication.isPlayingOrWillChangePlaymode,
                 "Profile allocation checks require idle Edit mode.");
             var failures = new List<string>();
+            CheckRecorderCalibration();
             int controls = CheckProfileValues();
             int measured = 0;
             foreach (GreedLastRunChannel? channel in new GreedLastRunChannel?[]
@@ -76,20 +78,34 @@ namespace GreedLast.Editor
             Require(failures.Count == 0, "Passive run presentation profile reads must not allocate temporary arrays: "
                 + string.Join(" | ", failures));
             Debug.Log("Greed live profile allocation passed: " + measured + " warmed pure paths x " + Samples
-                + " reads allocate zero managed bytes; " + controls
-                + " independent score/tie controls preserve profile results. Synthetic core inputs and thread allocation counters only, not whole-frame/device FPS or audible latency.");
+                + " reads produce zero GC.Alloc events; " + controls
+                + " independent score/tie controls preserve profile results. Synthetic core inputs and current-thread Unity profiler events only, not allocation byte sizes, whole-frame/device FPS or audible latency.");
         }
 
         private static void CheckAllocation(string name, Func<string> read, string expected, List<string> failures)
         {
             for (int i = 0; i < 128; i++) Require(read() == expected, "Profile warmup returned a different value.");
-            long before = GC.GetAllocatedBytesForCurrentThread();
+            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                65536, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
             bool matched = true;
             for (int i = 0; i < Samples; i++) matched &= read() == expected;
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            allocations.Stop();
+            Require(allocations.Valid && allocations.Count < allocations.Capacity,
+                "Profile allocation recording must remain valid and unsaturated.");
             Require(matched, "Allocation measurement must preserve its exact profile value.");
-            Debug.Log("Greed profile allocation: " + name + ", reads=" + Samples + ", managedBytes=" + allocated);
-            if (allocated != 0) failures.Add(name + "=" + allocated);
+            int events = allocations.Count;
+            Debug.Log("Greed profile allocation: " + name + ", reads=" + Samples + ", gcAllocEvents=" + events);
+            if (events != 0) failures.Add(name + "=" + events);
+        }
+
+        private static void CheckRecorderCalibration()
+        {
+            using var allocations = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc",
+                4096, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            for (int i = 0; i < 16; i++) GC.KeepAlive(new byte[64]);
+            allocations.Stop();
+            Require(allocations.Valid && allocations.Count >= 16 && allocations.Count < allocations.Capacity,
+                "An allocation recorder must detect deliberate allocations before zero-event results are trusted.");
         }
 
         private static int CheckProfileValues()
