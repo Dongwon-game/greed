@@ -66,6 +66,9 @@ namespace GreedLast.Editor
             try
             {
                 CultureInfo.CurrentCulture = formatOverride ?? CultureInfo.GetCultureInfo(writer);
+                if (formatOverride != null)
+                    Require(float.TryParse(seconds.ToString("0.0"), out float legacySeconds) && legacySeconds.Equals(seconds),
+                        "The custom format must be readable by the original current-culture numeric parser.");
                 string timing = "집중 발동 1회 / 집중 성공 2회 / 집중 유지 " + seconds.ToString("0.0") + "초";
                 var normal = new GreedLastRunRecord(true, 900, 3, 0, 2, 6, 12, 1, 2, 90f,
                     "culture-record", "박자 감각", "집중 축", "황금 박동", "안정 루트 / 집중 축", timing);

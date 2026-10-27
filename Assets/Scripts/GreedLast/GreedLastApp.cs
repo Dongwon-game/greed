@@ -8494,8 +8494,9 @@ namespace GreedLast
         private static float ExtractTimingProfileSeconds(string timingProfile, string prefix)
         {
             string value = ExtractTimingProfileValue(timingProfile, prefix, "초");
-            // Stored 0.0 profiles use a dot or comma decimal, never a thousands separator.
-            bool parsed = float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float seconds)
+            // Preserve the current decimal format and accept legacy dot/comma text without grouping.
+            bool parsed = float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out float seconds)
+                || float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out seconds)
                 || float.TryParse(value, NumberStyles.Float, TimingProfileCommaFormat, out seconds);
             return parsed && !float.IsNaN(seconds) && !float.IsInfinity(seconds) ? Mathf.Max(0f, seconds) : 0f;
         }
