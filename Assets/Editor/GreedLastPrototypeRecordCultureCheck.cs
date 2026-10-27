@@ -17,6 +17,7 @@ namespace GreedLast.Editor
             CultureInfo previousCulture = CultureInfo.CurrentCulture;
             var failures = new List<string>();
             int cases = 0;
+            int parserControls = 0;
             try
             {
                 foreach (string writer in new[] { "en-US", "de-DE" })
@@ -26,13 +27,26 @@ namespace GreedLast.Editor
                     CheckReload(writer, reader, seconds, failures);
                     cases++;
                 }
+                foreach (string reader in new[] { "ko-KR", "en-US", "de-DE", "fr-FR" })
+                {
+                    CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(reader);
+                    foreach (string value in new[] { "", "not-a-number", "NaN", "Infinity", "-Infinity", "1e1000", "1,234.5", "1.234,5", "-1.5", "-1,5" })
+                    {
+                        float actual = (float)typeof(GreedLastMockBackend).GetMethod("ExtractTimingProfileSeconds",
+                            BindingFlags.Static | BindingFlags.NonPublic).Invoke(null,
+                                new object[] { "집중 유지 " + value + "초", "집중 유지 " });
+                        Require(actual.Equals(0f), "Invalid or negative durations must not become nonfinite or grouped seconds: " + reader + "/" + value);
+                        parserControls++;
+                    }
+                }
             }
             finally { CultureInfo.CurrentCulture = previousCulture; }
             Require(failures.Count == 0,
                 "Stored focus duration must survive a decimal culture change: " + string.Join(" | ", failures));
             Debug.Log("Greed record timing culture passed: " + cases
                 + " stored decimal/write-read culture pairs retain normal and infinite focus summaries,"
-                + " original timing text and exact saved JSON. Dedicated test keys only; no personal data or device-language proof.");
+                + " original timing text and exact saved JSON; " + parserControls
+                + " invalid/negative parser controls retain zero. Dedicated test keys only; no personal data or device-language proof.");
         }
 
         private static void CheckReload(string writer, string reader, float seconds, List<string> failures)

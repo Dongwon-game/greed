@@ -304,6 +304,10 @@ namespace GreedLast
         private const int GrowthMaxLevel = 3;
         private const int SaveDataVersion = 1;
         private const string PlayerPrefsKey = "GreedLast.MockBackend.SaveData.v1";
+        private static readonly NumberFormatInfo TimingProfileCommaFormat = new NumberFormatInfo
+        {
+            NumberDecimalSeparator = ",",
+        };
         private static readonly string[] SaveLoadoutNamePresets =
         {
             "균형 저장",
@@ -8490,7 +8494,10 @@ namespace GreedLast
         private static float ExtractTimingProfileSeconds(string timingProfile, string prefix)
         {
             string value = ExtractTimingProfileValue(timingProfile, prefix, "초");
-            return float.TryParse(value, out float seconds) ? Mathf.Max(0f, seconds) : 0f;
+            // Stored 0.0 profiles use a dot or comma decimal, never a thousands separator.
+            bool parsed = float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float seconds)
+                || float.TryParse(value, NumberStyles.Float, TimingProfileCommaFormat, out seconds);
+            return parsed && !float.IsNaN(seconds) && !float.IsInfinity(seconds) ? Mathf.Max(0f, seconds) : 0f;
         }
 
         private static string ExtractTimingProfileValue(string timingProfile, string prefix, string suffix)
