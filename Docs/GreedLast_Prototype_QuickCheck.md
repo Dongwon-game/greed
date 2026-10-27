@@ -8,7 +8,7 @@
 
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
-- 현재 배포: **2026-10-27 13:39 KST / custom-decimal**, 게임·Editor 입력 `7bdc044`. 집중 유지 시간의 기존 현재 숫자 형식 호환을 유지했고, 앞선 점/쉼표 읽기와 성향/HUD 임시 배열 제거도 포함한다. 원문/저장 형식·주행/판정·점수/보상과 한 번 저장/두 번 사용은 유지한다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-custom-decimal.zip`이며 이전 13:07 실행본 전체/ZIP과 앞선 보존본도 유지한다.
+- 현재 배포: **2026-10-27 14:08 KST / review-pending**, 게임·Editor 입력 `8b3c350`. 지정한 장/탈출의 복기 목표는 해당 구간의 판정만 평가하고, 미도달 종료는 대기로 남긴다. 이전 소수점 호환·할당 보완도 포함한다. ZIP은 `Builds/GreedLastPrototype-verified-20261027-review-pending.zip`이며 이전 실행본/ZIP과 개인 저장은 보존했다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 [저장 위치](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/PlayerPrefs.html)는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
