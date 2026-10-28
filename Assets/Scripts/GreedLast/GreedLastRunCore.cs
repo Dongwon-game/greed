@@ -4453,6 +4453,13 @@ namespace GreedLast
             string summary = storedLoadout.ChoiceSummary ?? string.Empty;
             if (!string.IsNullOrEmpty(gift))
             {
+                bool hasGiftHistory = CountChoiceOccurrences(summary, "집중 축") > 0
+                    || CountChoiceOccurrences(summary, "생존 축") > 0
+                    || CountChoiceOccurrences(summary, "연쇄 축") > 0;
+                // Materialize the legacy fallback before a new gift makes history authoritative.
+                if (!hasGiftHistory && IsInfinitePreparationGift(storedLoadout.PrimaryGift))
+                    summary = string.IsNullOrEmpty(summary)
+                        ? storedLoadout.PrimaryGift : summary + " / " + storedLoadout.PrimaryGift;
                 summary = string.IsNullOrEmpty(summary) ? gift : summary + " / " + gift;
             }
 
