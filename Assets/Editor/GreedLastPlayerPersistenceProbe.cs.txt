@@ -34,6 +34,7 @@ namespace GreedLast.PlayerChecks
             public bool quitCallbackObserved;
             public bool backgroundResultsRequested;
             public bool scopedGoalsRequested, normalReviewGoalEarned, normalReviewGoalPersisted;
+            public bool normalReviewGoalFailed, normalReviewGoalFailurePersisted;
             public bool infiniteReviewGoalEarned, infiniteReviewGoalPersisted;
             public int backgroundChecks;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
@@ -559,8 +560,11 @@ namespace GreedLast.PlayerChecks
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 1
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == prior.growthPoints,
                     "Quitting live normal play must not manufacture an attempt, candidate or reward.");
+                if (scopedGoals) state.ShowLocalNotice("탈출 실패 기록 저장\n재도전 목표: " + NormalReviewGoal);
                 Call(app, "RequestNormalRun");
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.RunCoreTest);
+                if (scopedGoals) Require(RunState().ReviewTargetText == NormalReviewGoal && RunState().ReviewTargetScoped,
+                    "Both live-quit and natural-failure controls must actually enter the requested chapter goal.");
                 yield return DriveCourse(respond: false, untilFirstTrap: phase == "live-normal");
                 if (phase == "live-normal")
                 {
@@ -574,6 +578,13 @@ namespace GreedLast.PlayerChecks
                     GreedLastRunAttemptRecord record = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed);
                     Require(core.IsStoppedNormalRun && record.IsValid && Count("normalFailCount") == 0,
                         "Quit must first settle the real naturally failed normal run.");
+                    if (scopedGoals)
+                    {
+                        Require(RunState().ReviewTargetHasProgress && RunState().ReviewTargetMissCount > 0,
+                            "A real missed target chapter must fail, not remain waiting or become achieved.");
+                        RequireReviewProfile(record.TimingProfile, NormalReviewGoal, "실패 실수 " + RunState().ReviewTargetMissCount);
+                        result.normalReviewGoalFailed = true;
+                    }
                     result.record = From(record);
                     result.terminalBeforeQuit = true;
                     if (backgroundResults) yield return VerifyBackgroundBoundary(failure: true);
@@ -590,6 +601,15 @@ namespace GreedLast.PlayerChecks
                 Require(saved.IsValid && saved.Outcome == GreedLastRunAttemptOutcome.Failed,
                     "The stored normal attempt must remain a failure, not an abandon.");
                 SameRecord(From(saved), prior.record);
+                if (scopedGoals)
+                {
+                    Require(prior.normalReviewGoalFailed && saved.MissCount > 0,
+                        "The failed-goal baseline must come from the actual preceding naturally failed process.");
+                    RequireReviewProfile(saved.TimingProfile, NormalReviewGoal, "실패 실수 ");
+                    Require(!saved.TimingProfile.Contains("복기 결과 달성", StringComparison.Ordinal),
+                        "Reopening a failed chapter goal must never promote it to an achieved result.");
+                    result.normalReviewGoalFailurePersisted = true;
+                }
                 if (phase == "verify-failure-again")
                     Require(Previous("verify-failure").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
                         "An already settled normal failure must not grant another reward on quit.");

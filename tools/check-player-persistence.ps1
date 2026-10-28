@@ -321,6 +321,8 @@ try {
         if ($result.scopedGoalsRequested -ne $expectScopedGoals -or
             $result.normalReviewGoalEarned -ne ($expectScopedGoals -and $phase -eq 'clear') -or
             $result.normalReviewGoalPersisted -ne ($expectScopedGoals -and $phase -in @('save','first-use','last-use','verify','verify-again')) -or
+            $result.normalReviewGoalFailed -ne ($expectScopedGoals -and $phase -eq 'normal-fail') -or
+            $result.normalReviewGoalFailurePersisted -ne ($expectScopedGoals -and $phase -in @('verify-failure','verify-failure-again')) -or
             $result.infiniteReviewGoalEarned -ne ($expectScopedGoals -and $phase -eq 'last-use') -or
             $result.infiniteReviewGoalPersisted -ne ($expectScopedGoals -and $phase -in @('verify','verify-again'))) {
             throw ('Scoped review goal earnings and fresh-process persistence coverage is incomplete: ' + $phase)
@@ -344,6 +346,7 @@ try {
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
             AttemptRecordComparisons=$result.attemptRecordComparisons; ScopedGoalsRequested=$result.scopedGoalsRequested;
             NormalReviewGoalEarned=$result.normalReviewGoalEarned; NormalReviewGoalPersisted=$result.normalReviewGoalPersisted;
+            NormalReviewGoalFailed=$result.normalReviewGoalFailed; NormalReviewGoalFailurePersisted=$result.normalReviewGoalFailurePersisted;
             InfiniteReviewGoalEarned=$result.infiniteReviewGoalEarned; InfiniteReviewGoalPersisted=$result.infiniteReviewGoalPersisted}
     }
     $report.FailedPhase = ''
