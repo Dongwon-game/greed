@@ -2858,7 +2858,7 @@ namespace GreedLast
                 : "기록 생성";
 
             return "1 일반 런: " + normalStep + " / 위험→동작·박자·보상·상태줄·코치·루트 버튼·탈출 게이트"
-                + "\n2 저장 조합: " + saveStep + " / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진"
+                + "\n2 저장 조합: " + saveStep + " / 저장 슬롯 선택→클리어 요약·칸 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진"
                 + "\n3 무한모드: " + infiniteStep + " / 위협·정산·실전 재개"
                 + "\n4 기록/흔적: " + recordStep + " / 기록만: 점수 행 / 거리·구간 보조 / 보조 단독 제외·일시 피드백 제외 / 2/4 버튼";
         }
@@ -19809,7 +19809,7 @@ namespace GreedLast
 
             int target = Mathf.Max(1, snapshot.ChapterTarget);
             int progress = BuildEscapeGateVisibleProgress(snapshot);
-            return "탈출 게이트 " + progress + "/" + target + " 완료 · 입구로 나가기";
+            return "탈출 게이트 " + progress + "/" + target + " 완료 · 저장 슬롯 선택";
         }
 
         private static string BuildInfiniteProgressLabel(GreedLastRunSnapshot snapshot, int target)

@@ -82,6 +82,10 @@ namespace GreedLast.Editor
                 if (!order.Contains(primary + "→클리어 요약", StringComparison.Ordinal)
                     || order.Contains("입구로 나가기", StringComparison.Ordinal))
                     failures.Add((refill ? "refill" : "normal") + " playtest-order=" + order);
+                Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine", order) == "기록 없음"
+                    && InvokeMockBackendStaticLabel("CompactRecordBoardLine", "[S] 1660점 / "
+                        + order.Replace("\n", " / ") + " / 콤14") == "[S] 1660점 / 콤14",
+                    "Current action guidance must stay out of record rows while preserving actual score/combo values.");
                 Require(publications == beforePublications && run.Equals(before), "Reading follow-up guidance must not mutate the completed run.");
                 clears++;
 
@@ -13336,8 +13340,8 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiLabel("BuildRunChapterHudText", snapshot) == "입구 탈출 완료",
                 "The clear summary HUD must read as the completed entrance escape.");
             Require(
-                InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", snapshot) == "탈출 게이트 3/3 완료 · 입구로 나가기",
-                "The clear summary progress bar must keep the completed escape-gate count connected to the entrance-exit button.");
+                InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", snapshot) == "탈출 게이트 3/3 완료 · 저장 슬롯 선택",
+                "The clear summary progress bar must keep the completed escape-gate count connected to the actual save-slot button.");
             RequireTextLayoutBudget(
                 InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", snapshot),
                 1,
