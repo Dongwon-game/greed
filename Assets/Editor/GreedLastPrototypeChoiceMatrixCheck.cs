@@ -287,7 +287,7 @@ namespace GreedLast.Editor
                     if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                     Require(run.ActivePattern, "Failure controls must reach real traps.");
                     clock += Mathf.Max(run.Pattern.HitSeconds,
-                        run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds) + 0.1f - run.ElapsedSeconds;
+                        run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds) + 0.1f - run.ElapsedSeconds;
                     core.Tick(clock);
                 }
                 Require(run.Stopped && run.Health == 0 && run.MissCount >= 3
