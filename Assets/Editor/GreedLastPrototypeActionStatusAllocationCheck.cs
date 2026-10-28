@@ -82,6 +82,7 @@ namespace GreedLast.Editor
                 for (int step = 0; !run.Stopped && step < 100; step++)
                 {
                     if (run.ChoiceActive) { core.HandleInput(GreedLastRunChannel.Right, clock += 0.1f); continue; }
+                    if (run.StartCountdownActive) { core.Tick(clock += 2f); core.Tick(clock += 1f); }
                     if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                     Require(run.ActivePattern, "Stopped status must come from actual natural no-input failure.");
                     clock += Mathf.Max(run.Pattern.HitSeconds, run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds - core.InputTimingOffsetSeconds)
