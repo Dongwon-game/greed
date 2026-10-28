@@ -92,6 +92,9 @@ namespace GreedLast.Editor
             var action = (Func<GreedLastRunSnapshot, int, string>)Delegate.CreateDelegate(
                 typeof(Func<GreedLastRunSnapshot, int, string>), typeof(GreedLastRuntimeUi)
                     .GetMethod("BuildRouteCadencePipActionSymbol", BindingFlags.Static | BindingFlags.NonPublic));
+            var compact = (Func<GreedLastRunSnapshot, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildRouteCadenceCompact", BindingFlags.Static | BindingFlags.NonPublic));
             var measured = new HashSet<string>(StringComparer.Ordinal);
             int checks = 0;
             Verify(default);
@@ -170,10 +173,16 @@ namespace GreedLast.Editor
 
             void Verify(GreedLastRunSnapshot snapshot)
             {
-                bool available = snapshot.PracticeMode || !snapshot.InfiniteMode
-                    && (snapshot.ChapterIndex == 1 || snapshot.ChapterIndex >= 2
-                        && (snapshot.ActiveRouteProfile == "안정 루트" || snapshot.ActiveRouteProfile == "변주 루트"
-                            || snapshot.ActiveRouteProfile == "압박 루트"));
+                bool routeAvailable = !snapshot.InfiniteMode && snapshot.ChapterIndex >= 2
+                    && (snapshot.ActiveRouteProfile == "안정 루트" || snapshot.ActiveRouteProfile == "변주 루트"
+                        || snapshot.ActiveRouteProfile == "압박 루트");
+                bool available = snapshot.PracticeMode || !snapshot.InfiniteMode && snapshot.ChapterIndex == 1 || routeAvailable;
+                string expectedTiming = routeAvailable
+                    ? " " + Token(ExpectedTiming(snapshot, 0)) + ">" + Token(ExpectedTiming(snapshot, 1))
+                        + ">" + Token(ExpectedTiming(snapshot, 2)) : string.Empty;
+                Require(compact(snapshot) == expectedTiming,
+                    "The actual UI cadence values must preserve all three independent timings, especially the relic's middle step.");
+                checks++;
                 bool visible = available && !snapshot.InfiniteMode && !snapshot.ChoiceActive
                     && !snapshot.Stopped && !snapshot.Paused && !snapshot.CountdownActive;
                 for (int index = -1; index <= 3; index++)
@@ -226,6 +235,11 @@ namespace GreedLast.Editor
                 : run.ActiveRouteProfile == "변주 루트"
                     ? new[] { GreedLastTimingType.Offbeat, GreedLastTimingType.Perfect, GreedLastTimingType.Offbeat }[index]
                     : new[] { GreedLastTimingType.Clutch, GreedLastTimingType.Offbeat, GreedLastTimingType.Clutch }[index];
+        }
+
+        private static string Token(GreedLastTimingType timing)
+        {
+            return timing == GreedLastTimingType.Perfect ? "정" : timing == GreedLastTimingType.Clutch ? "압" : "엇";
         }
 
         private static void CheckAllocation(string name, Func<string> read, string expected, List<string> failures)
