@@ -6,7 +6,7 @@
 
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
-- 현재 실행본: **2026-10-29 00:51 KST / legacy-preparation**. 게임은 `498ffa5`, 후속 Editor 검사·빌드 입력은 `3870b00`이다. 혼합 선택과 정비 연결을 검증하고 옛 형식의 직접 정비에서 기프트 보존을 보완했다. 현재 저장을 불러오는 경로는 수정 전에도 기프트를 보존했다. 새 그래픽이나 판정·보상 정의·한 번 저장/두 번 사용 규칙 변경은 아니다.
+- 현재 실행본: **2026-10-29 01:43 KST / action-status-cache**. 게임·빌드 입력은 `8a0fd90`이다. 동작 완주 상태의 같은 문구를 반복 생성하지 않도록 보완하고 전체 주행·혼합 선택·저장 검사를 통과했다. 새 그래픽이나 판정·보상 정의·한 번 저장/두 번 사용 규칙 변경은 아니다. 사람의 소리/회전 편안함과 휴대폰 체감은 아래 순서로 별도 확인한다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 저장 위치는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 개인 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
