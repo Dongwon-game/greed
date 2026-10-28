@@ -2209,6 +2209,7 @@ namespace GreedLast.Editor
             RunInfiniteResultActionCheck();
             RunClearActionConsistencyCheck();
             RunLoadoutBonusReasonCheck();
+            GreedLastPrototypeChoiceMatrixCheck.Run();
             RunInfiniteReviewCountCheck();
             RunPreparedSummaryPriorityCheck();
             VerifyLiveRunCoachLines(now + 720f);
