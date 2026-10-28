@@ -7,10 +7,79 @@ namespace GreedLast.Editor
 {
     public static class GreedLastPrototypeChoiceMatrixCheck
     {
+        [MenuItem("Greed Last/Run Legacy Gift Preparation Check")]
+        public static void RunLegacyPreparationCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Legacy preparation checks require Edit mode.");
+            string[] gifts = { "집중 축", "생존 축", "연쇄 축" };
+            string[] relics = { "황금 박동", "사막의 잔상", "파라오의 각인" };
+            string[] routes = { "", "안정 루트", "변주 루트", "압박 루트" };
+            var mismatches = new List<string>();
+            int cases = 0;
+            foreach (string original in gifts)
+            foreach (string route in routes)
+            foreach (string added in gifts)
+            foreach (string relic in relics)
+            {
+                VerifyPreparedGiftValues(original, route, original, added, relic, mismatches);
+                cases++;
+            }
+            // Existing histories stay authoritative even when a legacy-looking primary field differs.
+            foreach (string history in gifts)
+            foreach (string added in gifts)
+            {
+                string primary = history == gifts[0] ? gifts[1] : gifts[0];
+                VerifyPreparedGiftValues(primary, history, history, added, relics[0], mismatches);
+                cases++;
+            }
+            foreach (string original in gifts)
+            {
+                VerifyPreparedGiftValues(original, "", original, "", relics[0], mismatches);
+                cases++;
+            }
+            Debug.Log("Greed legacy preparation controls: " + cases + " actual core starts, mismatches=" + mismatches.Count);
+            Require(cases == 120 && mismatches.Count == 0,
+                "Legacy stored gift must survive preparation: " + string.Join(" | ", mismatches));
+            Debug.Log("Greed legacy preparation passed: 108 legacy gift/route/preparation/relic combinations, "
+                + "nine authoritative modern-history controls and three no-gift controls. Independent initial values, memory-only records/cores; no personal saves.");
+        }
+
+        private static void VerifyPreparedGiftValues(string primary, string summary, string expectedGift,
+            string added, string relic, List<string> mismatches)
+        {
+            var stored = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                20f, "legacy-preparation-control", "", primary, "", summary, "");
+            GreedLastRunRecord prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(stored, added, relic);
+            int survival = (expectedGift == "생존 축" ? 1 : 0) + (added == "생존 축" ? 1 : 0);
+            int focus = (expectedGift == "집중 축" ? 1 : 0) + (added == "집중 축" ? 1 : 0);
+            int chain = (expectedGift == "연쇄 축" ? 1 : 0) + (added == "연쇄 축" ? 1 : 0);
+            int expectedHealth = 3 + Math.Min(2, survival + (summary == "안정 루트" ? 1 : 0));
+            int expectedFocus = Math.Min(3, (focus > 0 ? focus + 1 : 0) + (summary == "변주 루트" ? 1 : 0));
+            int expectedCombo = Math.Min(5, chain * 2 + (summary == "압박 루트" ? 1 : 0));
+            int expectedScore = 10 + chain * 60 + (summary == "압박 루트" ? 50 : 0);
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            try
+            {
+                core.EnterInfiniteRun(prepared);
+                if (run.Health != expectedHealth || run.Combo != expectedCombo || run.Score != expectedScore
+                    || run.Focus != (expectedFocus >= 3 ? 0 : expectedFocus) || run.FocusStateActive != (expectedFocus >= 3))
+                    mismatches.Add(primary + ":" + summary + "+" + added + "/" + relic
+                        + " actual=" + run.Health + "," + run.Focus + "," + run.Combo + "," + run.Score
+                        + " expected=" + expectedHealth + "," + expectedFocus + "," + expectedCombo + "," + expectedScore);
+                Require(stored.ChoiceSummary == summary && stored.PrimaryGift == primary
+                    && prepared.PrimaryGift == primary && prepared.Relic == relic,
+                    "Preparing a legacy gift must not mutate its stored record or chosen relic.");
+            }
+            finally { core.Exit(); }
+        }
+
         [MenuItem("Greed Last/Run Mixed Choice Pair Check")]
         public static void Run()
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Mixed choice checks require Edit mode.");
+            RunLegacyPreparationCheck();
             int[,] matrix = BuildMatrix();
             Require(CoversEveryPair(matrix), "The authored matrix must cover all nine values of every choice pair.");
             var duplicate = (int[,])matrix.Clone();
