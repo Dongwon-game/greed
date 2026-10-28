@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using Unity.Profiling;
 using UnityEditor;
@@ -51,6 +52,7 @@ namespace GreedLast.Editor
                 Require(run.SuccessCount == 1 && run.ChapterProgress == 1 && run.PerfectBundleIntact,
                     "The live status control must follow an actual first exact input.");
                 Measure("actual-first-exact", run, expectedLabels[1]);
+                GreedLastRunSnapshot actualFirstExact = run;
                 int originalMask = run.CurrentBundleAvoidanceMask;
                 var masks = new List<int>();
                 for (int i = 0; i < 32; i++) masks.Add(i);
@@ -93,6 +95,7 @@ namespace GreedLast.Editor
                 Measure("stopped", run, "");
                 Require(cases == 43, "Every action-status state/mask control must complete.");
                 Require(failures.Count == 0, "Three-action status reads must reuse unchanged labels: " + string.Join(" | ", failures));
+                CheckCultureLabels(read, actualFirstExact, expectedLabels);
                 Debug.Log("Greed action status allocation passed: 43 states/masks x 1024 warmed reads, zero current-thread GC.Alloc events, "
                     + "independent eight labels and gate controls preserved. Real first exact/Good/pause/failure controls plus 35 synthetic formatting masks; "
                     + "not 43 played runs, whole-frame allocation bytes, rendered/device FPS or audible latency.");
@@ -113,6 +116,41 @@ namespace GreedLast.Editor
                 if (events != 0) failures.Add(name + "=" + events);
                 cases++;
             }
+        }
+
+        private static void CheckCultureLabels(Func<GreedLastRunSnapshot, string> read,
+            GreedLastRunSnapshot actualFirstExact, string[] expectedLabels)
+        {
+            var build = (Func<string[]>)Delegate.CreateDelegate(typeof(Func<string[]>), typeof(GreedLastRuntimeUi)
+                .GetMethod("BuildThreeActionBundleStatusLabels", BindingFlags.Static | BindingFlags.NonPublic));
+            var custom = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            custom.NumberFormat.NativeDigits = new[] { "\u0660", "\u0661", "\u0662", "\u0663", "\u0664",
+                "\u0665", "\u0666", "\u0667", "\u0668", "\u0669" };
+            custom.NumberFormat.NumberDecimalSeparator = ",";
+            custom.NumberFormat.PositiveSign = "plus";
+            custom.NumberFormat.NegativeSign = "minus";
+            CultureInfo[] cultures = { CultureInfo.InvariantCulture, CultureInfo.GetCultureInfo("en-US"),
+                CultureInfo.GetCultureInfo("ko-KR"), CultureInfo.GetCultureInfo("de-DE"), CultureInfo.GetCultureInfo("fr-FR"),
+                CultureInfo.GetCultureInfo("ar-SA"), CultureInfo.GetCultureInfo("ja-JP"), custom };
+            CultureInfo original = CultureInfo.CurrentCulture;
+            try
+            {
+                foreach (CultureInfo culture in cultures)
+                {
+                    CultureInfo.CurrentCulture = culture;
+                    string[] labels = build();
+                    Require(labels.Length == expectedLabels.Length, "Culture label count must remain eight.");
+                    for (int i = 0; i < labels.Length; i++)
+                        Require(string.Equals(labels[i], expectedLabels[i], StringComparison.Ordinal),
+                            "Culture must preserve the independently expected action label at index " + i);
+                    Require(string.Equals(read(actualFirstExact), expectedLabels[1], StringComparison.Ordinal),
+                        "Culture changes after initialization must preserve the actual first exact cached label.");
+                }
+            }
+            finally { CultureInfo.CurrentCulture = original; }
+            Require(ReferenceEquals(CultureInfo.CurrentCulture, original), "The private check thread culture must be restored.");
+            Debug.Log("Greed action status culture passed: eight culture profiles, 64 rebuilt labels and eight actual-first-exact cached reads; "
+                + "thread culture restored. Not OS locale changes, cold allocation profiling or additional played runs.");
         }
 
         private static void Require(bool condition, string message)
