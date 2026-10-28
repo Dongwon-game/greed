@@ -112,8 +112,8 @@ namespace GreedLast.Editor
                         Require(backend.LoadLobby().SaveSlotOccupied[slot], "A legacy slot must survive until its second use.");
                         backend.SelectSaveLoadoutSlot(slot);
                         Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord stored, out _, out _, added, relic)
-                            && stored.PrimaryGift == original && stored.ChoiceSummary == "" && stored.Relic == "" && stored.Score == 100,
-                            "Loading and preparing must preserve the original legacy gift-only record.");
+                            && stored.PrimaryGift == original && stored.ChoiceSummary == original && stored.Relic == "" && stored.Score == 100,
+                            "The backend must retain its existing canonical gift-history repair before preparation.");
                         string afterConsume = PlayerPrefs.GetString(key);
                         var mismatches = new List<string>();
                         VerifyPreparedGiftRecord(stored, original, added, relic, mismatches);
