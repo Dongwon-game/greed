@@ -29,6 +29,86 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Loadout Bonus Reason Check")]
+        public static void RunLoadoutBonusReasonCheck()
+        {
+            Require(CanRun(), "Loadout bonus reason checks require an idle Edit-mode editor.");
+            var mismatches = new List<string>();
+            int cases = 0;
+            foreach (int growth in new[] { 0, 3 })
+            foreach (bool beatGift in new[] { false, true })
+            foreach (bool accurate in new[] { false, true })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                core.SnapshotChanged += value => run = value;
+                core.ConfigureGrowth(growth, 0, 0);
+                core.Enter();
+                float clock = Time.realtimeSinceStartup;
+                int judgements = 0, choices = 0;
+                for (int step = 0; !run.Stopped && step < 100; step++)
+                {
+                    if (run.ChoiceActive)
+                    {
+                        GreedLastRunChannel channel = run.ChoiceKind == GreedLastChoiceKind.StartGift
+                            ? beatGift ? GreedLastRunChannel.Left : GreedLastRunChannel.Right
+                            : run.ChoiceKind == GreedLastChoiceKind.Relic ? GreedLastRunChannel.Left : GreedLastRunChannel.Right;
+                        core.HandleInput(channel, clock += 0.1f);
+                        choices++;
+                        continue;
+                    }
+                    if (run.StartCountdownActive) { core.Tick(clock += 2f); core.Tick(clock += 1f); }
+                    if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                    Require(run.ActivePattern && !run.CountdownActive, "Bonus reason controls require actual authored traps.");
+                    bool exact = accurate ? judgements % 2 == 0 : judgements == 0;
+                    float delta = exact ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                    clock += run.Pattern.CoreSeconds + delta - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    judgements++;
+                }
+                Require(core.CanExitAfterClear && judgements == 15 && choices == 8 && run.MissCount == 0
+                    && run.SuccessCount == (accurate ? 8 : 1) && run.GoodCount == (accurate ? 7 : 14)
+                    && run.MaxPrecisionStreak == 1, "Bonus reason fixtures must clear with isolated accuracy/growth/start-gift controls.");
+                var backend = CreateIsolatedBackend();
+                backend.RegisterClear(core.CreateRunRecord());
+                backend.SelectSaveLoadoutSlot(1);
+                backend.ConfirmSaveLoadout();
+                string shown = backend.BuildSelectedInfiniteLoadoutDetailText();
+                Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord stored, out _, out _)
+                    && stored.IsValid && string.IsNullOrEmpty(stored.Relic)
+                    && !stored.ChoiceSummary.Contains("황금 박동", StringComparison.Ordinal),
+                    "Actual gift-only storage must remove the normal relic before measuring infinite bonuses.");
+                string detail = GreedLastRunCore.BuildInfiniteLoadoutBonusBreakdown(stored);
+                Require(shown.Contains(detail, StringComparison.Ordinal), "Stored detail must expose the same actual bonus breakdown.");
+                int reasonIndex = detail.IndexOf("\n근거: ", StringComparison.Ordinal);
+                string reason = reasonIndex < 0 ? string.Empty : detail.Substring(reasonIndex + "\n근거: ".Length);
+                int expectedFocus = (beatGift ? 1 : 0) + (accurate ? 1 : 0);
+                int expectedScore = Mathf.Clamp(Mathf.Clamp(Mathf.RoundToInt(stored.Score * 0.10f), 0, 200)
+                    + 180 + 50 + (stored.MaxCombo >= 10 ? 60 : 0) + (accurate ? 40 : 0), 0, 300);
+                var infinite = new GreedLastRunCore();
+                GreedLastRunSnapshot started = default;
+                infinite.SnapshotChanged += value => started = value;
+                infinite.ConfigureGrowth(growth, 0, 0);
+                infinite.EnterInfiniteRun(stored);
+                Require(started.Health == 3 + growth && started.Focus == expectedFocus && started.Combo == 5
+                    && started.Score == expectedScore && !started.FocusStateActive
+                    && detail.StartsWith("보너스 상세: 체력 +0 / 집중 +" + expectedFocus + " / 콤보 +5 / 점수 +" + expectedScore, StringComparison.Ordinal),
+                    "Actual start values must preserve the independent unchanged numeric bonus controls.");
+                if (reason.Contains("생존", StringComparison.Ordinal)
+                    || reason.Contains("집중", StringComparison.Ordinal) != (expectedFocus > 0)
+                    || reason.Contains("정확도", StringComparison.Ordinal) != accurate)
+                    mismatches.Add("growth=" + growth + " beat=" + beatGift + " accurate=" + accurate + " reason=" + reason);
+                Require(reason.Contains("연쇄 x3", StringComparison.Ordinal), "The genuine triple-chain reason must remain present.");
+                infinite.Exit();
+                core.Exit();
+                cases++;
+            }
+            Debug.Log("Greed loadout bonus reason controls: " + cases + " actual clear/store/start paths, numeric values preserved, mismatches=" + mismatches.Count);
+            Require(mismatches.Count == 0, "Loadout bonus reasons must match awarded bonuses: " + string.Join(" | ", mismatches));
+            Require(cases == 8, "All bonus reason controls must finish.");
+            Debug.Log("Greed loadout bonus reasons passed: eight actual clears/stores/infinite starts, independent unchanged numeric bonuses, growth and low/high accuracy isolated. Transient cores/backends only; no personal saves or desktop/device input.");
+        }
+
         [MenuItem("Greed Last/Run Clear Action Consistency Check")]
         public static void RunClearActionConsistencyCheck()
         {
@@ -2060,6 +2140,7 @@ namespace GreedLast.Editor
             RunSavedGiftPreviewCheck();
             RunInfiniteResultActionCheck();
             RunClearActionConsistencyCheck();
+            RunLoadoutBonusReasonCheck();
             RunInfiniteReviewCountCheck();
             RunPreparedSummaryPriorityCheck();
             VerifyLiveRunCoachLines(now + 720f);
