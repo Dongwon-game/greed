@@ -86,7 +86,7 @@ namespace GreedLast.Editor
                 clears++;
 
                 core.Enter(string.Empty, refill);
-                core.HandleInput(GreedLastRunChannel.Center, clock += 0.1f);
+                core.HandleInput(GreedLastRunChannel.Left, clock += 0.1f);
                 for (int tick = 0; !run.Stopped && tick < 10000; tick++) core.Tick(clock += 0.05f);
                 Require(run.Stopped && run.Health == 0 && !core.CanExitAfterClear && !run.SaveEligible
                     && InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", run, false)
