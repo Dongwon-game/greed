@@ -88,7 +88,7 @@ $processes = [Collections.Generic.List[object]]::new()
 $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash;
     StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
-    Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
+    Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; private synthetic lobby notices seed scoped goals. Not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
     RegistryPath=$registryPath; Processes=$processes; Phases=@(); Inputs=@(); SafetyControls=@();
     OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
@@ -104,7 +104,7 @@ if ($UnreadableSave) {
     $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
 }
 if ($BackgroundResults) {
-    $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
+    $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes; private synthetic lobby notices seed scoped goals. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
 }
 if ($InteractiveWindow) {
     $report.Scope = 'Interactive isolated player window phases and fresh-process persistence. External UI actions must be separately observed and recorded; this script does not identify the close trigger or claim physical timing, audible output or device performance.'
@@ -310,6 +310,14 @@ try {
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
         }
+        $scopedGoals = !($PracticeQuit -or $UnreadableSave -or $InteractiveLoadout -or $InteractiveMenus -or $InteractiveWindow)
+        if ($result.scopedGoalsRequested -ne $scopedGoals -or
+            $result.normalReviewGoalEarned -ne ($scopedGoals -and $phase -eq 'clear') -or
+            $result.normalReviewGoalPersisted -ne ($scopedGoals -and $phase -in @('save','first-use','last-use','verify','verify-again')) -or
+            $result.infiniteReviewGoalEarned -ne ($scopedGoals -and $phase -eq 'last-use') -or
+            $result.infiniteReviewGoalPersisted -ne ($scopedGoals -and $phase -in @('verify','verify-again'))) {
+            throw ('Scoped review goal earnings and fresh-process persistence coverage is incomplete: ' + $phase)
+        }
         if ($InteractiveMenus -and !$result.nativeMenuCandidatePreserved) {
             throw ('Required native menu/candidate coverage did not complete: ' + $phase)
         }
@@ -327,7 +335,9 @@ try {
             PracticeReviewCompleted=$result.practiceReviewCompleted;
             LegacyRecordComparisonBlindSpots=$result.legacyRecordComparisonBlindSpots; SavedSlotComparisons=$result.savedSlotComparisons;
             NormalRecordComparisons=$result.normalRecordComparisons; InfiniteRecordComparisons=$result.infiniteRecordComparisons;
-            AttemptRecordComparisons=$result.attemptRecordComparisons}
+            AttemptRecordComparisons=$result.attemptRecordComparisons; ScopedGoalsRequested=$result.scopedGoalsRequested;
+            NormalReviewGoalEarned=$result.normalReviewGoalEarned; NormalReviewGoalPersisted=$result.normalReviewGoalPersisted;
+            InfiniteReviewGoalEarned=$result.infiniteReviewGoalEarned; InfiniteReviewGoalPersisted=$result.infiniteReviewGoalPersisted}
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true

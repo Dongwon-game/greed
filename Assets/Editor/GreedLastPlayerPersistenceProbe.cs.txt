@@ -12,6 +12,8 @@ namespace GreedLast.PlayerChecks
     {
         private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.NonPublic;
         private const string UnreadableFixtureValue = "not-json-private-save-guard-fixture";
+        private const string NormalReviewGoal = "1장 보정 0회";
+        private const string InfiniteReviewGoal = "다음 구간 무실수";
         private GreedLastApp app;
         private GreedLastRunCore core;
         private GreedLastMockBackend backend;
@@ -31,6 +33,8 @@ namespace GreedLast.PlayerChecks
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool quitCallbackObserved;
             public bool backgroundResultsRequested;
+            public bool scopedGoalsRequested, normalReviewGoalEarned, normalReviewGoalPersisted;
+            public bool infiniteReviewGoalEarned, infiniteReviewGoalPersisted;
             public int backgroundChecks;
             public int clears, failures, abandons, infiniteRuns, growthPoints, automaticResumes;
             public int inputUnavailableWaitFrames, resumeCountdownWaitFrames;
@@ -154,6 +158,8 @@ namespace GreedLast.PlayerChecks
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             bool unreadablePhase = phase.StartsWith("unreadable-", StringComparison.Ordinal);
             bool practiceQuitPhase = phase.StartsWith("practice-", StringComparison.Ordinal);
+            result.scopedGoalsRequested = Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
+                "live-normal", "normal-fail", "verify-failure", "verify-failure-again" }, phase) >= 0;
             Require(!practiceQuitPhase || !backgroundResults, "Practice-quit checks must run separately from background result settlement.");
             Require(!unreadablePhase || !backgroundResults, "Unreadable-storage checks must run separately from result settlement.");
             if (unreadablePhase && phase != "unreadable-seed")
@@ -171,6 +177,12 @@ namespace GreedLast.PlayerChecks
                 && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase && !practiceQuitPhase)
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
                 "Completing the real first practice must persist across player restarts.");
+
+            if (phase == "save" || phase == "first-use" || phase == "last-use" || phase == "verify" || phase == "verify-again")
+            {
+                RequireReviewProfile(Read<GreedLastRunRecord>(backend, "lastRunRecord").TimingProfile, NormalReviewGoal, "달성 보정 0");
+                result.normalReviewGoalPersisted = true;
+            }
 
             if (practiceQuitPhase)
             {
@@ -366,9 +378,16 @@ namespace GreedLast.PlayerChecks
                 Call(app, "RequestPracticeRun");
                 yield return DriveCourse();
                 Require(core.IsPracticeComplete, "The real first practice must finish without developer shortcuts.");
-                Call(app, "RequestNextRunPattern");
+                if (phase == "clear")
+                {
+                    Call(app, "RequestReturnToLobby");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+                    state.ShowLocalNotice("탈출 실패 기록 저장\n재도전 목표: " + NormalReviewGoal);
+                    Call(app, "RequestNormalRun");
+                }
+                else Call(app, "RequestNextRunPattern");
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
-                yield return DriveCourse();
+                yield return DriveCourse(chapterTwoGood: phase == "clear");
                 bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
                 bool settledNativeClear = (phase == "window-loadout" || phase == "window-menu") && backend.HasSaveLoadoutCandidate
                     && Count("normalClearCount") == 1;
@@ -376,6 +395,16 @@ namespace GreedLast.PlayerChecks
                     "The actual clear must be unsettled, or already settled once in a native menu mode only.");
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
+                if (phase == "clear")
+                {
+                    GreedLastRunSnapshot run = RunState();
+                    Require(run.ReviewTargetText == NormalReviewGoal && run.ReviewTargetScoped && run.ReviewTargetScopeCompleted
+                        && run.ReviewTargetGoodCount == 0 && run.ReviewTargetMissCount == 0
+                        && record.SuccessCount == 14 && record.GoodCount == 1 && record.MissCount == 0,
+                        "The actual normal course must finish its named first chapter with only a later off-scope Good.");
+                    RequireReviewProfile(record.TimingProfile, NormalReviewGoal, "달성 보정 0");
+                    result.normalReviewGoalEarned = true;
+                }
                 result.record = From(record);
                 if (backgroundResults) yield return VerifyBackgroundBoundary(clear: true);
                 if (phase == "window-menu")
@@ -451,6 +480,7 @@ namespace GreedLast.PlayerChecks
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Real starts and prior live quit must preserve their exact consumption boundary.");
                 VerifySavedSlotRecord();
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), Previous("clear").record);
+                if (phase == "last-use") state.ShowLocalNotice("무한 복기 재도전\n목표: " + InfiniteReviewGoal);
                 yield return PrepareInfinite();
                 if (phase == "first-use")
                 {
@@ -467,11 +497,18 @@ namespace GreedLast.PlayerChecks
                     Require(EmptySlots() && core.IsInfiniteRun && !RunState().Stopped,
                         "The second real start must clear the slot without destroying its active run.");
                     result.secondRunAliveAfterSlotClear = true;
-                    yield return WaitFor(() => RunState().Stopped);
+                    Require(RunState().ReviewTargetText == InfiniteReviewGoal,
+                        "The actual last-use preparation must transfer its current review goal, not the saved normal goal.");
+                    yield return DriveCourse(maxResponses: 3);
                     Require(core.IsStoppedInfiniteRun && Count("infiniteRunCount") == 0,
                         "Quit must be the first settlement of the naturally ended infinite run.");
                     GreedLastInfiniteRunRecord record = core.CreateInfiniteRunRecord();
                     Require(record.IsValid, "The naturally ended real player must produce a record.");
+                    Require(result.infiniteReviewGoalEarned && RunState().MissCount > 0
+                        && RunState().ReviewTargetScopeCompleted && RunState().ReviewTargetGoodCount == 0
+                        && RunState().ReviewTargetMissCount == 0,
+                        "Later natural misses must retain the first completed review section before normal quit.");
+                    RequireReviewProfile(record.TimingProfile, InfiniteReviewGoal, "달성 무실수");
                     result.record = From(record);
                     result.expectedInfiniteGrowthReward = (int)typeof(GreedLastMockBackend)
                         .GetMethod("BuildInfiniteGrowthReward", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { record });
@@ -493,6 +530,12 @@ namespace GreedLast.PlayerChecks
                     && Count("infiniteRunCount") == 1 && backend.LoadSelectedSaveSlotView().GrowthPoints == 3 + prior.expectedInfiniteGrowthReward,
                     "Fresh processes must retain the empty slot and exactly one terminal infinite record/reward.");
                 SameRecord(From(Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord")), prior.record);
+                GreedLastInfiniteRunRecord restored = Read<GreedLastInfiniteRunRecord>(backend, "lastInfiniteRunRecord");
+                RequireReviewProfile(restored.TimingProfile, InfiniteReviewGoal, "달성 무실수");
+                string preparation = GreedLastApp.BuildInfinitePreparationReviewContextFromLobbyDetail(backend.BuildInfiniteRunResultMessage(restored));
+                Require(preparation.Contains("목표: 다음 구간 보정 0회", StringComparison.Ordinal),
+                    "A fresh process must advance the persisted achieved first-section goal through the real preparation builder.");
+                result.infiniteReviewGoalPersisted = true;
                 if (phase == "verify-again") Require(Previous("verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
                     "Closing a settled lobby must not duplicate growth rewards.");
             }
@@ -931,9 +974,18 @@ namespace GreedLast.PlayerChecks
             Require(Read<int>(app, "infinitePreparationStep") == 2, "Both ordinary preparation choices must complete.");
         }
 
-        private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false)
+        private static void RequireReviewProfile(string profile, string goal, string outcome)
+        {
+            Require(profile != null && profile.Contains("복기 목표 " + goal + " / 복기 결과 " + outcome, StringComparison.Ordinal),
+                "The real player record must retain its earned scoped review outcome: " + goal);
+        }
+
+        private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
+            bool chapterTwoGood = false, int maxResponses = int.MaxValue)
         {
             float nextChoice = 0f;
+            bool injectedGood = false;
+            int responses = 0;
             while (!RunState().Stopped)
             {
                 CheckDeadline();
@@ -963,12 +1015,30 @@ namespace GreedLast.PlayerChecks
                     Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
                     nextChoice = now + 0.25f;
                 }
-                else if (respond && run.ActivePattern && !run.CountdownActive && !run.Paused
-                    && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds
+                else if (respond && responses < maxResponses && run.ActivePattern && !run.CountdownActive && !run.Paused
                     && run.LastResult == GreedLastJudgementResult.None)
+                {
+                    bool good = chapterTwoGood && !injectedGood && run.Phase == GreedLastRunPhase.RunPlaying && run.ChapterIndex == 2;
+                    float inputAt = run.Pattern.CoreSeconds + (good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f);
+                    if (run.ElapsedSeconds + core.InputTimingOffsetSeconds < inputAt) { yield return null; continue; }
                     Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                    if (chapterTwoGood || maxResponses != int.MaxValue)
+                        Require(RunState().LastResult == (good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success),
+                            "The process probe must earn its requested judgement through actual frames and app commands.");
+                    responses++;
+                    injectedGood |= good;
+                    if (maxResponses == 3 && core.IsInfiniteRun && responses == 3)
+                    {
+                        Require(RunState().ReviewTargetScoped && RunState().ReviewTargetScopeCompleted
+                            && RunState().InfiniteSectionsCleared == 1 && RunState().ReviewTargetGoodCount == 0
+                            && RunState().ReviewTargetMissCount == 0,
+                            "Three actual responses must complete the first reviewed infinite section before later failure.");
+                        result.infiniteReviewGoalEarned = true;
+                    }
+                }
                 yield return null;
             }
+            if (chapterTwoGood) Require(injectedGood, "The full process course must include the off-scope Good control.");
             yield return null;
         }
 
