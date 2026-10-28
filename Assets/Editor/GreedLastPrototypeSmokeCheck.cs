@@ -34,7 +34,7 @@ namespace GreedLast.Editor
         {
             Require(CanRun(), "Clear action checks require an idle Edit-mode editor.");
             var failures = new List<string>();
-            int clears = 0, failuresChecked = 0;
+            int clears = 0, failuresChecked = 0, layoutCases = 0;
             foreach (bool refill in new[] { false, true })
             {
                 var core = new GreedLastRunCore();
@@ -110,6 +110,7 @@ namespace GreedLast.Editor
                         + order.Replace("\n", " / ") + " / 콤14") == "[S] 1660점 / 콤14",
                     "Current action guidance must stay out of record rows while preserving actual score/combo values.");
                 Require(publications == beforePublications && run.Equals(before), "Reading follow-up guidance must not mutate the completed run.");
+                layoutCases += VerifyClearResultLayout(run);
                 clears++;
 
                 core.Enter(string.Empty, refill);
@@ -125,9 +126,92 @@ namespace GreedLast.Editor
             }
             Require(failures.Count == 0, "Clear follow-up guidance must name the actual save-slot button: " + string.Join(" | ", failures));
             Debug.Log("Greed clear action consistency passed: two actual 15-judgement/8-choice clears and two natural failures; "
+                + layoutCases + " result layouts with complete visible text and non-overlapping controls; "
                 + "header/progress/playtest guidance matches both primary button modes, alternate lobby and failure actions retained. "
                 + "Transient cores/backends only; no personal saves, desktop input/capture or audible/device verification.");
-            Require(clears == 2 && failuresChecked == 2, "All clear action controls must complete.");
+            Require(clears == 2 && failuresChecked == 2 && layoutCases == 24, "All clear action and layout controls must complete.");
+        }
+
+        private static int VerifyClearResultLayout(GreedLastRunSnapshot run)
+        {
+            GameObject existingCamera = GameObject.Find("GreedLastCamera");
+            GameObject existingEventSystem = GameObject.Find("GreedLastEventSystem");
+            var host = new GameObject("GreedClearResultLayoutCheck");
+            GameObject canvasRoot = null;
+            int cases = 0;
+            try
+            {
+                var ui = host.AddComponent<GreedLastRuntimeUi>();
+                InitializeRuntimeUiSmoke(ui, playerControls: true);
+                RectTransform root = GetRuntimeUiField<RectTransform>(ui, "rootPanelRect");
+                Canvas canvas = root.GetComponentInParent<Canvas>();
+                canvasRoot = canvas.gameObject;
+                canvas.GetComponent<CanvasScaler>().enabled = false;
+                canvas.renderMode = RenderMode.WorldSpace;
+                RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+                foreach (Vector2Int size in new[] { new Vector2Int(640, 360), new Vector2Int(800, 600), new Vector2Int(844, 390) })
+                foreach (bool inset in new[] { false, true })
+                foreach (bool clean in new[] { false, true })
+                {
+                    canvas.scaleFactor = size.y / 1920f;
+                    canvasRect.sizeDelta = new Vector2(1920f * size.x / size.y, 1920f);
+                    canvasRect.position = Vector3.zero;
+                    canvasRect.rotation = Quaternion.identity;
+                    canvasRect.localScale = Vector3.one * (10f / 1920f);
+                    SetRuntimeUiField(ui, "devCleanViewEnabled", clean);
+                    ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Clear result layout", string.Empty, 0));
+                    ui.RenderRun(run);
+                    InvokeRuntimeUiInstance(ui, "ApplySafeAreaSample",
+                        inset ? new Rect(24f, 8f, size.x - 32f, size.y - 16f) : new Rect(0f, 0f, size.x, size.y),
+                        size.x, size.y, true);
+                    Canvas.ForceUpdateCanvases();
+                    Text body = GetRuntimeUiField<Text>(ui, "detailText");
+                    Button primary = GetRuntimeUiField<Button>(ui, "nextPatternButton");
+                    Button back = GetRuntimeUiField<Button>(ui, "returnLobbyButton");
+                    Require(body.enabled && body.gameObject.activeInHierarchy
+                        && body.text == InvokeRuntimeUiLabel("BuildStoppedRunSummary", run)
+                        && body.text.Contains("저장 기회 1회", StringComparison.Ordinal)
+                        && !body.text.Contains("저장하기", StringComparison.Ordinal)
+                        && GetButtonLabel(primary) == "저장 슬롯 선택" && primary.IsInteractable()
+                        && GetButtonLabel(back) == "저장 없이 로비" && back.IsInteractable(),
+                        "The final result render must use its compact summary and actual clickable save/lobby labels, not the intermediate header.");
+                    Text[] labels = { GetRuntimeUiField<Text>(ui, "titleText"), body,
+                        primary.GetComponentInChildren<Text>(), back.GetComponentInChildren<Text>() };
+                    foreach (Text label in labels)
+                    {
+                        Require(GreedLastPrototypeFontCheck.IsTextComplete(label, out int visible, out int full, out _)
+                            && visible > 0 && visible == full,
+                            "Clear result text must be fully generated at every sampled layout: " + label.name);
+                        label.cachedTextGenerator.Populate(label.text, label.GetGenerationSettings(label.rectTransform.rect.size));
+                        Rect textRect = label.rectTransform.rect;
+                        foreach (UIVertex vertex in label.cachedTextGenerator.verts)
+                        {
+                            Vector3 point = vertex.position / label.pixelsPerUnit;
+                            Require(point.x >= textRect.xMin - 3f && point.x <= textRect.xMax + 3f
+                                && point.y >= textRect.yMin - 3f && point.y <= textRect.yMax + 3f,
+                                "Clear result glyphs must stay inside their own text area: " + label.name);
+                        }
+                    }
+                    Rect primaryBounds = BoundsInRoot(primary.GetComponent<RectTransform>(), root);
+                    Rect backBounds = BoundsInRoot(back.GetComponent<RectTransform>(), root);
+                    Rect bodyBounds = BoundsInRoot(body.rectTransform, root);
+                    Require(root.rect.Contains(primaryBounds.min) && root.rect.Contains(primaryBounds.max)
+                        && root.rect.Contains(backBounds.min) && root.rect.Contains(backBounds.max)
+                        && root.rect.Contains(bodyBounds.min) && root.rect.Contains(bodyBounds.max)
+                        && !primaryBounds.Overlaps(backBounds) && !primaryBounds.Overlaps(bodyBounds)
+                        && !backBounds.Overlaps(bodyBounds), "Clear result body and actions must fit the safe area without overlap.");
+                    cases++;
+                }
+            }
+            finally
+            {
+                if (canvasRoot != null) UnityEngine.Object.DestroyImmediate(canvasRoot);
+                DestroySmokeCreatedObject("GreedLastCamera", existingCamera);
+                DestroySmokeCreatedObject("GreedLastEventSystem", existingEventSystem);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+            return cases;
         }
 
         [MenuItem("Greed Last/Run Infinite Result Action Check")]
