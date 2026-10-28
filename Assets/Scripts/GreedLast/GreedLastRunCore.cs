@@ -4499,7 +4499,7 @@ namespace GreedLast
                 + " / 집중 +" + bonus.FocusBonus
                 + " / 콤보 +" + bonus.ComboBonus
                 + " / 점수 +" + bonus.ScoreBonus;
-            string reason = BuildInfiniteLoadoutBonusReason(loadoutRecord);
+            string reason = BuildInfiniteLoadoutBonusReason(loadoutRecord, bonus);
             return string.IsNullOrEmpty(reason)
                 ? text
                 : text + "\n근거: " + reason;
@@ -4623,7 +4623,6 @@ namespace GreedLast
             int focusBonus = 0;
             int comboBonus = 0;
             int scoreBonus = Mathf.Clamp(Mathf.RoundToInt(loadoutRecord.Score * 0.10f), 0, 200);
-            long judgementTotal = (long)loadoutRecord.SuccessCount + loadoutRecord.GoodCount + loadoutRecord.MissCount;
 
             AccumulateLoadoutKeywordBonus(loadoutRecord.StartGift, ref healthBonus, ref focusBonus, ref comboBonus, ref scoreBonus);
             int survivalGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "생존 축");
@@ -4667,7 +4666,7 @@ namespace GreedLast
                 scoreBonus += 60;
             }
 
-            if (judgementTotal > 0 && loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount >= (long)loadoutRecord.GoodCount + loadoutRecord.MissCount)
+            if (HasLoadoutAccuracyBonus(loadoutRecord))
             {
                 focusBonus += 1;
                 scoreBonus += 40;
@@ -4698,7 +4697,15 @@ namespace GreedLast
                 Mathf.Clamp(scoreBonus, 0, 300));
         }
 
-        private static string BuildInfiniteLoadoutBonusReason(GreedLastRunRecord loadoutRecord)
+        private static bool HasLoadoutAccuracyBonus(GreedLastRunRecord record)
+        {
+            long total = (long)record.SuccessCount + record.GoodCount + record.MissCount;
+            return total > 0 && record.MissCount <= 1
+                && record.SuccessCount >= (long)record.GoodCount + record.MissCount;
+        }
+
+        private static string BuildInfiniteLoadoutBonusReason(
+            GreedLastRunRecord loadoutRecord, GreedLastInfiniteLoadoutBonus bonus)
         {
             if (!loadoutRecord.IsValid)
             {
@@ -4711,17 +4718,17 @@ namespace GreedLast
             int chainGiftStacks = CountChoiceOccurrences(loadoutRecord.ChoiceSummary, "연쇄 축");
             AppendBonusReason(
                 ref reason,
-                loadoutRecord.Health >= 4 || survivalGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "생존 축"),
+                bonus.HealthBonus > 0,
                 survivalGiftStacks > 1 ? "생존 x" + survivalGiftStacks : "생존");
             AppendBonusReason(
                 ref reason,
-                loadoutRecord.Focus >= MaxFocus || focusGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "집중 축"),
+                bonus.FocusBonus > 0,
                 focusGiftStacks > 1 ? "집중 x" + focusGiftStacks : "집중");
             AppendBonusReason(
                 ref reason,
-                loadoutRecord.MaxCombo >= 6 || chainGiftStacks > 0 || ContainsChoice(loadoutRecord.PrimaryGift, "연쇄 축"),
+                bonus.ComboBonus > 0,
                 chainGiftStacks > 1 ? "연쇄 x" + chainGiftStacks : "연쇄");
-            AppendBonusReason(ref reason, loadoutRecord.MissCount <= 1 && loadoutRecord.SuccessCount > 0, "정확도");
+            AppendBonusReason(ref reason, HasLoadoutAccuracyBonus(loadoutRecord), "정확도");
             AppendBonusReason(ref reason, ExtractPrecisionStreak(loadoutRecord.TimingProfile) >= 3, "정박");
             AppendBonusReason(ref reason, loadoutRecord.Score >= 700 || ContainsChoice(loadoutRecord.StartGift, "고점 본능"), "고점");
             return reason;
