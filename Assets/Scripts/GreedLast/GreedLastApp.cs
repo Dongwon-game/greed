@@ -19519,7 +19519,7 @@ namespace GreedLast
 
             bool visible = BuildRouteCadencePipState(snapshot, 0) != "hidden";
             routeCadencePipsRoot.SetActive(visible);
-            if (!visible || !TryBuildHudCadence(snapshot, out GreedLastTimingType[] timings))
+            if (!visible || !TryBuildHudCadence(snapshot, out TimingCadence timings))
             {
                 return;
             }
@@ -19644,18 +19644,38 @@ namespace GreedLast
             return index == progress ? "active" : "pending";
         }
 
+        private readonly struct TimingCadence
+        {
+            private readonly GreedLastTimingType first, middle, last;
+
+            public TimingCadence(GreedLastTimingType first, GreedLastTimingType middle, GreedLastTimingType last)
+            {
+                this.first = first;
+                this.middle = middle;
+                this.last = last;
+            }
+
+            public int Length => 3;
+
+            public GreedLastTimingType this[int index] => index switch
+            {
+                0 => first,
+                1 => middle,
+                2 => last,
+                _ => throw new IndexOutOfRangeException(),
+            };
+        }
+
         private static bool TryBuildHudCadence(
             GreedLastRunSnapshot snapshot,
-            out GreedLastTimingType[] timings)
+            out TimingCadence timings)
         {
             if (snapshot.PracticeMode || !snapshot.InfiniteMode && snapshot.ChapterIndex == 1)
             {
-                timings = new[]
-                {
+                timings = new TimingCadence(
                     GreedLastTimingType.Perfect,
                     GreedLastTimingType.Clutch,
-                    GreedLastTimingType.Offbeat,
-                };
+                    GreedLastTimingType.Offbeat);
                 return true;
             }
 
@@ -19664,12 +19684,16 @@ namespace GreedLast
 
         private static string BuildRouteCadencePipActionSymbol(GreedLastRunSnapshot snapshot, int index)
         {
-            if (index < 0 || index >= 3 || !TryBuildHudAvoidanceCadence(snapshot, out GreedLastAvoidanceType[] actions))
+            if (index < 0 || index >= 3 || !TryBuildHudCadence(snapshot, out _))
             {
                 return string.Empty;
             }
 
-            switch (actions[index])
+            bool finalValidation = snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4;
+            int authoredChapter = snapshot.PracticeMode || snapshot.ChapterIndex <= 1
+                ? 1 : finalValidation ? 4 : snapshot.ChapterIndex;
+            switch (GreedLastRunCore.GetAuthoredAvoidanceType(
+                authoredChapter, index, snapshot.PracticeMode, false, finalValidation, snapshot.ActiveRouteProfile))
             {
                 case GreedLastAvoidanceType.Jump:
                     return "↑";
@@ -19680,35 +19704,6 @@ namespace GreedLast
                 default:
                     return string.Empty;
             }
-        }
-
-        private static bool TryBuildHudAvoidanceCadence(
-            GreedLastRunSnapshot snapshot,
-            out GreedLastAvoidanceType[] actions)
-        {
-            actions = null;
-            if (!TryBuildHudCadence(snapshot, out _))
-            {
-                return false;
-            }
-
-            bool finalValidation = snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4;
-            int authoredChapter = snapshot.PracticeMode || snapshot.ChapterIndex <= 1
-                ? 1
-                : finalValidation ? 4 : snapshot.ChapterIndex;
-            actions = new GreedLastAvoidanceType[3];
-            for (int i = 0; i < actions.Length; i += 1)
-            {
-                actions[i] = GreedLastRunCore.GetAuthoredAvoidanceType(
-                    authoredChapter,
-                    i,
-                    snapshot.PracticeMode,
-                    false,
-                    finalValidation,
-                    snapshot.ActiveRouteProfile);
-            }
-
-            return true;
         }
 
         private static Color32 BuildRouteCadencePipTimingColor(GreedLastTimingType timingType)
@@ -23568,7 +23563,7 @@ namespace GreedLast
 
         private static string BuildRouteCadenceCompact(GreedLastRunSnapshot snapshot)
         {
-            if (!TryBuildRouteCadence(snapshot, out _, out GreedLastTimingType[] timings))
+            if (!TryBuildRouteCadence(snapshot, out _, out TimingCadence timings))
             {
                 return string.Empty;
             }
@@ -24274,7 +24269,7 @@ namespace GreedLast
 
         private static string BuildRouteCadenceCue(GreedLastRunSnapshot snapshot)
         {
-            if (!TryBuildRouteCadence(snapshot, out string routeLabel, out GreedLastTimingType[] timings))
+            if (!TryBuildRouteCadence(snapshot, out string routeLabel, out TimingCadence timings))
             {
                 return snapshot.ChapterIndex == 3 && !string.IsNullOrEmpty(snapshot.ActiveRelic)
                     ? "유물 증폭 · " + snapshot.ActiveRelic
@@ -24383,10 +24378,10 @@ namespace GreedLast
         private static bool TryBuildRouteCadence(
             GreedLastRunSnapshot snapshot,
             out string routeLabel,
-            out GreedLastTimingType[] timings)
+            out TimingCadence timings)
         {
             routeLabel = string.Empty;
-            timings = null;
+            timings = default;
             if (snapshot.InfiniteMode || snapshot.ChapterIndex < 2)
             {
                 return false;
@@ -24396,30 +24391,24 @@ namespace GreedLast
             {
                 case "안정 루트":
                     routeLabel = "안정";
-                    timings = new[]
-                    {
+                    timings = new TimingCadence(
                         GreedLastTimingType.Perfect,
                         GreedLastTimingType.Clutch,
-                        GreedLastTimingType.Perfect,
-                    };
+                        GreedLastTimingType.Perfect);
                     break;
                 case "변주 루트":
                     routeLabel = "변주";
-                    timings = new[]
-                    {
+                    timings = new TimingCadence(
                         GreedLastTimingType.Offbeat,
                         GreedLastTimingType.Perfect,
-                        GreedLastTimingType.Offbeat,
-                    };
+                        GreedLastTimingType.Offbeat);
                     break;
                 case "압박 루트":
                     routeLabel = "압박";
-                    timings = new[]
-                    {
+                    timings = new TimingCadence(
                         GreedLastTimingType.Clutch,
                         GreedLastTimingType.Offbeat,
-                        GreedLastTimingType.Clutch,
-                    };
+                        GreedLastTimingType.Clutch);
                     break;
                 default:
                     return false;
@@ -24427,12 +24416,10 @@ namespace GreedLast
 
             if (snapshot.Phase == GreedLastRunPhase.EscapeRunning || snapshot.ChapterIndex >= 4)
             {
-                timings = new[]
-                {
+                timings = new TimingCadence(
                     GreedLastTimingType.Clutch,
                     GreedLastTimingType.Offbeat,
-                    GreedLastTimingType.Perfect,
-                };
+                    GreedLastTimingType.Perfect);
                 return true;
             }
 
@@ -24441,7 +24428,7 @@ namespace GreedLast
                 GreedLastTimingType relicTiming = BuildRelicCadenceTiming(snapshot.ActiveRelic);
                 if (relicTiming != GreedLastTimingType.None)
                 {
-                    timings[1] = relicTiming;
+                    timings = new TimingCadence(timings[0], relicTiming, timings[2]);
                 }
             }
 
@@ -45857,7 +45844,7 @@ namespace GreedLast
                 || snapshot.Stopped
                 || snapshot.ChapterProgress <= 0
                 || snapshot.ChapterProgress >= snapshot.ChapterTarget
-                || !TryBuildRouteCadence(snapshot, out routeLabel, out GreedLastTimingType[] timings))
+                || !TryBuildRouteCadence(snapshot, out routeLabel, out TimingCadence timings))
             {
                 return false;
             }
