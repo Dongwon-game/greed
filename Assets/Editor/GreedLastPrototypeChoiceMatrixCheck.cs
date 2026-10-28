@@ -20,17 +20,24 @@ namespace GreedLast.Editor
             duplicate[0, 0] = 3;
             Require(!CoversEveryPair(duplicate), "Coverage validation must reject out-of-range choices.");
             int clears = 0, starts = 0;
-            foreach (int accuracy in new[] { 0, 1, 2 })
+            foreach (int accuracy in new[] { 0, 1, 2, 3 })
             for (int row = 0; row < matrix.GetLength(0); row++)
             {
                 VerifyPath(matrix, row, accuracy, ref starts);
                 clears++;
             }
-            Require(clears == 81 && starts == 162, "Every mixed path must finish and start both allocated uses.");
+            int failures = 0;
+            for (int row = 0; row < matrix.GetLength(0); row++)
+            {
+                VerifyNaturalFailure(matrix, row);
+                failures++;
+            }
+            Require(clears == 108 && starts == 216 && failures == 27, "Every mixed path and negative control must finish.");
             Debug.Log("Greed mixed choice pairs passed: 27 rows cover all 45 choice pairs / 405 pair values, "
-                + "81 actual normal clears (exact/Good/mixed), 1215 judgements, 648 choices, 162 prepared infinite starts and first traps, "
+                + "108 actual normal clears (exact/Good/mixed/one miss), 1620 clear judgements, 864 clear choices, "
+                + "27 natural no-input failures, 216 prepared infinite starts and first traps, "
                 + "one save/two uses/automatic clear, third-use rejection and live last-use preservation. "
-                + "Memory-only backends and synthetic core clocks; not 162 full infinite runs or native input/device proof.");
+                + "Memory-only backends and synthetic core clocks; not 216 full infinite runs or native input/device proof.");
         }
 
         private static int[,] BuildMatrix()
@@ -88,16 +95,19 @@ namespace GreedLast.Editor
                     if (run.StartCountdownActive) { core.Tick(clock += 2f); core.Tick(clock += 1f); }
                     if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                     Require(run.ActivePattern && !run.CountdownActive, "Mixed paths must reach authored traps: " + context);
-                    bool exact = accuracy == 0 || accuracy == 2 && judgements % 2 == 0;
+                    bool exact = accuracy == 0 || accuracy == 3 || accuracy == 2 && judgements % 2 == 0;
                     float delta = exact ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                     clock += run.Pattern.CoreSeconds + delta - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    GreedLastRunChannel channel = accuracy == 3 && judgements == 4
+                        ? (GreedLastRunChannel)((int)run.Pattern.Channel % 3 + 1) : run.Pattern.Channel;
+                    core.HandleInput(channel, clock);
                     judgements++;
                 }
-                int expectedExact = accuracy == 0 ? 15 : accuracy == 1 ? 0 : 8;
+                int expectedExact = accuracy == 0 ? 15 : accuracy == 1 ? 0 : accuracy == 3 ? 14 : 8;
+                int expectedMiss = accuracy == 3 ? 1 : 0;
                 Require(core.CanExitAfterClear && run.EscapeSucceeded && run.SaveEligible && run.Health > 0
                     && choices == 8 && judgements == 15 && run.SuccessCount == expectedExact
-                    && run.GoodCount == 15 - expectedExact && run.MissCount == 0,
+                    && run.GoodCount == 15 - expectedExact - expectedMiss && run.MissCount == expectedMiss,
                     "Every mixed path must finish the real core, including all-Good survival: " + context);
                 var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                 backend.RegisterClear(core.CreateRunRecord());
@@ -120,6 +130,44 @@ namespace GreedLast.Editor
                     VerifyInfiniteStart(backend, prepared, use == 1, context);
                     starts++;
                 }
+            }
+            finally { core.Exit(); }
+        }
+
+        private static void VerifyNaturalFailure(int[,] matrix, int row)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += value => run = value;
+            core.Enter();
+            float clock = Time.realtimeSinceStartup;
+            int choices = 0;
+            try
+            {
+                for (int step = 0; !run.Stopped && step < 100; step++)
+                {
+                    if (run.ChoiceActive)
+                    {
+                        Require(choices < 8, "Failure controls must not invent extra choices.");
+                        core.HandleInput((GreedLastRunChannel)(matrix[row, choices++] + 1), clock += 0.1f);
+                        continue;
+                    }
+                    if (run.StartCountdownActive) { core.Tick(clock += 2f); core.Tick(clock += 1f); }
+                    if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                    Require(run.ActivePattern, "Failure controls must reach real traps.");
+                    clock += Mathf.Max(run.Pattern.HitSeconds,
+                        run.Pattern.CoreSeconds + run.Pattern.GoodWindowSeconds) + 0.1f - run.ElapsedSeconds;
+                    core.Tick(clock);
+                }
+                Require(run.Stopped && run.Health == 0 && run.MissCount >= 3
+                    && run.SuccessCount == 0 && run.GoodCount == 0 && !core.CanExitAfterClear
+                    && !run.SaveEligible && !core.CreateRunRecord().IsValid,
+                    "Mixed choices must naturally fail without creating a clear candidate: row=" + row);
+                var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
+                backend.RegisterClear(core.CreateRunRecord());
+                Require(backend.RegisterNormalAttempt(core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Failed))
+                    && !backend.HasSaveLoadoutCandidate && !backend.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                    "A failed attempt must remain a failure record, not a stored clear: row=" + row);
             }
             finally { core.Exit(); }
         }
