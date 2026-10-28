@@ -4286,7 +4286,11 @@ namespace GreedLast
             }
 
             int stacks = CountChoiceOccurrences(record.ChoiceSummary, gift);
-            return stacks > 0 || !HasChoice(record.PrimaryGift, gift) ? stacks : 1;
+            if (stacks > 0 || !HasChoice(record.PrimaryGift, gift)) return stacks;
+            bool hasGiftHistory = CountChoiceOccurrences(record.ChoiceSummary, "집중 축") > 0
+                || CountChoiceOccurrences(record.ChoiceSummary, "생존 축") > 0
+                || CountChoiceOccurrences(record.ChoiceSummary, "연쇄 축") > 0;
+            return hasGiftHistory ? 0 : 1;
         }
 
         private void RecordChoice(GreedLastChoiceKind completedKind, string selected)
