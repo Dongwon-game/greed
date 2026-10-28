@@ -29,6 +29,80 @@ namespace GreedLast.Editor
         [MenuItem("Greed Last/Run Prototype Smoke Check", true)]
         private static bool CanRun() => !EditorApplication.isPlayingOrWillChangePlaymode;
 
+        [MenuItem("Greed Last/Run Clear Action Consistency Check")]
+        public static void RunClearActionConsistencyCheck()
+        {
+            Require(CanRun(), "Clear action checks require an idle Edit-mode editor.");
+            var failures = new List<string>();
+            int clears = 0, failuresChecked = 0;
+            foreach (bool refill in new[] { false, true })
+            {
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot run = default;
+                int publications = 0;
+                core.SnapshotChanged += value => { run = value; publications++; };
+                float clock = Time.realtimeSinceStartup;
+                core.Enter(string.Empty, refill);
+                int judgements = 0, choices = 0;
+                for (int step = 0; !run.Stopped && step < 100; step++)
+                {
+                    if (run.ChoiceActive)
+                    {
+                        core.HandleInput(GreedLastRunChannel.Center, clock += 0.1f);
+                        choices++;
+                        continue;
+                    }
+                    if (run.StartCountdownActive)
+                    {
+                        core.Tick(clock += 2f);
+                        core.Tick(clock += 1f);
+                    }
+                    if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+                    Require(run.ActivePattern && !run.CountdownActive, "Clear action controls require actual authored traps.");
+                    clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
+                    core.HandleInput(run.Pattern.Channel, clock);
+                    judgements++;
+                }
+                Require(core.CanExitAfterClear && run.Stopped && run.EscapeSucceeded && run.SaveEligible
+                    && judgements == 15 && choices == 8, "Clear action controls must finish normal/refill runs without shortcuts.");
+                GreedLastRunSnapshot before = run;
+                int beforePublications = publications;
+                string primary = InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", run, true);
+                Require(primary == "저장 슬롯 선택"
+                    && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", run, true, true) == primary
+                    && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", run, true, false) == primary
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", run, true) == "저장 없이 로비",
+                    "The clear action baseline must use the actual primary and alternate labels in both display modes.");
+                string progress = InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", run);
+                if (!progress.Contains(primary, StringComparison.Ordinal) || progress.Contains("입구로 나가기", StringComparison.Ordinal))
+                    failures.Add((refill ? "refill" : "normal") + " progress=" + progress);
+                var backend = CreateIsolatedBackend();
+                backend.RegisterClear(core.CreateRunRecord());
+                string order = InvokeMockBackendLabel(backend, "BuildPrototypePlaytestOrderText");
+                if (!order.Contains(primary + "→클리어 요약", StringComparison.Ordinal)
+                    || order.Contains("입구로 나가기", StringComparison.Ordinal))
+                    failures.Add((refill ? "refill" : "normal") + " playtest-order=" + order);
+                Require(publications == beforePublications && run.Equals(before), "Reading follow-up guidance must not mutate the completed run.");
+                clears++;
+
+                core.Enter(string.Empty, refill);
+                core.HandleInput(GreedLastRunChannel.Center, clock += 0.1f);
+                for (int tick = 0; !run.Stopped && tick < 10000; tick++) core.Tick(clock += 0.05f);
+                Require(run.Stopped && run.Health == 0 && !core.CanExitAfterClear && !run.SaveEligible
+                    && InvokeRuntimeUiLabel("BuildRunNextActionButtonLabel", run, false)
+                        == (refill ? "보충 재시작" : "다시 시작")
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", run, false) == "로비로",
+                    "Natural normal/refill failures must retain restart/lobby actions, not a clear save action.");
+                failuresChecked++;
+                core.Exit();
+            }
+            Require(failures.Count == 0, "Clear follow-up guidance must name the actual save-slot button: " + string.Join(" | ", failures));
+            Debug.Log("Greed clear action consistency passed: two actual 15-judgement/8-choice clears and two natural failures; "
+                + "progress/playtest guidance matches both primary button modes, alternate lobby and failure actions retained. "
+                + "Transient cores/backends only; no personal saves, desktop input/capture or audible/device verification.");
+            Require(clears == 2 && failuresChecked == 2, "All clear action controls must complete.");
+        }
+
         [MenuItem("Greed Last/Run Infinite Result Action Check")]
         public static void RunInfiniteResultActionCheck()
         {
@@ -1874,6 +1948,7 @@ namespace GreedLast.Editor
             VerifySingleUseSaveCandidateAndTwoRunLifetime(fullRunRecord, chapterMissAttempt, chapterGoodAttempt);
             RunSavedGiftPreviewCheck();
             RunInfiniteResultActionCheck();
+            RunClearActionConsistencyCheck();
             RunInfiniteReviewCountCheck();
             RunPreparedSummaryPriorityCheck();
             VerifyLiveRunCoachLines(now + 720f);
