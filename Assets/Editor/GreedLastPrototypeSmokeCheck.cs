@@ -122,11 +122,59 @@ namespace GreedLast.Editor
                 core.Exit();
                 boundaries++;
             }
+            int sourceControls = VerifyBonusReasonSourceControls();
             Debug.Log("Greed loadout bonus reason controls: " + cases + " actual clear/store/start paths, " + boundaries
-                + " independent count boundaries, numeric values preserved, mismatches=" + mismatches.Count);
+                + " independent count boundaries, " + sourceControls
+                + " legacy/route/precision source controls, numeric values preserved, mismatches=" + mismatches.Count);
             Require(mismatches.Count == 0, "Loadout bonus reasons must match awarded bonuses: " + string.Join(" | ", mismatches));
-            Require(cases == 8 && boundaries == 7, "All bonus reason controls must finish.");
+            Require(cases == 8 && boundaries == 7 && sourceControls == 11, "All bonus reason controls must finish.");
             Debug.Log("Greed loadout bonus reasons passed: eight actual clears/stores/infinite starts, independent unchanged numeric bonuses, growth and low/high accuracy isolated. Transient cores/backends only; no personal saves or desktop/device input.");
+        }
+
+        private static int VerifyBonusReasonSourceControls()
+        {
+            var samples = new (string primary, string summary, string timing,
+                int health, int focus, int combo, int score, string reasons)[]
+            {
+                ("생존 축", "", "", 1, 0, 0, 10, "생존"),
+                ("집중 축", "", "", 0, 2, 0, 10, "집중"),
+                ("연쇄 축", "", "", 0, 0, 2, 70, "연쇄"),
+                ("", "안정 루트", "", 1, 0, 0, 10, "생존"),
+                ("", "변주 루트", "", 0, 1, 0, 10, "집중"),
+                ("", "압박 루트", "", 0, 0, 1, 60, "연쇄"),
+                ("", "", "정박 최고 3", 0, 1, 0, 46, "집중 / 정박"),
+                ("", "", "정박 최고 5", 0, 1, 1, 110, "집중 / 연쇄 / 정박"),
+                ("생존 축", "집중 축", "", 0, 2, 0, 10, "집중"),
+                ("", "", "", 0, 0, 0, 10, ""),
+            };
+            int controls = 0;
+            foreach (var sample in samples)
+            {
+                var record = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                    20f, "bonus-source-control", "", sample.primary, "", sample.summary, sample.timing);
+                string detail = GreedLastRunCore.BuildInfiniteLoadoutBonusBreakdown(record);
+                string expected = "보너스 상세: 체력 +" + sample.health + " / 집중 +" + sample.focus
+                    + " / 콤보 +" + sample.combo + " / 점수 +" + sample.score
+                    + (sample.reasons.Length == 0 ? "" : "\n근거: " + sample.reasons);
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot initial = default;
+                core.SnapshotChanged += value => initial = value;
+                try
+                {
+                    core.EnterInfiniteRun(record);
+                    Require(detail == expected && initial.Health == 3 + sample.health
+                        && initial.Focus == sample.focus && initial.Combo == sample.combo
+                        && initial.Score == sample.score && !initial.FocusStateActive,
+                        "Legacy primary-gift fallback, route-only and precision-only reasons must match independent unchanged start values: "
+                        + sample.primary + " / " + sample.summary + " / " + sample.timing + " => " + detail);
+                }
+                finally { core.Exit(); }
+                controls++;
+            }
+            Require(GreedLastRunCore.BuildInfiniteLoadoutBonusBreakdown(default)
+                == "보너스 상세: 기본 체력 / 기본 집중 / 콤보 0 / 점수 0",
+                "Invalid loadouts must keep the existing baseline without any bonus reason.");
+            return controls + 1;
         }
 
         [MenuItem("Greed Last/Run Clear Action Consistency Check")]
