@@ -24170,9 +24170,9 @@ namespace GreedLast
             {
                 titleText.text = snapshot.RefillRun ? "보충 런 완료" : "피라미드 탈출";
                 detailText.text = snapshot.RefillRun
-                    ? "공명핵 회수 완료\n저장하기를 누르면 새 저장 조합 슬롯을 고릅니다.\n저장 후 무한모드 준비로 이어집니다."
+                    ? "공명핵 회수·탈출 완료\n저장 슬롯 선택을 누르면 새 저장 조합의 칸을 고릅니다.\n저장 후 무한모드 준비로 이어집니다."
                         + "\n" + BuildCompletedSegmentReview(snapshot)
-                    : "공명핵 회수 완료\n저장하기를 누르면 슬롯 선택 화면으로 이동합니다.\n저장하지 않으면 바로 로비로 돌아갑니다."
+                    : "공명핵 회수·탈출 완료\n저장 슬롯 선택을 누르면 클리어 요약과 칸 선택으로 이동합니다.\n저장 없이 로비로 나갈 수도 있습니다."
                         + "\n" + BuildCompletedSegmentReview(snapshot);
                 return;
             }
