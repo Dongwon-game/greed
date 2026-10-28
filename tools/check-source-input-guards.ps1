@@ -21,14 +21,16 @@ if ([IO.Path]::GetDirectoryName($root) -cne $reportParent -or
     (Test-Path -LiteralPath $root) -or (Test-Path -LiteralPath $fixtureRoot)) { throw 'Fresh owned test directories are required.' }
 [void][IO.Directory]::CreateDirectory($root)
 [void][IO.Directory]::CreateDirectory($fixtureRoot)
+$emptyHooks = Join-Path $fixtureRoot 'empty-hooks'
+[void][IO.Directory]::CreateDirectory($emptyHooks)
 $runners = @(
     @{Name='engine'; Path=(Join-Path $project 'tools\check-engine-loop.ps1'); Message='Review and commit changed game/editor inputs before exporting a check.'},
     @{Name='player'; Path=(Join-Path $project 'tools\check-player-persistence.ps1'); Message='Commit or review changed game inputs before exporting a probe.'}
 )
 $report = [ordered]@{Id=$id; SourceHead=$head; StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     ExpectedFailure=[bool]$ExpectedFailure; Succeeded=$false; Reproduced=$false; Error=''; FixtureRoot=$fixtureRoot;
-    FixturesRetained=$true; AllNoExports=$false; MissedDirtyGuards=0; Cases=@(); Inputs=@();
-    Scope='Two real runner preflights with -WhatIf against seven tiny synthetic Git repositories. No Unity process, source export, personal preferences, screen input/capture, game build or real font mutation.'}
+    FixturesRetained=$true; AllNoExports=$false; FixtureSourcesUnchanged=$false; MissedDirtyGuards=0; Cases=@(); Inputs=@();
+    Scope='Two real runner preflights with -WhatIf against nine tiny synthetic Git repositories, including allowed documentation/tool-only changes. Fixture Git hooks and commit signing are disabled locally per command. No Unity process, source export, personal preferences, screen input/capture, game build or real font mutation.'}
 
 function Write-Fixture([string]$Directory, [string]$Relative, [string]$Text) {
     $path = [IO.Path]::GetFullPath((Join-Path $Directory $Relative))
@@ -38,7 +40,7 @@ function Write-Fixture([string]$Directory, [string]$Relative, [string]$Text) {
 }
 
 function Invoke-FixtureGit([string]$Directory, [string[]]$Arguments) {
-    $output = @(git -C $Directory @Arguments 2>&1)
+    $output = @(git -c ('core.hooksPath=' + $emptyHooks) -c commit.gpgSign=false -C $Directory @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) { throw ('Fixture Git failed: ' + ($output -join ' ')) }
 }
 
@@ -56,6 +58,8 @@ try {
         folder_meta='Assets\ThirdParty.meta'
         package='Packages\manifest.json'
         settings='ProjectSettings\ProjectSettings.asset'
+        documentation='Docs\readme.md'
+        tooling='tools\readme.txt'
     }
     foreach ($case in $fixtures.GetEnumerator()) {
         $directory = Join-Path $fixtureRoot $case.Key
@@ -80,20 +84,25 @@ try {
                 if ($_.Exception.Message -cne $runner.Message) { throw }
                 $blocked = $true
             }
-            $expectedBlock = [bool]$case.Value
+            $expectedBlock = [bool]$case.Value -and $case.Key -notin @('documentation','tooling')
             $report.Cases += @{Runner=$runner.Name; Fixture=$case.Key; ExpectedDirtyBlock=$expectedBlock;
                 DirtyBlocked=$blocked; Passed=($blocked -eq $expectedBlock)}
             if ($expectedBlock -and !$blocked) { $report.MissedDirtyGuards++ }
-            if ($case.Key -in @('clean','script','package','settings') -and $blocked -ne $expectedBlock) {
+            if ($case.Key -in @('clean','documentation','tooling','script','package','settings') -and $blocked -ne $expectedBlock) {
                 throw 'Clean and existing tracked-input controls must retain their real preflight behavior.'
             }
         }
         foreach ($path in $before.Keys) {
             if ((Get-FileHash -LiteralPath $path).Hash -cne $before[$path]) { throw 'Preflight modified a fixture source file.' }
         }
+        $after = @(Get-ChildItem -LiteralPath $directory -Recurse -File | Where-Object { $_.FullName -notlike '*\.git\*' })
+        if ($after.Count -ne $before.Count -or @($after | Where-Object { !$before.ContainsKey($_.FullName) }).Count) {
+            throw 'Preflight added or removed a fixture source file.'
+        }
         if (Test-Path -LiteralPath (Join-Path $directory 'Logs')) { throw 'A -WhatIf preflight created export directories.' }
     }
     $report.AllNoExports = $true
+    $report.FixtureSourcesUnchanged = $true
     if ($ExpectedFailure) {
         if ($report.MissedDirtyGuards -ne 6 -or @($report.Cases | Where-Object { !$_.Passed -and $_.Fixture -notin @('font','new_asset','folder_meta') }).Count) {
             throw 'Require exactly the six omitted Asset-path guards to reproduce.'
