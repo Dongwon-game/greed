@@ -1,5 +1,24 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-28 탈출 결과의 버튼 이름 일치와 17시 30분 실행본
+
+현재 배포는 **17:30 KST / clear-actions**, 게임·빌드 입력 `aea348c`다. 실제 기본 버튼은 `저장 슬롯 선택`인데 완료 진행줄·흔적 확인 순서는 `입구로 나가기`, 일반/보충 결과 본문은 `저장하기`를 가리켰다. 게임 파일은 이 네 안내 문자열만 수정했다. 코어·장면/자원·폰트·패키지/설정과 판정/피해·점수/보상·한 번 저장/실제 두 번 사용은 유지한다.
+
+- 첫 검사 `cfd21aa`: `Logs/EngineLoopChecks/482410a2cd3b4725b1b1f0e42d883daf/report.json`, SHA256 `CADC97C02F371FD187F54C7B38A07BA6C10258872FDB539E1E2F91565D831D26`. 실패 대조에 체력 보너스의 안정 호흡을 써 첫 장 마감 선택에서 멈춘 검사 준비 오류다. 예상 재현도 실패했으므로 게임 오류 재현이나 통과로 세지 않는다. 개인/원본 불변·소유 종료다.
+- 기본 체력 기프트로 고친 `981fd6c`: `Logs/EngineLoopChecks/9b45b3af97ca4853aab85473037af361/report.json`, SHA256 `BD81040C931A5C0981CD9F192A5F2A46091DC1974B3A857052FA77475A349EB5`. 실제 일반·보충 완주/자연 실패 대조를 유지하며 두 완료 진행줄과 두 흔적 안내의 옛 이름을 예상 실패로 재현했다.
+- 진행줄/흔적 수정 `f0ae9c1`: `Logs/EngineLoopChecks/12cf140a777f4fe4abb26a23910d238b/report.json`, SHA256 `A0335856E6669AF5BB4C41AF20CFBCE6FE688560F105E68630E78D742A474F4D`. 당시 집중 검사 통과다. 이후 추가한 본문 검사를 소급 포함하지 않는다.
+- 실제 결과 본문까지 읽는 `3a7a62d`: `Logs/EngineLoopChecks/9a2dac93a13f4a28a402a6655912c1ef/report.json`, SHA256 `1AE5B345158D4F79707AFC3E628F2D473084C054ADCF8CE1A965BE10B47E6C31`. 일반/보충 본문에 남은 옛 `저장하기` 이름 두 곳을 예상 실패로 재현했다.
+- 최종 `aea348c`: `Logs/EngineLoopChecks/758a2cf3b90143aaa050451e54892ad1/report.json`, SHA256 `FB36CC05585BE1E51C60EADAF98582FA5C6465E3647B59A5B9B5AE0392F865CD`. 일반·보충 각각 실제 15판정/8선택 완주, 두 자연 실패와 본문/진행줄/흔적·기본/상세 버튼 일치가 통과했다. 대체 로비·실패 재시작/로비, 읽기 불변과 현재 안내의 기록 보드 제외도 유지했다. 일회성 코어/백엔드·별도 텍스트 UI이며 개인/원본 불변·소유 종료다.
+
+전체 스모크/배포는 `Logs/PlayerReleaseChecks/ec834f532bf64128ad662bdd05073ad3/report.json`, SHA256 `8533E4B8A55C013D103A9A25C97DB4D72C200FFF4A54B457341D12C8DEA2A856`에서 통과했다. 고유 제품에서 스모크 후 원래 제품 ID의 비개발 Windows를 만들고 시험 설정을 정확히 복원했다. Git 정규화 blob으로 모든 Assets/Packages 120파일을 대조했고 Editor·시험/초기화 API 제외와 154파일 ZIP도 확인했다.
+
+- DLL `AE94F3C3CA86476F4405AE789ED2A21045369F0C9C13C5F408136C539144D557`.
+- ZIP `Builds/GreedLastPrototype-verified-20261028-clear-actions.zip`, 58,434,807바이트·SHA256 `B76582F2F2CEC8F78B1672416D0470B421D4EE437BF1B0505F8B1A0C1A0038C6`.
+- 초기 구동 `Logs/StandaloneChecks/report-startup-20261028-083036-4192084.json`, SHA256 `53E959E2A9A2D8DCD9ACB244A60D13359043C20444CB0C98CE869D9674E22011`: 20초 생존·예외 0·소유 종료·개인 값 0→0/불변이다. 최초 첫 연습 표시 손실의 복구를 뜻하지 않는다.
+- 이전 15:10 실행본 전체는 위 배포 폴더의 `previous-release`에, ZIP은 원래 경로에 보존했다. 배포 원문 UTC `2026-10-28T08:30:15.9353348Z`는 KST 17:30이다.
+
+새 두 방식 전체 엔진 `Logs/EngineLoopChecks/4eec5c79bd60415f94a7d733fe90c3b5`는 아직 진행 중이며 완료/성공으로 세지 않는다. 이번 원본 기획 범위나 게임 규칙을 늘리지 않았고 빠른 확인은 지난 배포 설명 대신 처음부터 누르는 12단계·다섯 체감 기준으로 정리했다. 화면/마우스/키·캡처·실제 가청 소리·휴대폰 검증은 하지 않았다.
+
 ## 2026-10-28 검사용 내보내기의 자원 경로 누락 방지
 
 두 공개 검사 도구가 코드/장면/Resources 등 일부 하위 경로만 변경 확인에 넣고 ThirdParty 글꼴·새 Assets 경로·폴더 메타파일을 빠뜨렸다. 그러면 그 미커밋 작업 파일 대신 이전 커밋의 자료를 내보내면서 사전 보호를 통과했다. `641940c`는 두 확인 목록을 `Assets` 전체·`Packages`·`ProjectSettings`로 맞춘 두 줄 수정이다. 의도적으로 무시된 파일의 강제 추가나 게임 코드/빌드 변경이 아니다.

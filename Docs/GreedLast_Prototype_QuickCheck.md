@@ -6,7 +6,7 @@
 
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
-- 현재 실행본: **2026-10-28 15:10 KST / cadence-allocation**. 게임 입력 `dbf117f`, 후속 Editor·빌드 입력 `b5d1307`이다. 이후 검사 도구/문서 변경은 새 게임 배포가 아니다.
+- 현재 실행본: **2026-10-28 17:30 KST / clear-actions**. 게임·빌드 입력은 `aea348c`다. 탈출 결과의 본문·진행줄·흔적 안내를 실제 `저장 슬롯 선택` 버튼 이름에 맞췄다. 판정·보상·저장 규칙은 그대로다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 저장 위치는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 개인 진행도를 초기화하지 않는다.
 
 ## 처음부터 눌러볼 순서
