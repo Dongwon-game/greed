@@ -73,6 +73,10 @@ namespace GreedLast.Editor
             try
             {
                 core.EnterInfiniteRun(prepared);
+                if (run.SurvivalGiftStacks != survival || run.FocusGiftStacks != focus || run.ChainGiftStacks != chain)
+                    mismatches.Add("stacks " + primary + ":" + summary + "+" + added
+                        + " actual=" + run.SurvivalGiftStacks + "," + run.FocusGiftStacks + "," + run.ChainGiftStacks
+                        + " expected=" + survival + "," + focus + "," + chain);
                 if (run.Health != expectedHealth || run.Combo != expectedCombo || run.Score != expectedScore
                     || run.Focus != (expectedFocus >= 3 ? 0 : expectedFocus) || run.FocusStateActive != (expectedFocus >= 3))
                     mismatches.Add(primary + ":" + summary + "+" + added + "/" + relic
