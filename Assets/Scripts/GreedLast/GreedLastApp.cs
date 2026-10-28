@@ -15780,6 +15780,7 @@ namespace GreedLast
         private static readonly Color32 PrototypeRunnerHairColor = new Color32(45, 64, 70, 255);
         private static readonly Color32 PrototypeRunnerHornColor = new Color32(246, 229, 167, 255);
         private static readonly Color32 PrototypeRunnerSashColor = new Color32(210, 78, 62, 255);
+        private static readonly string[] ThreeActionBundleStatusLabels = BuildThreeActionBundleStatusLabels();
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
 
@@ -23418,16 +23419,24 @@ namespace GreedLast
                 return "동작 완주 중단";
             }
 
-            string symbols = BuildThreeActionBundleSymbols(snapshot.CurrentBundleAvoidanceMask);
-            int count = CountThreeActionBundleActions(snapshot.CurrentBundleAvoidanceMask);
-            if (count <= 0)
-            {
-                return string.Empty;
-            }
+            return ThreeActionBundleStatusLabels[(snapshot.CurrentBundleAvoidanceMask >> 1) & 7];
+        }
 
-            string nextSymbol = BuildThreeActionBundleNextSymbol(snapshot.CurrentBundleAvoidanceMask);
-            string nextText = string.IsNullOrEmpty(nextSymbol) ? string.Empty : "→" + nextSymbol;
-            return "동작 " + symbols + " " + count + "/3" + nextText;
+        private static string[] BuildThreeActionBundleStatusLabels()
+        {
+            var labels = new string[8];
+            labels[0] = string.Empty;
+            for (int index = 1; index < labels.Length; index++)
+            {
+                // Jump, slide and twist occupy mask bits 1, 2 and 3; other bits do not affect the label.
+                int mask = index << 1;
+                string symbols = BuildThreeActionBundleSymbols(mask);
+                int count = CountThreeActionBundleActions(mask);
+                string nextSymbol = BuildThreeActionBundleNextSymbol(mask);
+                string nextText = string.IsNullOrEmpty(nextSymbol) ? string.Empty : "→" + nextSymbol;
+                labels[index] = "동작 " + symbols + " " + count + "/3" + nextText;
+            }
+            return labels;
         }
 
         private static string BuildThreeActionBundleSymbols(int avoidanceMask)
