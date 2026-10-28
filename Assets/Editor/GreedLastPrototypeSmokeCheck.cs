@@ -76,6 +76,29 @@ namespace GreedLast.Editor
                 string progress = InvokeRuntimeUiLabel("BuildStoppedNormalProgressLabel", run);
                 if (!progress.Contains(primary, StringComparison.Ordinal) || progress.Contains("입구로 나가기", StringComparison.Ordinal))
                     failures.Add((refill ? "refill" : "normal") + " progress=" + progress);
+                var headerHost = new GameObject("GreedClearHeaderCheck");
+                try
+                {
+                    var ui = headerHost.AddComponent<GreedLastRuntimeUi>();
+                    var title = new GameObject("Title", typeof(RectTransform), typeof(Text));
+                    var detail = new GameObject("Detail", typeof(RectTransform), typeof(Text));
+                    title.transform.SetParent(headerHost.transform, false);
+                    detail.transform.SetParent(headerHost.transform, false);
+                    typeof(GreedLastRuntimeUi).GetField("titleText", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(ui, title.GetComponent<Text>());
+                    typeof(GreedLastRuntimeUi).GetField("detailText", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .SetValue(ui, detail.GetComponent<Text>());
+                    typeof(GreedLastRuntimeUi).GetMethod("RenderRunHeader", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(ui, new object[] { run });
+                    string header = detail.GetComponent<Text>().text;
+                    if (!header.Contains(primary, StringComparison.Ordinal) || header.Contains("저장하기", StringComparison.Ordinal))
+                        failures.Add((refill ? "refill" : "normal") + " header=" + header);
+                }
+                finally
+                {
+                    GreedLastPrototypeAudioCheck.ReleaseEditorAudio(headerHost);
+                    UnityEngine.Object.DestroyImmediate(headerHost);
+                }
                 var backend = CreateIsolatedBackend();
                 backend.RegisterClear(core.CreateRunRecord());
                 string order = InvokeMockBackendLabel(backend, "BuildPrototypePlaytestOrderText");
@@ -102,7 +125,7 @@ namespace GreedLast.Editor
             }
             Require(failures.Count == 0, "Clear follow-up guidance must name the actual save-slot button: " + string.Join(" | ", failures));
             Debug.Log("Greed clear action consistency passed: two actual 15-judgement/8-choice clears and two natural failures; "
-                + "progress/playtest guidance matches both primary button modes, alternate lobby and failure actions retained. "
+                + "header/progress/playtest guidance matches both primary button modes, alternate lobby and failure actions retained. "
                 + "Transient cores/backends only; no personal saves, desktop input/capture or audible/device verification.");
             Require(clears == 2 && failuresChecked == 2, "All clear action controls must complete.");
         }
