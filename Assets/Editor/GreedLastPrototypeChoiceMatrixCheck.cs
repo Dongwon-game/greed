@@ -146,6 +146,7 @@ namespace GreedLast.Editor
         {
             Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Mixed choice checks require Edit mode.");
             RunLegacyPreparationCheck();
+            RunGiftStackBoundaryCheck();
             int[,] matrix = BuildMatrix();
             Require(CoversEveryPair(matrix), "The authored matrix must cover all nine values of every choice pair.");
             var duplicate = (int[,])matrix.Clone();
@@ -173,6 +174,74 @@ namespace GreedLast.Editor
                 + "27 natural no-input failures, 216 prepared infinite starts and first traps, "
                 + "one save/two uses/automatic clear, third-use rejection and live last-use preservation. "
                 + "Memory-only backends and synthetic core clocks; not 216 full infinite runs or native input/device proof.");
+        }
+
+        [MenuItem("Greed Last/Run Prepared Gift Stack Boundary Check")]
+        public static void RunGiftStackBoundaryCheck()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Gift stack boundaries require Edit mode.");
+            string[] gifts = { "집중 축", "생존 축", "연쇄 축" };
+            string[] starts = { "박자 감각", "안정 호흡", "고점 본능" };
+            string[] routes = { "안정 루트", "변주 루트", "압박 루트" };
+            int[] healthByCount = { 0, 1, 2, 2, 2 }, focusByCount = { 0, 2, 3, 3, 3 };
+            int[] comboByCount = { 0, 2, 4, 5, 5 }, scoreByCount = { 0, 60, 120, 180, 180 };
+            int cases = 0, distributions = 0;
+            for (int focus = 0; focus <= 3; focus++)
+            for (int survival = 0; survival <= 3 - focus; survival++)
+            {
+                int chain = 3 - focus - survival;
+                distributions++;
+                for (int routeMask = 0; routeMask < 8; routeMask++)
+                for (int start = 0; start < starts.Length; start++)
+                for (int added = 0; added < gifts.Length; added++)
+                for (int reverse = 0; reverse < 2; reverse++)
+                {
+                    var history = new List<string>();
+                    int[] counts = { focus, survival, chain };
+                    for (int gift = 0; gift < gifts.Length; gift++)
+                        for (int i = 0; i < counts[gift]; i++) history.Add(gifts[gift]);
+                    if (reverse != 0) history.Reverse();
+                    string primary = history[history.Count - 1];
+                    for (int route = 0; route < routes.Length; route++)
+                        if ((routeMask & (1 << route)) != 0) history.Add(routes[route]);
+                    string summary = string.Join(" / ", history);
+                    var stored = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                        20f, "prepared-stack-boundary", starts[start], primary, "", summary, "");
+                    var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(stored, gifts[added], "황금 박동");
+                    counts[added]++;
+                    int expectedHealth = 3 + Math.Min(2, healthByCount[counts[1]] + (start == 1 ? 1 : 0)
+                        + ((routeMask & 1) != 0 ? 1 : 0));
+                    int expectedFocus = Math.Min(3, focusByCount[counts[0]] + (start == 0 ? 1 : 0)
+                        + ((routeMask & 2) != 0 ? 1 : 0));
+                    int expectedCombo = Math.Min(5, comboByCount[counts[2]] + ((routeMask & 4) != 0 ? 1 : 0));
+                    int expectedScore = Math.Min(300, 10 + scoreByCount[counts[2]] + (start == 2 ? 80 : 0)
+                        + ((routeMask & 4) != 0 ? 50 : 0));
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    try
+                    {
+                        core.EnterInfiniteRun(prepared);
+                        string context = "counts=" + string.Join(",", counts) + " routes=" + routeMask
+                            + " start=" + start + " reverse=" + reverse;
+                        Require(run.Health == expectedHealth && run.Score == expectedScore && run.Combo == expectedCombo
+                            && run.Focus == (expectedFocus == 3 ? 0 : expectedFocus)
+                            && run.FocusStateActive == (expectedFocus == 3), "Prepared gift cap boundary differs: " + context);
+                        Require(run.FocusGiftStacks == counts[0] && run.SurvivalGiftStacks == counts[1]
+                            && run.ChainGiftStacks == counts[2], "Prepared gift history counts differ: " + context);
+                        Require(stored.ChoiceSummary == summary && stored.PrimaryGift == primary && stored.Relic == ""
+                            && prepared.PrimaryGift == primary && prepared.Relic == "황금 박동",
+                            "Preparation must preserve the original while adding only the run-local gift/relic: " + context);
+                    }
+                    finally { core.Exit(); }
+                    cases++;
+                }
+            }
+            Require(distributions == 10 && cases == 1440, "All authored gift-count boundary controls must finish.");
+            Debug.Log("Greed prepared gift stack boundaries passed: ten three-gift count distributions, eight route-presence masks, "
+                + "three start gifts, three preparation gifts and two history orders; 1440 synthetic core starts with independent "
+                + "health/focus/combo/score cap tables and restored stack counts. Fixed score/no accuracy or growth bonus, one relic; "
+                + "not normal clears, all choice permutations, persisted saves, complete infinite runs or native input/device proof.");
         }
 
         private static int[,] BuildMatrix()
