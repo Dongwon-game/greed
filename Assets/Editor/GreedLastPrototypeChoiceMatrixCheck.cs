@@ -40,8 +40,11 @@ namespace GreedLast.Editor
             Debug.Log("Greed legacy preparation controls: " + cases + " actual core starts, mismatches=" + mismatches.Count);
             Require(cases == 120 && mismatches.Count == 0,
                 "Legacy stored gift must survive preparation: " + string.Join(" | ", mismatches));
+            int persistedStarts = VerifyLegacyPreparationPersistence(gifts, relics);
+            Require(persistedStarts == 54, "All legacy preparation reload/use controls must finish.");
             Debug.Log("Greed legacy preparation passed: 108 legacy gift/route/preparation/relic combinations, "
-                + "nine authoritative modern-history controls and three no-gift controls. Independent initial values, memory-only records/cores; no personal saves.");
+                + "nine authoritative modern-history controls, three no-gift controls and 54 persisted prepared starts across 27 dedicated keys. "
+                + "Independent initial values, two-use reload/auto-clear, stored originals unchanged; no personal saves or new-process proof.");
         }
 
         private static void VerifyPreparedGiftValues(string primary, string summary, string expectedGift,
@@ -49,6 +52,13 @@ namespace GreedLast.Editor
         {
             var stored = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
                 20f, "legacy-preparation-control", "", primary, "", summary, "");
+            VerifyPreparedGiftRecord(stored, expectedGift, added, relic, mismatches);
+        }
+
+        private static void VerifyPreparedGiftRecord(GreedLastRunRecord stored, string expectedGift,
+            string added, string relic, List<string> mismatches)
+        {
+            string primary = stored.PrimaryGift, summary = stored.ChoiceSummary;
             GreedLastRunRecord prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(stored, added, relic);
             int survival = (expectedGift == "생존 축" ? 1 : 0) + (added == "생존 축" ? 1 : 0);
             int focus = (expectedGift == "집중 축" ? 1 : 0) + (added == "집중 축" ? 1 : 0);
@@ -73,6 +83,58 @@ namespace GreedLast.Editor
                     "Preparing a legacy gift must not mutate its stored record or chosen relic.");
             }
             finally { core.Exit(); }
+        }
+
+        private static int VerifyLegacyPreparationPersistence(string[] gifts, string[] relics)
+        {
+            string prefix = GreedLastMockBackend.PersistenceTestKeyPrefix + "legacy-preparation-" + Guid.NewGuid().ToString("N");
+            var keys = new List<string>();
+            int starts = 0;
+            try
+            {
+                foreach (string original in gifts)
+                foreach (string added in gifts)
+                foreach (string relic in relics)
+                {
+                    string key = prefix + "." + keys.Count;
+                    Require(!PlayerPrefs.HasKey(key), "A legacy reload fixture must use a fresh test key.");
+                    keys.Add(key);
+                    var record = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                        20f, "legacy-reload-control", "", original, "", "", "");
+                    var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                    backend.RegisterClear(record);
+                    int slot = (keys.Count - 1) % 3;
+                    backend.SelectSaveLoadoutSlot(slot);
+                    backend.ConfirmSaveLoadout();
+                    for (int use = 0; use < 2; use++)
+                    {
+                        backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        Require(backend.LoadLobby().SaveSlotOccupied[slot], "A legacy slot must survive until its second use.");
+                        backend.SelectSaveLoadoutSlot(slot);
+                        Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord stored, out _, out _, added, relic)
+                            && stored.PrimaryGift == original && stored.ChoiceSummary == "" && stored.Relic == "" && stored.Score == 100,
+                            "Loading and preparing must preserve the original legacy gift-only record.");
+                        string afterConsume = PlayerPrefs.GetString(key);
+                        var mismatches = new List<string>();
+                        VerifyPreparedGiftRecord(stored, original, added, relic, mismatches);
+                        Require(mismatches.Count == 0 && PlayerPrefs.GetString(key) == afterConsume,
+                            "A reloaded legacy start must retain its independently expected bonus without rewriting stored originals.");
+                        var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        Require(reloaded.LoadLobby().SaveSlotOccupied[slot] == (use == 0),
+                            "Legacy reloads must preserve one remaining use, then the automatically emptied slot.");
+                        if (use == 1)
+                            Require(!reloaded.TryConsumeSelectedSaveLoadout(out _, out _, out _), "A legacy slot must not revive a third use on reload.");
+                        starts++;
+                    }
+                }
+            }
+            finally
+            {
+                foreach (string key in keys) PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.Save();
+            }
+            foreach (string key in keys) Require(!PlayerPrefs.HasKey(key), "The owned legacy preparation test keys must be removed.");
+            return starts;
         }
 
         [MenuItem("Greed Last/Run Mixed Choice Pair Check")]
