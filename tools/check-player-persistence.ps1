@@ -36,7 +36,7 @@ $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
-$runtimeInputs = @('Assets/Scripts', 'Assets/Editor', 'Assets/Scenes', 'Assets/Resources', 'Packages', 'ProjectSettings')
+$runtimeInputs = @('Assets', 'Packages', 'ProjectSettings')
 $dirty = @(git -C $project status --porcelain --untracked-files=all -- $runtimeInputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Commit or review changed game inputs before exporting a probe.' }
 $head = (git -C $project rev-parse HEAD).Trim()

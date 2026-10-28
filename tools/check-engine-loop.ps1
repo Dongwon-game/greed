@@ -12,7 +12,7 @@ if ($CueOnly -and $MenuOnly) { throw 'Choose only one focused engine check.' }
 if ($env:OS -ne 'Windows_NT') { throw 'This isolated editor runner supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
-$inputs = @('Assets/Scripts','Assets/Editor','Assets/Scenes','Assets/Resources','Packages','ProjectSettings')
+$inputs = @('Assets','Packages','ProjectSettings')
 $dirty = @(git -C $project status --porcelain --untracked-files=all -- $inputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Review and commit changed game/editor inputs before exporting a check.' }
 $head = (git -C $project rev-parse HEAD).Trim()
