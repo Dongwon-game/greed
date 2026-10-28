@@ -103,9 +103,29 @@ namespace GreedLast.Editor
                 core.Exit();
                 cases++;
             }
-            Debug.Log("Greed loadout bonus reason controls: " + cases + " actual clear/store/start paths, numeric values preserved, mismatches=" + mismatches.Count);
+            int boundaries = 0;
+            foreach (int[] sample in new[] { new[] { 0, 0, 0, 0 }, new[] { 1, 1, 0, 1 },
+                new[] { 1, 0, 1, 1 }, new[] { 1, 1, 1, 0 }, new[] { int.MaxValue, int.MaxValue, 0, 1 },
+                new[] { int.MaxValue, int.MaxValue, 1, 0 }, new[] { int.MaxValue, 0, 2, 0 } })
+            {
+                var record = new GreedLastRunRecord(true, 1000, 3, 0, 0, 0, sample[0], sample[1], sample[2],
+                    20f, "accuracy-boundary", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+                string detail = GreedLastRunCore.BuildInfiniteLoadoutBonusBreakdown(record);
+                var core = new GreedLastRunCore();
+                GreedLastRunSnapshot initial = default;
+                core.SnapshotChanged += value => initial = value;
+                core.EnterInfiniteRun(record);
+                Require(detail.Contains("정확도", StringComparison.Ordinal) == (sample[3] == 1)
+                    && initial.Focus == sample[3] && initial.Health == 3 && initial.Combo == 0
+                    && initial.Score == 100 + 40 * sample[3],
+                    "Accuracy reasons and unchanged numeric starts must retain zero/tie/miss-count/large-count eligibility.");
+                core.Exit();
+                boundaries++;
+            }
+            Debug.Log("Greed loadout bonus reason controls: " + cases + " actual clear/store/start paths, " + boundaries
+                + " independent count boundaries, numeric values preserved, mismatches=" + mismatches.Count);
             Require(mismatches.Count == 0, "Loadout bonus reasons must match awarded bonuses: " + string.Join(" | ", mismatches));
-            Require(cases == 8, "All bonus reason controls must finish.");
+            Require(cases == 8 && boundaries == 7, "All bonus reason controls must finish.");
             Debug.Log("Greed loadout bonus reasons passed: eight actual clears/stores/infinite starts, independent unchanged numeric bonuses, growth and low/high accuracy isolated. Transient cores/backends only; no personal saves or desktop/device input.");
         }
 
