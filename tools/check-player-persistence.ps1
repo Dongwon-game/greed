@@ -8,11 +8,15 @@ param(
     [switch]$InteractiveMenus,
     [switch]$BackgroundResults,
     [switch]$UnreadableSave,
-    [switch]$PracticeQuit
+    [switch]$PracticeQuit,
+    [switch]$ScopedGoals
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($ScopedGoals -and ($PracticeQuit -or $UnreadableSave -or $CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus)) {
+    throw 'Choose scoped goals with only the optional background callback mode.'
+}
 if ($PracticeQuit -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave)) {
     throw 'Choose the private practice-quit check separately from all other modes.'
 }
@@ -88,7 +92,7 @@ $processes = [Collections.Generic.List[object]]::new()
 $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash;
     StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
-    Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; private synthetic lobby notices seed scoped goals. Not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
+    Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
     RegistryPath=$registryPath; Processes=$processes; Phases=@(); Inputs=@(); SafetyControls=@();
     OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
@@ -97,6 +101,7 @@ $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
+$report.ScopedGoalsRequested = [bool]$ScopedGoals
 if ($PracticeQuit) {
     $report.Scope = 'Five fresh private players: incomplete practice quit, two-action review from a synthetic lobby notice, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
 }
@@ -104,8 +109,9 @@ if ($UnreadableSave) {
     $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
 }
 if ($BackgroundResults) {
-    $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes; private synthetic lobby notices seed scoped goals. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
+    $report.Scope = 'Isolated real-frame Windows player with explicit app pause/focus callbacks before quit and ten fresh processes. Not actual OS suspension, forced kill, native window input, audible output or physical mobile testing.'
 }
+if ($ScopedGoals) { $report.Scope += ' Private synthetic lobby notices seed scoped goals; actual chapter/section judgements, normal quit and fresh-process records verify their outcomes.' }
 if ($InteractiveWindow) {
     $report.Scope = 'Interactive isolated player window phases and fresh-process persistence. External UI actions must be separately observed and recorded; this script does not identify the close trigger or claim physical timing, audible output or device performance.'
 }
@@ -277,6 +283,7 @@ try {
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
+        if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
         $timeout = if ($phase -in @('window-loadout','window-menu')) { 630000 } elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
@@ -310,12 +317,12 @@ try {
         if ($result.backgroundResultsRequested -ne [bool]$BackgroundResults -or $result.backgroundChecks -ne $expectedBackgroundChecks) {
             throw ('Background callback evidence missing or unexpectedly enabled: ' + $phase)
         }
-        $scopedGoals = !($PracticeQuit -or $UnreadableSave -or $InteractiveLoadout -or $InteractiveMenus -or $InteractiveWindow)
-        if ($result.scopedGoalsRequested -ne $scopedGoals -or
-            $result.normalReviewGoalEarned -ne ($scopedGoals -and $phase -eq 'clear') -or
-            $result.normalReviewGoalPersisted -ne ($scopedGoals -and $phase -in @('save','first-use','last-use','verify','verify-again')) -or
-            $result.infiniteReviewGoalEarned -ne ($scopedGoals -and $phase -eq 'last-use') -or
-            $result.infiniteReviewGoalPersisted -ne ($scopedGoals -and $phase -in @('verify','verify-again'))) {
+        $expectScopedGoals = [bool]$ScopedGoals
+        if ($result.scopedGoalsRequested -ne $expectScopedGoals -or
+            $result.normalReviewGoalEarned -ne ($expectScopedGoals -and $phase -eq 'clear') -or
+            $result.normalReviewGoalPersisted -ne ($expectScopedGoals -and $phase -in @('save','first-use','last-use','verify','verify-again')) -or
+            $result.infiniteReviewGoalEarned -ne ($expectScopedGoals -and $phase -eq 'last-use') -or
+            $result.infiniteReviewGoalPersisted -ne ($expectScopedGoals -and $phase -in @('verify','verify-again'))) {
             throw ('Scoped review goal earnings and fresh-process persistence coverage is incomplete: ' + $phase)
         }
         if ($InteractiveMenus -and !$result.nativeMenuCandidatePreserved) {
