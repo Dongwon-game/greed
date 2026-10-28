@@ -2210,6 +2210,7 @@ namespace GreedLast.Editor
             RunClearActionConsistencyCheck();
             RunLoadoutBonusReasonCheck();
             GreedLastPrototypeChoiceMatrixCheck.Run();
+            GreedLastPrototypeSaveLifetimeModelCheck.Run();
             RunInfiniteReviewCountCheck();
             RunPreparedSummaryPriorityCheck();
             VerifyLiveRunCoachLines(now + 720f);
