@@ -52,7 +52,9 @@ function Run-Case([string]$Name) {
     $copy = Join-Path $caseRoot 'export'
     [void][IO.Directory]::CreateDirectory($project)
     [void](Fixture-Git $project @('init','-q'))
-    [IO.File]::WriteAllText((Join-Path $project '.gitattributes'),"* text=auto eol=lf`n",[Text.UTF8Encoding]::new($false))
+    $attributes = "* text=auto eol=lf`n"
+    if ($Name -eq 'crlf-export') { $attributes += "*.cs text eol=crlf`n*.cs.txt text eol=crlf`n" }
+    [IO.File]::WriteAllText((Join-Path $project '.gitattributes'),$attributes,[Text.UTF8Encoding]::new($false))
     foreach ($path in $paths) {
         $file = Join-Path $project $path
         [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($file))
@@ -105,10 +107,10 @@ function Run-Case([string]$Name) {
     return @{ Name=$Name; CommittedInputsMatched=$matches; WorktreeUnchanged=$true; Staged=$true }
 }
 try {
-    $names = if ($ExpectedFailure) { @('worktree-race') } else { @('clean','worktree-race','tampered-export','missing-export') }
+    $names = if ($ExpectedFailure) { @('worktree-race') } else { @('clean','crlf-export','worktree-race','tampered-export','missing-export') }
     foreach ($name in $names) { $r.Cases += Run-Case $name }
     $r.Reproduced = [bool]$ExpectedFailure
-    $r.Succeeded = !$ExpectedFailure -and $r.Cases.Count -eq 4
+    $r.Succeeded = !$ExpectedFailure -and $r.Cases.Count -eq 5
 }
 catch { $r.Error = $_.Exception.ToString() }
 finally {

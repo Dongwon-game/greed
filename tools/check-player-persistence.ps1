@@ -182,7 +182,7 @@ try {
         $relativePath = $asset.Source.Replace('\','/')
         $canonicalBlob = (git -C $project rev-parse ($head+':'+$relativePath)).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Committed probe blob missing.' }
-        $exportedBlob = (git -C $project hash-object --no-filters -- $source).Trim()
+        $exportedBlob = (git -C $project hash-object ('--path='+$relativePath) -- $source).Trim()
         if ($LASTEXITCODE -ne 0 -or $exportedBlob -cne $canonicalBlob) {
             throw 'Exported probe source differs from its committed blob.'
         }
