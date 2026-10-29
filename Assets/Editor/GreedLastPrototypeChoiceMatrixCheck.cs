@@ -42,9 +42,12 @@ namespace GreedLast.Editor
                 "Legacy stored gift must survive preparation: " + string.Join(" | ", mismatches));
             int persistedStarts = VerifyLegacyPreparationPersistence(gifts, relics);
             Require(persistedStarts == 54, "All legacy preparation reload/use controls must finish.");
+            int authoritativeStarts = VerifyAuthoritativeHistoryPersistence(gifts, relics);
+            Require(authoritativeStarts == 108, "All authoritative history reload/use controls must finish.");
             Debug.Log("Greed legacy preparation passed: 108 legacy gift/route/preparation/relic combinations, "
                 + "nine authoritative modern-history controls, three no-gift controls and 54 persisted prepared starts across 27 dedicated keys. "
-                + "Independent initial values, two-use reload/auto-clear, stored originals unchanged; no personal saves or new-process proof.");
+                + "Also 108 authoritative-history persisted starts across 54 other dedicated keys. Independent initial values and restored stacks, "
+                + "two-use reload/auto-clear, stored originals unchanged; no personal saves or new-process proof.");
         }
 
         private static void VerifyPreparedGiftValues(string primary, string summary, string expectedGift,
@@ -138,6 +141,62 @@ namespace GreedLast.Editor
                 PlayerPrefs.Save();
             }
             foreach (string key in keys) Require(!PlayerPrefs.HasKey(key), "The owned legacy preparation test keys must be removed.");
+            return starts;
+        }
+
+        private static int VerifyAuthoritativeHistoryPersistence(string[] gifts, string[] relics)
+        {
+            string prefix = GreedLastMockBackend.PersistenceTestKeyPrefix + "authoritative-history-" + Guid.NewGuid().ToString("N");
+            var keys = new List<string>();
+            int starts = 0;
+            try
+            {
+                foreach (string history in gifts)
+                foreach (string primary in gifts)
+                {
+                    if (history == primary) continue;
+                    foreach (string added in gifts)
+                    foreach (string relic in relics)
+                    {
+                        string key = prefix + "." + keys.Count;
+                        Require(!PlayerPrefs.HasKey(key), "Authoritative history reloads must own fresh test keys.");
+                        keys.Add(key);
+                        var record = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                            20f, "authoritative-history-control", "", primary, "", history, "");
+                        var backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                        backend.RegisterClear(record);
+                        int slot = (keys.Count - 1) % 3;
+                        backend.SelectSaveLoadoutSlot(slot);
+                        backend.ConfirmSaveLoadout();
+                        for (int use = 0; use < 2; use++)
+                        {
+                            backend = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            backend.SelectSaveLoadoutSlot(slot);
+                            Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord stored, out _, out _, added, relic)
+                                && stored.PrimaryGift == primary && stored.ChoiceSummary == history && stored.Relic == "" && stored.Score == 100,
+                                "Save/reload must preserve authoritative history without rewriting its older primary field.");
+                            string afterConsume = PlayerPrefs.GetString(key);
+                            var mismatches = new List<string>();
+                            VerifyPreparedGiftRecord(stored, history, added, relic, mismatches);
+                            Require(mismatches.Count == 0 && PlayerPrefs.GetString(key) == afterConsume,
+                                "Reloaded preparation must agree on bonuses/stacks without rewriting stored originals.");
+                            var reloaded = GreedLastMockBackend.CreatePersistenceTestBackendForEditor(key);
+                            Require(reloaded.LoadLobby().SaveSlotOccupied[slot] == (use == 0),
+                                "Authoritative history use counts must survive reload then automatically empty at the second use.");
+                            if (use == 1)
+                                Require(!reloaded.TryConsumeSelectedSaveLoadout(out _, out _, out _),
+                                    "An authoritative history slot must not accept a third use after reload.");
+                            starts++;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                foreach (string key in keys) PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.Save();
+            }
+            foreach (string key in keys) Require(!PlayerPrefs.HasKey(key), "Owned authoritative history keys must be removed.");
             return starts;
         }
 
