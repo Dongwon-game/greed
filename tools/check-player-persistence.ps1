@@ -108,6 +108,8 @@ $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
 $report.ScopedGoalsRequested = [bool]$ScopedGoals
 $report.GiftHistoryRequested = [bool]$GiftHistory
+$report.PrivateEditorIdentityVerified = $false
+$report.PrivateEditorIdentityReportSHA256 = ''
 if ($GiftHistory) {
     $report.Scope = 'Five fresh private Windows processes: three seeded authoritative gift-history records, metadata/two uses/automatic emptying and repeated third-use rejection across normal Application.Quit/relaunch. Transient public-core synthetic clocks verify prepared stacks/bonuses and six first judgements; not actual normal clears, real-time infinite runs, native input/capture, personal recovery, audible output or phone testing.'
 }
@@ -200,9 +202,22 @@ try {
         '-executeMethod','GreedLast.Editor.GreedLastPlayerPersistenceBuilder.Build','-greed-probe-id',$id,
         '-logFile',('"'+$buildLog+'"')) 900000 'isolated-build'
     $info = Get-Content -LiteralPath (Join-Path $root 'build.json') -Raw | ConvertFrom-Json
-    if ($info.id -cne $id -or $info.company -cne 'GreedLastPrototypeChecks' -or $info.product -cne ('Persistence-' + $id)) {
+    if ($info.id -cne $id -or $info.company -cne 'GreedLastPrototypeChecks' -or $info.product -cne ('Persistence-' + $id) -or
+        !$info.privateEditorIdentityRetained -or $info.editorCompany -cne $info.company -or $info.editorProduct -cne $info.product) {
         throw 'Isolated build identity mismatch.'
     }
+    $identityLog = Join-Path $root 'editor-identity.log'
+    Invoke-OwnedProcess $unity @('-batchmode','-nographics','-quit','-projectPath',('"'+$copy+'"'),
+        '-executeMethod','GreedLast.Editor.GreedLastPlayerPersistenceBuilder.VerifyEditorIdentity','-greed-probe-id',$id,
+        '-logFile',('"'+$identityLog+'"')) 180000 'private-editor-identity'
+    $identityPath = Join-Path $root 'editor-identity.json'
+    $identity = Get-Content -LiteralPath $identityPath -Raw | ConvertFrom-Json
+    if (!$identity.privateIdentity -or $identity.id -cne $id -or $identity.company -cne $info.company -or
+        $identity.product -cne $info.product -or $identity.settingsCompany -cne $info.company -or $identity.settingsProduct -cne $info.product) {
+        throw 'Reopened private Editor identity did not match the isolated player.'
+    }
+    $report.PrivateEditorIdentityVerified = $true
+    $report.PrivateEditorIdentityReportSHA256 = (Get-FileHash -LiteralPath $identityPath).Hash
     $exe = Join-Path $root 'Player\GreedLastPersistenceProbe.exe'
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -cne $info.executableSha256) { throw 'Isolated executable digest mismatch.' }
     $probeDll = Join-Path $root 'Player\GreedLastPersistenceProbe_Data\Managed\Assembly-CSharp.dll'
