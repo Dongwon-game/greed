@@ -82,13 +82,22 @@ function Read-OwnedEngineReport([string]$Copy) {
     $directory = Join-Path $Copy 'Logs\PlayModeChecks'
     $latest = Join-Path $directory 'latest-report.json'
     if (!(Test-Path -LiteralPath $latest)) { return $null }
-    $engine = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
+    $latestText = [IO.File]::ReadAllText($latest)
+    $engine = $latestText | ConvertFrom-Json
     if ([string]::IsNullOrEmpty($engine.archivedReport) -or [IO.Path]::GetFileName($engine.archivedReport) -cne $engine.archivedReport) {
         throw 'Unsafe archived report path.'
     }
+    if ($engine.archivedReport -ceq 'latest-report.json') { throw 'The archived engine report must be distinct from its latest alias.' }
     $path = Join-Path $directory $engine.archivedReport
     if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'The archived engine report is missing.' }
-    return [pscustomobject]@{Data=$engine;Path=$path;SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
+    $bytes = [IO.File]::ReadAllBytes($path)
+    $reader = [IO.StreamReader]::new([IO.MemoryStream]::new($bytes,$false),[Text.Encoding]::UTF8,$true)
+    try { $archivedText = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    if (![string]::Equals($latestText,$archivedText,[StringComparison]::Ordinal)) { throw 'The latest engine report must match its archived report.' }
+    $archived = $archivedText | ConvertFrom-Json
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $digest = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','') } finally { $sha.Dispose() }
+    return [pscustomobject]@{Data=$archived;Path=$path;SHA256=$digest}
 }
 
 try {
