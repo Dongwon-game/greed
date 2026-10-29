@@ -6,7 +6,14 @@
 
 `471bd01`은 ScrollRect의 취소 프레임에만 휠을 무시하고 이후 프레임은 기존 동작을 사용한다. `Logs/EngineLoopChecks/2b97259e702f4a5e917a91e8a8eb56e9/report.json`, SHA256 `A2EC970D5702CE5D7CB489AE941CD76633DA0664F46CB7DEDEB178A26758B01E`의 두 재로딩 방식 각각 기본/상세 두 화면·command/focus/app 여섯 취소·여섯 새 휠 복구와 기존 여덟 드래그/네 칸 인계를 통과했다. 314/337프레임이며 저장/후보/사용권/성장과 개인/원본 설정은 불변, 소유 프로세스는 종료했다. 합성 입력을 실제 EventSystem이 처리한 검사이며 사용자 창/물리 휠·가청 소리/휴대폰 검사가 아니다.
 
-이 중간 보존 시점에는 같은 입력의 전체 엔진 `d1ed59a6c7254865acb8ff9eb81553ce`가 진행 중이다. 새 Windows 배포는 아직 없고 현재 11:47/history-stacks 실행본을 유지한다. 아래 완료 이력과 진행 중 검사를 섞지 않는다.
+중간 공개 기록 `e114663` 당시 진행 중이던 전체 엔진은 최종 통과했다. `Logs/EngineLoopChecks/d1ed59a6c7254865acb8ff9eb81553ce/report.json`, SHA256 `7AF2F22FF795FD673119C969E389CBD3DA11622CF1CB7DE3143242704AD7BA10`이며 보관 원문 SHA256은 `009A026BB7087AABA10A213E5CB849065742E6A021DBC9E1445BED88C06054D7`다. 두 방식 각각 479.25/481.98초·28,291/28,304프레임에서 일반 15판정/8선택·한 번 저장·정비 취소 무소모·실제 무한 두 번/자동 비움과 여섯 휠 취소/새 입력 복구를 유지했다. 개인/원본 설정 불변·소유 종료다.
+
+새 배포는 **2026-10-29 13:52 KST / menu-wheel**, 게임·Editor/빌드 `471bd01`이다. `Logs/PlayerReleaseChecks/91fb37b1e763415f81a4fd0518626680/report.json`, SHA256 `DC283CC8A0D9E531E74D37E36749ADFDA69364D66FF5249F2B2EAA0AF50082DB`에서 새 고유 제품 전체 스모크·126입력 blob·원래 제품 ID 비개발 Windows/시험 타입·초기화 API 제외·사본 설정 복원과 배포 검사가 통과했다. 별도 Editor 빌드 도우미는 보고서의 SHA256으로 구분한다.
+
+- 빌드 원문 UTC `2026-10-29T04:52:13.0426071Z`, DLL SHA256 `06AC04022E2F50FE96DA10B74462BE991E2E4580E4E3001BB07BC41032A47B3A`.
+- `Builds/GreedLastPrototype-verified-20261029-menu-wheel.zip`, 58,435,072바이트·154파일·SHA256 `5D07B35C42B28F32CFA1D7FDE437A565449EA2D9DF2936A2137F68C619F80FD1`.
+- 초기 구동 `Logs/StandaloneChecks/report-startup-20261029-045242-1804422.json`, SHA256 `A75EE6FDB7B31BD10A91E807E6036F8BE1AC35BF699F81237EF22DD4EF4B4D75`: 20초 생존·예외 0·소유 종료·개인 값 0→0/불변. 최초 첫 연습 표시 손실의 복구가 아니다.
+- 이전 11:47 실행본 전체는 배포 폴더의 `previous-release`, 이전 ZIP은 원래 경로에 보존했다. 개인/원본/시험 설정은 보존했고 소유 프로세스는 모두 종료했다. 화면/OS 입력·캡처·가청 소리·휴대폰 검사는 하지 않았다. 아래 11:47 및 이전 배포는 당시 이력이다.
 
 ## 2026-10-29 완료된 플레이어 시험 사본의 에디터 식별자 보존
 
