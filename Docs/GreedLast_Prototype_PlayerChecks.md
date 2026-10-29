@@ -8,6 +8,8 @@
 
 ## 완료된 시험 사본의 에디터 저장 분리
 
+배포된 휠 보호는 후속 `tools/verify-prototype-build.ps1`의 `MenuWheelFrameGuards`로도 확인한다. Play/취소 프레임 분기·취소 기록과 비활성화 연결을 읽고 원래 스크롤 호출을 보존하는지 확인한다. `tools/check-wheel-artifact-guards.ps1 -PreviousAssemblyPath <보관한 이전 DLL>`의 일곱 읽기 전용 대조와 현재 ZIP 154파일 검사가 통과했다. 이전 DLL의 현재 계약 거부는 이전 배포가 당시 실패했다는 뜻이 아니다. 게임/13:52 실행본은 유지하며 메모리 변경을 실행 파일로 쓰지 않는다. 원문은 [확인 이력](GreedLast_Prototype_CheckHistory.md)에 구분했다.
+
 `9ce53b6`부터 플레이어 검사 사본은 빌드가 끝난 뒤에도 `GreedLastPrototypeChecks / Persistence-고유ID` 회사·제품명을 유지한다. 앞선 빌더는 시험 실행 파일만 별도 제품으로 만들고 사본의 에디터 설정은 원래 이름으로 돌렸으므로, 그 사본을 나중에 에디터로 열어 Play하면 개인 저장 영역과 겹칠 여지가 있었다. 앞선 자동 검사의 개인 저장 변경이나 과거 첫 연습 표시 유실의 원인을 재현한 것은 아니다.
 
 도구는 빌드 후 새 숨김 에디터 프로세스로 사본을 다시 열고 `Application`과 `PlayerSettings` 양쪽의 고유 식별자가 일치해야만 플레이어 단계를 시작한다. `PrivateEditorIdentityVerified`와 해당 보고서 SHA256을 결과에 남긴다. 원본 프로젝트의 회사·제품명과 설정 파일은 바꾸지 않으며, 이미 남은 옛 사본을 에디터로 열어 검증하지 않는다. 빌드에 들어가기 전 중단된 사본까지 안전하다는 보장은 아니다.
