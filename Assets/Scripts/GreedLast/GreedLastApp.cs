@@ -15775,11 +15775,11 @@ namespace GreedLast
         private static readonly Color32 PrototypeTealColor = new Color32(86, 156, 149, 255);
         private static readonly Color32 PrototypeVermilionColor = new Color32(214, 88, 68, 255);
         private static readonly Color32 PrototypeRunCorridorTintColor = new Color32(126, 143, 137, 255);
-        private static readonly Color32 PrototypeRunnerSkinColor = new Color32(154, 169, 86, 255);
+        private static readonly Color32 PrototypeRunnerSkinColor = new Color32(184, 119, 76, 255);
         private const float PrototypeRunAvatarScale = 1.4f;
-        private static readonly Color32 PrototypeRunnerHairColor = new Color32(45, 64, 70, 255);
-        private static readonly Color32 PrototypeRunnerHornColor = new Color32(246, 229, 167, 255);
-        private static readonly Color32 PrototypeRunnerSashColor = new Color32(210, 78, 62, 255);
+        private static readonly Color32 PrototypeRunnerHairColor = new Color32(39, 31, 26, 255);
+        private static readonly Color32 PrototypeRunnerBandColor = new Color32(246, 229, 167, 255);
+        private static readonly Color32 PrototypeRunnerSashColor = new Color32(33, 113, 121, 255);
         private static readonly string[] ThreeActionBundleStatusLabels = BuildThreeActionBundleStatusLabels();
 
         private static bool DevToolsEnabled => GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
@@ -15925,14 +15925,18 @@ namespace GreedLast
         private GameObject runnerAvatarRoot;
         private CanvasGroup runnerAvatarCanvasGroup;
         private RawImage runnerIllustration;
+        private Texture2D runnerRunTexture;
+        private Texture2D runnerJumpTexture;
+        private Texture2D runnerSlideTexture;
+        private Texture2D runnerTwistTexture;
         private Image runnerShadow;
         private Image runnerCoreGlow;
         private Image runnerPreparationCue;
         private Text runnerPreparationSymbolText;
         private readonly Vector3[] runnerCueCorners = new Vector3[4];
         private Image runnerHairBack;
-        private Image runnerLeftHorn;
-        private Image runnerRightHorn;
+        private Image runnerLeftBand;
+        private Image runnerRightBand;
         private Image runnerHead;
         private Image runnerTorso;
         private Image runnerSash;
@@ -27859,8 +27863,11 @@ namespace GreedLast
             runnerAvatarCanvasGroup.interactable = false;
             runnerAvatarRoot.SetActive(false);
 
-            Texture2D runnerTexture = Resources.Load<Texture2D>("GreedLast/PrototypeRunner");
-            if (runnerTexture != null)
+            runnerRunTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunner");
+            runnerJumpTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunnerJump");
+            runnerSlideTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunnerSlide");
+            runnerTwistTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunnerTwist");
+            if (runnerRunTexture != null)
             {
                 GameObject illustration = CreateRect(
                     "RunnerIllustration",
@@ -27870,19 +27877,21 @@ namespace GreedLast
                     new Vector2(0.5f, 0.5f),
                     new Vector2(138f, 207f));
                 runnerIllustration = illustration.AddComponent<RawImage>();
-                runnerIllustration.texture = runnerTexture;
+                runnerIllustration.texture = runnerRunTexture;
                 runnerIllustration.color = new Color32(255, 255, 255, 240);
                 runnerIllustration.raycastTarget = false;
-                runnerIllustration.rectTransform.anchoredPosition = new Vector2(4f, 2f);
+                runnerIllustration.rectTransform.anchorMin = new Vector2(0.5f, 0.12f);
+                runnerIllustration.rectTransform.anchorMax = runnerIllustration.rectTransform.anchorMin;
+                ApplyPrototypeRunnerIllustrationPose(0, 1f, new Vector4(0f, 0f, 1f, 1f));
             }
 
             Color32 bodyColor = PrototypeRunnerSkinColor;
             runnerHairBack = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerHairBack", 0.5f, 0.80f, 58f, 48f, PrototypeRunnerHairColor);
             runnerHead = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerHead", 0.5f, 0.81f, 34f, 36f, bodyColor);
-            runnerLeftHorn = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerLeftHorn", 0.38f, 0.96f, 16f, 34f, PrototypeRunnerHornColor);
-            runnerRightHorn = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerRightHorn", 0.62f, 0.96f, 16f, 34f, PrototypeRunnerHornColor);
-            SetRunnerPartAngle(runnerLeftHorn, -22f);
-            SetRunnerPartAngle(runnerRightHorn, 22f);
+            runnerLeftBand = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerLeftBand", 0.40f, 0.90f, 18f, 7f, PrototypeRunnerBandColor);
+            runnerRightBand = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerRightBand", 0.60f, 0.90f, 18f, 7f, PrototypeRunnerBandColor);
+            SetRunnerPartAngle(runnerLeftBand, -6f);
+            SetRunnerPartAngle(runnerRightBand, 6f);
             runnerTorso = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerTorso", 0.5f, 0.55f, 45f, 72f, bodyColor);
             runnerSash = CreateRunnerPart(runnerAvatarRoot.transform, "RunnerSash", 0.55f, 0.49f, 58f, 13f, PrototypeRunnerSashColor);
             SetRunnerPartAngle(runnerSash, -8f);
@@ -31107,7 +31116,7 @@ namespace GreedLast
 
         private void CreatePrototypeEntranceBackdrop(Transform parent)
         {
-            prototypeEntranceTitleTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
+            prototypeEntranceTitleTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianEntrance");
             prototypeLobbyTexture = Resources.Load<Texture2D>("GreedLast/PrototypeLobby");
             Texture2D texture = prototypeEntranceTitleTexture != null
                 ? prototypeEntranceTitleTexture
@@ -34429,6 +34438,7 @@ namespace GreedLast
                 return;
             }
 
+            ApplyPrototypeRunnerIllustrationPose(0, 1f, new Vector4(0f, 0f, 1f, 1f));
             float pulse = BuildLobbyRunnerPulse(beatPhase);
             float sway = Mathf.Sin(beatPhase * Mathf.PI * 2f);
             float revealProgress = BuildLobbyEntranceRevealProgress(
@@ -34518,6 +34528,7 @@ namespace GreedLast
 
             if (!runVisible)
             {
+                ApplyPrototypeRunnerIllustrationPose(0, 1f, new Vector4(0f, 0f, 1f, 1f));
                 HideRunnerFootfallPips();
                 HideRunnerPreparationCue();
                 HideRunnerActionTrails();
@@ -34586,6 +34597,9 @@ namespace GreedLast
             float shadowScaleX = 1f + Mathf.Abs(stride) * 0.08f;
             float shadowAlpha = 112f;
             float remaining = runnerResponseUntil - Time.unscaledTime;
+            int illustrationPose = 0;
+            float illustrationDirection = 1f;
+            Vector4 illustrationTransform = new Vector4(0f, 0f, 1f, 1f);
             float runnerDownbeatLift = remaining <= 0f
                 ? BuildRunnerDownbeatLift(
                     running && latestRunSnapshot.ActivePattern,
@@ -34627,6 +34641,11 @@ namespace GreedLast
                 else
                 {
                     float responseStrength = runnerResponseResult == GreedLastJudgementResult.Good ? 0.68f : 1f;
+                    illustrationPose = BuildPrototypeRunnerPoseIndex((int)runnerResponseType,
+                        runnerResponseResult, progress, !runnerBlocked);
+                    illustrationDirection = channelDirection;
+                    illustrationTransform = BuildRunnerResponsePoseTransform(runnerResponseType,
+                        arc * responseStrength, channelDirection);
                     ApplyRunnerResponsePose(
                         avatarRect,
                         arc * responseStrength,
@@ -34877,6 +34896,7 @@ namespace GreedLast
                 silhouetteStrength,
                 silhouetteDirection,
                 running ? stride : 0f);
+            ApplyPrototypeRunnerIllustrationPose(illustrationPose, illustrationDirection, illustrationTransform);
 
             float runEntranceHandoffProgress = BuildRunEntranceHandoffProgress(
                 runVisible,
@@ -36300,30 +36320,30 @@ namespace GreedLast
             return BuildRunnerSilhouetteSashLayout(BuildRunnerResponseType(pattern), strength, direction).w;
         }
 
-        private static float BuildRunnerSilhouetteHornOffsetXForPattern(
+        private static float BuildRunnerSilhouetteBandOffsetXForPattern(
             GreedLastPatternModel pattern,
             float strength,
             float direction,
             float side)
         {
-            return BuildRunnerSilhouetteHornLayout(BuildRunnerResponseType(pattern), strength, direction, side).x;
+            return BuildRunnerSilhouetteBandLayout(BuildRunnerResponseType(pattern), strength, direction, side).x;
         }
 
-        private static float BuildRunnerSilhouetteHornOffsetYForPattern(
+        private static float BuildRunnerSilhouetteBandOffsetYForPattern(
             GreedLastPatternModel pattern,
             float strength,
             float side)
         {
-            return BuildRunnerSilhouetteHornLayout(BuildRunnerResponseType(pattern), strength, 1f, side).y;
+            return BuildRunnerSilhouetteBandLayout(BuildRunnerResponseType(pattern), strength, 1f, side).y;
         }
 
-        private static float BuildRunnerSilhouetteHornAngleForPattern(
+        private static float BuildRunnerSilhouetteBandAngleForPattern(
             GreedLastPatternModel pattern,
             float strength,
             float direction,
             float side)
         {
-            return BuildRunnerSilhouetteHornLayout(BuildRunnerResponseType(pattern), strength, direction, side).w;
+            return BuildRunnerSilhouetteBandLayout(BuildRunnerResponseType(pattern), strength, direction, side).w;
         }
 
         private static Vector4 BuildRunnerSilhouetteHairLayout(
@@ -36392,7 +36412,7 @@ namespace GreedLast
             }
         }
 
-        private static Vector4 BuildRunnerSilhouetteHornLayout(
+        private static Vector4 BuildRunnerSilhouetteBandLayout(
             RunnerResponseType response,
             float strength,
             float direction,
@@ -36408,21 +36428,21 @@ namespace GreedLast
                         safeSide * safeStrength * 2.4f,
                         safeStrength * 3f,
                         1f + safeStrength * 0.06f,
-                        safeSide * 22f + safeSide * safeStrength * 5f);
+                        safeSide * 6f + safeSide * safeStrength * 5f);
                 case RunnerResponseType.Slide:
                     return new Vector4(
                         safeSide * safeStrength * 3.2f,
                         -safeStrength * 4f,
                         1f - safeStrength * 0.10f,
-                        safeSide * 22f - safeSide * safeStrength * 5f);
+                        safeSide * 6f - safeSide * safeStrength * 5f);
                 case RunnerResponseType.Twist:
                     return new Vector4(
                         safeDirection * safeStrength * 2.6f + safeSide * safeStrength * 1.1f,
                         safeStrength * 1.2f,
                         1f + safeStrength * 0.02f,
-                        safeSide * 22f + safeDirection * safeStrength * 7f - safeSide * safeStrength * 2f);
+                        safeSide * 6f + safeDirection * safeStrength * 7f - safeSide * safeStrength * 2f);
                 default:
-                    return new Vector4(0f, 0f, 1f, safeSide * 22f);
+                    return new Vector4(0f, 0f, 1f, safeSide * 6f);
             }
         }
 
@@ -36799,25 +36819,25 @@ namespace GreedLast
                 sash.w,
                 new Vector2(sash.x, sash.y));
 
-            Vector4 leftHorn = BuildRunnerSilhouetteHornLayout(response, strength, direction, -1f);
+            Vector4 leftBand = BuildRunnerSilhouetteBandLayout(response, strength, direction, -1f);
             SetRunnerPartLayout(
-                runnerLeftHorn,
-                0.38f,
-                0.96f,
-                16f,
-                34f * leftHorn.z,
-                leftHorn.w,
-                new Vector2(leftHorn.x, leftHorn.y));
+                runnerLeftBand,
+                0.40f,
+                0.90f,
+                18f,
+                7f * leftBand.z,
+                leftBand.w,
+                new Vector2(leftBand.x, leftBand.y));
 
-            Vector4 rightHorn = BuildRunnerSilhouetteHornLayout(response, strength, direction, 1f);
+            Vector4 rightBand = BuildRunnerSilhouetteBandLayout(response, strength, direction, 1f);
             SetRunnerPartLayout(
-                runnerRightHorn,
-                0.62f,
-                0.96f,
-                16f,
-                34f * rightHorn.z,
-                rightHorn.w,
-                new Vector2(rightHorn.x, rightHorn.y));
+                runnerRightBand,
+                0.60f,
+                0.90f,
+                18f,
+                7f * rightBand.z,
+                rightBand.w,
+                new Vector2(rightBand.x, rightBand.y));
         }
 
         private static void SetRunnerPartLayout(
@@ -36853,8 +36873,8 @@ namespace GreedLast
             }
 
             SetRunnerPartColor(runnerHairBack, WithAlpha(Color32.Lerp(PrototypeRunnerHairColor, color, 0.10f), overlayAlpha));
-            SetRunnerPartColor(runnerLeftHorn, WithAlpha(Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f), overlayAlpha));
-            SetRunnerPartColor(runnerRightHorn, WithAlpha(Color32.Lerp(PrototypeRunnerHornColor, color, 0.18f), overlayAlpha));
+            SetRunnerPartColor(runnerLeftBand, WithAlpha(Color32.Lerp(PrototypeRunnerBandColor, color, 0.18f), overlayAlpha));
+            SetRunnerPartColor(runnerRightBand, WithAlpha(Color32.Lerp(PrototypeRunnerBandColor, color, 0.18f), overlayAlpha));
             SetRunnerPartColor(runnerHead, WithAlpha(color, overlayAlpha));
             SetRunnerPartColor(runnerTorso, WithAlpha(color, overlayAlpha));
             SetRunnerPartColor(runnerSash, WithAlpha(Color32.Lerp(PrototypeRunnerSashColor, color, 0.22f), overlayAlpha));
@@ -36866,7 +36886,42 @@ namespace GreedLast
 
         private static int BuildRunnerProceduralOverlayAlpha(bool hasIllustration)
         {
-            return hasIllustration ? 40 : 255;
+            return hasIllustration ? 0 : 255;
+        }
+
+        private static int BuildPrototypeRunnerPoseIndex(int response, GreedLastJudgementResult result,
+            float progress, bool active)
+        {
+            if (!active || (result != GreedLastJudgementResult.Success && result != GreedLastJudgementResult.Good)
+                || float.IsNaN(progress) || progress < 0.04f || progress > 0.92f) return 0;
+            return response >= (int)RunnerResponseType.Jump && response <= (int)RunnerResponseType.Twist ? response : 0;
+        }
+
+        private static float BuildPrototypeRunnerFootPivot(int pose)
+        {
+            switch (pose)
+            {
+                case 1: return 0.14941406f;
+                case 2: return 0.06022135f;
+                case 3: return 0.06803385f;
+                default: return 0.06217448f;
+            }
+        }
+
+        private void ApplyPrototypeRunnerIllustrationPose(int pose, float direction, Vector4 responseTransform)
+        {
+            if (runnerIllustration == null) return;
+            Texture2D texture = pose == 1 ? runnerJumpTexture : pose == 2 ? runnerSlideTexture
+                : pose == 3 ? runnerTwistTexture : null;
+            if (texture == null) { texture = runnerRunTexture; pose = 0; }
+            if (runnerIllustration.texture != texture) runnerIllustration.texture = texture;
+            RectTransform rect = runnerIllustration.rectTransform;
+            rect.pivot = new Vector2(0.5f, BuildPrototypeRunnerFootPivot(pose));
+            float scaleX = pose == 0 ? 1f : Mathf.Max(0.1f, responseTransform.z);
+            float scaleY = pose == 0 ? 1f : Mathf.Max(0.1f, responseTransform.w);
+            // Preserve the painted proportions; the parent retains the existing movement arc.
+            rect.localScale = new Vector3((pose == 3 && direction < 0f ? -1f : 1f) / scaleX, 1f / scaleY, 1f);
+            rect.anchoredPosition = new Vector2(4f, pose == 2 ? -responseTransform.y / scaleY : 0f);
         }
 
         private static Color32 BuildPrototypeRunnerIllustrationTint(Color32 bodyColor)

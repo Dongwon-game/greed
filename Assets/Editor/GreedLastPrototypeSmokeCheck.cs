@@ -676,6 +676,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeAndroidReadinessCheck.VerifyPolicy();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
+            GreedLastPrototypeEgyptianArtCheck.Run();
             GreedLastPrototypeVisualCheck.VerifyCaptureFinishPolicy();
             GreedLastPrototypeVisualCheck.VerifyCapturePublication();
             GreedLastPrototypeCandidateCheck.Run();
@@ -735,12 +736,12 @@ namespace GreedLast.Editor
                         GreedLastScreenState.LobbyReady,
                         0f),
                 "The entrance illustration must crossfade behind run staging before it deactivates, while lobby staging remains available.");
-            Texture2D entranceTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEntrance");
+            Texture2D entranceTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianEntrance");
             Require(
                 entranceTexture != null,
                 "The generated prototype entrance illustration must be packaged as a Resources texture for editor and player builds.");
             TextureImporter entranceTextureImporter = AssetImporter.GetAtPath(
-                "Assets/Resources/GreedLast/PrototypeEntrance.png") as TextureImporter;
+                "Assets/Resources/GreedLast/PrototypeEgyptianEntrance.png") as TextureImporter;
             Require(
                 entranceTextureImporter != null
                     && !entranceTextureImporter.mipmapEnabled
@@ -898,12 +899,12 @@ namespace GreedLast.Editor
                     && pressuredCorridorTint.g > escapeCorridorTint.g
                     && pressuredCorridorTint.a == 255,
                 "The corridor art must pick up restrained chapter pressure, escape warmth, and focus or danger emphasis without replacing gameplay contrast.");
-            Texture2D runnerTexture = Resources.Load<Texture2D>("GreedLast/PrototypeRunner");
+            Texture2D runnerTexture = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunner");
             Require(
                 runnerTexture != null,
-                "The generated dokkaebi runner illustration must be packaged as a Resources texture for lobby and run presentation.");
+                "The Egyptian human runner illustration must be packaged for lobby and run presentation.");
             TextureImporter runnerTextureImporter = AssetImporter.GetAtPath(
-                "Assets/Resources/GreedLast/PrototypeRunner.png") as TextureImporter;
+                "Assets/Resources/GreedLast/PrototypeEgyptianRunner.png") as TextureImporter;
             Require(
                 runnerTextureImporter != null
                     && !runnerTextureImporter.mipmapEnabled
@@ -919,9 +920,9 @@ namespace GreedLast.Editor
             Require(
                 InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true)
                     < InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", false)
-                    && InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true) >= 32
+                    && InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", true) == 0
                     && InvokeRuntimeUiInt("BuildRunnerProceduralOverlayAlpha", false) == 255,
-                "The generated runner must keep readable procedural action accents while the missing-art fallback stays fully opaque.");
+                "Painted poses must not have ghost procedural limbs; the missing-art human fallback stays opaque.");
             Color32 runnerIllustrationTint = InvokeRuntimeUiColor(
                 "BuildPrototypeRunnerIllustrationTint",
                 new Color32(221, 83, 68, 255));
@@ -4234,12 +4235,12 @@ namespace GreedLast.Editor
                     && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHairOffsetXForPattern", rightRotation, 1f, rightRotationDirection) > 0f
                     && InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashAngleForPattern", leftRotation, 1f, leftRotationDirection)
                         < InvokeRuntimeUiFloat("BuildRunnerSilhouetteSashAngleForPattern", rightRotation, 1f, rightRotationDirection)
-                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetYForPattern", leftJumpTrail, 1f, -1f)
-                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetYForPattern", centerSlideTrail, 1f, -1f)
-                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornAngleForPattern", leftJumpTrail, 1f, 1f, -1f))
-                        > Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornAngleForPattern", centerSlideTrail, 1f, 1f, -1f))
-                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetXForPattern", rightRotation, 1f, rightRotationDirection, 1f)
-                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteHornOffsetXForPattern", leftRotation, 1f, leftRotationDirection, 1f),
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetYForPattern", leftJumpTrail, 1f, -1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetYForPattern", centerSlideTrail, 1f, -1f)
+                    && Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandAngleForPattern", leftJumpTrail, 1f, 1f, -1f))
+                        > Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandAngleForPattern", centerSlideTrail, 1f, 1f, -1f))
+                    && InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetXForPattern", rightRotation, 1f, rightRotationDirection, 1f)
+                        > InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetXForPattern", leftRotation, 1f, leftRotationDirection, 1f),
                 "Prototype runner hair, sash, and horn accents must carry directional rotation/twist reads without changing control rules.");
             Require(
                 InvokeRuntimeUiLabel("BuildPrototypeTrapArtStyleKey", leftRotation) == "통로:금색-청록",
