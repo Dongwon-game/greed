@@ -176,12 +176,22 @@ try {
         @{Source='Assets\Editor\GreedLastPlayerPersistenceBuilder.cs'; Destination='Assets\Editor\GreedLastPlayerPersistenceBuilder.cs'},
         @{Source='Assets\Editor\GreedLastPlayerPersistenceProbe.cs.txt'; Destination='Assets\Scripts\GreedLastPlayerPersistenceProbe.cs'}
     )) {
-        $source = Join-Path $project $asset.Source
+        $source = Join-Path $copy $asset.Source
         $destination = Join-Path $copy $asset.Destination
-        [IO.File]::Copy($source, $destination, $true)
+        if (!(Test-Path -LiteralPath $source -PathType Leaf)) { throw 'Exported committed probe source is missing.' }
+        $relativePath = $asset.Source.Replace('\','/')
+        $canonicalBlob = (git -C $project rev-parse ($head+':'+$relativePath)).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Committed probe blob missing.' }
+        $exportedBlob = (git -C $project hash-object --no-filters -- $source).Trim()
+        if ($LASTEXITCODE -ne 0 -or $exportedBlob -cne $canonicalBlob) {
+            throw 'Exported probe source differs from its committed blob.'
+        }
+        if (![string]::Equals($source,$destination,[StringComparison]::OrdinalIgnoreCase)) {
+            [IO.File]::Copy($source, $destination, $true)
+        }
         $digest = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
         if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -cne $digest) { throw 'Probe source copy mismatch.' }
-        $report.Inputs += @{Path=$asset.Source; SHA256=$digest}
+        $report.Inputs += @{Path=$asset.Source; SHA256=$digest; CanonicalBlob=$canonicalBlob}
     }
     [IO.File]::WriteAllText((Join-Path $root 'prepared.json'), ($report | ConvertTo-Json -Depth 8))
     $buildLog = Join-Path $root 'build.log'
