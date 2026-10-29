@@ -87,7 +87,7 @@ function Read-OwnedEngineReport([string]$Copy) {
     if ([string]::IsNullOrEmpty($engine.archivedReport) -or [IO.Path]::GetFileName($engine.archivedReport) -cne $engine.archivedReport) {
         throw 'Unsafe archived report path.'
     }
-    if ($engine.archivedReport -ceq 'latest-report.json') { throw 'The archived engine report must be distinct from its latest alias.' }
+    if ([string]::Equals($engine.archivedReport,'latest-report.json',[StringComparison]::OrdinalIgnoreCase)) { throw 'The archived engine report must be distinct from its latest alias.' }
     $path = Join-Path $directory $engine.archivedReport
     if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw 'The archived engine report is missing.' }
     $bytes = [IO.File]::ReadAllBytes($path)

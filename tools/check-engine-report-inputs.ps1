@@ -31,18 +31,18 @@ $r=[ordered]@{SourceHead=$head;StartedUtc=[DateTime]::UtcNow.ToString('O');Compl
 [IO.File]::Copy($PSCommandPath,(Join-Path $root 'driver.ps1'),$false)
 [IO.File]::Copy($runner,(Join-Path $root 'source-runner.ps1'),$false)
 try{
-    $names=if($ExpectedFailure){@('alias-drift')}else{@('success','failure','alias-drift','unsafe-path','missing-archive','self-alias')}
+    $names=if($ExpectedFailure){@('alias-drift')}else{@('success','failure','alias-drift','unsafe-path','missing-archive','self-alias','self-alias-case')}
     foreach($name in $names){
         $copy=Join-Path $root ('fixtures\'+$name)
         $directory=Join-Path $copy 'Logs\PlayModeChecks'
         [void][IO.Directory]::CreateDirectory($directory)
-        $archiveName=if($name -eq 'unsafe-path'){'../escape.json'}elseif($name -eq 'self-alias'){'latest-report.json'}else{'report-fixture.json'}
+        $archiveName=if($name -eq 'unsafe-path'){'../escape.json'}elseif($name -eq 'self-alias'){'latest-report.json'}elseif($name -eq 'self-alias-case'){'LATEST-REPORT.JSON'}else{'report-fixture.json'}
         $latestData=[ordered]@{archivedReport=$archiveName;succeeded=($name -ne 'failure');scope='generated reader fixture'}
         $archiveData=[ordered]@{archivedReport=$archiveName;succeeded=($name -notin @('failure','alias-drift'));scope='generated reader fixture'}
         $latest=Join-Path $directory 'latest-report.json'
         [IO.File]::WriteAllText($latest,($latestData|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
         $archive=Join-Path $directory 'report-fixture.json'
-        if($name -notin @('unsafe-path','missing-archive','self-alias')){
+        if($name -notin @('unsafe-path','missing-archive','self-alias','self-alias-case')){
             [IO.File]::WriteAllText($archive,($archiveData|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
         }
         $failure=''
@@ -62,12 +62,12 @@ try{
             $r.Cases+=@{Name=$name;Matched=$true;SucceededValue=$read.Data.succeeded}
         }else{
             $expected=if($name -eq 'unsafe-path'){'Unsafe archived report path.'}elseif($name -eq 'missing-archive'){'The archived engine report is missing.'}
-                elseif($name -eq 'self-alias'){'The archived engine report must be distinct from its latest alias.'}else{'The latest engine report must match its archived report.'}
+                elseif($name -in @('self-alias','self-alias-case')){'The archived engine report must be distinct from its latest alias.'}else{'The latest engine report must match its archived report.'}
             if($failure -cne $expected){throw ('Invalid report relationship was not rejected: '+$name+'; '+$failure)}
             $r.Cases+=@{Name=$name;Rejected=$true}
         }
     }
-    $r.Succeeded=!$ExpectedFailure -and $r.Cases.Count -eq 6
+    $r.Succeeded=!$ExpectedFailure -and $r.Cases.Count -eq 7
 }catch{$r.Error=$_.Exception.ToString()}
 finally{
     $r.SourceRunnerUnchanged=$before -ceq (Get-FileHash -LiteralPath $runner).Hash
