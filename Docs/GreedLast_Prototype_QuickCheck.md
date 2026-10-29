@@ -6,7 +6,7 @@
 
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
-- 현재 실행본: **2026-10-29 19:23 KST / egyptian-runner**, 게임/그림 `bfc0741`, 엔진·빌드 입력 `91fd361`. 이집트풍 인간의 달리기·점프·숙이기·비틀기와 입구 인물을 연결했다. 앞선 휠/기프트 보호를 포함하며 판정·보상·한 번 저장/두 번 사용은 유지한다. 후속 `bfcc183`은 같은 연결 검사를 상시 검사로 옮기고 진단 방향 표기를 맞춘 소스이며 재검증 중이다.
+- 현재 실행본: **2026-10-29 19:48 KST / egyptian-runner-checks**, 게임·Editor/빌드 입력 `bfcc183`. 이집트풍 인간의 네 동작과 입구 인물, 상시 그림 연결 검사를 포함한다. 두 방식 엔진·전체 스모크·비개발 Windows/ZIP·초기 구동을 통과했다. 판정·보상·한 번 저장/실제 두 번 사용은 유지하며 이전 19:23 실행본/ZIP과 개인 저장은 보존했다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 저장 위치는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 개인 진행도를 초기화하지 않는다.
 
 ## 이번 그림 확인
