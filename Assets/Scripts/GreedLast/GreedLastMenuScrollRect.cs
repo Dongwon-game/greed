@@ -36,6 +36,12 @@ namespace GreedLast
             if (ReferenceEquals(activePointer, pointer)) base.OnInitializePotentialDrag(pointer);
         }
 
+        public override void OnScroll(PointerEventData pointer)
+        {
+            if (Application.isPlaying && canceledFrame == Time.frameCount) return;
+            base.OnScroll(pointer);
+        }
+
         public override void OnBeginDrag(PointerEventData pointer)
         {
             if (ReferenceEquals(activePointer, pointer)) base.OnBeginDrag(pointer);

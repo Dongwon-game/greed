@@ -3669,6 +3669,7 @@ namespace GreedLast.Editor
                     input.BeforeMouseRead = null;
                     input.Touches = Array.Empty<Touch>();
                     Call(ui, "OnApplicationFocus", true);
+                    Call(ui, "SetAppInputAvailable", true);
                     Call(ui, "ApplySafeAreaSample", area, width, height, true);
                     backendField.SetValue(app, original);
                     state.SetLobbyReady(original.LoadLobby());
