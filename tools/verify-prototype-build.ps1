@@ -206,6 +206,47 @@ function Assert-ScreenFrameGate {
     }
 }
 
+function Assert-MenuWheelFrameGuard {
+    param($Methods)
+    $scroll = @($Methods | Where-Object { $_.Name -ceq 'OnScroll' })
+    $cancel = @($Methods | Where-Object { $_.Name -ceq 'CancelPendingGestures' })
+    $disable = @($Methods | Where-Object { $_.Name -ceq 'OnDisable' })
+    if ($scroll.Count -ne 1 -or $cancel.Count -ne 1 -or $disable.Count -ne 1 -or
+        !$scroll[0].IsVirtual -or $scroll[0].IsStatic -or $scroll[0].ReturnType.FullName -cne 'System.Void' -or
+        $scroll[0].Parameters.Count -ne 1 -or
+        $scroll[0].Parameters[0].ParameterType.FullName -cne 'UnityEngine.EventSystems.PointerEventData') {
+        throw 'Menu wheel frame guard surface missing or changed.'
+    }
+    $i = @($scroll[0].Body.Instructions)
+    $codes = @($i | ForEach-Object { $_.OpCode.Code.ToString() })
+    if ($i.Count -ne 11 -or $codes[0] -cne 'Call' -or
+        $i[0].Operand.FullName -cne 'System.Boolean UnityEngine.Application::get_isPlaying()' -or
+        $codes[1] -notin @('Brfalse','Brfalse_S') -or $i[1].Operand -ne $i[7] -or
+        ($codes[2..4] -join ',') -cne 'Ldarg_0,Ldfld,Call' -or
+        $i[3].Operand.FullName -cne 'System.Int32 GreedLast.GreedLastMenuScrollRect::canceledFrame' -or
+        $i[4].Operand.FullName -cne 'System.Int32 UnityEngine.Time::get_frameCount()' -or
+        $codes[5] -notin @('Bne_Un','Bne_Un_S') -or $i[5].Operand -ne $i[7] -or
+        ($codes[6..10] -join ',') -cne 'Ret,Ldarg_0,Ldarg_1,Call,Ret' -or
+        $i[9].Operand.FullName -cne 'System.Void UnityEngine.UI.ScrollRect::OnScroll(UnityEngine.EventSystems.PointerEventData)') {
+        throw 'Menu wheel frame guard must reject only the canceled Play frame and otherwise call native scrolling.'
+    }
+    $c = @($cancel[0].Body.Instructions)
+    if ($c.Count -lt 6 -or $c[0].OpCode.Code.ToString() -cne 'Call' -or
+        $c[0].Operand.FullName -cne 'System.Boolean UnityEngine.Application::get_isPlaying()' -or
+        $c[1].OpCode.Code.ToString() -notin @('Brfalse','Brfalse_S') -or $c[1].Operand -ne $c[5] -or
+        $c[2].OpCode.Code.ToString() -cne 'Ldarg_0' -or $c[3].OpCode.Code.ToString() -cne 'Call' -or
+        $c[3].Operand.FullName -cne 'System.Int32 UnityEngine.Time::get_frameCount()' -or
+        $c[4].OpCode.Code.ToString() -cne 'Stfld' -or $c[4].Operand.FullName -cne $i[3].Operand.FullName) {
+        throw 'Menu wheel cancellation must capture the engine frame in the same field only during Play.'
+    }
+    $d = @($disable[0].Body.Instructions)
+    if ((($d | ForEach-Object { $_.OpCode.Code.ToString() }) -join ',') -cne 'Ldarg_0,Call,Ldarg_0,Call,Ret' -or
+        $d[1].Operand.FullName -cne 'System.Void GreedLast.GreedLastMenuScrollRect::CancelPendingGestures()' -or
+        $d[3].Operand.FullName -cne 'System.Void UnityEngine.UI.ScrollRect::OnDisable()') {
+        throw 'Menu wheel disabling must cancel its frame before native cleanup.'
+    }
+}
+
 function Assert-ScreenHandlerLifetime {
     param($Methods)
     foreach ($name in @('Awake', 'OnDestroy', 'HandlePresentationReleased')) {
@@ -352,6 +393,8 @@ try {
         $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastMenuScrollbar' -and $_.Name -ceq 'OnPointerDown'
     }).Count -ne 1) { throw 'Release fresh touch command/lane/menu callers changed.' }
     foreach ($method in $freshTouchCallers) { Assert-FreshTouchGate $method }
+    $menuScrollMethods = @($types.Methods | Where-Object { $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastMenuScrollRect' })
+    Assert-MenuWheelFrameGuard $menuScrollMethods
     $appMethods = @($types.Methods | Where-Object { $_.DeclaringType.FullName -ceq 'GreedLast.GreedLastApp' })
     $screenPolicies = @($appMethods | Where-Object { $_.Name -ceq 'get_HasUnpresentedScreenTransition' })
     if ($screenPolicies.Count -ne 1) { throw 'Release screen transition policy missing; this is not the current input-protected build.' }
@@ -420,6 +463,7 @@ if ($PackagePath) {
     GuardedSaveConfirmationMutations = $saveResolutions.Count * 2
     FreshTouchPolicies = $freshTouchPolicies.Count
     GuardedFreshTouchCallers = $freshTouchCallers.Count
+    MenuWheelFrameGuards = 1
     ScreenFramePolicies = $screenPolicies.Count
     GuardedScreenFrameCallers = $screenCallers.Count
     ScreenHandlerLifetimeMethods = 3
