@@ -21,7 +21,7 @@ namespace GreedLast.PlayerChecks
         private string root, phase;
         private float deadline;
         private bool finished, outputValidated;
-        private bool backgroundResults, scopedGoals;
+        private bool backgroundResults, scopedGoals, giftHistory;
         private bool windowAwaitingClose, windowReady;
         private readonly Result result = new Result();
 
@@ -46,6 +46,9 @@ namespace GreedLast.PlayerChecks
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
+            public bool giftHistoryRequested, giftHistoryMetadataPreserved, giftHistoryEmptyPreserved, giftHistoryThirdUseRejected;
+            public int giftHistoryStarts;
+            public Record[] giftHistorySlots;
             public int recordSchemaVersion, recordFieldCount, recordComparatorControls, legacyRecordComparisonBlindSpots, recordInvalidControls;
             public int normalRecordComparisons, infiniteRecordComparisons, attemptRecordComparisons, savedSlotComparisons;
             public bool unreadableSaveSeeded, unreadableSavePreserved, unreadableRetryPreserved;
@@ -122,6 +125,8 @@ namespace GreedLast.PlayerChecks
             phase = Argument("-greed-probe-phase");
             backgroundResults = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-background-results") >= 0;
             scopedGoals = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-scoped-goals") >= 0;
+            giftHistory = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-gift-history") >= 0;
+            result.giftHistoryRequested = giftHistory;
             result.backgroundResultsRequested = backgroundResults;
             Require(!backgroundResults || !phase.StartsWith("window-", StringComparison.Ordinal),
                 "Background callback checks cannot replace interactive window input.");
@@ -131,7 +136,8 @@ namespace GreedLast.PlayerChecks
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
                 "unreadable-seed", "unreadable-blocked", "unreadable-verify",
-                "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again" }, phase) >= 0,
+                "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again",
+                "gift-history-seed", "gift-history-first", "gift-history-last", "gift-history-verify", "gift-history-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
             string expected = Path.GetDirectoryName(Path.GetDirectoryName(Application.dataPath));
@@ -141,6 +147,8 @@ namespace GreedLast.PlayerChecks
                 && Application.productName == "Persistence-" + id,
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
+            Require(giftHistory == phase.StartsWith("gift-history-", StringComparison.Ordinal)
+                && (!giftHistory || (!backgroundResults && !scopedGoals)), "Gift history checks require their dedicated noninteractive mode.");
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
             deadline = Time.realtimeSinceStartup + (phase == "window-loadout" || phase == "window-menu" ? 600f
                 : phase == "window-play" || phase == "window-clear" ? 330f : 150f);
@@ -177,6 +185,11 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady
                     && (bool)Call(app, "CanAcceptPlayerInput"));
             Require((bool)Call(app, "CanAcceptPlayerInput"), "The actual player must accept ordinary app commands.");
+            if (giftHistory)
+            {
+                VerifyGiftHistoryPersistence();
+                yield break;
+            }
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
                 && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase && !practiceQuitPhase)
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
@@ -615,6 +628,108 @@ namespace GreedLast.PlayerChecks
                         "An already settled normal failure must not grant another reward on quit.");
             }
             else throw new InvalidOperationException("Unsupported persistence phase.");
+        }
+
+        private void VerifyGiftHistoryPersistence()
+        {
+            result.scope = "Five fresh private Windows processes with seeded backend records and transient public-core synthetic clocks. "
+                + "Normal Application.Quit/relaunch preserves three authoritative gift histories, source metadata and two uses/automatic emptying. "
+                + "Not played normal clears, real-time infinite runs, native input/capture, personal recovery, audible output or device performance.";
+            string[] histories = { "집중 축", "생존 축", "연쇄 축" };
+            string[] primaries = { "생존 축", "집중 축", "집중 축" };
+            if (phase == "gift-history-seed")
+            {
+                Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0
+                    && Count("infiniteRunCount") == 0, "Gift history seeding requires an empty private product.");
+                result.giftHistorySlots = new Record[3];
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    var source = new GreedLastRunRecord(true, 100, 3, 0, 0, 0, 0, 0, 0,
+                        20f, "gift-history-" + slot, "", primaries[slot], "", histories[slot], "");
+                    backend.RegisterClear(source);
+                    backend.SelectSaveLoadoutSlot(slot);
+                    backend.ConfirmSaveLoadout();
+                    backend.ConfirmSaveLoadout();
+                    GreedLastRunRecord stored = Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[slot];
+                    Require(stored.IsValid && stored.ChoiceSummary == histories[slot] && stored.PrimaryGift == primaries[slot]
+                        && !backend.HasSaveLoadoutCandidate && Uses()[slot] == 2,
+                        "Seeding must preserve authoritative history and consume each candidate once.");
+                    result.giftHistorySlots[slot] = From(stored);
+                }
+            }
+            else
+            {
+                Result seed = Previous("gift-history-seed");
+                Require(seed.succeeded && seed.giftHistoryRequested && seed.giftHistoryMetadataPreserved
+                    && seed.giftHistorySlots != null && seed.giftHistorySlots.Length == 3,
+                    "Gift history checks require the actual prior private seed process.");
+                Require(Count("normalClearCount") == seed.clears && Count("infiniteRunCount") == 0
+                    && backend.LoadSelectedSaveSlotView().GrowthPoints == seed.growthPoints && !backend.HasSaveLoadoutCandidate,
+                    "Relaunching seeded data must not recreate a candidate or gameplay reward.");
+                if (phase == "gift-history-first" || phase == "gift-history-last")
+                {
+                    int before = phase == "gift-history-first" ? 2 : 1;
+                    if (before == 1) Require(Previous("gift-history-first").succeeded,
+                        "The last use must follow the actual first-use process.");
+                    result.giftHistorySlots = new Record[3];
+                    for (int slot = 0; slot < 3; slot++)
+                    {
+                        Require(Uses()[slot] == before, "Each reloaded slot must retain its expected remaining uses.");
+                        backend.SelectSaveLoadoutSlot(slot);
+                        Require(backend.TryConsumeSelectedSaveLoadout(out GreedLastRunRecord stored, out _, out _, histories[slot], "황금 박동"),
+                            "Each seeded history must support exactly its two ordinary uses.");
+                        SameRecord(From(stored), seed.giftHistorySlots[slot]);
+                        result.savedSlotComparisons++;
+                        result.giftHistorySlots[slot] = From(stored);
+                        string key = Read<string>(backend, "persistenceKey");
+                        Require(key == "GreedLast.MockBackend.SaveData.v1", "Use only the ordinary key inside this unique private product.");
+                        string persisted = PlayerPrefs.GetString(key);
+                        var prepared = GreedLastRunCore.CreatePreparedInfiniteLoadout(stored, histories[slot], "황금 박동");
+                        var check = new GreedLastRunCore();
+                        GreedLastRunSnapshot run = default;
+                        check.SnapshotChanged += value => run = value;
+                        try
+                        {
+                            check.EnterInfiniteRun(prepared);
+                            Require(run.FocusGiftStacks == (slot == 0 ? 2 : 0)
+                                && run.SurvivalGiftStacks == (slot == 1 ? 2 : 0) && run.ChainGiftStacks == (slot == 2 ? 2 : 0)
+                                && run.Health == (slot == 1 ? 5 : 3) && run.Focus == 0 && run.FocusStateActive == (slot == 0)
+                                && run.Combo == (slot == 2 ? 4 : 0) && run.Score == (slot == 2 ? 130 : 10),
+                                "Fresh-process preparation bonuses and active stacks must follow history, not the older primary field.");
+                            float clock = Time.realtimeSinceStartup;
+                            check.Tick(clock += 2f); check.Tick(clock += 1f);
+                            Require(run.ActivePattern && !run.Stopped, "An automatically emptied slot must leave its returned run-local record usable.");
+                            clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - check.InputTimingOffsetSeconds;
+                            check.HandleInput(run.Pattern.Channel, clock);
+                            Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1,
+                                "The prepared run-local record must reach an actual public-core exact judgement.");
+                            if (before == 1) result.secondRunAliveAfterSlotClear = !run.Stopped && run.Health > 0;
+                        }
+                        finally { check.Exit(); }
+                        Require(PlayerPrefs.GetString(key) == persisted && Uses()[slot] == before - 1,
+                            "Transient core preparation/play must not rewrite persisted records or consume another use.");
+                        result.giftHistoryStarts++;
+                    }
+                }
+                else
+                {
+                    Require(Previous("gift-history-last").succeeded && Previous("gift-history-last").giftHistoryEmptyPreserved,
+                        "Empty-slot verification must follow the actual last-use process.");
+                    if (phase == "gift-history-verify-again") Require(Previous("gift-history-verify").succeeded,
+                        "Repeated empty-slot verification must follow the actual prior verification process.");
+                }
+                if (phase != "gift-history-first")
+                {
+                    Require(EmptySlots() && Array.TrueForAll(Uses(), value => value == 0), "All three slots must remain automatically empty.");
+                    Require(!backend.TryConsumeSelectedSaveLoadout(out _, out _, out _), "No automatically emptied history may be used a third time.");
+                    result.giftHistoryThirdUseRejected = true;
+                    result.giftHistoryEmptyPreserved = true;
+                }
+            }
+            Require(Count("normalClearCount") == 3 && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0
+                && Count("infiniteRunCount") == 0 && !backend.HasSaveLoadoutCandidate,
+                "Seeded history checks must retain exactly their three synthetic clears and no live gameplay settlement.");
+            result.giftHistoryMetadataPreserved = true;
         }
 
         private IEnumerator VerifyUnreadableSaveEntry()

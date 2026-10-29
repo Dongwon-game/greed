@@ -9,11 +9,15 @@ param(
     [switch]$BackgroundResults,
     [switch]$UnreadableSave,
     [switch]$PracticeQuit,
-    [switch]$ScopedGoals
+    [switch]$ScopedGoals,
+    [switch]$GiftHistory
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($GiftHistory -and ($ScopedGoals -or $PracticeQuit -or $UnreadableSave -or $CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults)) {
+    throw 'Choose the private gift-history check separately from all other modes.'
+}
 if ($ScopedGoals -and ($PracticeQuit -or $UnreadableSave -or $CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus)) {
     throw 'Choose scoped goals with only the optional background callback mode.'
 }
@@ -68,7 +72,8 @@ function Read-PersonalPreferences {
     return ($snapshot | ConvertTo-Json -Depth 8 -Compress)
 }
 
-$operation = if ($PracticeQuit) { 'Verify incomplete, short review and completed first practice across normal quit and five fresh private player processes, without advancing gameplay records' }
+$operation = if ($GiftHistory) { 'Seed three synthetic gift histories in a unique product, then verify metadata and two uses/auto-empty across five normal-exit Windows processes with transient synthetic core checks' }
+    elseif ($PracticeQuit) { 'Verify incomplete, short review and completed first practice across normal quit and five fresh private player processes, without advancing gameplay records' }
     elseif ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
     elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
@@ -102,6 +107,10 @@ $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
 $report.ScopedGoalsRequested = [bool]$ScopedGoals
+$report.GiftHistoryRequested = [bool]$GiftHistory
+if ($GiftHistory) {
+    $report.Scope = 'Five fresh private Windows processes: three seeded authoritative gift-history records, metadata/two uses/automatic emptying and repeated third-use rejection across normal Application.Quit/relaunch. Transient public-core synthetic clocks verify prepared stacks/bonuses and six first judgements; not actual normal clears, real-time infinite runs, native input/capture, personal recovery, audible output or phone testing.'
+}
 if ($PracticeQuit) {
     $report.Scope = 'Five fresh private players: incomplete practice quit, two-action review from a synthetic lobby notice, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
 }
@@ -266,7 +275,8 @@ try {
         }
     }
 
-    $phases = if ($PracticeQuit) { @('practice-live','practice-review','practice-complete','practice-verify','practice-verify-again') }
+    $phases = if ($GiftHistory) { @('gift-history-seed','gift-history-first','gift-history-last','gift-history-verify','gift-history-verify-again') }
+        elseif ($PracticeQuit) { @('practice-live','practice-review','practice-complete','practice-verify','practice-verify-again') }
         elseif ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
@@ -284,6 +294,7 @@ try {
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
         if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
+        if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
         $timeout = if ($phase -in @('window-loadout','window-menu')) { 630000 } elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
@@ -330,6 +341,22 @@ try {
         if ($InteractiveMenus -and !$result.nativeMenuCandidatePreserved) {
             throw ('Required native menu/candidate coverage did not complete: ' + $phase)
         }
+        $expectedGiftStarts = if ($GiftHistory -and $phase -in @('gift-history-first','gift-history-last')) { 3 } else { 0 }
+        if ($result.giftHistoryRequested -ne [bool]$GiftHistory -or $result.giftHistoryStarts -ne $expectedGiftStarts) {
+            throw ('Gift history mode/start coverage differs: ' + $phase)
+        }
+        if ($GiftHistory) {
+            $expectedUses = if ($phase -eq 'gift-history-seed') { @(2,2,2) } elseif ($phase -eq 'gift-history-first') { @(1,1,1) } else { @(0,0,0) }
+            $expectEmpty = $phase -in @('gift-history-last','gift-history-verify','gift-history-verify-again')
+            if (!$result.giftHistoryMetadataPreserved -or $result.clears -ne 3 -or $result.failures -ne 0 -or
+                $result.abandons -ne 0 -or $result.infiniteRuns -ne 0 -or $result.candidate -or
+                $result.uses.Count -ne 3 -or ($result.uses -join ',') -cne ($expectedUses -join ',') -or
+                $result.giftHistoryEmptyPreserved -ne $expectEmpty -or $result.giftHistoryThirdUseRejected -ne $expectEmpty -or
+                ($expectedGiftStarts -eq 3 -and ($result.savedSlotComparisons -ne 3 -or $result.giftHistorySlots.Count -ne 3)) -or
+                ($phase -eq 'gift-history-last' -and !$result.secondRunAliveAfterSlotClear)) {
+                throw ('Fresh-process gift history metadata/use/empty-state evidence is incomplete: ' + $phase)
+            }
+        }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
@@ -348,6 +375,11 @@ try {
             NormalReviewGoalEarned=$result.normalReviewGoalEarned; NormalReviewGoalPersisted=$result.normalReviewGoalPersisted;
             NormalReviewGoalFailed=$result.normalReviewGoalFailed; NormalReviewGoalFailurePersisted=$result.normalReviewGoalFailurePersisted;
             InfiniteReviewGoalEarned=$result.infiniteReviewGoalEarned; InfiniteReviewGoalPersisted=$result.infiniteReviewGoalPersisted}
+        $report.Phases[-1].GiftHistoryRequested = $result.giftHistoryRequested
+        $report.Phases[-1].GiftHistoryStarts = $result.giftHistoryStarts
+        $report.Phases[-1].GiftHistoryMetadataPreserved = $result.giftHistoryMetadataPreserved
+        $report.Phases[-1].GiftHistoryEmptyPreserved = $result.giftHistoryEmptyPreserved
+        $report.Phases[-1].GiftHistoryThirdUseRejected = $result.giftHistoryThirdUseRejected
     }
     $report.FailedPhase = ''
     $report.Succeeded = $true
