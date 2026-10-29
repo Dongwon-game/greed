@@ -1,5 +1,19 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-29 완료된 플레이어 시험 사본의 에디터 식별자 보존
+
+플레이어 빌더의 `finally`가 사본의 회사·제품명을 `DefaultCompany / greed last`로 돌리는 것을 확인했다. 앞선 자동 검사는 실제 별도 제품에서 개인 저장 불변으로 완료됐으나, 그 완료 사본을 나중에 에디터로 열어 Play하면 원본 에디터 저장 영역과 겹칠 여지가 있었다. 개인 자료 유실의 재현이나 10월 19일 첫 연습 표시 손실의 원인 규명/복구는 아니다. 원본 프로젝트와 이전 사본은 수정하지 않았다.
+
+Editor/도구 `9ce53b6`은 완료 사본의 설정을 `GreedLastPrototypeChecks / Persistence-고유ID`로 유지한다. 빌드 후 새 숨김 에디터를 열어 `Application.companyName/productName`과 `PlayerSettings` 양쪽이 고유 식별자인지 확인하고, 통과해야만 플레이어 검사를 시작한다. 원본 설정 파일의 해시 불변과 별개로 사본 설정은 의도적으로 고유 이름을 남긴다. 빌드 전 컴파일/준비에서 중단된 사본까지 이 검증이 완료됐다는 뜻은 아니다.
+
+- 실제 재열기/다섯 프로세스: `Logs/PlayerPersistenceChecks/dbc38e88f8874884887ec836df09f995/report.json`, SHA256 `2E704E6FCABA5BE8F49485FD16411B6B1E9EAEE719364DAB53B747C84D101880`. `PrivateEditorIdentityVerified` 참, 기프트 사용권 `2/2/2 → 1/1/1 → 0/0/0 → 0/0/0 → 0/0/0`·메타데이터/자동 비움·셋째 거부와 기존 네 안전 대조가 통과했다. 개인 저장/원본 설정 불변·소유 종료다. 이 다섯 단계의 합성 저장/임시 코어 범위는 아래 설명과 같으며 실제 전체 무한 주행으로 세지 않는다.
+- 새 에디터 원문: 같은 폴더의 `editor-identity.json`, SHA256 `796B3959EEDCE522306CDC0A678EF41B46DB34224BEBB4EAA71893B6227E629C`. 원문 UTC `2026-10-29T04:12:16.1777201Z`이며 `Application`/`PlayerSettings` 네 필드가 고유 제품과 일치했다. 마지막 단계 뒤 사본 설정도 고유 제품인 채 남아 있고 원본은 `DefaultCompany / greed last` 그대로다.
+- 소스 복사 경계: `Logs/ProbeInputChecks/a6ad418339424cbb91ce723a665cac1f/report.json`, SHA256 `B9CC3044DD2CD8D33B6194636ECBF14A5247C4FE370673CB266B3A396DC9FAF9`. 정상 LF/CRLF·동시 편집 보존·사본 변조/누락의 기존 다섯 대조가 통과했다. 이 작은 자료 검사는 Unity나 개인 저장을 사용하지 않는다.
+
+같은 입력의 새 고유 제품 전체 스모크도 `Logs/EngineLoopChecks/155b2416b7134bd3a27a6957157e30b0/report.json`, SHA256 `70037886B0D5102FCA5B657C1F3476FA8CD551359FDC02CF223C7F8B82475E02`에서 통과했다. 시험 자료의 Editor 텍스트 격리/일반 런타임 타입 제외와 기존 대표 흐름을 유지했다. 개인 저장/원본 설정 불변·두 소유 에디터 정상 종료다. 별도 고유 제품의 검사이며 실제 사용자 창이나 새 전체 프레임 주행 성공으로 세지 않는다.
+
+현재 11:47 빌드 입력 `c242784`와 비교해 바뀐 Assets/Packages/ProjectSettings 파일은 Editor 빌더와 시험 텍스트 두 개뿐이다. 게임/자원·패키지/원본 설정은 같아 사용자 DLL/ZIP과 앞선 실제 엔진 근거를 유지한다. 이 후속 에디터 검증을 이전 배포의 통과 범위로 소급하지 않는다. 화면/키·캡처·가청 소리·휴대폰 검사는 하지 않았다.
+
 ## 2026-10-29 엔진 결과의 판정 내용과 보관 원문 일치
 
 엔진 도구는 `latest-report.json`에서 판정 내용을 읽고 별도 보관 파일의 해시를 기록했다. 생성된 JSON 대조에서 최신 요약은 성공, 보관 원문은 실패일 때 서로 다른 내용을 같은 결과처럼 반환하는 경계를 재현했다. `Logs/EngineReportInputChecks/bfc0ffba797e495baf4cd77ee26107ab/report.json`, SHA256 `BF8DFF03B3F141E7B20FA3741634F2D4D1852FF8C69A666C2ED3E09BDB6FACC8`다. 예상 실패/재현 참이며 Unity나 실제 게임의 실패를 재현한 것은 아니다.
