@@ -2347,8 +2347,8 @@ namespace GreedLast.Editor
         private static void VerifyTrapResponseContracts()
         {
             Require(
-                InvokeRuntimeUiLabel("BuildPrototypeRunnerArtStyleKey") == "도깨비 소녀 실루엣",
-                "The prototype art pass must keep the runner direction anchored to the simplified goblin-girl silhouette.");
+                InvokeRuntimeUiLabel("BuildPrototypeRunnerArtStyleKey") == "이집트풍 인간 주자",
+                "The prototype art contract must reflect the approved Egyptian human runner.");
             VerifyTrapResponseFamily(
                 "점프",
                 "바닥→↑점프",
@@ -4241,7 +4241,7 @@ namespace GreedLast.Editor
                         > Mathf.Abs(InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandAngleForPattern", centerSlideTrail, 1f, 1f, -1f))
                     && InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetXForPattern", rightRotation, 1f, rightRotationDirection, 1f)
                         > InvokeRuntimeUiFloat("BuildRunnerSilhouetteBandOffsetXForPattern", leftRotation, 1f, leftRotationDirection, 1f),
-                "Prototype runner hair, sash, and horn accents must carry directional rotation/twist reads without changing control rules.");
+                "Prototype runner hair, sash, and headband accents must carry directional rotation/twist reads without changing control rules.");
             Require(
                 InvokeRuntimeUiLabel("BuildPrototypeTrapArtStyleKey", leftRotation) == "통로:금색-청록",
                 "Rotation-corridor traps must get a distinct prototype art key for the later graphic pass.");

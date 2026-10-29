@@ -123,8 +123,135 @@ namespace GreedLast.Editor
                 GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
                 UnityEngine.Object.DestroyImmediate(host);
             }
+            VerifyPublishedPoseBindings();
             Debug.Log("Greed Egyptian runner art passed: four source-alpha/import checks, " + policies
                 + " pose policy boundaries, " + transforms + " painted-proportion/foot/mirror transforms, three missing-pose recoveries and lobby reset. No desktop capture, player preferences or hardware-feel assertion.");
+        }
+
+        private static void VerifyPublishedPoseBindings()
+        {
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            const BindingFlags methods = BindingFlags.Instance | BindingFlags.NonPublic;
+            var previousCamera = GameObject.Find("GreedLastCamera");
+            var previousEvents = GameObject.Find("GreedLastEventSystem");
+            var host = new GameObject("GreedEgyptianPublishedPoseCheck");
+            GameObject canvas = null;
+            int outcomes = 0, pauses = 0, choices = 0;
+            try
+            {
+                var ui = host.AddComponent<GreedLastRuntimeUi>();
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
+                var type = typeof(GreedLastRuntimeUi);
+                var picture = (RawImage)type.GetField("runnerIllustration", fields).GetValue(ui);
+                canvas = ((RectTransform)type.GetField("rootPanelRect", fields).GetValue(ui)).GetComponentInParent<Canvas>().gameObject;
+                var normal = Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunner");
+                var update = type.GetMethod("UpdateRunnerAvatar", methods);
+                foreach (var result in new[] { GreedLastJudgementResult.Success, GreedLastJudgementResult.Good, GreedLastJudgementResult.Miss })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.Enter();
+                    float clock = 10f;
+                    int count = result == GreedLastJudgementResult.Miss ? 1 : 5;
+                    for (int action = 0; action < count; action++)
+                    {
+                        core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
+                        core.Tick(clock += 2f);
+                        core.Tick(clock += 1f);
+                        if (!run.ActivePattern) throw new InvalidOperationException("Published pose checks need an active pattern.");
+                        ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Run", "", 0));
+                        ui.RenderRun(run);
+                        float offset = result == GreedLastJudgementResult.Good
+                            ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                        clock = clock - run.CoreDeltaSeconds - core.InputTimingOffsetSeconds + offset;
+                        var channel = result == GreedLastJudgementResult.Miss
+                            ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                            : run.Pattern.Channel;
+                        core.HandleInput(channel, clock);
+                        if (run.LastResult != result) throw new InvalidOperationException("Unexpected published pose judgement: " + run.LastResult);
+                        ui.RenderRun(run);
+                        // Edit-mode test sampling only: core outcomes use public inputs; only the illustration clock is positioned at mid-response.
+                        type.GetField("runnerResponseStartedAt", fields).SetValue(ui, Time.unscaledTime - 1f);
+                        type.GetField("runnerResponseUntil", fields).SetValue(ui, Time.unscaledTime + 1f);
+                        update.Invoke(ui, null);
+                        string suffix = action == 0 ? "Jump" : action == 1 ? "Slide" : "Twist";
+                        bool live = !run.ChoiceActive && !run.Stopped && !run.CountdownActive && !run.Paused;
+                        Texture2D expected = result == GreedLastJudgementResult.Miss || !live ? normal
+                            : Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunner" + suffix);
+                        if (picture.texture != expected) throw new InvalidOperationException("Published outcome did not bind the expected action texture: " + action + "/" + result);
+                        outcomes++;
+                        if (!live)
+                        {
+                            if (!run.ChoiceActive) throw new InvalidOperationException("The shortcut's chapter end must be an actual choice gate.");
+                            choices++;
+                            clock += 4f;
+                            continue;
+                        }
+                        core.TogglePause(clock + 0.1f);
+                        ui.RenderRun(run);
+                        update.Invoke(ui, null);
+                        if (!run.Paused || picture.texture != normal || picture.rectTransform.localScale.x < 0f)
+                            throw new InvalidOperationException("Pause must clear the action texture and mirror.");
+                        pauses++;
+                        clock += 4f;
+                    }
+                }
+                foreach (var result in new[] { GreedLastJudgementResult.Success, GreedLastJudgementResult.Good })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.EnterInfiniteRun();
+                    float clock = Time.realtimeSinceStartup;
+                    bool foundTwist = false;
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "Infinite", "", 0));
+                    for (int step = 0; step < 1000 && !foundTwist; step++)
+                    {
+                        core.Tick(clock += 0.1f);
+                        if (!run.ActivePattern || run.CountdownActive || run.Paused || run.Stopped || run.ChoiceActive) continue;
+                        bool twist = run.Pattern.AvoidanceType == GreedLastAvoidanceType.Twist;
+                        ui.RenderRun(run);
+                        float offset = result == GreedLastJudgementResult.Good
+                            ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
+                        clock = clock - run.CoreDeltaSeconds - core.InputTimingOffsetSeconds + offset;
+                        core.HandleInput(run.Pattern.Channel, clock);
+                        if (run.LastResult != result) throw new InvalidOperationException("Unexpected infinite pose judgement.");
+                        ui.RenderRun(run);
+                        if (!twist) continue;
+                        if (run.Stopped || run.ChoiceActive) throw new InvalidOperationException("Infinite twist needs an uninterrupted run.");
+                        type.GetField("runnerResponseStartedAt", fields).SetValue(ui, Time.unscaledTime - 1f);
+                        type.GetField("runnerResponseUntil", fields).SetValue(ui, Time.unscaledTime + 1f);
+                        update.Invoke(ui, null);
+                        if (picture.texture != Resources.Load<Texture2D>("GreedLast/PrototypeEgyptianRunnerTwist"))
+                            throw new InvalidOperationException("The published live infinite twist must bind the twist texture.");
+                        outcomes++;
+                        core.TogglePause(clock + 0.1f);
+                        ui.RenderRun(run);
+                        update.Invoke(ui, null);
+                        if (!run.Paused || picture.texture != normal || picture.rectTransform.localScale.x < 0f)
+                            throw new InvalidOperationException("Infinite twist pause must restore the unmirrored normal texture.");
+                        pauses++;
+                        foundTwist = true;
+                    }
+                    if (!foundTwist) throw new InvalidOperationException("The public infinite run did not reach a twist in the bounded test.");
+                }
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
+                if (picture.texture != normal) throw new InvalidOperationException("Lobby must clear the last action image.");
+            }
+            finally
+            {
+                if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas);
+                foreach (string name in new[] { "GreedLastCamera", "GreedLastEventSystem" })
+                {
+                    var previous = name == "GreedLastCamera" ? previousCamera : previousEvents;
+                    if (previous == null) { var created = GameObject.Find(name); if (created != null) UnityEngine.Object.DestroyImmediate(created); }
+                }
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+            Debug.Log("Greed Egyptian published pose bindings passed: " + outcomes + " inspected public core outcomes, " + pauses
+                + " pause resets, " + choices + " actual choice gates and lobby reset. Includes live infinite exact/Good twists. Edit-mode UI sampling with a positioned private illustration clock, not engine frames, native input, screenshots or device feel.");
         }
 
         private static void VerifySourceBounds(string path, int pose)

@@ -48361,7 +48361,7 @@ namespace GreedLast
 
         private static string BuildPrototypeRunnerArtStyleKey()
         {
-            return "도깨비 소녀 실루엣";
+            return "이집트풍 인간 주자";
         }
 
         private static string BuildPrototypeTrapArtStyleKey(GreedLastPatternModel pattern)
