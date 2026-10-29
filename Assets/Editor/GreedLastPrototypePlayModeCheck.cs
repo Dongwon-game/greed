@@ -421,6 +421,7 @@ namespace GreedLast.Editor
             {
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.savedComparisonGestureCases == 8
                     && cycle.savedComparisonFreshRecoveries == 8 && cycle.savedComparisonViews == 2
+                    && cycle.savedComparisonWheelCases == 6 && cycle.savedComparisonWheelRecoveries == 6
                     && cycle.savedComparisonSlotHandoffs == 4
                     && cycle.savedComparisonMinimumTravelPixels > 1f && cycle.savedComparisonDataPreserved);
                 if (!results.succeeded) results.error = "Required actual saved-comparison menu coverage did not complete.";
@@ -659,6 +660,7 @@ namespace GreedLast.Editor
             public int engineMenuOverflowTransitions;
             public int engineMenuCrossControlCases;
             public int savedComparisonGestureCases, savedComparisonFreshRecoveries, savedComparisonViews, savedComparisonSlotHandoffs;
+            public int savedComparisonWheelCases, savedComparisonWheelRecoveries;
             public float savedComparisonMinimumTravelPixels;
             public bool savedComparisonDataPreserved;
             public bool recoveredCandidateSlotsPreserved;
@@ -3567,6 +3569,7 @@ namespace GreedLast.Editor
                         }
                         AssertPreserved();
                         report.savedComparisonViews++;
+                        yield return VerifySavedComparisonWheel(scroll, camera, () => AssertPreserved());
                         foreach (bool handle in new[] { false, true })
                         foreach (bool viewport in new[] { false, true })
                         {
@@ -3662,6 +3665,8 @@ namespace GreedLast.Editor
                 }
                 finally
                 {
+                    input.ScrollDelta = Vector2.zero;
+                    input.BeforeMouseRead = null;
                     input.Touches = Array.Empty<Touch>();
                     Call(ui, "OnApplicationFocus", true);
                     Call(ui, "ApplySafeAreaSample", area, width, height, true);
@@ -3670,6 +3675,69 @@ namespace GreedLast.Editor
                     if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 }
                 Debug.Log("Greed actual saved-comparison menu passed: clean/detailed occupied S3 plus unsaved candidate, eight body/handle interruptions and fresh recoveries, four two-finger slot handoffs, canceled release over save, full records/uses/candidate/rewards unchanged. In-memory fixtures and synthetic EventSystem only; no desktop or personal-save interaction.");
+            }
+
+            private IEnumerator VerifySavedComparisonWheel(ScrollRect scroll, Camera camera, Action assertPreserved)
+            {
+                input.Touches = Array.Empty<Touch>();
+                input.MouseEnabled = true;
+                input.MouseDown = input.MouseHeld = input.MouseUp = false;
+                int direction = 1;
+                foreach (string reason in new[] { "command", "focus", "app" })
+                {
+                    scroll.StopMovement();
+                    scroll.verticalNormalizedPosition = 0.5f;
+                    input.ScrollDelta = Vector2.zero;
+                    yield return null;
+                    Vector2 point = RectTransformUtility.WorldToScreenPoint(camera,
+                        scroll.viewport.TransformPoint(scroll.viewport.rect.center));
+                    input.MousePosition = point;
+                    Vector2 before = scroll.content.anchoredPosition;
+                    input.ScrollDelta = Vector2.up * direction;
+                    yield return null;
+                    input.ScrollDelta = Vector2.zero;
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                        "The wheel fixture must first move actual comparison content through the native input module.");
+                    assertPreserved();
+                    scroll.StopMovement();
+                    scroll.verticalNormalizedPosition = 0.5f;
+                    yield return null;
+                    Vector2 frozen = scroll.content.anchoredPosition;
+                    int canceledAt = -1;
+                    input.BeforeMouseRead = () =>
+                    {
+                        if (reason == "command") Call(ui, "CancelPendingUiInput");
+                        else
+                        {
+                            string signal = reason == "focus" ? "OnApplicationFocus" : "SetAppInputAvailable";
+                            Call(ui, signal, false);
+                            Call(ui, signal, true);
+                        }
+                        frozen = scroll.content.anchoredPosition;
+                        canceledAt = Time.frameCount;
+                    };
+                    input.ScrollDelta = Vector2.up * direction;
+                    yield return null;
+                    input.ScrollDelta = Vector2.zero;
+                    Require(canceledAt >= 0 && input.BeforeMouseRead == null,
+                        "The cancellation must occur inside the real module's mouse read.");
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, frozen) < 0.1f,
+                        "Canceled queued wheel input must not move the comparison in its cancellation frame: " + reason);
+                    assertPreserved();
+                    report.savedComparisonWheelCases++;
+                    yield return null;
+                    Require(Time.frameCount > canceledAt, "Fresh wheel recovery must use a later engine frame.");
+                    before = scroll.content.anchoredPosition;
+                    input.ScrollDelta = Vector2.down * direction;
+                    yield return null;
+                    input.ScrollDelta = Vector2.zero;
+                    Require(Vector2.Distance(scroll.content.anchoredPosition, before) > 1f,
+                        "A fresh later-frame wheel must recover without a click or another menu command.");
+                    assertPreserved();
+                    report.savedComparisonWheelRecoveries++;
+                    direction = -direction;
+                }
+                Debug.Log("Greed saved-comparison wheel passed: three same-frame command/focus/app cancellations and fresh later-frame recoveries, both wheel directions, actual EventSystem and unchanged saved data. Synthetic input only.");
             }
 
             private IEnumerator VerifyMenuScrollGestures()
