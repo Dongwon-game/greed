@@ -34596,7 +34596,7 @@ namespace GreedLast
             float shadowOffsetX = 0f;
             float shadowScaleX = 1f + Mathf.Abs(stride) * 0.08f;
             float shadowAlpha = 112f;
-            float remaining = runnerResponseUntil - Time.unscaledTime;
+            float remaining = runnerBlocked ? 0f : runnerResponseUntil - Time.unscaledTime;
             int illustrationPose = 0;
             float illustrationDirection = 1f;
             Vector4 illustrationTransform = new Vector4(0f, 0f, 1f, 1f);
