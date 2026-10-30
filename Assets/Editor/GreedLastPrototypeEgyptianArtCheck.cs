@@ -124,6 +124,7 @@ namespace GreedLast.Editor
                 UnityEngine.Object.DestroyImmediate(host);
             }
             VerifyPublishedPoseBindings();
+            VerifyPracticeLessonHandoff();
             Debug.Log("Greed Egyptian runner art passed: four source-alpha/import checks, " + policies
                 + " pose policy boundaries, " + transforms + " painted-proportion/foot/mirror transforms, three missing-pose recoveries and lobby reset. No desktop capture, player preferences or hardware-feel assertion.");
         }
@@ -323,6 +324,89 @@ namespace GreedLast.Editor
                     "Blocked runner must not retain the previous judgement's body or shadow motion.");
             }
             finally { Write(ui, "runnerResponseUntil", until); }
+        }
+
+        private static void VerifyPracticeLessonHandoff()
+        {
+            var previousCamera = GameObject.Find("GreedLastCamera");
+            var previousEvents = GameObject.Find("GreedLastEventSystem");
+            var host = new GameObject("GreedEgyptianPracticeHandoffCheck");
+            GameObject canvas = null;
+            int settled = 0, active = 0;
+            try
+            {
+                var ui = host.AddComponent<GreedLastRuntimeUi>();
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
+                canvas = Read<RectTransform>(ui, "rootPanelRect").GetComponentInParent<Canvas>().gameObject;
+                string[] actions = { "점프", "숙이기", "비틀기" };
+                foreach (string context in new[] { "", "복기: 기초연습 숙이기 단계", "복기: 기초연습 비틀기 단계" })
+                foreach (GreedLastJudgementResult result in new[] { GreedLastJudgementResult.Success, GreedLastJudgementResult.Good, GreedLastJudgementResult.Miss })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.EnterPractice(context);
+                    float clock = Time.realtimeSinceStartup;
+                    core.Tick(clock += 2f);
+                    core.Tick(clock += 1f);
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "연습", "", 0));
+                    int start = run.ChapterProgress;
+                    for (int step = start; step < 3; step++)
+                    {
+                        Require(run.ActivePattern && (int)run.Pattern.AvoidanceType == step + 1,
+                            "Practice handoff needs the real authored current action.");
+                        ui.RenderRun(run);
+                        VerifyLabels(step);
+                        Require((string)Call(null, "BuildRouteCadencePipState", run, step) == "active",
+                            "The current practice cadence becomes active only with its trap.");
+                        active++;
+                        clock -= run.CoreDeltaSeconds + core.InputTimingOffsetSeconds;
+                        if (result == GreedLastJudgementResult.Good)
+                            clock += (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
+                        var channel = result == GreedLastJudgementResult.Miss
+                            ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                            : run.Pattern.Channel;
+                        core.HandleInput(channel, clock);
+                        Require(run.LastResult == result, "Practice handoff must retain the actual public judgement.");
+                        ui.RenderRun(run);
+                        if (run.Stopped)
+                        {
+                            Require(!run.SaveEligible && run.SuccessCount + run.GoodCount + run.MissCount == 3 - start,
+                                "The final practice result must preserve its original counts and no-save rule.");
+                            break;
+                        }
+                        VerifyLabels(step);
+                        Require((string)Call(null, "BuildRouteCadencePipState", run, step) == "done"
+                            && (string)Call(null, "BuildRouteCadencePipState", run, step + 1) == "pending",
+                            "The next practice cadence must wait until the next trap actually starts.");
+                        ui.RenderRun(run);
+                        VerifyLabels(step);
+                        settled++;
+                        core.Tick(clock += 3f);
+                    }
+
+                    void VerifyLabels(int step)
+                    {
+                        string number = (step + 1) + "/3";
+                        Require(Read<Text>(ui, "titleText").text.Contains(number, StringComparison.Ordinal)
+                            && Read<Text>(ui, "titleText").text.Contains(actions[step], StringComparison.Ordinal)
+                            && ((string)Call(null, "BuildPracticeObjectiveLine", run)).Contains(actions[step], StringComparison.Ordinal)
+                            && ((string)Call(null, "BuildPracticeProgressLabel", run, 3)).Contains("단계 " + number, StringComparison.Ordinal)
+                            && ((string)Call(null, "BuildCompactRunProgressLabel", run, 3)) == "연습 " + number,
+                            "Practice labels must keep the resolved action until the next trap actually starts.");
+                    }
+                }
+            }
+            finally
+            {
+                if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas);
+                RemoveCreated("GreedLastCamera", previousCamera);
+                RemoveCreated("GreedLastEventSystem", previousEvents);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+            Debug.Log("Greed practice illustration handoff passed: " + active + " real active lessons and " + settled
+                + " post-judgement gaps across exact/Good/wrong-channel full and focused courses. Actual core counts, terminal result and no-save rule retained; no desktop or hardware input.");
         }
 
         private static void VerifySourceBounds(string path, int pose)
