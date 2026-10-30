@@ -19648,7 +19648,7 @@ namespace GreedLast
                 return snapshot.PracticeMode || snapshot.PerfectBundleIntact ? "done" : "broken";
             }
 
-            return index == progress ? "active" : "pending";
+            return index == progress && (!snapshot.PracticeMode || snapshot.ActivePattern) ? "active" : "pending";
         }
 
         private readonly struct TimingCadence
@@ -19765,7 +19765,7 @@ namespace GreedLast
 
             if (snapshot.PracticeMode)
             {
-                return "연습 " + (Mathf.Min(progress, target - 1) + 1) + "/" + target;
+                return "연습 " + (Mathf.Min(BuildPracticePresentedStep(snapshot), target - 1) + 1) + "/" + target;
             }
 
             if (snapshot.InfiniteMode)
@@ -24622,9 +24622,20 @@ namespace GreedLast
             }
         }
 
+        private static int BuildPracticePresentedStep(GreedLastRunSnapshot snapshot)
+        {
+            int step = snapshot.ChapterProgress;
+            // Progress is already credited while the last response finishes between traps.
+            if (!snapshot.ActivePattern && !snapshot.Stopped && snapshot.Pattern.IsValid
+                && snapshot.LastResult != GreedLastJudgementResult.None
+                && string.Equals(snapshot.Pattern.PatternId, snapshot.LastJudgedPattern.PatternId, StringComparison.Ordinal))
+                step -= 1;
+            return Mathf.Clamp(step, 0, 2);
+        }
+
         private static string BuildPracticeStepTitle(GreedLastRunSnapshot snapshot)
         {
-            switch (Mathf.Clamp(snapshot.ChapterProgress, 0, 2))
+            switch (BuildPracticePresentedStep(snapshot))
             {
                 case 0:
                     return "기초연습 1/3 · 정박 바닥→↑점프";
@@ -24637,7 +24648,7 @@ namespace GreedLast
 
         private static string BuildPracticeObjectiveLine(GreedLastRunSnapshot snapshot)
         {
-            switch (Mathf.Clamp(snapshot.ChapterProgress, 0, 2))
+            switch (BuildPracticePresentedStep(snapshot))
             {
                 case 0:
                     return "목표: 바닥→↑점프 / 정박 중앙 회피 / 정확→집중\n";
@@ -24650,7 +24661,7 @@ namespace GreedLast
 
         private static string BuildPracticeProgressLabel(GreedLastRunSnapshot snapshot, int target)
         {
-            int step = Mathf.Clamp(snapshot.ChapterProgress, 0, Mathf.Max(0, target - 1));
+            int step = Mathf.Clamp(BuildPracticePresentedStep(snapshot), 0, Mathf.Max(0, target - 1));
             string lesson;
             switch (step)
             {
