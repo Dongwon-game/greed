@@ -4,7 +4,7 @@
 
 [처음부터 확인하기](Docs/GreedLast_Prototype_QuickCheck.md) · [기획과 구현 범위](Docs/GreedLast_Prototype_PlanCoverage.md) · [검증 이력](Docs/GreedLast_Prototype_CheckHistory.md)
 
-[움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md)는 캐릭터 교체 전의 자료다. 세 회피·Good/오입력·회전·정지/재개·탈출부터 한 번 저장/실제 두 번 사용·자동 비움까지 흐름 참고용이며 사람의 리듬·소리·기기 성능 검사는 아니다.
+[움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md)에 현재 인간 주자의 연습·비틀기·회전·탈출 무음 자료 네 개가 있다. 실제 시험 제품의 UI 카메라 렌더이며 사람의 리듬·소리·기기 성능 검사는 아니다. 교체 전 인물의 저장/두 번 사용 등 전체 흐름 자료는 같은 문서 아래에 이력으로 구분했다.
 
 현재 그림은 **이집트풍 인간 주자**다. 그림체는 유지하고 인물/복식을 변경했으며 기본 달리기·점프·숙이기·비틀기를 독립 PNG로 연결한다. [그림 생성 사양과 원본 해시](Docs/ArtDrafts/EgyptianRunnerIntegration-v1.md)를 참고한다.
 

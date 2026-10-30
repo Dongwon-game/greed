@@ -1,0 +1,123 @@
+{
+  "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2",
+  "runtimeInputCommit": "e7b30cba6cee958de4e511c6fa571af5a00bc1f3",
+  "silent": true,
+  "sourceFrames": 237,
+  "captureReportSha256": "119B1AF409CDE5D716488A70FF6099BC7CA40DBFD2BCFE984BF750DEC492B491",
+  "encodingReportSha256": "5DB95FEA3FC24586A5EA0E99AE9DC7BFE7138052BEE64367A96C29CF332D7D72",
+  "scope": "Silent animated WebP from actual private-player camera samples, no image resizing/cropping. Sample intervals rounded to 10ms, final frame held 1s, looping. Timestamp-matched decoded quality controls are codec checks, not manual rhythm, native capture/input, audio, phone FPS or latency proof.",
+  "clips": [
+    {
+      "file": "Greed-Egyptian-Practice.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 7640,
+      "sourceSamples": 40,
+      "encodedFrames": 40,
+      "uniqueDecodedFrames": 40,
+      "bytes": 1533630,
+      "sha256": "56233CAACCD225951AB1C46B12C0DDEA2D7AFC71794A4E5B5BDC776AF4E2CA48",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 42.721
+        },
+        {
+          "decodedFrame": 20,
+          "sourceIndex": 20,
+          "psnrDb": 39.763
+        },
+        {
+          "decodedFrame": 39,
+          "sourceIndex": 39,
+          "psnrDb": 42.027
+        }
+      ]
+    },
+    {
+      "file": "Greed-Egyptian-Twist.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 4230,
+      "sourceSamples": 20,
+      "encodedFrames": 20,
+      "uniqueDecodedFrames": 20,
+      "bytes": 917316,
+      "sha256": "B921B5CBB028022316794A7514A274E5F957E460A7B749D4C6B7807A7E6D40DC",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 39.814
+        },
+        {
+          "decodedFrame": 10,
+          "sourceIndex": 10,
+          "psnrDb": 39.618
+        },
+        {
+          "decodedFrame": 19,
+          "sourceIndex": 19,
+          "psnrDb": 39.797
+        }
+      ]
+    },
+    {
+      "file": "Greed-Egyptian-Rotation.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 3890,
+      "sourceSamples": 18,
+      "encodedFrames": 18,
+      "uniqueDecodedFrames": 18,
+      "bytes": 562798,
+      "sha256": "EE876F318CAF753636F6D5719335F8BD02BD2190FFD6F9B9B03BEB39AC01B63F",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 40.082
+        },
+        {
+          "decodedFrame": 9,
+          "sourceIndex": 9,
+          "psnrDb": 39.182
+        },
+        {
+          "decodedFrame": 17,
+          "sourceIndex": 17,
+          "psnrDb": 36.26
+        }
+      ]
+    },
+    {
+      "file": "Greed-Egyptian-Escape.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 8820,
+      "sourceSamples": 47,
+      "encodedFrames": 47,
+      "uniqueDecodedFrames": 47,
+      "bytes": 1974940,
+      "sha256": "6AD4DC29C1E58EE8B1F621C58F851A7848E623BCDCB4B04CCCDCDBE00A0AB195",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 39.531
+        },
+        {
+          "decodedFrame": 23,
+          "sourceIndex": 23,
+          "psnrDb": 39.149
+        },
+        {
+          "decodedFrame": 46,
+          "sourceIndex": 46,
+          "psnrDb": 41.445
+        }
+      ]
+    }
+  ]
+}
