@@ -136,7 +136,7 @@ namespace GreedLast.Editor
             var previousEvents = GameObject.Find("GreedLastEventSystem");
             var host = new GameObject("GreedEgyptianPublishedPoseCheck");
             GameObject canvas = null;
-            int outcomes = 0, pauses = 0, choices = 0;
+            int outcomes = 0, pauses = 0, choices = 0, directions = 0;
             try
             {
                 var ui = host.AddComponent<GreedLastRuntimeUi>();
@@ -187,6 +187,11 @@ namespace GreedLast.Editor
                             choices++;
                             clock += 4f;
                             continue;
+                        }
+                        if (Read<GreedLastRunChannel>(ui, "runnerResponseChannel") == GreedLastRunChannel.Center)
+                        {
+                            VerifyResponseDirectionStable(ui);
+                            directions++;
                         }
                         core.TogglePause(clock + 0.1f);
                         ui.RenderRun(run);
@@ -248,6 +253,7 @@ namespace GreedLast.Editor
                 }
                 ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
                 if (picture.texture != normal) throw new InvalidOperationException("Lobby must clear the last action image.");
+                Require(directions > 0, "Published pose checks must include a real central-channel response.");
             }
             finally
             {
@@ -261,7 +267,35 @@ namespace GreedLast.Editor
                 UnityEngine.Object.DestroyImmediate(host);
             }
             Debug.Log("Greed Egyptian published pose bindings passed: " + outcomes + " inspected public core outcomes, " + pauses
-                + " pause/resume body-and-shadow resets, " + choices + " actual choice gates and lobby reset. Includes live infinite exact/Good twists. Edit-mode UI sampling with a positioned private illustration clock, not engine frames, native input, screenshots or device feel.");
+                + " pause/resume body-and-shadow resets, " + directions + " central-channel direction holds, " + choices
+                + " actual choice gates and lobby reset. Includes live infinite exact/Good twists. Edit-mode UI sampling with a positioned private illustration clock, not engine frames, native input, screenshots or device feel.");
+        }
+
+        private static void VerifyResponseDirectionStable(GreedLastRuntimeUi ui)
+        {
+            var root = Read<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
+            var shadow = Read<Image>(ui, "runnerShadow").rectTransform;
+            float phase = Read<float>(ui, "beatPhase");
+            Write(ui, "runEntranceHandoffUntil", 0f);
+            try
+            {
+                Write(ui, "beatPhase", 0.25f);
+                Write(ui, "runnerResponseStartedAt", Time.unscaledTime - 1f);
+                Write(ui, "runnerResponseUntil", Time.unscaledTime + 1f);
+                Call(ui, "UpdateRunnerAvatar");
+                float x = root.anchoredPosition.x;
+                float shadowX = shadow.anchoredPosition.x;
+                Quaternion rotation = root.localRotation;
+                Write(ui, "beatPhase", 0.75f);
+                Write(ui, "runnerResponseStartedAt", Time.unscaledTime - 1f);
+                Write(ui, "runnerResponseUntil", Time.unscaledTime + 1f);
+                Call(ui, "UpdateRunnerAvatar");
+                Require(Mathf.Abs(x - root.anchoredPosition.x) < 0.01f
+                    && Mathf.Abs(shadowX - shadow.anchoredPosition.x) < 0.01f
+                    && Quaternion.Angle(rotation, root.localRotation) < 0.01f,
+                    "Central-channel response must not reverse body or shadow direction when the beat phase changes.");
+            }
+            finally { Write(ui, "beatPhase", phase); }
         }
 
         private static void VerifyBlockedRunnerAtRest(GreedLastRuntimeUi ui)
