@@ -16107,6 +16107,7 @@ namespace GreedLast
         private float runnerResponseUntil;
         private RunnerResponseType runnerResponseType;
         private GreedLastRunChannel runnerResponseChannel;
+        private float runnerResponseDirection = 1f;
         private GreedLastJudgementResult runnerResponseResult;
         private bool runnerResponseWasRotationPattern;
         private Color32 runnerResponseColor = new Color32(255, 238, 181, 255);
@@ -17341,6 +17342,7 @@ namespace GreedLast
             beatMarkerGoodPulseUntil = beatMarkerComboBreakPulseUntil = beatMarkerComboTierPulseUntil = beatMarkerProfilePulseUntil = 0f;
             judgementFeedbackUntil = judgementFeedbackPopUntil = judgementLinePulseUntil = 0f;
             runnerResponseUntil = resolvedTrapUntil = forwardPayoffBurstUntil = rhythmBreakLineUntil = inputTimingTraceUntil = 0f;
+            runnerResponseDirection = 1f;
             threeActionExactBurstUntil = feedbackFlashUntil = downbeatPulseUntil = 0f;
             stageTransitionUntil = choiceConfirmationUntil = 0f;
             lastStagePresentationKey = string.Empty;
@@ -34613,15 +34615,7 @@ namespace GreedLast
                 float duration = Mathf.Max(0.01f, runnerResponseUntil - runnerResponseStartedAt);
                 float progress = Mathf.Clamp01((Time.unscaledTime - runnerResponseStartedAt) / duration);
                 float arc = Mathf.Sin(progress * Mathf.PI);
-                float channelDirection = runnerResponseChannel == GreedLastRunChannel.Left
-                    ? 1f
-                    : runnerResponseChannel == GreedLastRunChannel.Right
-                        ? -1f
-                        : Mathf.Sign(Mathf.Sin(beatPhase * Mathf.PI * 2f));
-                if (Mathf.Approximately(channelDirection, 0f))
-                {
-                    channelDirection = 1f;
-                }
+                float channelDirection = runnerResponseDirection;
 
                 SetRunnerBodyColor(Color32.Lerp(runnerBaseColor, runnerResponseColor, arc * 0.88f));
                 if (runnerResponseResult == GreedLastJudgementResult.Miss)
@@ -34861,10 +34855,7 @@ namespace GreedLast
                 float arc = Mathf.Sin(progress * Mathf.PI);
                 silhouetteResponse = runnerResponseType;
                 silhouetteStrength = Mathf.Clamp01(arc * (runnerResponseResult == GreedLastJudgementResult.Good ? 0.74f : 1f));
-                float responseDirection = BuildRunnerActionTrailDirection(runnerResponseChannel);
-                silhouetteDirection = Mathf.Approximately(responseDirection, 0f)
-                    ? silhouetteDirection
-                    : responseDirection;
+                silhouetteDirection = runnerResponseDirection;
             }
             else if (running
                 && latestRunSnapshot.ActivePattern
@@ -35085,7 +35076,7 @@ namespace GreedLast
             }
 
             float progress = Mathf.Clamp01((Time.unscaledTime - runnerResponseStartedAt) / duration);
-            float direction = BuildRunnerActionTrailDirection(runnerResponseChannel);
+            float direction = runnerResponseDirection;
             for (int i = 0; i < runnerActionTrails.Length; i += 1)
             {
                 Image trail = runnerActionTrails[i];
@@ -44867,6 +44858,10 @@ namespace GreedLast
             }
 
             runnerResponseResult = snapshot.LastResult;
+            // Keep a central-channel lean stable through the response's body, picture and trail.
+            runnerResponseDirection = BuildRunnerActionTrailDirection(runnerResponseChannel);
+            if (Mathf.Approximately(runnerResponseDirection, 0f))
+                runnerResponseDirection = Mathf.Sin(beatPhase * Mathf.PI * 2f) < 0f ? -1f : 1f;
             runnerResponseStartedAt = Time.unscaledTime;
             float duration = snapshot.LastResult == GreedLastJudgementResult.Miss
                 ? RunnerMissResponseDuration
