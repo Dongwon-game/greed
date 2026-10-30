@@ -5,6 +5,7 @@
 ## 실행
 
 - Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
+- 기존 진행도를 건드리지 않고 처음부터 볼 때는 [새 시작용 체험 실행본](GreedLast_Prototype_Demo.md)을 쓴다. `Builds\GreedLastDemo-20261030\GreedLastDemo.exe`이며 같은 게임 DLL·별도 저장 공간이다. 이후 재실행하면 체험판 자체 진행은 유지된다.
 - Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
 - 현재 실행본: **2026-10-30 14:21 KST / runner-motion**, 게임 `e7b30cb`, Editor/빌드 `f557a28`. 정지·재개 때 잔여 몸체/그림자 이동, 중앙 대응의 방향 반전, 다음 함정 전 연습 제목 불일치를 보완했다. 두 방식 엔진·현재 전체 스모크·비개발 Windows/ZIP·초기 구동을 통과했다. 엔진과 빌드의 게임/엔진 검사 입력은 같고 독립 Editor 기대값 한 파일의 차이는 확인 이력에 구분했다. 그림·판정·보상·한 번 저장/실제 두 번 사용은 유지하며 이전 10월 29일 19:48 실행본/ZIP과 개인 저장은 보존했다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 저장 위치는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 개인 진행도를 초기화하지 않는다.
