@@ -2,10 +2,10 @@
   "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2",
   "runtimeInputCommit": "e7b30cba6cee958de4e511c6fa571af5a00bc1f3",
   "silent": true,
-  "sourceFrames": 237,
+  "sourceFrames": 344,
   "captureReportSha256": "119B1AF409CDE5D716488A70FF6099BC7CA40DBFD2BCFE984BF750DEC492B491",
   "encodingReportSha256": "5DB95FEA3FC24586A5EA0E99AE9DC7BFE7138052BEE64367A96C29CF332D7D72",
-  "scope": "Silent animated WebP from actual private-player camera samples, no image resizing/cropping. Sample intervals rounded to 10ms, final frame held 1s, looping. Timestamp-matched decoded quality controls are codec checks, not manual rhythm, native capture/input, audio, phone FPS or latency proof.",
+  "scope": "Seven silent WebP clips from two fresh private Windows players, 344 source camera samples, public real-time core restarts for response setup and automatic app commands. No private clock edits, native input/capture, personal data, audio or phone/FPS proof. Rounded 10ms intervals, 1s final hold, loop. Identical paused frames may merge without losing duration.",
   "clips": [
     {
       "file": "Greed-Egyptian-Practice.webp",
@@ -33,7 +33,8 @@
           "sourceIndex": 39,
           "psnrDb": 42.027
         }
-      ]
+      ],
+      "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2"
     },
     {
       "file": "Greed-Egyptian-Twist.webp",
@@ -61,7 +62,8 @@
           "sourceIndex": 19,
           "psnrDb": 39.797
         }
-      ]
+      ],
+      "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2"
     },
     {
       "file": "Greed-Egyptian-Rotation.webp",
@@ -89,7 +91,8 @@
           "sourceIndex": 17,
           "psnrDb": 36.26
         }
-      ]
+      ],
+      "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2"
     },
     {
       "file": "Greed-Egyptian-Escape.webp",
@@ -117,7 +120,98 @@
           "sourceIndex": 46,
           "psnrDb": 41.445
         }
-      ]
+      ],
+      "sourceCommit": "ea0a61f0b2afbf617cae78fdc6fd77f7b1a713d2"
+    },
+    {
+      "file": "Greed-Egyptian-Good.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 8310,
+      "sourceSamples": 44,
+      "encodedFrames": 44,
+      "uniqueDecodedFrames": 44,
+      "bytes": 1758556,
+      "sha256": "41751742AFDF9C5C0DEF1E4EE6EAB3FCDD670DA8FCBC5CF40907CDC2AD7D1068",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 42.715
+        },
+        {
+          "decodedFrame": 22,
+          "sourceIndex": 22,
+          "psnrDb": 39.298
+        },
+        {
+          "decodedFrame": 43,
+          "sourceIndex": 43,
+          "psnrDb": 41.096
+        }
+      ],
+      "sourceCommit": "b72a11bd1fd2e37480091f3ebea90a0140f220e4"
+    },
+    {
+      "file": "Greed-Egyptian-Wrong-Channel.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 7970,
+      "sourceSamples": 42,
+      "encodedFrames": 42,
+      "uniqueDecodedFrames": 42,
+      "bytes": 1628270,
+      "sha256": "29B872AD8932137AAA7D01F8D4B98E43D7C284D39FC15875B7431EF2BA6424D2",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 41.745
+        },
+        {
+          "decodedFrame": 21,
+          "sourceIndex": 21,
+          "psnrDb": 40.004
+        },
+        {
+          "decodedFrame": 41,
+          "sourceIndex": 41,
+          "psnrDb": 42.131
+        }
+      ],
+      "sourceCommit": "b72a11bd1fd2e37480091f3ebea90a0140f220e4"
+    },
+    {
+      "file": "Greed-Egyptian-Pause-Resume.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 4300,
+      "sourceSamples": 21,
+      "encodedFrames": 17,
+      "uniqueDecodedFrames": 17,
+      "bytes": 440726,
+      "sha256": "492DD1B34E7A09C0B855FEEAF8B62E37C005E3ED5EDAF3A1B07098BF6AA86E36",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 41.127
+        },
+        {
+          "decodedFrame": 8,
+          "sourceIndex": 12,
+          "psnrDb": 40.475
+        },
+        {
+          "decodedFrame": 16,
+          "sourceIndex": 20,
+          "psnrDb": 39.672
+        }
+      ],
+      "sourceCommit": "b72a11bd1fd2e37480091f3ebea90a0140f220e4"
     }
-  ]
+  ],
+  "additionalSourceCommit": "b72a11bd1fd2e37480091f3ebea90a0140f220e4",
+  "responseCaptureReportSha256": "87FF772D525EFF5D195E8F55C543C0AFE50BEE66C28B52A6EF942D58DBF7FA48",
+  "responseEncodingReportSha256": "EBD5076E9ED3226BAE3FC30A2B9CDA5B54F693C6506FD758A54575108EC9C89B"
 }
