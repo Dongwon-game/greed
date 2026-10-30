@@ -10,7 +10,9 @@
 
 <img src="Assets/Resources/GreedLast/PrototypeEgyptianRunner.png" alt="이집트풍 인간 주자의 기본 달리기 자원" width="220">
 
-위 이미지는 캐릭터 자원 미리보기이며 실제 플레이 화면이 아니다. [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 이전 캐릭터의 오프스크린 렌더 기록으로 보존한다.
+위 이미지는 캐릭터 자원이다. 아래는 현재 소스의 [격리 카메라 플레이 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)이며 실제 사용자 화면 촬영이나 손맛 확인은 아니다. [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 이전 캐릭터의 기록으로 보존한다.
+
+![이집트풍 인간 주자의 첫 연습 함정 미리보기](Docs/Images/GreedLast-Egyptian-Run-20261030.png)
 
 ## 시작
 
