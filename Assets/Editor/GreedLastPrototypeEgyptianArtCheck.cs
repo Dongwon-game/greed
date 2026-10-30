@@ -193,6 +193,11 @@ namespace GreedLast.Editor
                         update.Invoke(ui, null);
                         if (!run.Paused || picture.texture != normal || picture.rectTransform.localScale.x < 0f)
                             throw new InvalidOperationException("Pause must clear the action texture and mirror.");
+                        VerifyBlockedRunnerAtRest(ui);
+                        core.TogglePause(clock + 0.2f);
+                        ui.RenderRun(run);
+                        Require(run.ResumeCountdownActive, "The paused response must enter a real resume countdown.");
+                        VerifyBlockedRunnerAtRest(ui);
                         pauses++;
                         clock += 4f;
                     }
@@ -231,6 +236,11 @@ namespace GreedLast.Editor
                         update.Invoke(ui, null);
                         if (!run.Paused || picture.texture != normal || picture.rectTransform.localScale.x < 0f)
                             throw new InvalidOperationException("Infinite twist pause must restore the unmirrored normal texture.");
+                        VerifyBlockedRunnerAtRest(ui);
+                        core.TogglePause(clock + 0.2f);
+                        ui.RenderRun(run);
+                        Require(run.ResumeCountdownActive, "The infinite response must enter a real resume countdown.");
+                        VerifyBlockedRunnerAtRest(ui);
                         pauses++;
                         foundTwist = true;
                     }
@@ -251,7 +261,34 @@ namespace GreedLast.Editor
                 UnityEngine.Object.DestroyImmediate(host);
             }
             Debug.Log("Greed Egyptian published pose bindings passed: " + outcomes + " inspected public core outcomes, " + pauses
-                + " pause resets, " + choices + " actual choice gates and lobby reset. Includes live infinite exact/Good twists. Edit-mode UI sampling with a positioned private illustration clock, not engine frames, native input, screenshots or device feel.");
+                + " pause/resume body-and-shadow resets, " + choices + " actual choice gates and lobby reset. Includes live infinite exact/Good twists. Edit-mode UI sampling with a positioned private illustration clock, not engine frames, native input, screenshots or device feel.");
+        }
+
+        private static void VerifyBlockedRunnerAtRest(GreedLastRuntimeUi ui)
+        {
+            var root = Read<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
+            var shadow = Read<Image>(ui, "runnerShadow").rectTransform;
+            float until = Read<float>(ui, "runnerResponseUntil");
+            // Exclude the separate entrance clock; compare only the old judgement's effect.
+            Write(ui, "runEntranceHandoffUntil", 0f);
+            Call(ui, "UpdateRunnerAvatar");
+            Vector2 position = root.anchoredPosition;
+            Vector3 scale = root.localScale;
+            Quaternion rotation = root.localRotation;
+            Vector2 shadowPosition = shadow.anchoredPosition;
+            Vector3 shadowScale = shadow.localScale;
+            try
+            {
+                Write(ui, "runnerResponseUntil", 0f);
+                Call(ui, "UpdateRunnerAvatar");
+                Require(Vector2.Distance(position, root.anchoredPosition) < 0.01f
+                    && Vector3.Distance(scale, root.localScale) < 0.01f
+                    && Quaternion.Angle(rotation, root.localRotation) < 0.01f
+                    && Vector2.Distance(shadowPosition, shadow.anchoredPosition) < 0.01f
+                    && Vector3.Distance(shadowScale, shadow.localScale) < 0.01f,
+                    "Blocked runner must not retain the previous judgement's body or shadow motion.");
+            }
+            finally { Write(ui, "runnerResponseUntil", until); }
         }
 
         private static void VerifySourceBounds(string path, int pose)
