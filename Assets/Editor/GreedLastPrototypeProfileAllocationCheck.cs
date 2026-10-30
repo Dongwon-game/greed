@@ -109,6 +109,11 @@ namespace GreedLast.Editor
             Require(run.ActivePattern && !run.CountdownActive, "Cadence checks require actual active practice.");
             Verify(run);
             Measure(run);
+            clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - practice.InputTimingOffsetSeconds;
+            practice.HandleInput(run.Pattern.Channel, clock);
+            Require(!run.ActivePattern && run.ChapterProgress == 1 && !run.Stopped,
+                "Practice cadence controls need a real resolved gap before the next trap.");
+            Verify(run);
             practice.TogglePause(clock);
             Verify(run);
             practice.TogglePause(clock);
@@ -190,7 +195,8 @@ namespace GreedLast.Editor
                     string expectedState = !visible || index < 0 || index > 2 ? "hidden"
                         : index < Mathf.Clamp(snapshot.ChapterProgress, 0, 3)
                             ? snapshot.PracticeMode || snapshot.PerfectBundleIntact ? "done" : "broken"
-                            : index == snapshot.ChapterProgress ? "active" : "pending";
+                            : index == snapshot.ChapterProgress && (!snapshot.PracticeMode || snapshot.ActivePattern)
+                                ? "active" : "pending";
                     string expectedAction = !available || index < 0 || index > 2 ? string.Empty : ExpectedAction(snapshot, index);
                     Require(state(snapshot, index) == expectedState && action(snapshot, index) == expectedAction,
                         "Cadence state/action must match the independent authored table without mutating progress.");
