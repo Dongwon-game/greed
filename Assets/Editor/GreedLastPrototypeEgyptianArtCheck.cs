@@ -125,6 +125,7 @@ namespace GreedLast.Editor
             }
             VerifyPublishedPoseBindings();
             VerifyPracticeLessonHandoff();
+            VerifyRunEntranceHandoff();
             Debug.Log("Greed Egyptian runner art passed: four source-alpha/import checks, " + policies
                 + " pose policy boundaries, " + transforms + " painted-proportion/foot/mirror transforms, three missing-pose recoveries and lobby reset. No desktop capture, player preferences or hardware-feel assertion.");
         }
@@ -407,6 +408,70 @@ namespace GreedLast.Editor
             }
             Debug.Log("Greed practice illustration handoff passed: " + active + " real active lessons and " + settled
                 + " post-judgement gaps across exact/Good/wrong-channel full and focused courses. Actual core counts, terminal result and no-save rule retained; no desktop or hardware input.");
+        }
+
+        private static void VerifyRunEntranceHandoff()
+        {
+            GameObject previousCamera = GameObject.Find("GreedLastCamera");
+            GameObject previousEvents = GameObject.Find("GreedLastEventSystem");
+            var host = new GameObject("GreedEgyptianEntranceHandoffCheck");
+            GameObject canvas = null;
+            int departures = 0;
+            try
+            {
+                var ui = host.AddComponent<GreedLastRuntimeUi>();
+                GreedLastPrototypeSmokeCheck.InitializeRuntimeUiSmoke(ui, playerControls: true);
+                canvas = Read<RectTransform>(ui, "rootPanelRect").GetComponentInParent<Canvas>().gameObject;
+                foreach (bool delayed in new[] { false, true })
+                foreach (var channel in new[] { GreedLastRunChannel.Left, GreedLastRunChannel.Center, GreedLastRunChannel.Right })
+                {
+                    var core = new GreedLastRunCore();
+                    GreedLastRunSnapshot run = default;
+                    core.SnapshotChanged += value => run = value;
+                    core.Enter();
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
+                    ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Run", "", 0));
+                    ui.RenderRun(run);
+                    Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.StartGift,
+                        "Entrance checks require the actual opening gift selection.");
+                    Require(Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                        "A start-gift choice must not consume the lobby entrance handoff.");
+                    if (delayed)
+                    {
+                        // Edit-mode presentation-clock sampling, not real elapsed engine time.
+                        Write(ui, "runEntranceHandoffStartedAt", Time.unscaledTime - 10f);
+                        Write(ui, "runEntranceHandoffUntil", Time.unscaledTime - 9f);
+                    }
+                    ui.RenderRun(run);
+                    Require(Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                        "Repeated opening-choice publications must not start an entrance.");
+                    float now = Time.realtimeSinceStartup;
+                    core.HandleInput(channel, now);
+                    ui.RenderRun(run);
+                    Require(run.StartCountdownActive && !run.ChoiceActive
+                        && Read<float>(ui, "runEntranceHandoffUntil") > Time.unscaledTime + 0.25f,
+                        "The selected opening gift must release one fresh lobby entrance into its real start countdown.");
+                    float until = Read<float>(ui, "runEntranceHandoffUntil");
+                    ui.RenderRun(run);
+                    core.TogglePause(now + 0.1f);
+                    ui.RenderRun(run);
+                    core.TogglePause(now + 0.2f);
+                    ui.RenderRun(run);
+                    Require(run.ResumeCountdownActive && Read<float>(ui, "runEntranceHandoffUntil") == until,
+                        "Countdown publication and pause/resume must not replay the entrance.");
+                    departures++;
+                }
+                Debug.Log("Greed opening-gift entrance handoff passed: " + departures
+                    + " immediate/delayed public choices and one-shot countdown/pause publications. Private Edit-mode UI clock samples, not engine or desktop input.");
+            }
+            finally
+            {
+                if (canvas != null) UnityEngine.Object.DestroyImmediate(canvas);
+                RemoveCreated("GreedLastCamera", previousCamera);
+                RemoveCreated("GreedLastEventSystem", previousEvents);
+                GreedLastPrototypeAudioCheck.ReleaseEditorAudio(host);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
         }
 
         private static void VerifySourceBounds(string path, int pose)
