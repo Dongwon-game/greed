@@ -16169,6 +16169,7 @@ namespace GreedLast
         private float lobbyEntranceRevealUntil;
         private float runEntranceHandoffStartedAt;
         private float runEntranceHandoffUntil;
+        private bool runEntranceHandoffPending;
         private bool runEntranceHandoffPortalReady;
         private bool runEntranceHandoffPracticeFirst;
         private GreedLastScreenState lastRenderedScreenState;
@@ -17149,6 +17150,16 @@ namespace GreedLast
             }
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
+            if (runEntranceHandoffPending && snapshot.StartCountdownActive
+                && !snapshot.Paused && !snapshot.ChoiceActive && !snapshot.Stopped)
+            {
+                runEntranceHandoffPending = false;
+                runEntranceHandoffStartedAt = Time.unscaledTime;
+                runEntranceHandoffUntil = runEntranceHandoffStartedAt + RunEntranceHandoffDuration;
+                PlayClip(runEntranceClip,
+                    BuildRunEntranceCueVolume(runEntranceHandoffPortalReady, runEntranceHandoffPracticeFirst));
+                PlayHaptic(BuildRunEntranceHapticDuration());
+            }
             judgementLine.enabled = !snapshot.ChoiceActive && !snapshot.Stopped;
             TrackChoiceConfirmation(hadPreviousSnapshot, previousSnapshot, snapshot);
             TrackStagePresentation(snapshot);
@@ -26060,14 +26071,16 @@ namespace GreedLast
 
             if (ShouldStartRunEntranceHandoff(hasRenderedScreenState, lastRenderedScreenState, state))
             {
-                runEntranceHandoffStartedAt = Time.unscaledTime;
-                runEntranceHandoffUntil = runEntranceHandoffStartedAt + RunEntranceHandoffDuration;
+                // The opening gift may remain visible longer than the entrance animation.
+                runEntranceHandoffPending = true;
+                runEntranceHandoffStartedAt = runEntranceHandoffUntil = 0f;
                 runEntranceHandoffPortalReady = lobbyRunPortalReady;
                 runEntranceHandoffPracticeFirst = lobbyRunPortalPracticeFirst;
-                PlayClip(
-                    runEntranceClip,
-                    BuildRunEntranceCueVolume(runEntranceHandoffPortalReady, runEntranceHandoffPracticeFirst));
-                PlayHaptic(BuildRunEntranceHapticDuration());
+            }
+            else if (state != GreedLastScreenState.RunCoreTest)
+            {
+                runEntranceHandoffPending = false;
+                runEntranceHandoffStartedAt = runEntranceHandoffUntil = 0f;
             }
 
             lastRenderedScreenState = state;

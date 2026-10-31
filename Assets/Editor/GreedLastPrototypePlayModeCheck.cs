@@ -681,6 +681,8 @@ namespace GreedLast.Editor
             public int engineMouseClicks, engineTouchTaps, canceledEngineCommands;
             public int fullNormalJudgements, normalChoices, savedSlotIndex, actualInfiniteStarts;
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
+            public bool openingGiftEntranceDeferred, openingGiftEntranceReleased, openingGiftEntranceOnce;
+            public int openingGiftEntranceWaitingFrames;
             public bool exhaustedSlotAutoCleared, infiniteNaturalFailures, emptySlotRefillReentered;
             public float fullLoopSeconds;
         }
@@ -4055,6 +4057,17 @@ namespace GreedLast.Editor
                 Require(run.ChoiceActive && !run.InfiniteMode, "The engine normal-run command must open its first choice.");
                 if (run.DevInvincible) core.ToggleDevInvincible();
                 Require(!run.DevInvincible, "The full normal loop must use real health and natural failure rules.");
+                float giftWaitUntil = Time.realtimeSinceStartup + 0.55f;
+                while (Time.realtimeSinceStartup < giftWaitUntil)
+                {
+                    Require(run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.StartGift
+                        && Read<bool>(ui, "runEntranceHandoffPending")
+                        && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                        "Real opening-gift frames must retain the pending entrance instead of spending its short animation.");
+                    report.openingGiftEntranceWaitingFrames++;
+                    yield return null;
+                }
+                report.openingGiftEntranceDeferred = report.openingGiftEntranceWaitingFrames > 0;
                 checkingFullLoopClock = true;
                 float nextChoiceAt = Time.realtimeSinceStartup + 0.4f;
                 float deadline = Time.realtimeSinceStartup + 120f;
@@ -4092,6 +4105,18 @@ namespace GreedLast.Editor
                         else yield return TapTouch(Read<Button[]>(ui, "laneButtons")[0]);
                         Require(!run.ChoiceActive || run.ChoiceKind != before,
                             "One engine touch must resolve exactly the current readable choice.");
+                        if (before == GreedLastChoiceKind.StartGift)
+                        {
+                            float entranceUntil = Read<float>(ui, "runEntranceHandoffUntil");
+                            Require(run.StartCountdownActive && !Read<bool>(ui, "runEntranceHandoffPending")
+                                && entranceUntil > Time.unscaledTime,
+                                "A real opening-gift touch must release a fresh entrance during its start countdown.");
+                            report.openingGiftEntranceReleased = true;
+                            yield return null;
+                            Require(Read<float>(ui, "runEntranceHandoffUntil") == entranceUntil,
+                                "Later engine countdown frames must not re-arm the entrance.");
+                            report.openingGiftEntranceOnce = true;
+                        }
                         report.normalChoices++;
                         nextChoiceAt = Time.realtimeSinceStartup + 0.4f;
                     }

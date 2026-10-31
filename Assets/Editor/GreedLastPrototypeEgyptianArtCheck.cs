@@ -461,6 +461,28 @@ namespace GreedLast.Editor
                         "Countdown publication and pause/resume must not replay the entrance.");
                     departures++;
                 }
+                var practice = new GreedLastRunCore();
+                GreedLastRunSnapshot practiceRun = default;
+                practice.SnapshotChanged += value => practiceRun = value;
+                practice.EnterPractice();
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Practice", "", 0));
+                ui.RenderRun(practiceRun);
+                Require(practiceRun.StartCountdownActive && Read<float>(ui, "runEntranceHandoffUntil") > Time.unscaledTime,
+                    "Practice without an opening choice must still start the entrance immediately.");
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "Run", "", 0));
+                var cancelled = new GreedLastRunCore();
+                GreedLastRunSnapshot cancelledRun = default;
+                cancelled.SnapshotChanged += value => cancelledRun = value;
+                cancelled.Enter();
+                ui.RenderRun(cancelledRun);
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.LobbyReady, "Lobby", "", 0));
+                cancelled.EnterInfiniteRun();
+                ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRun, "Infinite", "", 0));
+                ui.RenderRun(cancelledRun);
+                Require(!Read<bool>(ui, "runEntranceHandoffPending") && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                    "Leaving an opening choice must not carry its pending entrance into another mode.");
                 Debug.Log("Greed opening-gift entrance handoff passed: " + departures
                     + " immediate/delayed public choices and one-shot countdown/pause publications. Private Edit-mode UI clock samples, not engine or desktop input.");
             }
