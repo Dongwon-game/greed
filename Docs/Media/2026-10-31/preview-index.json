@@ -1,0 +1,90 @@
+{
+  "sourceCommit": "e934d9da4317718e40369f3200acd20e081f1082",
+  "silent": true,
+  "sourceFrames": 334,
+  "captureReportSha256": "8AFC2AD1CB110BD11F75B8A905F502979274F5470CF25E7759A99775E13888E5",
+  "encodingReportSha256": "BE352EEED692570167C13A61E895CA9F68B2E42F5060EF67C0C0AE629DA21DC7",
+  "scope": "Two silent clips from separate fresh private players: 960x540 delayed opening-gift departure and 640x360 one complete normal course, both original camera dimensions with no resize/crop/private-clock edits. Actual engine frames and automatic app commands, not native input/capture, audible output, manual balance or phone/FPS proof. Intervals rounded to 10ms, final1s hold and looping; equal adjacent frames may merge with duration retained.",
+  "clips": [
+    {
+      "file": "Greed-Egyptian-Opening-Departure.webp",
+      "width": 960,
+      "height": 540,
+      "durationMs": 3800,
+      "sourceSamples": 32,
+      "encodedFrames": 25,
+      "uniqueDecodedFrames": 25,
+      "bytes": 377010,
+      "sha256": "9480F39E24F043E74C24CF5F787C47D177A50B123604D2AF1FC3CA3C08997CE3",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 43.035
+        },
+        {
+          "decodedFrame": 5,
+          "sourceIndex": 12,
+          "psnrDb": 36.778
+        },
+        {
+          "decodedFrame": 6,
+          "sourceIndex": 13,
+          "psnrDb": 36.762
+        },
+        {
+          "decodedFrame": 7,
+          "sourceIndex": 14,
+          "psnrDb": 36.596
+        },
+        {
+          "decodedFrame": 12,
+          "sourceIndex": 19,
+          "psnrDb": 36.23
+        },
+        {
+          "decodedFrame": 24,
+          "sourceIndex": 31,
+          "psnrDb": 39.782
+        }
+      ]
+    },
+    {
+      "file": "Greed-Egyptian-Normal-Run.webp",
+      "width": 640,
+      "height": 360,
+      "durationMs": 34350,
+      "sourceSamples": 219,
+      "encodedFrames": 217,
+      "uniqueDecodedFrames": 217,
+      "bytes": 4651774,
+      "sha256": "9574FB3A7DD1B838B73317EF3FD047CA00727055FA75DFC0302B11E94C7D3EC9",
+      "qualitySamples": [
+        {
+          "decodedFrame": 0,
+          "sourceIndex": 0,
+          "psnrDb": 41.405
+        },
+        {
+          "decodedFrame": 108,
+          "sourceIndex": 110,
+          "psnrDb": 38.041
+        },
+        {
+          "decodedFrame": 216,
+          "sourceIndex": 218,
+          "psnrDb": 40.679
+        }
+      ],
+      "actualNormalRecord": {
+        "score": 7044,
+        "distance": 100.47846221923828,
+        "successes": 15,
+        "good": 0,
+        "misses": 0
+      }
+    }
+  ],
+  "fullCourseCaptureReportSha256": "A1BF500FEB7B880AD8BA8B604EFB7F9EC4E0FFA662448F0B28A03C1438C31E66",
+  "fullCourseEncodingReportSha256": "4E41C89D4969882315B0F9CA1D41205324D41AA5560526AFEAF224DB4D061A13"
+}
