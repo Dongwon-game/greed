@@ -4,7 +4,7 @@
 
 ## 10월 31일 실제 확인
 
-**14:38 KST**, 설치된 Unity 6.4 / `6000.4.3f1` API는 `moduleSupported=false`, 번들 검사 `bundledPrerequisitesPresent=false`, 누락 파일 9개였다. 완료된 개인 데이터 분리 사본에서 기존 `GreedLast/Check Android Prerequisites`를 실행했다. Android Build Support와 SDK/NDK/JDK를 준비해야 Android 개발을 진행할 수 있다. [Unity 6.4 공식 환경 안내](https://docs.unity3d.com/6000.4/Documentation/Manual/android-sdksetup.html)
+**14:38 KST**, 설치된 Unity 6.4 / `6000.4.3f1` API는 `moduleSupported=false`, 번들 검사 `bundledPrerequisitesPresent=false`, 누락 파일 9개였다. 완료된 개인 데이터 분리 사본에서 기존 `Greed Last → Check Android Prerequisites`를 실행했다. Android Build Support와 SDK/NDK/JDK를 준비해야 Android 개발을 진행할 수 있다. [Unity 6.4 공식 환경 안내](https://docs.unity3d.com/6000.4/Documentation/Manual/android-sdksetup.html)
 
 이 검사는 이 프로젝트에 고정된 Windows 호스트/Unity 6000.4.3f1의 **기본 번들 경로**를 확인한다. 누락 9개를 모든 Unity 버전에 공통인 요구 파일 목록으로 해석하지 않는다. 별도 SDK 경로 설정·도구 실행/버전·서명·약관 수락 여부를 확인한 것도 아니다. 검사 성공은 준비 상태를 읽었다는 뜻이며 APK 빌드 성공이 아니다.
 
