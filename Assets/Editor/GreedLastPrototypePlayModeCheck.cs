@@ -683,6 +683,8 @@ namespace GreedLast.Editor
             public bool fullNormalClear, candidateConsumedOnce, preparationCancelPreservedUses;
             public bool openingGiftEntranceDeferred, openingGiftEntranceReleased, openingGiftEntranceOnce;
             public int openingGiftEntranceWaitingFrames;
+            public bool openingGiftEntrancePauseSettled, openingGiftEntrancePauseStable, openingGiftEntranceResumeOnce;
+            public int openingGiftEntrancePauseWaitingFrames;
             public bool exhaustedSlotAutoCleared, infiniteNaturalFailures, emptySlotRefillReentered;
             public float fullLoopSeconds;
         }
@@ -4046,6 +4048,46 @@ namespace GreedLast.Editor
                     + " growth/source restored, no private clocks/state or personal persistence; not hardware/device testing.");
             }
 
+            private IEnumerator VerifyOpeningGiftEntrancePause()
+            {
+                yield return ClickMouse(Read<Button>(ui, "pauseButton"));
+                Require(run.Paused && run.StartCountdownActive
+                    && !Read<bool>(ui, "runEntranceHandoffPending")
+                    && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                    "A real pause press during departure must settle the entrance without losing its opening countdown.");
+                report.openingGiftEntrancePauseSettled = true;
+                RectTransform avatar = Read<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
+                Image shadow = Read<Image>(ui, "runnerShadow");
+                Vector2 position = avatar.anchoredPosition, shadowPosition = shadow.rectTransform.anchoredPosition;
+                Vector3 scale = avatar.localScale, shadowScale = shadow.rectTransform.localScale;
+                Quaternion rotation = avatar.localRotation;
+                Color shadowColor = shadow.color;
+                float alpha = Read<CanvasGroup>(ui, "runnerAvatarCanvasGroup").alpha;
+                float remaining = run.StartCountdownRemainingSeconds;
+                float until = Time.realtimeSinceStartup + 0.40f;
+                while (Time.realtimeSinceStartup < until)
+                {
+                    Require(run.Paused && run.StartCountdownActive
+                        && Mathf.Abs(run.StartCountdownRemainingSeconds - remaining) < 0.0001f
+                        && Vector2.Distance(avatar.anchoredPosition, position) < 0.01f
+                        && Vector3.Distance(avatar.localScale, scale) < 0.01f
+                        && Quaternion.Angle(avatar.localRotation, rotation) < 0.01f
+                        && Vector2.Distance(shadow.rectTransform.anchoredPosition, shadowPosition) < 0.01f
+                        && Vector3.Distance(shadow.rectTransform.localScale, shadowScale) < 0.01f
+                        && shadow.color == shadowColor
+                        && Mathf.Abs(Read<CanvasGroup>(ui, "runnerAvatarCanvasGroup").alpha - alpha) < 0.0001f,
+                        "The actual paused entrance frames must keep body, shadow and the saved opening countdown at rest.");
+                    report.openingGiftEntrancePauseWaitingFrames++;
+                    yield return null;
+                }
+                report.openingGiftEntrancePauseStable = report.openingGiftEntrancePauseWaitingFrames > 0;
+                yield return ClickMouse(Read<Button>(ui, "nextPatternButton"));
+                Require(run.ResumeCountdownActive && !Read<bool>(ui, "runEntranceHandoffPending")
+                    && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                    "A fresh resume press must retain its lead-in without replaying the settled entrance.");
+                report.openingGiftEntranceResumeOnce = true;
+            }
+
             private IEnumerator VerifyFullLoop()
             {
                 float began = Time.realtimeSinceStartup;
@@ -4116,6 +4158,7 @@ namespace GreedLast.Editor
                             Require(Read<float>(ui, "runEntranceHandoffUntil") == entranceUntil,
                                 "Later engine countdown frames must not re-arm the entrance.");
                             report.openingGiftEntranceOnce = true;
+                            yield return VerifyOpeningGiftEntrancePause();
                         }
                         report.normalChoices++;
                         nextChoiceAt = Time.realtimeSinceStartup + 0.4f;

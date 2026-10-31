@@ -17160,6 +17160,9 @@ namespace GreedLast
                     BuildRunEntranceCueVolume(runEntranceHandoffPortalReady, runEntranceHandoffPracticeFirst));
                 PlayHaptic(BuildRunEntranceHapticDuration());
             }
+            // A pause menu must not keep resizing the runner and portal behind its controls.
+            if (snapshot.Paused)
+                runEntranceHandoffStartedAt = runEntranceHandoffUntil = 0f;
             judgementLine.enabled = !snapshot.ChoiceActive && !snapshot.Stopped;
             TrackChoiceConfirmation(hadPreviousSnapshot, previousSnapshot, snapshot);
             TrackStagePresentation(snapshot);
