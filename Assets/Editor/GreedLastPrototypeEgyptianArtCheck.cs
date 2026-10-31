@@ -453,12 +453,17 @@ namespace GreedLast.Editor
                         "The selected opening gift must release one fresh lobby entrance into its real start countdown.");
                     float until = Read<float>(ui, "runEntranceHandoffUntil");
                     ui.RenderRun(run);
+                    Require(Read<float>(ui, "runEntranceHandoffUntil") == until,
+                        "Repeated departure countdowns must not replay the entrance.");
                     core.TogglePause(now + 0.1f);
                     ui.RenderRun(run);
+                    Require(run.Paused && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                        "Pausing during an entrance must settle its body and portal before the pause menu is shown.");
                     core.TogglePause(now + 0.2f);
                     ui.RenderRun(run);
-                    Require(run.ResumeCountdownActive && Read<float>(ui, "runEntranceHandoffUntil") == until,
-                        "Countdown publication and pause/resume must not replay the entrance.");
+                    Require(run.ResumeCountdownActive && !Read<bool>(ui, "runEntranceHandoffPending")
+                        && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
+                        "A fresh resume countdown must not replay the settled entrance.");
                     departures++;
                 }
                 var practice = new GreedLastRunCore();
@@ -484,7 +489,7 @@ namespace GreedLast.Editor
                 Require(!Read<bool>(ui, "runEntranceHandoffPending") && Read<float>(ui, "runEntranceHandoffUntil") <= Time.unscaledTime,
                     "Leaving an opening choice must not carry its pending entrance into another mode.");
                 Debug.Log("Greed opening-gift entrance handoff passed: " + departures
-                    + " immediate/delayed public choices and one-shot countdown/pause publications. Private Edit-mode UI clock samples, not engine or desktop input.");
+                    + " immediate/delayed public choices, one-shot countdowns and a settled pause/resume entrance clock. Private Edit-mode UI clock samples, not engine or desktop input.");
             }
             finally
             {
