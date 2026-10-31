@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "0f7a9b938b76468b701d8eac61a5adabaaa8be43",
+  "recordedUtc": "2026-10-31T14:10:35.974608+09:00",
+  "sourceFrames": 79,
+  "captureSha256": "75E4F90D25B9EB41A940525CA540FB348B8E2B7CC575F76BA844B874CD576674",
+  "buildReportSha256": "4B1B8CCC630BB45D342BC4719F9871F6634FE014D303C4D4DBA49E263B3E5214",
+  "encodingReportSha256": "8A9C8FB625DEF675C658D912BF6049D55DA5EDBBE80DDFB8C99C8502BA3D6155",
+  "clip": {
+    "file": "Greed-Egyptian-Entrance-Pause.webp",
+    "width": 960,
+    "height": 540,
+    "durationMs": 4730,
+    "sourceSamples": 41,
+    "encodedFrames": 31,
+    "uniqueDecodedFrames": 31,
+    "bytes": 308068,
+    "sha256": "84BCFC4EFA7858CA9BAA3E5066B7CE045DAB67411106EA31B864BCBAE7085F4D",
+    "qualitySamples": [
+      {
+        "decodedFrame": 0,
+        "sourceIndex": 0,
+        "psnrDb": 42.538
+      },
+      {
+        "decodedFrame": 1,
+        "sourceIndex": 1,
+        "psnrDb": 41.837
+      },
+      {
+        "decodedFrame": 2,
+        "sourceIndex": 2,
+        "psnrDb": 41.149
+      },
+      {
+        "decodedFrame": 8,
+        "sourceIndex": 8,
+        "psnrDb": 41.333
+      },
+      {
+        "decodedFrame": 15,
+        "sourceIndex": 25,
+        "psnrDb": 41.436
+      },
+      {
+        "decodedFrame": 30,
+        "sourceIndex": 40,
+        "psnrDb": 38.244
+      }
+    ]
+  },
+  "scope": "Actual private-player offscreen camera samples: first gift, active entrance interrupted by pause, six settled paused samples and fresh resume lead-in through the first trap. No resize/crop/pixel edits. Silent automatic app commands; not a full clear/save/infinite movie, native screen/input, audible output, manual timing or phone performance proof."
+}

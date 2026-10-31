@@ -1,5 +1,19 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-10-31 출발 중 정지와 새 재개
+
+첫 기프트 선택 뒤 이미 시작한 0.34초 입구 연출이 정지 메뉴 뒤에서 주자/그림자/입구를 계속 바꾸는 경계를 확인했다. 검사만 추가한 `74c0dca`의 `Logs/EngineLoopChecks/2ae38381a1f14dfa8686e898cf97b4a4/report.json`, SHA256 `84875063BC0D0FD885AE79779872D9993DFF8C16DE01C74851AC1987F10C8CB1`에서 지정한 실패를 재현했다. 게임·Editor/빌드 `0f7a9b9`는 정지 발행 때 표시 시계만 완료 상태로 정리한다. 아직 선택 중인 출발 대기는 유지하고 새 재개 카운트로 입구 연출을 다시 시작하지 않는다. 코어 시계·판정/보상·저장 규칙과 그림은 바꾸지 않았다.
+
+전용 `999e6a94e43b4a86a2ec4a95aa0adaec/report.json`/SHA256 `8CEC433F885685D885BF266D0F5937F71584035D53057F5F5F9901A324D27174`는 세 채널의 즉시/지연 선택, 반복 출발 발행과 정지/새 재개·기초 연습·취소의 기존 검사를 통과했다. 같은 전체 입력의 두 방식 엔진 `6a102a67133d4f119911a7b0f60dabb8/report.json`/SHA256 `191B3C080EAB9BBB17A26219218DFF6D4EF21C6F18D4AB9650921EFA07DB5047`, 원시 SHA256 `06A58C12E1AC78093CB580220B9DACBC76EA6DF48DA0B29C98CBA8C88F7781DD`도 통과했다. 각 480.48/482.03초·28,441/28,413프레임이며 첫 선택 대기 34/33프레임 뒤 출발 중 실제 정지 입력, 각각 25실제 프레임의 몸체·그림자·알파·시작 카운트 동결, 새 재개/연출 재시작 방지를 확인했다. 일반 15판정/8선택·한 번 저장·정비 취소 무소모·무한 두 번/자동 비움도 유지했다. 이 검사 경로들은 `Logs/EngineLoopChecks` 아래이며 개인 저장/원본 설정은 그대로고 소유 에디터는 종료했다.
+
+새 별도 Windows 카메라 자료 `Logs/PlayerPersistenceChecks/be42e684fb0b4f6697d7157af0e1de3c/pause-build-report.json`/SHA256 `4B1B8CCC630BB45D342BC4719F9871F6634FE014D303C4D4DBA49E263B3E5214`, 원시 `course.json`/`75E4F90D25B9EB41A940525CA540FB348B8E2B7CC575F76BA844B874CD576674`는 실제 첫 기초 연습 뒤 로비에서 일반 런을 열고 아직 진행 중인 입구 연출을 정지했다. 실제 정지 표본 6개에서 크기 1.4/알파 1/거리 0 고정과 새 재개 뒤 입구 재시작 없음을 확인했다. 첫 함정 초반에서 끝나며 `course`라는 공통 출력명이나 미완성 Record를 완주·핵 획득 실패로 해석하지 않는다.
+
+원본 79장 중 이 경계 41표본은 WebP 31프레임/4.73초/308,068바이트, SHA256 `84BCFC4EFA7858CA9BAA3E5066B7CE045DAB67411106EA31B864BCBAE7085F4D`다. 인코딩 `entrance-pause-encoding.json`/SHA256 `8A9C8FB625DEF675C658D912BF6049D55DA5EDBBE80DDFB8C99C8502BA3D6155`는 길이/크기/반복/비어 있지 않은 변화와 원본 시각별 화질 6대조(최소 PSNR 38.244dB)를 통과했다. 출발/정지/첫 함정의 재디코딩 PNG도 보았으며 자르기·크기 변경·픽셀 보정은 없다. 사본 Editor 재열기의 고유 제품명, 개인 저장/원본 설정/당시 실행본 불변과 소유 프로세스 종료를 확인했다. [움직임 미리보기](GreedLast_Prototype_MotionPreview.md)에 새 자료와 이전 두 파일/일곱 파일의 소스를 구분한다. 자동 앱 명령·오프스크린 렌더이며 사용자 화면/실제 손·가청 소리·휴대폰 검사가 아니다.
+
+정식 배포는 **14:20 KST / entrance-pause**, 원문 `Logs/PlayerReleaseChecks/b0d958fdccce4e26b7c9681cda1e0c34/report.json`/SHA256 `34729023C925BF0157406E7436184B4861C9D2BAC4DD7C6171E3C4EFC3BA8663`이다. UTC 원문 시각 `2026-10-31T05:20:24.6102522Z`에서 +09:00을 적용했다. 같은 전체 입력·138정규 입력·전체 스모크·비개발 Windows/시험 타입 제외/5그림 바인딩·154파일 ZIP·20초 초기 구동 예외 0이 통과했다. DLL `1BA9181E549A92557FC1064F5F3D56E54C40192BF3DC25785672F086C6A354F3`, ZIP `GreedLastPrototype-verified-20261031-entrance-pause.zip`/66,442,332바이트/`67601FE03B8576F08EA688026FEB8D48341A3790C886AE776A34BC8BF0132DD3`. 이전 13:21 실행본 전체를 백업했고 이전 ZIP·개인 저장/원본 설정·사본 고유 설정은 불변이다. 빌드/관찰 프로세스는 종료했다.
+
+기존 Demo31도 **14:23 KST**에 같은 회사/제품명과 위 DLL로 갱신했다. 새 저장 공간이나 초기화가 아니다. 정식 사본의 완료된 전체 스모크/메타데이터·DLL을 재사용하고 결과 DLL 일치·native 제품명·152파일/ZIP을 대조했으며 Demo31 자체의 전체 스모크나 초기 구동을 반복하지 않았다. 보고서 `Logs/PlayerReleaseChecks/187c5d7a0aa64bbb95b5752fd27dc4e3/report.json`/SHA256 `C3BD1AD94DB606DB4C99AE7F11C10358BF29AF69AEAB9D235C134F7FF1589BCF`. 새 ZIP `GreedLastDemo-20261031-entrance-pause.zip`은 66,440,109바이트/`696BB2BF8FBB8EDD7083567D1F2C2C427C97429EBFD04E43CA082960D68B7C65`다. 이전 Demo31 전체를 `previous-demo31`에 보관했고 이전 ZIP/개인·두 Demo 저장/정식 실행본·원본/사본 설정도 보존했다. 소유 빌드는 exit 0/종료, 해당 체험 저장 환경은 자동 실행하지 않았다. [새 시작용 체험 실행본](GreedLast_Prototype_Demo.md)에 같은 경로와 직접 확인 순서를 갱신했다.
+
 ## 2026-10-31 13시 21분 첫 기프트 뒤 출발
 
 로비에서 일반 런에 들어갈 때 0.34초 입구 연출이 시작되어, 첫 기프트를 기다리면 주자가 보이기 전에 연출/입구음이 끝나는 경계를 재현했다. 검사 추가 `316dadd`의 `Logs/EngineLoopChecks/8cff56ea5e904ee9b1a4ec311bb03372/report.json`, SHA256 `4D3040CCE1C070C4094EEEB1067B4314D60BD057A4CF3C05600104009CB84655`는 정확한 실패 문구를 확인했다. 개인 저장/원본 설정은 그대로였고 실제 사용자 창 조작으로 세지 않는다.

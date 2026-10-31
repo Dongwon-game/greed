@@ -6,13 +6,13 @@
 
 기존 진행도를 건드리지 않고 처음부터 직접 볼 때는 [새 시작용 체험 실행본](Docs/GreedLast_Prototype_Demo.md)을 연다. 게임 코드는 기존 검증본과 같고 저장 공간만 분리한 로컬 Windows 제품이다.
 
-[움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md)에서 현재 인간 주자의 **첫 기프트 대기 뒤 출발 3.80초**와 **일반 런 전체 34.35초**를 먼저 본다. 실제 시험 제품의 자동 앱 명령·UI 카메라 렌더이며 사람의 리듬·소리·기기 성능 검사는 아니다. 앞선 10월 30일 일곱 동작 자료와 교체 전 인물의 흐름은 같은 문서 아래 날짜별 링크로 보존했다.
+[움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md)에서 새 **출발 중 정지/새 재개 4.73초**를 먼저 본다. 앞선 소스의 첫 기프트 뒤 출발 3.80초와 일반 런 전체 34.35초, 10월 30일 일곱 동작도 입력별로 보존했다. 실제 시험 제품의 자동 앱 명령·UI 카메라 렌더이며 사람의 리듬·소리·기기 성능 검사는 아니다.
 
 현재 그림은 **이집트풍 인간 주자**다. 그림체는 유지하고 인물/복식을 변경했으며 기본 달리기·점프·숙이기·비틀기를 독립 PNG로 연결한다. [그림 생성 사양과 원본 해시](Docs/ArtDrafts/EgyptianRunnerIntegration-v1.md)를 참고한다.
 
 <img src="Assets/Resources/GreedLast/PrototypeEgyptianRunner.png" alt="이집트풍 인간 주자의 기본 달리기 자원" width="220">
 
-위 이미지는 캐릭터 자원이다. 아래는 현재 소스의 [격리 카메라 플레이 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)이며 실제 사용자 화면 촬영이나 손맛 확인은 아니다. [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 이전 캐릭터의 기록으로 보존한다.
+위 이미지는 캐릭터 자원이다. 아래는 10월 30일 소스의 [격리 카메라 플레이 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)이며 실제 사용자 화면 촬영이나 손맛 확인은 아니다. [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 이전 캐릭터의 기록으로 보존한다.
 
 ![이집트풍 인간 주자의 첫 연습 함정 미리보기](Docs/Images/GreedLast-Egyptian-Run-20261030.png)
 
