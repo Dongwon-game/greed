@@ -74,9 +74,34 @@ namespace GreedLast.Editor
             return string.Equals(Path.GetFullPath(project), Path.GetFullPath(expected), StringComparison.OrdinalIgnoreCase);
         }
 
+        public static void Initialize()
+        {
+            string root = RequireExport(out Export export);
+            string output = Path.Combine(root, "editor-identity.json");
+            Require(!File.Exists(output) && PlayerSettings.companyName == "DefaultCompany" && PlayerSettings.productName == "greed last",
+                "Initialize only an untouched Android export; preserve previous identity evidence.");
+            PlayerSettings.companyName = Company;
+            PlayerSettings.productName = "AndroidPreview-" + export.id;
+            AssetDatabase.SaveAssets();
+            WriteNew(output, new Identity { id = export.id, company = Company, product = PlayerSettings.productName });
+        }
+
+        private static void RequirePrivateEditor(string root, Export export)
+        {
+            string path = Path.Combine(root, "editor-identity.json");
+            Require(File.Exists(path), "Initialize the private Android Editor identity before inspecting or preparing it.");
+            var identity = JsonUtility.FromJson<Identity>(File.ReadAllText(path));
+            string product = "AndroidPreview-" + export.id;
+            Require(identity != null && identity.id == export.id && identity.company == Company && identity.product == product
+                && PlayerSettings.companyName == Company && PlayerSettings.productName == product
+                && Application.companyName == Company && Application.productName == product,
+                "Reopen the Android export with its unique private Editor identity.");
+        }
+
         public static void Inspect()
         {
-            string root = RequireExport(out _);
+            string root = RequireExport(out Export export);
+            RequirePrivateEditor(root, export);
             Require(!File.Exists(Path.Combine(root, "prerequisites.json")), "Preserve the previous Android prerequisite evidence.");
             VerifyPolicy();
             GreedLastPrototypeAndroidReadinessCheck.Run();
@@ -106,18 +131,15 @@ namespace GreedLast.Editor
         {
             string root = RequireExport(out Export export);
             RequirePrerequisites(root);
+            RequirePrivateEditor(root, export);
             string prepared = Path.Combine(root, "prepared-android-project.json");
-            Require(!File.Exists(prepared) && PlayerSettings.companyName == "DefaultCompany" && PlayerSettings.productName == "greed last",
-                "Android preparation requires an untouched source export.");
+            Require(!File.Exists(prepared), "Preserve the previous Android preparation evidence.");
             string notices = Path.Combine(Application.dataPath, "StreamingAssets", "GreedLast", "ThirdParty");
             Require(!Directory.Exists(notices), "Do not replace exported third-party notices.");
             Directory.CreateDirectory(notices);
             File.Copy("Assets/ThirdParty/NotoSansKR/OFL.txt", Path.Combine(notices, "NotoSansKR-OFL.txt"), false);
             File.Copy("Assets/ThirdParty/NotoSansSymbols2/OFL.txt", Path.Combine(notices, "NotoSansSymbols2-OFL.txt"), false);
             File.Copy("Assets/ThirdParty/NotoSansKR/NOTICE.txt", Path.Combine(notices, "NotoSansKR-NOTICE.txt"), false);
-            // Retain a unique Editor identity even if the prepared copy is reopened later.
-            PlayerSettings.companyName = Company;
-            PlayerSettings.productName = "AndroidPreview-" + export.id;
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, PackageId);
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;

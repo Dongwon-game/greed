@@ -78,7 +78,7 @@ $report = [ordered]@{ Id=$id; SourceHead=$head; StartedUtc=[DateTime]::UtcNow.To
     Status='Pending'; Succeeded=$false; InspectionSucceeded=$false; BuildRequested=[bool]$BuildApk; BuildAttempted=$false; ApkBuilt=$false;
     Error=''; SourceArchiveSHA256=''; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath).Hash;
     PrerequisitesSHA256=''; ModuleSupported=$false; BundledPrerequisitesPresent=$false; Apk=''; ApkSHA256='';
-    BuildInfoSHA256=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false; WindowsAssembliesUnchanged=$false;
+    BuildInfoSHA256=''; PrivateEditorIdentityEstablished=$false; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false; WindowsAssembliesUnchanged=$false;
     Processes=$processes; Scope='Private Windows-host Unity export. Default: prerequisite inspection only. Explicit -BuildApk -PrerequisitesReviewed: separate-package non-development ARM64 IL2CPP APK after the operator reviews installed tools/licenses. This runner does not invoke installers, accept licenses, change the personal target, run adb/install or assert store signing/hardware success. Unity toolchain behavior requires separate review.' }
 
 function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) {
@@ -110,10 +110,16 @@ try {
     $copy = Join-Path $root 'Project'
     Expand-Archive -LiteralPath $archive -DestinationPath $copy
     $copySettings = Join-Path $copy 'ProjectSettings\ProjectSettings.asset'
-    $copyHash = (Get-FileHash -LiteralPath $copySettings).Hash
     $common = @('-batchmode','-nographics','-quit','-projectPath',('"'+$copy+'"'),'-greed-android-id',$id)
+    Invoke-OwnedEditor ($common + @('-executeMethod','GreedLast.Editor.GreedLastAndroidPreviewBuilder.Initialize',
+        '-logFile',('"'+(Join-Path $root 'initialize.log')+'"'))) 600000 'initialize-private-editor'
+    $editorIdentity=Get-Content -LiteralPath (Join-Path $root 'editor-identity.json') -Raw | ConvertFrom-Json
+    if ($editorIdentity.id -cne $id -or $editorIdentity.company -cne 'GreedLastPrototypeChecks' -or
+        $editorIdentity.product -cne ('AndroidPreview-'+$id)) { throw 'The initial private Editor identity did not match.' }
+    $copyHash = (Get-FileHash -LiteralPath $copySettings).Hash
     Invoke-OwnedEditor ($common + @('-executeMethod','GreedLast.Editor.GreedLastAndroidPreviewBuilder.Inspect',
         '-logFile',('"'+(Join-Path $root 'inspect.log')+'"'))) 600000 'inspect'
+    $report.PrivateEditorIdentityEstablished=$true
     if ((Get-FileHash -LiteralPath $copySettings).Hash -cne $copyHash) { throw 'Read-only inspection changed exported PlayerSettings.' }
     $prerequisites = Join-Path $root 'prerequisites.json'
     $readiness = Get-Content -LiteralPath $prerequisites -Raw | ConvertFrom-Json
@@ -160,7 +166,7 @@ finally {
     $report.WindowsAssembliesUnchanged=@($windowsFiles.Keys | Where-Object {
         !(Test-Path -LiteralPath $_ -PathType Leaf) -or (Get-FileHash -LiteralPath $_).Hash -cne $windowsFiles[$_]
     }).Count -eq 0
-    $report.Succeeded=($report.Succeeded -and $report.PersonalPreferencesUnchanged -and $report.ProjectSettingsUnchanged -and
+    $report.Succeeded=($report.Succeeded -and $report.PrivateEditorIdentityEstablished -and $report.PersonalPreferencesUnchanged -and $report.ProjectSettingsUnchanged -and
         $report.WindowsAssembliesUnchanged -and @($processes | Where-Object { !$_.Stopped -or $_.TimedOut -or $_.ExitCode -ne 0 }).Count -eq 0)
     if (!$report.PersonalPreferencesUnchanged -or !$report.ProjectSettingsUnchanged -or !$report.WindowsAssembliesUnchanged) {
         $report.Status='PreservationFailed'
