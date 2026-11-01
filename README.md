@@ -25,7 +25,7 @@
 
 좌·중·우는 이동할 레인이 아니라 위험에 대응하는 채널이다. 자세한 조작과 이번 우선 확인은 [빠른 확인](Docs/GreedLast_Prototype_QuickCheck.md)을 따른다.
 
-휴대폰 확인은 [모바일 실기기 준비](Docs/GreedLast_Prototype_MobileSetup.md)를 따른다. 현재 설치의 Android 지원 부재를 실제 API로 확인했으며 설치 준비·APK 빌드·실기기 검증을 구분한다. Windows 실행본과 개인 진행은 바꾸지 않았다.
+휴대폰 확인은 [모바일 실기기 준비](Docs/GreedLast_Prototype_MobileSetup.md)를 따른다. 격리 Android 점검/시험 빌드 도구를 추가했지만 현재 설치에는 Android 지원이 없어 실제 APK 빌드·실기기는 미검증이다. 기본 명령은 점검만 하며 APK는 준비 검토 뒤 별도 옵션으로 요청한다. Windows 실행본과 개인 진행은 바꾸지 않았다.
 
 ## 대표 흐름
 

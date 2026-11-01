@@ -1,5 +1,39 @@
 # Greed Last 프로토타입 과거 확인 기록
 
+## 2026-11-01 격리 모바일 시험 빌드 준비
+
+도구 `8e4a674`와 검토 옵션/통합 검사 연결 `b03143b`, 완료 사본의 Editor 식별자 분리 `152322a`를 추가했다. `tools/build-android-preview.ps1`은 사본만 고유 Editor 식별자로 분리한 뒤 준비 상태를 점검한다. 명시적 `-BuildApk -PrerequisitesReviewed` 조합에서만 준비 이후 별도 패키지/제품의 ARM64 IL2CPP 비개발 APK 경로로 이어지도록 구현했다. 개인 프로젝트나 현재 Windows 배포는 빌드/실행하지 않는다. 준비 전 경로/ID/스키마/커밋과 미커밋 입력을 거부하며 정상 처리 뒤 고유 Editor 제품명을 유지한다. 시간초과·실패 사본은 로그와 함께 보존하고 사용자 자료를 추측 복원하거나 삭제하지 않는다.
+
+**이번에 실제 APK를 만들었다는 뜻은 아니다.** 12:12 KST의 기본 점검과 12:13 명시적 APK 요청 모두 현재 모듈 미지원/번들 9파일 누락을 읽었다. 전자는 점검 완료, 후자는 `PrerequisitesMissing`/`BuildAttempted=false`로 준비·대상 전환 전에 거부된 것이 기대 결과다. 테스트 입력의 검토 플래그는 실제 SDK 약관 동의로 세지 않는다. 모듈 설치·약관 수락·Gradle/IL2CPP·APK 생성·서명/설치·실기기 동작은 검증하지 않았다. 처음 작성한 PowerShell 개행 구문은 실행 전 파서에서 바로잡았으며 게임 오류가 아니다.
+
+원문은 아래 로컬 `Logs` 경로에 보존했다. 공개 저장소에는 빌드·로그나 개인 설정을 넣지 않는다.
+
+| 입력과 확인 | 로컬 원문 | SHA256 |
+| --- | --- | --- |
+| `8e4a674`, 세 실제 도구 × 작은 Git 사본 9개: 27 WhatIf/미커밋 조건, 내보내기 0·원본 불변 | `SourceInputGuardChecks/de0cec7dbbde4674979dfa445a35a194/report.json` | `837A7015B9A7E646EB1E10A1185E140C4EBBC7FEBF48940ED37482241DC04809` |
+| `8e4a674`, 기본 점검 완료·미설치·APK 없음 | `AndroidPreviewBuilds/dcdcdb6c8c1f479bbe78346943f2e404/report.json` | `EE7453A1CB6D2DD229BF0E024178F7D371D62E3B50F11DCD14E02286263D495C` |
+| `b03143b`, 명시적 APK 요청의 기대 중단·실제 빌드 시도 없음 | `AndroidPreviewBuilds/6447bdf351054e8187b73565cf779e3b/report.json` | `DE56E30931C9A5A5DD37853A438177B9A81E3290B06A0BE69C219EBCFB690968` |
+| `b03143b`, 검토 옵션 오류 2개·직접 Prepare/Build·잘못된 ID, 거부 5조건 | `AndroidPreviewBuilds/6447bdf351054e8187b73565cf779e3b/negative-checks.json` | `6840AF253D96984316885D34985980CE0EC74729DFC3C97C8AB607CC1A1BC2D4` |
+| `b03143b`, 새 고유 제품 사본의 전체 편집기 스모크·새 정책 포함, 12:19 완료 | `EngineLoopChecks/74c511e0c7a14cf79f3325a51bbc4283/report.json` | `1FA7988139547C2886A84AAC00826687A95A0C864B669D1D1D6F61686F278861` |
+| `b03143b`, Editor 메타데이터 참조의 조건부 C# 3대조·소스 7파일 불변 | `AndroidConditionalChecks/0edc3b3cfb964c06afa2de076a3c0480/report.json` | `ED921B2381EDAF228A5665BF17641FB1A308CA89756842BDE404E64CBBCAE4DC` |
+| `152322a`, 기본 점검: 고유 Editor 식별자 초기화/새 로딩·미설치 확인, 12:27 완료 | `AndroidPreviewBuilds/49bfd6e743394f2ab7953e8c823f44bb/report.json` | `E26A2B7327B7A75D11D86A237F74B286DE1A5C2A1D32E910A2B5CF18987DFD1E` |
+| `152322a`, 같은 새 사본의 직접 호출/옵션 거부 5조건·개인/사본 식별자 불변 | `AndroidPreviewBuilds/49bfd6e743394f2ab7953e8c823f44bb/negative-checks.json` | `BA1B5870E8850AB86688D9E81303C9F131A239AA983EBD2A2FBEA559DF67CC5A` |
+| `152322a` Editor 오버레이로 초기 두 사본 식별자 분리·새 로딩·이전 ZIP/보고서 불변 | `AndroidPreviewBuilds/retirement-5e4a274a28b442f4a396856bc85f4ab3/report.json` | `8FBD36C8A82D0B442FBE2FB5700AD36D0340F89C82C675CB1EA1EB0B92ACE1CD` |
+
+초기 `8e4a674`/`b03143b`의 점검만 끝낸 사본은 원본 Editor 제품명을 남겨, 이후 사용자가 그 사본을 열고 Play하면 개인 Editor 저장 공간을 공유할 위험이 있었다. 실제 검사 중 개인 값 변경은 없었다. `152322a`는 Android 준비와 별개로 사본만 먼저 고유 회사/제품명으로 저장하고 새 에디터의 Application/PlayerSettings가 모두 그 식별자를 읽어야 점검하도록 보완했다. 12:27의 새 사본과 후속 직접 호출 거부를 통과했으며 개인·두 Demo 값/원본 설정/현재 Windows DLL은 불변이다. 이 후속은 편집기 컴파일/집중 검사이며 위 `b03143b` 전체 스모크를 같은 전체 입력의 재실행으로 세지 않는다.
+
+초기 두 사본에도 같은 Editor 파일만 오버레이하고 고유 식별자를 설정했다. 새 에디터가 그 식별자를 검증한 뒤 기존 준비 원문의 덮어쓰기를 거부하는 지정 문구(exit 1)로 종료해 재열기 분리를 확인했다. 네 소유 에디터는 종료했고 개인 값/원본 설정과 이전 source.zip·완료/음성 보고서는 바이트 그대로다. 사본의 Editor 파일/식별자 설정은 사후 보완으로 의도적으로 바뀌었으므로 최초 검사 입력은 보존한 원본 ZIP에서 확인한다. 전체 사본을 원래 상태였다고 표시하거나 이전 결과를 다시 써서 성공으로 바꾸지 않았다.
+
+실제 음성 실행의 소유 에디터 셋은 지정 문구로 exit 1/종료했고 준비 JSON·추가 고지·Player/APK를 만들지 않았다. 기본/명시 요청의 점검 에디터와 전체 스모크의 두 소유 에디터는 exit 0/종료했다. 개인/두 체험판의 Greed 값·원본 설정과 현재 두 Windows DLL은 점검/음성 실행에서 보존됐다. 전체 스모크도 개인 값/원본 설정 불변을 확인했다. 새 Windows 재빌드나 같은 게임의 전체 엔진/렌더 재검사를 반복한 것은 아니다. 런타임 `Assets/Scripts`, 패키지와 ProjectSettings는 `0f7a9b9`와 같으며 현재 10월 31일 14:20/14:23 실행본을 유지한다.
+
+### 조건부 C# 대조의 한계
+
+Roslyn은 설치된 Windows 호스트의 편집기/NetStandard/UGUI 메타데이터 206참조와 현재 런타임 7파일을 사용했다. `UNITY_ANDROID`만 켠 소스의 분기 대조이며 `UNITY_EDITOR`/`DEVELOPMENT_BUILD`는 없다. 무분기/JNI 참조 제외는 통과, Android 분기/JNI 제외는 지정 `AndroidJavaClass`/`AndroidJavaObject`의 CS1069 다섯 건만 발생, Android 분기/JNI 포함은 통과했다. 출력 DLL은 로드/실행하지 않았다. Unity Android 타깃 참조·IL2CPP/Gradle·APK·JNI 실행이나 실제 진동 성공이 아니다.
+
+앞선 `facacdcc51b045ad868093cc5f1ab744`는 한국어 진단/Handheld를 빠뜨린 검사기 판독 오류였고, `765dfe254570423fac55ee7a45de49d1`는 Windows 플레이어 메타데이터에 모바일 전용 Handheld가 없는 한계였다. 두 보고서는 실패 상태 그대로 보존했다. SARIF 구조화 진단과 편집기 메타데이터로 대조했으며 게임 코드를 억지로 바꾸거나 가짜 모바일 타입을 넣지 않았다. Handheld의 Android/iOS 전용 범위는 [Unity 6.4 공식 API](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/Handheld.html)와 대조했다.
+
+사용 순서와 아직 검증하지 않은 준비 환경의 APK 경로는 [모바일 실기기 준비](GreedLast_Prototype_MobileSetup.md)를 따른다. 실제 폰의 그립/터치·센서·소리/지연/FPS 확인은 여전히 별도다.
+
 ## 2026-10-31 14시 38분 모바일 준비 재확인
 
 현재 게임/검사 입력 `0f7a9b9`의 완료된 개인 데이터 분리 사본에서 기존 Android 준비 메뉴를 실행했다. 설치된 `6000.4.3f1`의 `BuildPipeline.IsBuildTargetSupported` 결과는 false였고 번들 경로의 고정된 9개 도구 파일도 없었다. 원문 `Logs/AndroidChecks/cd987114637e45d8a5c69a1a2af7e880/report.json`/SHA256 `BA27EA545EBDE9F0C67C17448CAA5FABD7EDBB6699F1969D68E4ACD2FD9C43E0`, 내부 도구 원문 SHA256 `B3CE0F44CDACE2A2F3D863150E616E253795FBEB7905B6EFC9A3D9DDBE72E734`다. 사본 설정 불변·소유 에디터 exit 0/종료를 확인했다. 이 읽기 전용 실행은 모듈 설치·약관 동의·대상 전환·도구 실행/버전·APK/서명·기기 성공이 아니다.
