@@ -25,12 +25,13 @@ $emptyHooks = Join-Path $fixtureRoot 'empty-hooks'
 [void][IO.Directory]::CreateDirectory($emptyHooks)
 $runners = @(
     @{Name='engine'; Path=(Join-Path $project 'tools\check-engine-loop.ps1'); Message='Review and commit changed game/editor inputs before exporting a check.'},
-    @{Name='player'; Path=(Join-Path $project 'tools\check-player-persistence.ps1'); Message='Commit or review changed game inputs before exporting a probe.'}
+    @{Name='player'; Path=(Join-Path $project 'tools\check-player-persistence.ps1'); Message='Commit or review changed game inputs before exporting a probe.'},
+    @{Name='android'; Path=(Join-Path $project 'tools\build-android-preview.ps1'); Message='Review and commit changed game/editor inputs before exporting an Android preview.'}
 )
 $report = [ordered]@{Id=$id; SourceHead=$head; StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     ExpectedFailure=[bool]$ExpectedFailure; Succeeded=$false; Reproduced=$false; Error=''; FixtureRoot=$fixtureRoot;
     FixturesRetained=$true; AllNoExports=$false; FixtureSourcesUnchanged=$false; MissedDirtyGuards=0; Cases=@(); Inputs=@();
-    Scope='Two real runner preflights with -WhatIf against nine tiny synthetic Git repositories, including allowed documentation/tool-only changes. Fixture Git hooks and commit signing are disabled locally per command. No Unity process, source export, personal preferences, screen input/capture, game build or real font mutation.'}
+    Scope='Three real runner preflights with -WhatIf against nine tiny synthetic Git repositories, including allowed documentation/tool-only changes. Fixture Git hooks and commit signing are disabled locally per command. No Unity process, source export, personal preferences, screen input/capture, game build or real font mutation.'}
 
 function Write-Fixture([string]$Directory, [string]$Relative, [string]$Text) {
     $path = [IO.Path]::GetFullPath((Join-Path $Directory $Relative))
