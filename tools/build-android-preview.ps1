@@ -2,11 +2,14 @@
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
-    [switch]$BuildApk
+    [switch]$BuildApk,
+    [switch]$PrerequisitesReviewed
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($BuildApk -and !$PrerequisitesReviewed) { throw 'Install and review the required SDK tools/licenses first; explicit APK builds require -PrerequisitesReviewed.' }
+if ($PrerequisitesReviewed -and !$BuildApk) { throw '-PrerequisitesReviewed only applies to an explicitly requested -BuildApk.' }
 if ($env:OS -ne 'Windows_NT') { throw 'The Android preview runner supports Windows-host Unity only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
@@ -76,7 +79,7 @@ $report = [ordered]@{ Id=$id; SourceHead=$head; StartedUtc=[DateTime]::UtcNow.To
     Error=''; SourceArchiveSHA256=''; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath).Hash;
     PrerequisitesSHA256=''; ModuleSupported=$false; BundledPrerequisitesPresent=$false; Apk=''; ApkSHA256='';
     BuildInfoSHA256=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false; WindowsAssembliesUnchanged=$false;
-    Processes=$processes; Scope='Private Windows-host Unity export. Default: prerequisite inspection only. Explicit -BuildApk: separate-package non-development ARM64 IL2CPP APK. No SDK installation/license acceptance, personal project target change, adb/install, store signing or hardware assertions.' }
+    Processes=$processes; Scope='Private Windows-host Unity export. Default: prerequisite inspection only. Explicit -BuildApk -PrerequisitesReviewed: separate-package non-development ARM64 IL2CPP APK after the operator reviews installed tools/licenses. This runner does not invoke installers, accept licenses, change the personal target, run adb/install or assert store signing/hardware success. Unity toolchain behavior requires separate review.' }
 
 function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) {
     $process = Start-Process -FilePath $unity -ArgumentList $Arguments -WindowStyle Hidden -PassThru
@@ -159,6 +162,10 @@ finally {
     }).Count -eq 0
     $report.Succeeded=($report.Succeeded -and $report.PersonalPreferencesUnchanged -and $report.ProjectSettingsUnchanged -and
         $report.WindowsAssembliesUnchanged -and @($processes | Where-Object { !$_.Stopped -or $_.TimedOut -or $_.ExitCode -ne 0 }).Count -eq 0)
+    if (!$report.PersonalPreferencesUnchanged -or !$report.ProjectSettingsUnchanged -or !$report.WindowsAssembliesUnchanged) {
+        $report.Status='PreservationFailed'
+        $report.Error+=' Personal state changed during the check; review concurrent work and preserve the evidence.'
+    }
     $report.CompletedUtc=[DateTime]::UtcNow.ToString('O')
     [IO.File]::WriteAllText((Join-Path $root 'report.json'), ($report | ConvertTo-Json -Depth 9))
 }

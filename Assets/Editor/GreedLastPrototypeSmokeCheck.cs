@@ -674,6 +674,7 @@ namespace GreedLast.Editor
             GreedLastPrototypeKeyboardCheck.VerifyShortcutHoldVisuals();
             GreedLastPrototypeKeyboardCheck.VerifyInputBorrowingPolicy();
             GreedLastPrototypeAndroidReadinessCheck.VerifyPolicy();
+            GreedLastAndroidPreviewBuilder.VerifyPolicy();
             GreedLastPrototypePlayModeCheck.VerifyCanceledGate();
             GreedLastPrototypeFontCheck.Run();
             GreedLastPrototypeEgyptianArtCheck.Run();

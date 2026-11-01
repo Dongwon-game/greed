@@ -160,9 +160,11 @@ namespace GreedLast.Editor
                 var result = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
                     scenes = new[] { Scene }, locationPathName = apk, target = BuildTarget.Android, options = BuildOptions.None });
                 Require(result.summary.result == BuildResult.Succeeded && File.Exists(apk), "Android preview APK build did not succeed.");
+                bool development = (result.summary.options & BuildOptions.Development) != 0;
+                Require(!development, "The mobile preview must not package development controls.");
                 info = new BuildInfo { id = export.id, sourceHead = export.sourceHead, builtUtc = DateTime.UtcNow.ToString("O"),
                     unityVersion = Application.unityVersion, company = PreviewCompany, product = PreviewProduct, packageId = PackageId,
-                    apkPath = "Player/GreedLastMobilePreview.apk", apkSha256 = Hash(apk), smokePassed = true, developmentBuild = false };
+                    apkPath = "Player/GreedLastMobilePreview.apk", apkSha256 = Hash(apk), smokePassed = true, developmentBuild = development };
             }
             finally
             {
