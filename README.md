@@ -1,6 +1,8 @@
 # Greed
 
-기획서의 조작 감각과 대표 한 판을 확인하는 Unity 모바일 리듬 탈출 프로토타입이다. Unity 프로젝트 표시명은 `greed last`다.
+기획서를 읽는 사람이 **Windows PC에서 조작 감각과 대표 한 판을 체험하는 Unity 리듬 탈출 프로토타입**이다. Unity 프로젝트 표시명은 `greed last`다. 2026-11-02 사용자 결정으로 모바일 빌드·실기기 검증은 현재 목표에서 제외했다.
+
+처음 보는 사람은 [PC 체험 안내](Docs/GreedLast_Prototype_PCReview.md)를 먼저 따른다. Unity 설치 없이 기존 Windows 체험 실행본으로 확인한다.
 
 [처음부터 확인하기](Docs/GreedLast_Prototype_QuickCheck.md) · [기획과 구현 범위](Docs/GreedLast_Prototype_PlanCoverage.md) · [검증 이력](Docs/GreedLast_Prototype_CheckHistory.md)
 
@@ -25,13 +27,13 @@
 
 좌·중·우는 이동할 레인이 아니라 위험에 대응하는 채널이다. 자세한 조작과 이번 우선 확인은 [빠른 확인](Docs/GreedLast_Prototype_QuickCheck.md)을 따른다.
 
-휴대폰 확인은 [모바일 실기기 준비](Docs/GreedLast_Prototype_MobileSetup.md)를 따른다. 격리 Android 점검/시험 빌드 도구를 추가했지만 현재 설치에는 Android 지원이 없어 실제 APK 빌드·실기기는 미검증이다. 기본 명령은 점검만 하며 APK는 준비 검토 뒤 별도 옵션으로 요청한다. Windows 실행본과 개인 진행은 바꾸지 않았다.
+Android 설치·APK·휴대폰 센서/지연/FPS 확인은 현재 완료 조건이 아니다. [이전 모바일 준비 기록](Docs/GreedLast_Prototype_MobileSetup.md)은 과거 작업 근거로만 보존하며 자동 재개하지 않는다.
 
 ## 대표 흐름
 
 직선 주행 → 함정 회피와 정확 타이밍 보상 → 루트·기프트·유물 선택 → 공명핵 회수 → 탈출 → 원하는 한 칸에 한 번 저장 → 무한 정비 → 실제 두 번째 시작에 슬롯 자동 비움 → 시작한 런 유지/기록으로 이어진다.
 
-일반 런은 4장과 탈출의 대표 코스로 압축했다. 완성 상용 게임 전체나 길드·계정·결제·서버 운영 기능을 목표로 하지 않는다. 회전은 통로에 제한적으로 적용하며 실제 폰 센서/소리 지연·손맛은 기기에서 별도로 확인한다.
+일반 런은 4장과 탈출의 대표 코스로 압축했다. 완성 상용 게임 전체나 길드·계정·결제·서버 운영 기능을 목표로 하지 않는다. 회전은 통로에 제한적으로 적용한다. PC 키보드/마우스에서 위험·박자·보상이 읽히고 한 판을 자연스럽게 마치는지가 최종 확인 기준이다.
 
 ## 검증과 Windows 빌드
 
