@@ -10709,6 +10709,7 @@ namespace GreedLast.Editor
 
         private static void VerifyReadableMenuAndResultLayouts(GreedLastRuntimeUi ui)
         {
+            VerifyPlayerInputPresentation();
             VerifyPlayfieldReadability(ui);
             VerifyCompactTimingGuide(ui);
             GreedLastPrototypeHudCheck.VerifyCompactTimingGuideReuse(ui);
@@ -10884,6 +10885,23 @@ namespace GreedLast.Editor
             tone.Invoke(null, new object[] { action, new Color32(205, 166, 70, 255), new Color32(238, 204, 114, 255), new Color32(165, 124, 48, 255) });
             Require(action.targetGraphic.color == Color.white && action.GetComponentInChildren<Text>().color.grayscale > 0.7f,
                 "A disabled action must retain a readable label and must not be tinted twice.");
+        }
+
+        private static void VerifyPlayerInputPresentation()
+        {
+            string pcGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", false);
+            string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
+            Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
+                && pcGuide.Contains("A/← · S/Space · D/→", StringComparison.Ordinal)
+                && pcGuide.Contains("이동이 아닌 대응", StringComparison.Ordinal)
+                && pcGuide.Contains("판정선", StringComparison.Ordinal)
+                && mobileGuide.Contains("영역", StringComparison.Ordinal)
+                && !mobileGuide.Contains("Space", StringComparison.Ordinal),
+                "First practice must teach same-channel response, timing and actual platform controls before starting.");
+            foreach (bool dev in new[] { false, true })
+            foreach (bool mobile in new[] { false, true })
+                Require(InvokeRuntimeUiStaticBool("ShouldShowHapticsSetting", dev, mobile) == (dev || mobile),
+                    "PC release must hide the nonfunctional haptic setting while mobile and developer checks keep it.");
         }
 
         private static void VerifyHudModeTransitions(GreedLastRuntimeUi ui, GreedLastRunSnapshot original, Text hud)
@@ -11132,6 +11150,18 @@ namespace GreedLast.Editor
                 core.Tick(clock += 1f);
                 Require(run.ActivePattern, "Compact action checks require a live avoidance pattern.");
                 string cue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false);
+                string pcCue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueTextForPlatform", run, false, false, false);
+                string pcHint = InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForPlatform", run.Pattern, false, false, false);
+                Require(pcHint == InvokeRuntimeUiLabel("BuildRunChannelInputHintForMode", run.Pattern.Channel, true)
+                    && !pcCue.Contains("탭", StringComparison.Ordinal)
+                    && !pcCue.Contains("기울임", StringComparison.Ordinal)
+                    && !pcCue.Contains("Q/", StringComparison.Ordinal)
+                    && !pcCue.Contains("E/", StringComparison.Ordinal)
+                    && (i < 3 || pcCue.Contains(pcHint, StringComparison.Ordinal)),
+                    "PC release action cues must advertise supported lane keys without tilt or development-only shortcuts.");
+                Require(InvokeRuntimeUiLabel("BuildCompactActiveActionCueTextForPlatform", run, false, true, true)
+                    == InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, false, true),
+                    "Mobile cue presentation must retain its existing touch/tilt controls.");
                 Require(cue.Split('\n').Length == 2 && cue.Contains(responses[i], StringComparison.Ordinal)
                     && cue.Contains("정박 +" + InvokeRuntimeUiInt("BuildActiveExactScorePreview", run), StringComparison.Ordinal),
                     "Every compact cue must retain its actual action and exact-score preview in two lines.");
@@ -11169,6 +11199,12 @@ namespace GreedLast.Editor
                     clock + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
                 Require(run.LastResult == GreedLastJudgementResult.Miss, "Compact failure checks need a real wrong-channel outcome.");
                 string feedback = InvokeRuntimeUiLabel("BuildCompactJudgementFeedbackText", run, true, false);
+                string pcFeedback = InvokeRuntimeUiLabel("BuildCompactJudgementFeedbackTextForPlatform", run, false, false, false);
+                Require(pcFeedback.Contains("정답 " + pcHint, StringComparison.Ordinal)
+                    && !pcFeedback.Contains("탭", StringComparison.Ordinal)
+                    && !pcFeedback.Contains("Q/", StringComparison.Ordinal)
+                    && !pcFeedback.Contains("E/", StringComparison.Ordinal),
+                    "PC wrong-channel feedback must teach the supported key for the actual judged pattern.");
                 Require(feedback.Split('\n').Length == 2 && feedback.Contains("Miss", StringComparison.Ordinal)
                     && feedback.Contains("정답", StringComparison.Ordinal) && feedback.Contains("체력 " + run.Health, StringComparison.Ordinal),
                     "Compact failure feedback must retain the correction and actual health without a long paragraph.");

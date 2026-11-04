@@ -108,9 +108,9 @@ namespace GreedLast.Editor
         internal static void VerifyCompactActionCueReuse(GreedLastRuntimeUi ui)
         {
             VerifyPatternRouteTokens();
-            var fresh = (Func<GreedLastRunSnapshot, bool, bool, string>)Delegate.CreateDelegate(
-                typeof(Func<GreedLastRunSnapshot, bool, bool, string>), typeof(GreedLastRuntimeUi)
-                    .GetMethod("BuildCompactActiveActionCueText", BindingFlags.Static | BindingFlags.NonPublic));
+            var fresh = (Func<GreedLastRunSnapshot, bool, bool, bool, string>)Delegate.CreateDelegate(
+                typeof(Func<GreedLastRunSnapshot, bool, bool, bool, string>), typeof(GreedLastRuntimeUi)
+                    .GetMethod("BuildCompactActiveActionCueTextForPlatform", BindingFlags.Static | BindingFlags.NonPublic));
             var cached = (Func<GreedLastRunSnapshot, bool, bool, string>)Delegate.CreateDelegate(
                 typeof(Func<GreedLastRunSnapshot, bool, bool, string>), ui, typeof(GreedLastRuntimeUi)
                     .GetMethod("GetCompactActiveActionCueText", BindingFlags.Instance | BindingFlags.NonPublic));
@@ -217,11 +217,11 @@ namespace GreedLast.Editor
                 foreach (bool tilt in new[] { false, true })
                 {
                     string label = cached(run, tools, tilt);
-                    Require(label == fresh(run, tools, tilt), "Cached action cue must equal its current original label.");
+                    Require(label == fresh(run, tools, tilt, Application.isMobilePlatform), "Cached action cue must equal its current platform label.");
                     for (int repeat = 0; repeat < 4; repeat++)
                         Require(ReferenceEquals(label, cached(run, tools, tilt)), "Unchanged action cue must reuse one string.");
                 }
-                string expected = fresh(run, true, tiltAvailable());
+                string expected = fresh(run, true, tiltAvailable(), Application.isMobilePlatform);
                 ui.RenderRun(run);
                 typeof(GreedLastRuntimeUi).GetField("judgementFeedbackUntil", BindingFlags.Instance | BindingFlags.NonPublic)
                     .SetValue(ui, 0f);

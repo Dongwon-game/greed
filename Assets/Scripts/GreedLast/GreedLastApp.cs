@@ -16787,6 +16787,13 @@ namespace GreedLast
             bool growthDevLike = showDevTools && growthBoardLike;
             bool lobbyDevLike = showDevTools && snapshot.State == GreedLastScreenState.LobbyReady;
             bool onboardingComplete = IsCoreOnboardingComplete(snapshot);
+            if (snapshot.State == GreedLastScreenState.LobbyReady
+                && snapshot.CoreActionsEnabled && !onboardingComplete)
+            {
+                string guide = BuildFirstPracticeInputGuide(Application.isMobilePlatform);
+                detail = string.IsNullOrEmpty(detail) ? guide : detail + "\n\n" + guide;
+                detailText.text = detail;
+            }
             lobbyRunPortalVisible = ShouldShowLobbyRunPortal(snapshot.State);
             lobbyRunPortalPracticeFirst = lobbyRunPortalVisible && !onboardingComplete;
             lobbyRunPortalReady = BuildLobbyRunPortalReady(
@@ -18235,7 +18242,9 @@ namespace GreedLast
             focusMaxButton.gameObject.SetActive(showDevTools && showSideTools);
             threatUpButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
             threatDownButton.gameObject.SetActive(showDevTools && showSideTools);
-            hapticsButton.gameObject.SetActive(showPauseSettings || (showDevTools && showSideTools));
+            hapticsButton.gameObject.SetActive(
+                (showPauseSettings || (showDevTools && showSideTools))
+                && ShouldShowHapticsSetting(showDevTools, Application.isMobilePlatform));
             rotationTiltButton.gameObject.SetActive(
                 showPauseSettings
                 && ShouldShowRotationTiltSetting(
@@ -18276,6 +18285,11 @@ namespace GreedLast
             return devToolsEnabled || (isMobilePlatform && supportsAccelerometer);
         }
 
+        private static bool ShouldShowHapticsSetting(bool devToolsEnabled, bool isMobilePlatform)
+        {
+            return devToolsEnabled || isMobilePlatform;
+        }
+
         private void SetRunMenuButtonLayout(bool pauseMenu)
         {
             Transform buttonParent = pauseMenu ? pauseMenuPanel.transform : rootPanel.transform;
@@ -18299,7 +18313,10 @@ namespace GreedLast
                 bool showRotationTiltSetting = rotationTiltButton.gameObject.activeSelf;
                 SetPauseMenuControl(rotationTiltButton, 0f, -248f, 820f);
                 SetPauseMenuControl(hapticsButton, 0f, showRotationTiltSetting ? -380f : -248f, 820f);
-                SetPauseMenuControl(motionComfortButton, 0f, showRotationTiltSetting ? -512f : -380f, 820f);
+                float comfortY = -248f
+                    - (showRotationTiltSetting ? 132f : 0f)
+                    - (hapticsButton.gameObject.activeSelf ? 132f : 0f);
+                SetPauseMenuControl(motionComfortButton, 0f, comfortY, 820f);
                 return;
             }
 
@@ -24778,6 +24795,14 @@ namespace GreedLast
             }
 
             return snapshot.Detail;
+        }
+
+        private static string BuildFirstPracticeInputGuide(bool isMobilePlatform)
+        {
+            return "위험이 오는 채널과 같은 좌 · 중 · 우를 누르세요."
+                + (isMobilePlatform ? "\n화면의 좌 · 중 · 우 영역으로 대응합니다."
+                    : "\nA/← · S/Space · D/→ 또는 해당 영역 클릭")
+                + "\n좌우 이동이 아닌 대응입니다. 판정선에 맞춰 누르세요.";
         }
 
         private static string BuildPreparedInfiniteDisplayDetail(string detail)
@@ -45237,7 +45262,8 @@ namespace GreedLast
         {
             bool compact = UsePlayerRunControls;
             string text = compact
-                ? BuildCompactJudgementFeedbackText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
+                ? BuildCompactJudgementFeedbackTextForPlatform(snapshot, DevToolsEnabled,
+                    IsRuntimeRotationTiltAvailable(), Application.isMobilePlatform)
                 : BuildJudgementFeedbackText(snapshot);
             if (!compact && lastPresentedJudgementRecommendationReady)
                 text += (CountTextLines(text) >= 3 ? " · " : "\n")
@@ -45453,6 +45479,22 @@ namespace GreedLast
         private static string BuildCompactJudgementFeedbackText(
             GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool rotationTiltAvailable)
         {
+            return BuildCompactJudgementFeedbackTextWithInputHint(snapshot,
+                BuildActiveActionCueInputHintForCapabilities(BuildJudgementFeedbackPattern(snapshot),
+                    devToolsEnabled, rotationTiltAvailable));
+        }
+
+        private static string BuildCompactJudgementFeedbackTextForPlatform(
+            GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool rotationTiltAvailable, bool isMobilePlatform)
+        {
+            return BuildCompactJudgementFeedbackTextWithInputHint(snapshot,
+                BuildActiveActionCueInputHintForPlatform(BuildJudgementFeedbackPattern(snapshot),
+                    devToolsEnabled, rotationTiltAvailable, isMobilePlatform));
+        }
+
+        private static string BuildCompactJudgementFeedbackTextWithInputHint(
+            GreedLastRunSnapshot snapshot, string inputHint)
+        {
             GreedLastPatternModel pattern = BuildJudgementFeedbackPattern(snapshot);
             string action = BuildRunnerResponseSymbol(pattern) + " " + BuildActiveActionResponseLabel(pattern);
             switch (snapshot.LastResult)
@@ -45481,7 +45523,7 @@ namespace GreedLast
                         + "\n" + timing + " · " + goodPayoff;
                 case GreedLastJudgementResult.Miss:
                     string reason = snapshot.MissReason == "wrong_channel"
-                        ? "정답 " + BuildActiveActionCueInputHintForCapabilities(pattern, devToolsEnabled, rotationTiltAvailable)
+                        ? "정답 " + inputHint
                         : snapshot.MissReason == "no_input" ? "입력 없음"
                         : snapshot.MissReason == "too_early" ? "너무 빠름"
                         : snapshot.MissReason == "too_late" ? "너무 늦음" : "회피 실패";
@@ -47722,8 +47764,9 @@ namespace GreedLast
                 cachedCompactActionExactScore = exactScore;
                 cachedCompactActionDevTools = devToolsEnabled;
                 cachedCompactActionRotationTilt = rotationTiltAvailable;
-                cachedCompactActionCue = BuildCompactActiveActionCueTextWithScore(
-                    snapshot, devToolsEnabled, rotationTiltAvailable, exactScore);
+                cachedCompactActionCue = BuildCompactActiveActionCueTextWithInputHint(snapshot, exactScore,
+                    BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, devToolsEnabled,
+                        rotationTiltAvailable, Application.isMobilePlatform));
             }
             return cachedCompactActionCue;
         }
@@ -47745,13 +47788,30 @@ namespace GreedLast
             bool rotationTiltAvailable,
             int exactScore)
         {
+            return BuildCompactActiveActionCueTextWithInputHint(snapshot, exactScore,
+                BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable));
+        }
+
+        private static string BuildCompactActiveActionCueTextForPlatform(
+            GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool rotationTiltAvailable, bool isMobilePlatform)
+        {
+            if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
+                return string.Empty;
+            return BuildCompactActiveActionCueTextWithInputHint(snapshot, BuildActiveExactScorePreview(snapshot),
+                BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, devToolsEnabled,
+                    rotationTiltAvailable, isMobilePlatform));
+        }
+
+        private static string BuildCompactActiveActionCueTextWithInputHint(
+            GreedLastRunSnapshot snapshot, int exactScore, string inputHint)
+        {
             if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
                 return string.Empty;
 
             string action = BuildTrapApproachLabel(snapshot.Pattern) + " → "
                 + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + BuildActiveActionResponseLabel(snapshot.Pattern);
             if (GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
-                action += " · " + BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable);
+                action += " · " + inputHint;
 
             return action + "\n정박 +" + exactScore
                 + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);
@@ -47990,6 +48050,15 @@ namespace GreedLast
             }
 
             return rotationTiltAvailable ? "중립→" + rotationHint : rotationHint;
+        }
+
+        private static string BuildActiveActionCueInputHintForPlatform(
+            GreedLastPatternModel pattern, bool devToolsEnabled, bool rotationTiltAvailable, bool isMobilePlatform)
+        {
+            // Keyboard lane inputs work in PC release builds. Q/E remain development-only.
+            return !isMobilePlatform && !devToolsEnabled
+                ? BuildRunChannelInputHintForMode(pattern.Channel, true)
+                : BuildActiveActionCueInputHintForCapabilities(pattern, devToolsEnabled, rotationTiltAvailable);
         }
 
         private static string BuildRotationInputHintForMode(GreedLastPatternModel pattern, bool devToolsEnabled)
