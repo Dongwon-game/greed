@@ -26306,7 +26306,7 @@ namespace GreedLast
                 return "피라미드 입구를 여는 중";
             }
 
-            return "모바일 리듬 탈출 / 좌 · 중 · 우 대응";
+            return "리듬 탈출 / 좌 · 중 · 우 대응";
         }
 
         private static bool ShouldShowModeSubtitleForScreen(GreedLastScreenState state)
@@ -48547,8 +48547,9 @@ namespace GreedLast
                 SetLaneLabelMode(36, false);
                 for (int i = 0; i < laneLabelTexts.Length; i++)
                 {
-                    laneLabelTexts[i].text = BuildCleanRunLaneLabel(i, i == target ? snapshot.Pattern : default,
-                        DevToolsEnabled, IsRuntimeRotationTiltAvailable());
+                    laneLabelTexts[i].text = BuildCleanRunLaneLabelForPlatform(i,
+                        i == target ? snapshot.Pattern : default, DevToolsEnabled,
+                        IsRuntimeRotationTiltAvailable(), Application.isMobilePlatform);
                 }
                 SetRunLaneLabelColors(target, snapshot);
                 return;
@@ -48586,7 +48587,19 @@ namespace GreedLast
 
         private static string BuildRunLaneBaseLabel(int laneIndex, bool compact)
         {
-            return BuildRunLaneBaseLabelForMode(laneIndex, compact, DevToolsEnabled);
+            return BuildRunLaneBaseLabelForMode(laneIndex, compact,
+                DevToolsEnabled || !Application.isMobilePlatform);
+        }
+
+        private static string BuildCleanRunLaneLabelForPlatform(int laneIndex, GreedLastPatternModel pattern,
+            bool devToolsEnabled, bool rotationTiltAvailable, bool isMobilePlatform)
+        {
+            // A/S/D and arrows are player inputs on PC, even in a non-development build.
+            // Q/E rotation shortcuts remain development-only and must not be advertised here.
+            if (!isMobilePlatform && !devToolsEnabled)
+                return BuildRunLaneBaseLabelForMode(laneIndex, false, true);
+
+            return BuildCleanRunLaneLabel(laneIndex, pattern, devToolsEnabled, rotationTiltAvailable);
         }
 
         private static string BuildCleanRunLaneLabel(int laneIndex, GreedLastPatternModel pattern,

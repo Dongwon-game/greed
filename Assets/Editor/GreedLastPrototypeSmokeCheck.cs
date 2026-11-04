@@ -703,6 +703,8 @@ namespace GreedLast.Editor
                         == "피라미드 입구를 여는 중"
                     && InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.LobbyReady)
                         .Contains("좌 · 중 · 우", StringComparison.Ordinal)
+                    && !InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.LobbyReady)
+                        .Contains("모바일", StringComparison.Ordinal)
                     && string.IsNullOrEmpty(
                         InvokeRuntimeUiLabel("BuildModeSubtitleForScreen", GreedLastScreenState.InfiniteRecordBoard)),
                 "Boot, loading, lobby, and record screens must use subtitles that match their visible purpose.");
@@ -11038,6 +11040,14 @@ namespace GreedLast.Editor
                     string desktop = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, true, false);
                     string mobile = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, false, true);
                     string fallback = InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", lane, run.Pattern, false, false);
+                    string pcPlayer = InvokeRuntimeUiLabel("BuildCleanRunLaneLabelForPlatform",
+                        lane, run.Pattern, false, false, false);
+                    string touchPlayer = InvokeRuntimeUiLabel("BuildCleanRunLaneLabelForPlatform",
+                        lane, run.Pattern, false, true, true);
+                    Require(pcPlayer == directions[lane] + "\n" + keys[lane],
+                        "Non-development PC headers must teach actual player keys for every action, without Q/E development shortcuts.");
+                    Require(touchPlayer == mobile,
+                        "PC input guidance must preserve the separate mobile touch/tilt labels.");
                     Require(fallback == directions[lane] + "\n탭",
                         "Touch headers must identify the lane once, without repeating the direction in the tap line.");
                     Require(desktop == directions[lane] + "\n" + (rotationTarget
@@ -11050,6 +11060,11 @@ namespace GreedLast.Editor
             Require(InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", 0, default(GreedLastPatternModel), false, true) == "좌\n탭"
                 && InvokeRuntimeUiLabel("BuildCleanRunLaneLabel", -1, run.Pattern, false, true) == "-",
                 "Inactive and invalid header lanes must not retain a previous rotation hint.");
+            Require(InvokeRuntimeUiLabel("BuildCleanRunLaneLabelForPlatform", 0,
+                        default(GreedLastPatternModel), false, false, false) == "좌\nA/←"
+                && InvokeRuntimeUiLabel("BuildCleanRunLaneLabelForPlatform", -1,
+                        run.Pattern, false, false, false) == "-",
+                "Idle and invalid PC headers must retain only their own supported player input.");
         }
 
         private static void VerifyCompactTimingGuide(GreedLastRuntimeUi ui)
