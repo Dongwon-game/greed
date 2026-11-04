@@ -6,12 +6,11 @@
 
 ## 실행
 
-- Windows: `C:\Projectunity\greed last\Builds\GreedLastPrototype\GreedLastPrototype.exe`를 연다.
-- 기존 진행도를 건드리지 않고 처음부터 볼 때는 [새 시작용 체험 실행본](GreedLast_Prototype_Demo.md)을 쓴다. `Builds\GreedLastDemo-20261031\GreedLastDemo.exe`이며 같은 게임 DLL·별도 저장 공간이다. **14:23에 같은 제품명으로 파일만 갱신**했으므로 이미 했던 Demo31 진행은 유지된다. Demo30이나 개인 진행을 지우거나 합치지 않았다.
-- Unity: `C:\Projectunity\greed last`를 **Unity 6.4 / 6000.4.3f1**로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
-- 현재 실행본: **2026-10-31 14:20 KST / entrance-pause**, 게임·Editor/빌드 `0f7a9b9`. 첫 기프트 선택 뒤 출발 대기는 유지하고, 출발 직후 멈추면 메뉴 뒤의 주자/그림자/입구 연출을 안정된 자세로 정리한다. 새 재개 카운트로 입구 연출을 반복하지 않는다. 같은 전체 입력의 두 방식 엔진·전체 스모크·비개발 Windows/ZIP·20초 초기 구동을 통과했다. 그림·판정·보상·저장 규칙은 그대로다. 이전 실행본 전체/ZIP과 개인 저장을 보존했고 Demo31도 **14:23 KST**에 같은 DLL로 갱신했다. 체험판 자체의 전체 스모크/초기 구동을 다시 수행한 것으로 세지 않는다.
+- 현재 Unity 프로젝트는 `C:\Users\ehddn\OneDrive\문서\ChatGPT\greed`다. Unity 6.4 / `6000.4.3f1`로 열고 `Assets/Scenes/GreedLast_Boot.unity`에서 Play한다.
+- Windows 체험본 위치와 입력 버전은 `Builds/PCReview-current.json`을 따른다. 이 파일이 없으면 새 체험본 배포가 완료된 상태로 보지 말고 Unity 또는 [확인 이력](GreedLast_Prototype_CheckHistory.md)의 검증된 사본을 사용한다.
+- 현재 체험본은 개인 게임과 분리된 시험 저장 공간을 사용한다. [체험 실행본 안내](GreedLast_Prototype_Demo.md)를 따른다. 다시 실행하면 해당 체험본의 진행을 유지하며, 개인 진행을 가져오거나 매번 초기화하지 않는다.
+- 포맷 전 `C:\Projectunity\greed last`와 Demo31 경로·10월 31일 실행본 설명은 과거 기록이다. 현재 PC에 그 실행 파일이 복원됐다는 뜻으로 읽지 않는다.
 - 한 저장 환경에서 진행한다. 에디터와 Windows의 저장 위치는 다를 수 있다. 다른 환경의 빈 칸을 저장 소실로 판단하거나 개인 진행도를 초기화하지 않는다.
-
 ## 이번 우선 확인
 
 1. 입구 로비 → 일반 런: 첫 기프트에서 2초 이상 기다린 뒤 원하는 하나를 고른다. 선택 대기 중 주자는 숨고, 선택 뒤 출발 카운트에서 입구를 넘어 주행 크기로 나타나야 한다. 오래 골랐다고 이 연출이 사라지면 안 된다.

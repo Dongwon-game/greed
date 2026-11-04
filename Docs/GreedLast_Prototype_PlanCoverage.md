@@ -4,7 +4,7 @@
 
 목표는 상용 게임 전체가 아니라 **시작 화면부터 대표 일반 런의 회피·리듬 이득과 탈출/저장/무한 연결을 체감하는 프로토타입**이다. 완성도 백분율 대신 아래 실제 흐름과 다섯 감각으로 판단한다.
 
-현재 실행본은 **2026-10-31 14:20 KST / entrance-pause**, 게임·Editor/빌드 `0f7a9b9`다. 첫 기프트 선택 뒤 출발 대기는 유지하며, 출발 중 정지하면 메뉴 뒤의 입구/주자/그림자 연출을 안정된 자세로 정리하고 새 재개에 반복하지 않는다. 승인한 인간 주자와 앞선 방향/연습 인계도 유지한다. 같은 전체 입력의 두 방식 엔진·전체 스모크·Windows/ZIP·초기 구동을 통과했다. 판정·보너스·저장 규칙과 대표 한 판 분량은 그대로다. Demo31은 **14:23**에 같은 DLL·제품명으로 파일만 갱신해 기존 체험 진행을 보존했다. 정식 전체 스모크를 재사용했고 체험판 자동 실행/새 초기화는 하지 않았다. 직접 확인과 손맛·휴대폰 검증의 남은 범위는 [빠른 확인](GreedLast_Prototype_QuickCheck.md)을 따른다.
+현재 개발 기준은 복원된 Unity 프로젝트다. 현재 PC 실행본 위치와 소스 식별은 `Builds/PCReview-current.json`과 [확인 이력](GreedLast_Prototype_CheckHistory.md)을 따른다. 포맷 전 2026-10-31 실행본은 과거 검증 기록이며 현재 PC에 배포 파일이 그대로 있다는 뜻은 아니다. 승인한 인간 주자·출발 연출·정지/새 재개와 기존 판정·보상·저장 규칙은 유지한다.
 
 대표 흐름의 두 재로딩 방식 엔진 프레임·별도 Windows 제품의 정상 종료/새 프로세스 근거와 이번 표시 수정의 검증은 [확인 이력](GreedLast_Prototype_CheckHistory.md)에 입력별로 구분했다. 자동 입력의 성공은 사람의 손맛·소리/휴대폰 확인과 다르다. 직접 누르는 순서는 [빠른 확인](GreedLast_Prototype_QuickCheck.md)에 모았다.
 
@@ -76,4 +76,4 @@
 - Alt+Tab 뒤 정지/새 재개와 탈출→결과/저장 선택을 확인하고 여기서 나온 문제를 조정한다. 합성 입력·카메라 검사를 사람의 손맛 확인으로 바꾸어 적지 않는다.
 - 모바일 지원 부재는 PC 프로토타입의 미완료/차단 사유가 아니다. PC용 문구·조작 안내 정리는 별도 후속이며 기존 게임 규칙과 개인 저장은 유지한다.
 
-참고 위치: `C:\Projectunity\greeddata\summary\03_Detailed_Final_Docs`의 20~27번과 `Production_process\Greed_6-5_Lock_Final_KR.docx`. 실행 순서는 [빠른 확인](GreedLast_Prototype_QuickCheck.md)을 따른다.
+참고 위치: `.local/Design-Recovery-20261104/summary/03_Detailed_Final_Docs`의 20~27번과 `Production_process/Greed_6-5_Lock_Final_KR.docx`. 최신 6-3은 [복구 자료 지도](Design-Source-Map.md)의 1Node 본문을 따른다. 실행 순서는 [빠른 확인](GreedLast_Prototype_QuickCheck.md)을 따른다.
