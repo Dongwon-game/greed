@@ -18244,7 +18244,7 @@ namespace GreedLast
             threatDownButton.gameObject.SetActive(showDevTools && showSideTools);
             hapticsButton.gameObject.SetActive(
                 (showPauseSettings || (showDevTools && showSideTools))
-                && ShouldShowHapticsSetting(showDevTools, Application.isMobilePlatform));
+                && ShouldShowHapticsSetting(DevToolsEnabled, Application.isMobilePlatform));
             rotationTiltButton.gameObject.SetActive(
                 showPauseSettings
                 && ShouldShowRotationTiltSetting(
