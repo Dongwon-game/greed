@@ -42,6 +42,7 @@ Android 설치·APK·휴대폰 센서/지연/FPS 확인은 현재 완료 조건�
 - 빌드 메뉴의 기본 출력은 `Builds/GreedLastPrototype/GreedLastPrototype.exe`다. 복원 후 개인 저장과 분리한 PC 체험본은 `Builds/PCReview-current.json`에 실제 생성한 실행 파일·ZIP·소스 식별을 기록한다. 이 파일이 없으면 새 배포 완료로 보지 않는다. 검증 범위는 [확인 이력](Docs/GreedLast_Prototype_CheckHistory.md)을 따른다.
 - 무적·바로가기·위협 조절은 에디터/개발 빌드 전용이다. 확인용으로 개인 진행도나 보관할 조합을 초기화·소모하지 않는다.
 - 실제 종료/새 프로세스의 저장 검사는 [실행 파일 검증](Docs/GreedLast_Prototype_PlayerChecks.md)을 따른다. 시험 전용 복사본/제품을 쓰며 정식 실행본에 시험 코드를 넣지 않는다.
+- 11월5일 작업 후보의 [직접 Windows 검증](Docs/Native-Review-20261105.md)은 기존 배포와 구분한다. 정지/설정 재실행과 실제 저장·정비 취소·두 번 사용은 확인했으며, 자동 입력이 실제 드래그를 전달하지 못한 메뉴 검사는 미완료다.
 - 새 사본의 전체 엔진 검사는 `tools/check-engine-loop.ps1`, 짧은 함정 예고/재개 검사는 `-CueOnly`다. 개인 저장소와 분리해 두 재로딩 방식을 확인하며, 준비 조건/범위는 같은 [검증 절차](Docs/GreedLast_Prototype_PlayerChecks.md#새-사본의-엔진-검사-도구)를 따른다.
 - `check-engine-loop.ps1 -SmokeOnly`는 격리 사본에서 그래픽/창 없이 편집기 스모크만 실행한다. 전체 Play-mode 사이클과 실제 PC 입력/손맛 확인은 별개다. 저장 검사에서 기본 실행본 폴더가 없으면 `check-player-persistence.ps1 -VerifiedReleasePath '<검증 실행본 폴더>'`를 사용한다.
 
