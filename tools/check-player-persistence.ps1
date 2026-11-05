@@ -7,6 +7,7 @@ param(
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
+    [switch]$InteractiveBoards,
     [switch]$BackgroundResults,
     [switch]$UnreadableSave,
     [switch]$PracticeQuit,
@@ -16,6 +17,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($InteractiveBoards -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
+    throw 'Choose native profile/record inspection separately from every other mode.'
+}
 if ($GiftHistory -and ($ScopedGoals -or $PracticeQuit -or $UnreadableSave -or $CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults)) {
     throw 'Choose the private gift-history check separately from all other modes.'
 }
@@ -78,6 +82,7 @@ $operation = if ($GiftHistory) { 'Seed three synthetic gift histories in a uniqu
     elseif ($UnreadableSave) { 'Seed unreadable data only in a new private test product, then verify real blocked boots, locked commands, retries and preservation across three normal-exit processes' }
     elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
+    elseif ($InteractiveBoards) { 'Prepare one private normal clear, await external profile/record inspection without saving or consuming, then verify two fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
@@ -115,6 +120,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
+$report.InteractiveBoardsRequested = [bool]$InteractiveBoards
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
 $report.ScopedGoalsRequested = [bool]$ScopedGoals
@@ -142,6 +148,9 @@ if ($InteractiveLoadout) {
 }
 if ($InteractiveMenus) {
     $report.Scope = 'Private SDK practice/two normal courses and one S3 save, then native comparison body/handle drags and post-focus fresh handle recovery without overwriting; original slot and new candidate remain across normal close and fresh processes. External input evidence required. Not physical rhythm, audio or phone testing.'
+}
+if ($InteractiveBoards) {
+    $report.Scope = 'Private SDK practice/normal clear in a headless process, then external native profile pages/record board and normal close. Two fresh processes verify the untouched candidate/record. No personal state reset, audible output or physical rhythm assessment.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
@@ -318,6 +327,7 @@ try {
         elseif ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
+        elseif ($InteractiveBoards) { @('clear','window-boards','window-boards-verify','window-boards-verify-again') }
         elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
         else { @('clear','save','first-use','last-use','verify','verify-again',
             'live-normal','normal-fail','verify-failure','verify-failure-again') }
@@ -325,7 +335,7 @@ try {
         $report.FailedPhase = $phase
         Write-Verbose ('Starting a fresh owned player process: ' + $phase)
         $log = Join-Path $root ($phase + '.log')
-        $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu')
+        $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
@@ -382,6 +392,10 @@ try {
         if ($InteractiveMenus -and !$result.nativeMenuCandidatePreserved) {
             throw ('Required native menu/candidate coverage did not complete: ' + $phase)
         }
+        if ($InteractiveBoards -and $phase -ne 'clear' -and
+            (!$result.nativeBoardsCompleted -or $result.nativeProfilePagesMask -ne 15 -or !$result.nativeRecordBoardObserved)) {
+            throw ('Required native profile/record coverage did not complete: ' + $phase)
+        }
         $expectedGiftStarts = if ($GiftHistory -and $phase -in @('gift-history-first','gift-history-last')) { 3 } else { 0 }
         if ($result.giftHistoryRequested -ne [bool]$GiftHistory -or $result.giftHistoryStarts -ne $expectedGiftStarts) {
             throw ('Gift history mode/start coverage differs: ' + $phase)
@@ -418,6 +432,9 @@ try {
             NormalReviewGoalFailed=$result.normalReviewGoalFailed; NormalReviewGoalFailurePersisted=$result.normalReviewGoalFailurePersisted;
             InfiniteReviewGoalEarned=$result.infiniteReviewGoalEarned; InfiniteReviewGoalPersisted=$result.infiniteReviewGoalPersisted}
         $report.Phases[-1].GiftHistoryRequested = $result.giftHistoryRequested
+        $report.Phases[-1].NativeBoardsCompleted = $result.nativeBoardsCompleted
+        $report.Phases[-1].NativeProfilePagesMask = $result.nativeProfilePagesMask
+        $report.Phases[-1].NativeRecordBoardObserved = $result.nativeRecordBoardObserved
         $report.Phases[-1].GiftHistoryStarts = $result.giftHistoryStarts
         $report.Phases[-1].GiftHistoryMetadataPreserved = $result.giftHistoryMetadataPreserved
         $report.Phases[-1].GiftHistoryEmptyPreserved = $result.giftHistoryEmptyPreserved

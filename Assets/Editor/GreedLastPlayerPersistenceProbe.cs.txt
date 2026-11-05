@@ -46,6 +46,8 @@ namespace GreedLast.PlayerChecks
             public bool nativeMenuComparisonObserved, nativeMenuBodyDragObserved, nativeMenuHandleBeforeFocus;
             public bool nativeMenuFocusLossObserved, nativeMenuHandleAfterFocus, nativeMenuCandidatePreserved;
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
+            public int nativeProfilePagesMask;
+            public bool nativeRecordBoardObserved, nativeBoardsCompleted;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public bool giftHistoryRequested, giftHistoryMetadataPreserved, giftHistoryEmptyPreserved, giftHistoryThirdUseRejected;
@@ -137,6 +139,7 @@ namespace GreedLast.PlayerChecks
                 "window-play", "window-clear", "window-verify", "window-verify-again",
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
+                "window-boards", "window-boards-verify", "window-boards-verify-again",
                 "unreadable-seed", "unreadable-blocked", "unreadable-verify",
                 "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again",
                 "gift-history-seed", "gift-history-first", "gift-history-last", "gift-history-verify", "gift-history-verify-again" }, phase) >= 0,
@@ -153,7 +156,7 @@ namespace GreedLast.PlayerChecks
                 && (!giftHistory || (!backgroundResults && !scopedGoals)), "Gift history checks require their dedicated noninteractive mode.");
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
             deadline = Time.realtimeSinceStartup + (phase == "window-loadout" || phase == "window-menu" ? 600f
-                : phase == "window-play" || phase == "window-clear" ? 330f : 150f);
+                : phase == "window-play" || phase == "window-clear" || phase == "window-boards" ? 330f : 150f);
             result.phase = phase;
             result.startedUtc = DateTime.UtcNow.ToString("O");
             result.company = Application.companyName;
@@ -294,6 +297,24 @@ namespace GreedLast.PlayerChecks
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0,
                     "The interactive practice control must start in its own empty product.");
                 yield return ObserveWindowCommands();
+            }
+            else if (phase == "window-boards")
+            {
+                result.record = Previous("clear").record;
+                yield return ObserveNativeBoards();
+            }
+            else if (phase == "window-boards-verify" || phase == "window-boards-verify-again")
+            {
+                Result closed = Previous("window-boards");
+                Require(closed.succeeded && closed.quitCallbackObserved && closed.nativeBoardsCompleted
+                    && closed.nativeProfilePagesMask == 15 && closed.nativeRecordBoardObserved,
+                    "The native profile/record inspection must finish before normal close.");
+                RequireBoardProgressPreserved(Previous("clear").record);
+                result.nativeBoardsCompleted = result.nativeRecordBoardObserved = true;
+                result.nativeProfilePagesMask = closed.nativeProfilePagesMask;
+                if (phase == "window-boards-verify-again")
+                    Require(Previous("window-boards-verify").growthPoints == backend.LoadSelectedSaveSlotView().GrowthPoints,
+                        "Read-only boards must not duplicate progression on another restart.");
             }
             else if (phase == "window-verify" || phase == "window-verify-again")
             {
@@ -826,6 +847,53 @@ namespace GreedLast.PlayerChecks
             RequireSettlement();
             result.backgroundChecks++;
             result.scope = "Real-frame isolated Windows player with explicitly invoked app pause/focus handlers and fresh-process persistence. Terminal results settle before Application.Quit; live controls remain paused and unrecorded. Not actual OS suspension/kill, native window input, audible output or physical mobile testing.";
+        }
+
+        private void RequireBoardProgressPreserved(Record expected, bool compareRecord = true)
+        {
+            Require(backend.HasSaveLoadoutCandidate && EmptySlots() && Count("normalClearCount") == 1
+                && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
+                && backend.LoadSelectedSaveSlotView().GrowthPoints == 3,
+                "Read-only profile/records must preserve the clear, candidate, growth and empty slots.");
+            if (compareRecord) SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), expected);
+        }
+
+        private IEnumerator ObserveNativeBoards()
+        {
+            RequireBoardProgressPreserved(result.record);
+            GreedLastRunRecord original = Read<GreedLastRunRecord>(backend, "lastRunRecord");
+            windowAwaitingClose = true;
+            WriteObservation("window-boards-ready");
+            int seen = 0;
+            bool recordSeen = false;
+            while (true)
+            {
+                CheckDeadline();
+                // Reading a board may legitimately mark its notification as seen.
+                // It must never save/discard the pending candidate or award progression.
+                RequireBoardProgressPreserved(result.record, compareRecord: false);
+                Require(Read<GreedLastRunRecord>(backend, "lastRunRecord").Equals(original),
+                    "Native board inspection must retain the original clear record.");
+                if (state.CurrentState == GreedLastScreenState.ProfileBoard)
+                {
+                    int page = Read<int>(app, "profileBoardPageIndex");
+                    Require(page >= 0 && page < 4, "The native profile page must be in its four-page range.");
+                    result.nativeProfilePagesMask |= 1 << page;
+                }
+                result.nativeRecordBoardObserved |= state.CurrentState == GreedLastScreenState.InfiniteRecordBoard;
+                if (seen != result.nativeProfilePagesMask || recordSeen != result.nativeRecordBoardObserved)
+                {
+                    seen = result.nativeProfilePagesMask;
+                    recordSeen = result.nativeRecordBoardObserved;
+                    WriteObservation("window-boards-seen-" + seen + "-" + (recordSeen ? "record" : "profile"));
+                }
+                if (!windowReady && seen == 15 && recordSeen && state.CurrentState == GreedLastScreenState.LobbyReady)
+                {
+                    result.nativeBoardsCompleted = windowReady = true;
+                    WriteObservation("window-boards-completed");
+                }
+                yield return null;
+            }
         }
 
         private IEnumerator ObserveWindowCommands()
