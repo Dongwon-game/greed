@@ -16372,8 +16372,9 @@ namespace GreedLast
             }
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
-                SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForMode(latestRunSnapshot,
-                    normalClearReady: false, playerControls: UsePlayerRunControls));
+                SetButtonLabel(nextPatternButton, BuildRunPrimaryButtonLabelForPlatform(latestRunSnapshot,
+                    normalClearReady: false, playerControls: UsePlayerRunControls,
+                    devToolsEnabled: DevToolsEnabled, isMobilePlatform: Application.isMobilePlatform));
                 UpdateRunProgress(latestRunSnapshot);
                 UpdateStageTransitionBanner();
                 if (Time.unscaledTime < judgementFeedbackUntil && CanShowRunTransientFeedback()
