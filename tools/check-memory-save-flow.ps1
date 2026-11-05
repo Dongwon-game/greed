@@ -13,6 +13,11 @@ $reportPath = (Resolve-Path -LiteralPath $CompilationReport).Path
 $compiled = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 if (!$compiled.Succeeded -or !$compiled.WatchedInputsUnchanged) { throw 'Require a successful preserved-input compilation.' }
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $project 'Assets/Scripts') -Filter '*.cs' -Recurse)
+$runtimeCompilation = @($compiled.Compilations | Where-Object {$_.Name -eq 'WindowsReleaseRuntime'})
+if (!$sources.Count -or $runtimeCompilation.Count -ne 1 -or $runtimeCompilation[0].ExitCode -ne 0 -or
+    $runtimeCompilation[0].SourceCount -ne $sources.Count) {
+    throw 'Require the current complete Windows runtime source set; added or removed files need a new compilation.'
+}
 foreach ($source in $sources) {
     $inputEntry = @($compiled.Inputs | Where-Object {$_.Path -eq $source.FullName})
     if ($inputEntry.Count -ne 1 -or (Get-FileHash -LiteralPath $source.FullName).Hash -cne $inputEntry[0].SHA256) {
