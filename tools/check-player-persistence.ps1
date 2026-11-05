@@ -351,6 +351,9 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
+        if ($result.nativeGestureObserverControls -ne 4) {
+            throw ('Native drag observer click/begin/travel/release controls are incomplete: ' + $phase)
+        }
         if ($CaptureFrames -and $phase -eq 'clear' -and !$result.practiceCompletedBeforeCourseEntry) {
             throw 'The post-render course must preserve and explicitly handle prior practice completion.'
         }
@@ -433,6 +436,7 @@ try {
             InfiniteReviewGoalEarned=$result.infiniteReviewGoalEarned; InfiniteReviewGoalPersisted=$result.infiniteReviewGoalPersisted}
         $report.Phases[-1].GiftHistoryRequested = $result.giftHistoryRequested
         $report.Phases[-1].NativeBoardsCompleted = $result.nativeBoardsCompleted
+        $report.Phases[-1].NativeGestureObserverControls = $result.nativeGestureObserverControls
         $report.Phases[-1].NativeProfilePagesMask = $result.nativeProfilePagesMask
         $report.Phases[-1].NativeRecordBoardObserved = $result.nativeRecordBoardObserved
         $report.Phases[-1].GiftHistoryStarts = $result.giftHistoryStarts

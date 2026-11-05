@@ -48,6 +48,7 @@ namespace GreedLast.PlayerChecks
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
             public int nativeProfilePagesMask;
             public bool nativeRecordBoardObserved, nativeBoardsCompleted;
+            public int nativeGestureObserverControls;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
             public bool giftHistoryRequested, giftHistoryMetadataPreserved, giftHistoryEmptyPreserved, giftHistoryThirdUseRejected;
@@ -171,6 +172,7 @@ namespace GreedLast.PlayerChecks
             core = Read<GreedLastRunCore>(app, "runCore");
             backend = Read<GreedLastMockBackend>(app, "backend");
             state = Read<GreedLastStateMachine>(app, "stateMachine");
+            VerifyNativeGestureObserverControls();
             bool unreadablePhase = phase.StartsWith("unreadable-", StringComparison.Ordinal);
             bool practiceQuitPhase = phase.StartsWith("practice-", StringComparison.Ordinal);
             bool standardPhase = Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
@@ -960,9 +962,6 @@ namespace GreedLast.PlayerChecks
             handleTrace.Configure(root, "handle", scroll);
             windowAwaitingClose = true;
             WriteObservation("window-menu-ready");
-            int previousGesture = 0;
-            float previousPosition = scroll.verticalNormalizedPosition, previousY = scroll.content.anchoredPosition.y;
-            float startPosition = previousPosition, startY = previousY;
             while (true)
             {
                 CheckDeadline();
@@ -979,11 +978,9 @@ namespace GreedLast.PlayerChecks
                 int gesture = comparison && scroll.vertical
                     ? bar.HasActiveGesture && handleTrace.IsDragging ? 1
                     : body.HasActiveGesture && bodyTrace.IsDragging ? 2 : 0 : 0;
-                float position = scroll.verticalNormalizedPosition, y = scroll.content.anchoredPosition.y;
-                if (gesture != 0 && gesture != previousGesture)
-                { startPosition = previousPosition; startY = previousY; }
-                float travel = Mathf.Abs(y - startY);
-                if (gesture != 0 && Mathf.Abs(position - startPosition) > 0.15f && travel > 10f)
+                var trace = gesture == 1 ? handleTrace : bodyTrace;
+                float travel = trace.DragTravelPixels;
+                if (gesture != 0 && trace.NormalizedDragTravel > 0.15f && travel > 10f)
                 {
                     if (gesture == 2)
                     {
@@ -1008,11 +1005,50 @@ namespace GreedLast.PlayerChecks
                     windowReady = result.nativeMenuCandidatePreserved = true;
                     WriteObservation("window-menu-completed");
                 }
-                previousGesture = gesture;
-                previousPosition = position;
-                previousY = y;
                 yield return null;
             }
+        }
+
+        private void VerifyNativeGestureObserverControls()
+        {
+            // Separate synthetic control objects; never move the game's menu or drive native input.
+            var control = new GameObject("NativeGestureObserverControl", typeof(RectTransform), typeof(ScrollRect));
+            try
+            {
+                var scroll = control.GetComponent<ScrollRect>();
+                scroll.viewport = control.GetComponent<RectTransform>();
+                scroll.viewport.sizeDelta = new Vector2(200f, 100f);
+                var contentObject = new GameObject("Content", typeof(RectTransform));
+                contentObject.transform.SetParent(control.transform, false);
+                var content = contentObject.GetComponent<RectTransform>();
+                content.sizeDelta = new Vector2(200f, 400f);
+                content.anchorMin = content.anchorMax = content.pivot = new Vector2(0.5f, 1f);
+                scroll.content = content;
+                var trace = control.AddComponent<GreedLastNativeGestureTrace>();
+                trace.Configure(null, "control", scroll);
+                var pointer = new PointerEventData(EventSystem.current) { pointerId = -1 };
+                content.anchoredPosition = new Vector2(0f, 80f); // A track click has already moved it.
+                trace.OnPointerDown(pointer);
+                Require(!trace.IsDragging && trace.DragTravelPixels == 0f, "A track click is not a drag.");
+                result.nativeGestureObserverControls++;
+                trace.OnBeginDrag(pointer);
+                trace.OnDrag(pointer);
+                Require(trace.IsDragging && trace.DragTravelPixels == 0f && trace.NormalizedDragTravel == 0f,
+                    "Click movement before BeginDrag must not count, even in the same frame.");
+                result.nativeGestureObserverControls++;
+                content.anchoredPosition = new Vector2(0f, 160f);
+                trace.OnDrag(pointer);
+                Require(trace.DragTravelPixels > 10f && trace.NormalizedDragTravel > 0.15f,
+                    "Only content movement after BeginDrag may satisfy native travel evidence.");
+                result.nativeGestureObserverControls++;
+                trace.OnPointerUp(pointer);
+                Require(!trace.IsDragging, "A released pointer cannot remain a native drag.");
+                trace.OnPointerDown(pointer);
+                Require(trace.DragTravelPixels == 0f && trace.NormalizedDragTravel == 0f,
+                    "A fresh press must not inherit prior travel.");
+                result.nativeGestureObserverControls++;
+            }
+            finally { UnityEngine.Object.Destroy(control); }
         }
 
         private void OnApplicationFocus(bool focused)
@@ -1469,9 +1505,12 @@ namespace GreedLast.PlayerChecks
         private ScrollRect scroll;
         private int count;
         public bool IsDragging { get; private set; }
+        public float DragTravelPixels { get; private set; }
+        public float NormalizedDragTravel { get; private set; }
+        private float startY, startNormalized;
         public void Configure(string root, string targetName, ScrollRect observed)
         {
-            path = Path.Combine(root, "native-menu-gestures.jsonl");
+            path = root == null ? null : Path.Combine(root, "native-menu-gestures.jsonl");
             target = targetName;
             scroll = observed;
         }
@@ -1493,11 +1532,30 @@ namespace GreedLast.PlayerChecks
                 normalized = scroll.verticalNormalizedPosition
             }) + Environment.NewLine);
         }
-        public void OnPointerDown(PointerEventData data) { IsDragging = false; Record("down", data); }
+        public void OnPointerDown(PointerEventData data)
+        {
+            IsDragging = false;
+            DragTravelPixels = NormalizedDragTravel = 0f;
+            Record("down", data);
+        }
         public void OnPointerUp(PointerEventData data) { IsDragging = false; Record("up", data); }
         public void OnInitializePotentialDrag(PointerEventData data) => Record("potential", data);
-        public void OnBeginDrag(PointerEventData data) { IsDragging = true; Record("begin", data); }
-        public void OnDrag(PointerEventData data) => Record("drag", data);
+        public void OnBeginDrag(PointerEventData data)
+        {
+            IsDragging = true;
+            startY = scroll.content.anchoredPosition.y;
+            startNormalized = scroll.verticalNormalizedPosition;
+            Record("begin", data);
+        }
+        public void OnDrag(PointerEventData data)
+        {
+            if (IsDragging)
+            {
+                DragTravelPixels = Mathf.Max(DragTravelPixels, Mathf.Abs(scroll.content.anchoredPosition.y - startY));
+                NormalizedDragTravel = Mathf.Max(NormalizedDragTravel, Mathf.Abs(scroll.verticalNormalizedPosition - startNormalized));
+            }
+            Record("drag", data);
+        }
         public void OnEndDrag(PointerEventData data) { IsDragging = false; Record("end", data); }
         private void OnDisable() => IsDragging = false;
     }
