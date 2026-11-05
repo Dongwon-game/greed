@@ -10898,6 +10898,11 @@ namespace GreedLast.Editor
                 "PC sensory summaries must not advertise unavailable hardware while mobile/developer settings retain their values.");
             string pcChecklist = InvokeMockBackendStaticLabel("BuildPrototypeInteractionChecklistTextForPlatform",
                 false, "무한 종료 흐름", "실제 시작만 사용권 소모", false);
+            Require(InvokeRuntimeUiLabel("BuildRunPauseHeaderDetailForPlatform",
+                    default(GreedLastRunSnapshot), false, false).StartsWith("ESC/P 또는 재개", StringComparison.Ordinal)
+                && InvokeRuntimeUiLabel("BuildRunPauseHeaderDetailForPlatform",
+                    default(GreedLastRunSnapshot), false, true).StartsWith("재개 버튼", StringComparison.Ordinal),
+                "Pause header instructions must match PC keyboard and mobile touch presentation.");
             RequireTextLayoutBudget(pcChecklist, 10, 92, "PC player interaction checklist");
             Require(pcChecklist.Contains("PC 조작", StringComparison.Ordinal)
                 && pcChecklist.Contains("A/←", StringComparison.Ordinal)

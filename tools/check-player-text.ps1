@@ -21,7 +21,10 @@ foreach ($source in $current) {
 }
 $assemblyPath = Join-Path (Split-Path $reportPath -Parent) 'WindowsReleaseRuntime/Assembly-CSharp.dll'
 $assemblyHash = (Get-FileHash -LiteralPath $assemblyPath).Hash
-$assembly = [Reflection.Assembly]::LoadFrom($assemblyPath)
+$loadContext = [Runtime.Loader.AssemblyLoadContext]::new(('GreedPlayerText-'+[Guid]::NewGuid().ToString('N')),$true)
+# A fresh load context prevents a second check in the same PowerShell session
+# from silently reusing an older Assembly-CSharp with the same assembly identity.
+$assembly = $loadContext.LoadFromAssemblyPath($assemblyPath)
 $backend = $assembly.GetType('GreedLast.GreedLastMockBackend',$true)
 $flags = [Reflection.BindingFlags]'Static,NonPublic,Public'
 $checks = [Collections.Generic.List[string]]::new()
@@ -95,6 +98,7 @@ foreach ($pair in $pairs) {
 }
 Check 'assembly unchanged' ((Get-FileHash -LiteralPath $assemblyPath).Hash -ceq $assemblyHash)
 } catch { $failure = $_.Exception.Message }
+finally { $loadContext.Unload() }
 $output = Join-Path $project ('Logs/PlayerTextChecks/'+[Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($output)
 $result = [ordered]@{Succeeded=($failure -eq '');Error=$failure;CheckCount=$checks.Count;Checks=@($checks);AssemblySHA256=$assemblyHash;CompilationReport=$reportPath;RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath).Hash;Scope='Reviewed static string-only backend methods under .NET. No Unity process, native engine, UI, backend instance, save access or gameplay validation.'}

@@ -24815,10 +24815,16 @@ namespace GreedLast
 
         private static string BuildRunPauseHeaderDetail(GreedLastRunSnapshot snapshot)
         {
-            return BuildRunPauseHeaderDetailForMode(snapshot, DevToolsEnabled);
+            return BuildRunPauseHeaderDetailForPlatform(snapshot, DevToolsEnabled, Application.isMobilePlatform);
         }
 
         private static string BuildRunPauseHeaderDetailForMode(GreedLastRunSnapshot snapshot, bool devToolsEnabled)
+        {
+            return BuildRunPauseHeaderDetailForPlatform(snapshot, devToolsEnabled, isMobilePlatform: true);
+        }
+
+        private static string BuildRunPauseHeaderDetailForPlatform(
+            GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool isMobilePlatform)
         {
             string exitLine = snapshot.PracticeMode
                 ? "로비로 돌아가도 일반 런 기록과 저장 기회에는 영향을 주지 않습니다."
@@ -24828,9 +24834,7 @@ namespace GreedLast
                     ? "로비로 돌아가면 현재 보충 런은 중단 기록으로 남습니다."
                 : "로비로 돌아가면 현재 런은 중단 기록으로 남습니다.";
             string coachLine = BuildPauseCoachLine(snapshot);
-            string resumeLine = devToolsEnabled
-                ? "ESC/P 또는 재개를 누르면 카운트와 앞 박자 여유 뒤에 이어집니다."
-                : "재개 버튼을 누르면 카운트와 앞 박자 여유 뒤에 이어집니다.";
+            string resumeLine = GreedLastPlayerInputPolicy.ResumeInstruction(devToolsEnabled, isMobilePlatform);
             return resumeLine
                 + (string.IsNullOrEmpty(coachLine) ? string.Empty : "\n" + coachLine)
                 + "\n" + exitLine;

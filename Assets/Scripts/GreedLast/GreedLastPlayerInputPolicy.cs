@@ -35,5 +35,10 @@ namespace GreedLast
 
         public static string PrimaryActionPrefix(bool devToolsEnabled, bool isMobilePlatform)
             => ShowKeyboardHints(devToolsEnabled, isMobilePlatform) ? "Enter/강조" : "강조 버튼";
+
+        public static string ResumeInstruction(bool devToolsEnabled, bool isMobilePlatform)
+            => ShowKeyboardHints(devToolsEnabled, isMobilePlatform)
+                ? "ESC/P 또는 재개를 누르면 카운트와 앞 박자 여유 뒤에 이어집니다."
+                : "재개 버튼을 누르면 카운트와 앞 박자 여유 뒤에 이어집니다.";
     }
 }
