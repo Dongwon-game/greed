@@ -19170,7 +19170,9 @@ namespace GreedLast.Editor
             Require(verificationText.Contains("약점 반복", StringComparison.Ordinal), "The verification page must remind the player to repeat the weak practice step.");
             Require(verificationText.Contains("보정 빠름·추천·늦음", StringComparison.Ordinal), "The verification page must include the input timing calibration buttons.");
             Require(verificationText.Contains("감각 소리%·진동", StringComparison.Ordinal), "The verification page must include the audio and haptic setting check.");
-            Require(verificationText.Contains("터치 탭", StringComparison.Ordinal), "The verification page must include the mobile touch-lane check.");
+            Require(verificationText.Contains("키·클릭", StringComparison.Ordinal)
+                    && !verificationText.Contains("터치 탭", StringComparison.Ordinal),
+                "The editor verification page must describe keyboard/click input; the separate mobile page must retain touch help.");
             Require(verificationText.Contains("무한 위협", StringComparison.Ordinal), "The verification page must include infinite threat controls when a save loadout is usable.");
             Require(verificationText.Contains("폭·보상", StringComparison.Ordinal), "The verification page must remind the player to read threat width and reward changes.");
             Require(verificationText.Contains("자동 비움", StringComparison.Ordinal), "The verification page must preserve the two-use auto-clear confirmation.");
