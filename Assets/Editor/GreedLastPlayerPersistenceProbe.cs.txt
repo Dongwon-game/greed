@@ -886,8 +886,10 @@ namespace GreedLast.PlayerChecks
             Require(bar != null && body != null, "The actual guarded body and handle must be present.");
             // Read-only observers share the existing handler objects. They never drive input,
             // alter event data, or count an event as successful movement.
-            body.gameObject.AddComponent<GreedLastNativeGestureTrace>().Configure(root, "body", scroll);
-            bar.gameObject.AddComponent<GreedLastNativeGestureTrace>().Configure(root, "handle", scroll);
+            var bodyTrace = body.gameObject.AddComponent<GreedLastNativeGestureTrace>();
+            var handleTrace = bar.gameObject.AddComponent<GreedLastNativeGestureTrace>();
+            bodyTrace.Configure(root, "body", scroll);
+            handleTrace.Configure(root, "handle", scroll);
             windowAwaitingClose = true;
             WriteObservation("window-menu-ready");
             int previousGesture = 0;
@@ -905,7 +907,10 @@ namespace GreedLast.PlayerChecks
                     && Read<bool>(app, "saveSlotDetailViewActive");
                 result.nativeMenuComparisonObserved |= comparison;
                 result.nativeSlotChoiceObserved |= comparison && Read<int>(backend, "selectedSaveSlotIndex") == 2;
-                int gesture = comparison && scroll.vertical ? bar.HasActiveGesture ? 1 : body.HasActiveGesture ? 2 : 0 : 0;
+                // A track click can move the handle during PointerDown. It is not a drag.
+                int gesture = comparison && scroll.vertical
+                    ? bar.HasActiveGesture && handleTrace.IsDragging ? 1
+                    : body.HasActiveGesture && bodyTrace.IsDragging ? 2 : 0 : 0;
                 float position = scroll.verticalNormalizedPosition, y = scroll.content.anchoredPosition.y;
                 if (gesture != 0 && gesture != previousGesture)
                 { startPosition = previousPosition; startY = previousY; }
@@ -1395,6 +1400,7 @@ namespace GreedLast.PlayerChecks
         private string path, target;
         private ScrollRect scroll;
         private int count;
+        public bool IsDragging { get; private set; }
         public void Configure(string root, string targetName, ScrollRect observed)
         {
             path = Path.Combine(root, "native-menu-gestures.jsonl");
@@ -1419,11 +1425,12 @@ namespace GreedLast.PlayerChecks
                 normalized = scroll.verticalNormalizedPosition
             }) + Environment.NewLine);
         }
-        public void OnPointerDown(PointerEventData data) => Record("down", data);
-        public void OnPointerUp(PointerEventData data) => Record("up", data);
+        public void OnPointerDown(PointerEventData data) { IsDragging = false; Record("down", data); }
+        public void OnPointerUp(PointerEventData data) { IsDragging = false; Record("up", data); }
         public void OnInitializePotentialDrag(PointerEventData data) => Record("potential", data);
-        public void OnBeginDrag(PointerEventData data) => Record("begin", data);
+        public void OnBeginDrag(PointerEventData data) { IsDragging = true; Record("begin", data); }
         public void OnDrag(PointerEventData data) => Record("drag", data);
-        public void OnEndDrag(PointerEventData data) => Record("end", data);
+        public void OnEndDrag(PointerEventData data) { IsDragging = false; Record("end", data); }
+        private void OnDisable() => IsDragging = false;
     }
 }
