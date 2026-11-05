@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
+    [string]$BuildPath,
     [string]$PackagePath,
     [string]$UnityEditorPath
 )
@@ -310,7 +311,8 @@ function Assert-SaveResolutionGuards {
 }
 
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
-$root = Join-Path $project 'Builds\GreedLastPrototype'
+$root = if ($BuildPath) { (Resolve-Path -LiteralPath $BuildPath).Path }
+    else { Join-Path $project 'Builds\GreedLastPrototype' }
 $infoPath = Join-Path $root 'VerifiedBuildInfo.json'
 $info = Get-Content -LiteralPath $infoPath -Raw | ConvertFrom-Json
 $versionLine = Get-Content -LiteralPath (Join-Path $project 'ProjectSettings\ProjectVersion.txt') | Where-Object { $_ -match '^m_EditorVersion: ' }

@@ -2,6 +2,7 @@
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
+    [string]$VerifiedReleasePath,
     [switch]$CaptureFrames,
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
@@ -38,6 +39,15 @@ if ($InteractiveMenus -and ($CaptureFrames -or $InteractiveWindow -or $Backgroun
 }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
+$release = if ($VerifiedReleasePath) { (Resolve-Path -LiteralPath $VerifiedReleasePath).Path }
+    else { Join-Path $project 'Builds\GreedLastPrototype' }
+if (!(Test-Path -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json') -PathType Leaf)) {
+    throw 'Provide -VerifiedReleasePath for an existing verified Windows build before exporting or launching a probe.'
+}
+# This read-only check also rejects stale/tampered metadata, development builds
+# and leaked probe types before spending time building an isolated product.
+$releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1') -ProjectPath $project -BuildPath $release -UnityEditorPath $unity | ConvertFrom-Json
+$releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
 $runtimeInputs = @('Assets', 'Packages', 'ProjectSettings')
@@ -95,6 +105,7 @@ if (Test-Path -LiteralPath $registryPath) { throw 'The unique test product must 
 [void][IO.Directory]::CreateDirectory($root)
 $processes = [Collections.Generic.List[object]]::new()
 $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash;
+    VerifiedReleasePath=$release;VerifiedReleaseInfoSHA256=$releaseInfoSHA256;VerifiedReleaseRuntimeSHA256=$releaseVerification.RuntimeAssemblySha256;
     StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
     Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
@@ -257,7 +268,9 @@ try {
     [void][IO.Directory]::CreateDirectory((Join-Path $negativeBuild 'GreedLastPrototype_Data\Managed'))
     [void][IO.Directory]::CreateDirectory((Join-Path $negativeProject 'ProjectSettings'))
     [IO.File]::Copy((Join-Path $project 'ProjectSettings\ProjectVersion.txt'), (Join-Path $negativeProject 'ProjectSettings\ProjectVersion.txt'))
-    $release = Join-Path $project 'Builds\GreedLastPrototype'
+    if ((Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash -cne $releaseInfoSHA256) {
+        throw 'The verified baseline metadata changed during the probe build.'
+    }
     foreach ($name in @('GreedLastPrototype.exe','NotoSansKR-OFL.txt','NotoSansSymbols2-OFL.txt','NotoSansKR-NOTICE.txt')) {
         [IO.File]::Copy((Join-Path $release $name), (Join-Path $negativeBuild $name))
     }
