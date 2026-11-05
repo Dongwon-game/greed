@@ -4,6 +4,9 @@ $project=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $source=Join-Path $project 'Assets/Scripts/GreedLast/GreedLastPlayerInputPolicy.cs'
 $sourceHash=(Get-FileHash -LiteralPath $source).Hash
 # Compile the real dependency-free presentation policy; no Unity types or UI are loaded.
+if ('GreedLast.GreedLastPlayerInputPolicy' -as [type]) {
+    throw 'Run policy checks in a fresh PowerShell process; an existing GreedLast policy type could be stale.'
+}
 Add-Type -Path $source
 $checks=0
 function Require([bool]$Condition,[string]$Message) {
