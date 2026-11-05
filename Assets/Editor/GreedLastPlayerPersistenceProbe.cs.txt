@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace GreedLast.PlayerChecks
 {
@@ -883,6 +884,10 @@ namespace GreedLast.PlayerChecks
             var bar = scroll.verticalScrollbar as GreedLastMenuScrollbar;
             var body = scroll as GreedLastMenuScrollRect;
             Require(bar != null && body != null, "The actual guarded body and handle must be present.");
+            // Read-only observers share the existing handler objects. They never drive input,
+            // alter event data, or count an event as successful movement.
+            body.gameObject.AddComponent<GreedLastNativeGestureTrace>().Configure(root, "body", scroll);
+            bar.gameObject.AddComponent<GreedLastNativeGestureTrace>().Configure(root, "handle", scroll);
             windowAwaitingClose = true;
             WriteObservation("window-menu-ready");
             int previousGesture = 0;
@@ -1382,5 +1387,43 @@ namespace GreedLast.PlayerChecks
                 Application.Quit(success ? 0 : 1);
             }
         }
+    }
+    public sealed class GreedLastNativeGestureTrace : MonoBehaviour,
+        IPointerDownHandler, IPointerUpHandler, IInitializePotentialDragHandler,
+        IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        private string path, target;
+        private ScrollRect scroll;
+        private int count;
+        public void Configure(string root, string targetName, ScrollRect observed)
+        {
+            path = Path.Combine(root, "native-menu-gestures.jsonl");
+            target = targetName;
+            scroll = observed;
+        }
+        [Serializable]
+        private sealed class Entry
+        {
+            public string target, kind;
+            public int frame, pointer;
+            public float x, y, pressX, pressY, contentY, normalized;
+        }
+        private void Record(string kind, PointerEventData data)
+        {
+            if (path == null || scroll == null || count++ >= 256) return;
+            File.AppendAllText(path, JsonUtility.ToJson(new Entry {
+                target = target, kind = kind, frame = Time.frameCount, pointer = data.pointerId,
+                x = data.position.x, y = data.position.y,
+                pressX = data.pressPosition.x, pressY = data.pressPosition.y,
+                contentY = scroll.content.anchoredPosition.y,
+                normalized = scroll.verticalNormalizedPosition
+            }) + Environment.NewLine);
+        }
+        public void OnPointerDown(PointerEventData data) => Record("down", data);
+        public void OnPointerUp(PointerEventData data) => Record("up", data);
+        public void OnInitializePotentialDrag(PointerEventData data) => Record("potential", data);
+        public void OnBeginDrag(PointerEventData data) => Record("begin", data);
+        public void OnDrag(PointerEventData data) => Record("drag", data);
+        public void OnEndDrag(PointerEventData data) => Record("end", data);
     }
 }
