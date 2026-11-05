@@ -10889,6 +10889,32 @@ namespace GreedLast.Editor
 
         private static void VerifyPlayerInputPresentation()
         {
+            Require(InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForPlatform", default(GreedLastRunSnapshot), false, false) == "ESC/P 메뉴"
+                && InvokeRuntimeUiLabel("BuildRunPauseButtonLabelForPlatform", default(GreedLastRunSnapshot), false, true) == "일시정지",
+                "PC player pause help must retain keyboard controls without changing mobile presentation.");
+            Require(InvokeRuntimeUiLabel("BuildSensorySettingsChecklistTextForCapabilities", 0.8f, true, true, false, false) == "감각: 소리 80%"
+                && InvokeRuntimeUiLabel("BuildSensorySettingsChecklistTextForCapabilities", 0.8f, false, true, true, true)
+                    == "감각: 소리 80%·진동 OFF·기울임 ON",
+                "PC sensory summaries must not advertise unavailable hardware while mobile/developer settings retain their values.");
+            string pcChecklist = InvokeMockBackendStaticLabel("BuildPrototypeInteractionChecklistTextForPlatform",
+                false, "무한 종료 흐름", "실제 시작만 사용권 소모", false);
+            RequireTextLayoutBudget(pcChecklist, 10, 92, "PC player interaction checklist");
+            Require(pcChecklist.Contains("PC 조작", StringComparison.Ordinal)
+                && pcChecklist.Contains("A/←", StringComparison.Ordinal)
+                && pcChecklist.Contains("S/Space", StringComparison.Ordinal)
+                && pcChecklist.Contains("D/→", StringComparison.Ordinal)
+                && pcChecklist.Contains("Enter: 강조 다음 행동", StringComparison.Ordinal)
+                && !pcChecklist.Contains("모바일", StringComparison.Ordinal)
+                && !pcChecklist.Contains("터치", StringComparison.Ordinal)
+                && !pcChecklist.Contains("진동", StringComparison.Ordinal)
+                && !pcChecklist.Contains("F1", StringComparison.Ordinal)
+                && !pcChecklist.Contains("PgUp", StringComparison.Ordinal),
+                "PC player profile checks must describe supported input without mobile or development-only controls.");
+            Require(InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
+                    "일반 런", "첫 탈출", false, false).StartsWith("Enter/강조:", StringComparison.Ordinal)
+                && InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
+                    "일반 런", "첫 탈출", false, true).StartsWith("강조 버튼:", StringComparison.Ordinal),
+                "Profile next-action help must match the actual PC/touch confirmation controls.");
             string pcGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", false);
             string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
             Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)

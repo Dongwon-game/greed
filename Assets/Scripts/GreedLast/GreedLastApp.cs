@@ -2062,7 +2062,7 @@ namespace GreedLast
         private string BuildPrototypeVerificationPageText()
         {
             bool devToolsEnabled = GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild);
-            return BuildPrototypeVerificationPageTextForMode(
+            return BuildPrototypeVerificationPageTextForPlatform(
                 BuildPrototypePlaytestOrderText(),
                 devToolsEnabled,
                 BuildPrototypeInfiniteInteractionCheckText(
@@ -2070,7 +2070,7 @@ namespace GreedLast
                     HasAnyUsableSaveLoadoutSlot(),
                     firstSaveCompleted),
                 BuildPrototypeSaveUseInteractionChecklistText(),
-                BuildProfileNextActionText());
+                BuildProfileNextActionText(), Application.isMobilePlatform);
         }
 
         private static string BuildPrototypeVerificationPageTextForMode(
@@ -2080,12 +2080,20 @@ namespace GreedLast
             string saveUseCheck,
             string nextActionText)
         {
-            return "검증 순서\n" + BuildPrototypeRuntimeModeChecklistText(devToolsEnabled)
+            return BuildPrototypeVerificationPageTextForPlatform(playtestOrderText, devToolsEnabled,
+                infiniteCheck, saveUseCheck, nextActionText, isMobilePlatform: true);
+        }
+
+        private static string BuildPrototypeVerificationPageTextForPlatform(
+            string playtestOrderText, bool devToolsEnabled, string infiniteCheck,
+            string saveUseCheck, string nextActionText, bool isMobilePlatform)
+        {
+            return "검증 순서\n" + BuildPrototypeRuntimeModeChecklistTextForPlatform(devToolsEnabled, isMobilePlatform)
                 + "\n" + playtestOrderText
-                + "\n\n조작 체크\n" + BuildPrototypeInteractionChecklistTextForMode(
+                + "\n\n조작 체크\n" + BuildPrototypeInteractionChecklistTextForPlatform(
                     devToolsEnabled,
                     infiniteCheck,
-                    saveUseCheck)
+                    saveUseCheck, isMobilePlatform)
                 + "\n\n현재 추천\n" + nextActionText;
         }
 
@@ -2118,8 +2126,8 @@ namespace GreedLast
             string nextCheck = BuildPrototypeNextCheckText();
 
             return BuildPrototypeScopeContractLine()
-                + "\n" + BuildPrototypeRuntimeModeChecklistText(
-                    GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild))
+                + "\n" + BuildPrototypeRuntimeModeChecklistTextForPlatform(
+                    GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild), Application.isMobilePlatform)
                 + "\n진행: " + BuildPrototypeProgressChecklistStatusText()
                 + " / " + BuildPrototypeCompletionLoopStatusText()
                 + " / 루프 상태: " + BuildPrototypeLoopCheckpointStateText()
@@ -2136,6 +2144,13 @@ namespace GreedLast
             return devToolsEnabled
                 ? "검증 모드: 에디터 테스트키 ON"
                 : "검증 모드: 모바일/릴리스 테스트키 숨김";
+        }
+
+        private static string BuildPrototypeRuntimeModeChecklistTextForPlatform(bool devToolsEnabled, bool isMobilePlatform)
+        {
+            return !devToolsEnabled && !isMobilePlatform
+                ? "검증 모드: PC / 개발 테스트키 숨김"
+                : BuildPrototypeRuntimeModeChecklistText(devToolsEnabled);
         }
 
         private string BuildPrototypeProgressChecklistStatusText()
@@ -2871,7 +2886,8 @@ namespace GreedLast
                 HasAnyUsableSaveLoadoutSlot(),
                 firstSaveCompleted);
             string saveUseCheck = BuildPrototypeSaveUseInteractionChecklistText();
-            return BuildPrototypeInteractionChecklistTextForMode(devToolsEnabled, infiniteCheck, saveUseCheck);
+            return BuildPrototypeInteractionChecklistTextForPlatform(devToolsEnabled, infiniteCheck,
+                saveUseCheck, Application.isMobilePlatform);
         }
 
         private string BuildPrototypeSaveUseInteractionChecklistText()
@@ -2893,12 +2909,22 @@ namespace GreedLast
             string infiniteCheck,
             string saveUseCheck)
         {
-            string primaryActionCheck = devToolsEnabled ? "Enter: 강조 다음 행동" : "강조 버튼: 다음 행동";
+            return BuildPrototypeInteractionChecklistTextForPlatform(devToolsEnabled, infiniteCheck,
+                saveUseCheck, isMobilePlatform: true);
+        }
+
+        private static string BuildPrototypeInteractionChecklistTextForPlatform(
+            bool devToolsEnabled, string infiniteCheck, string saveUseCheck, bool isMobilePlatform)
+        {
+            bool keyboardHints = GreedLastPlayerInputPolicy.ShowKeyboardHints(devToolsEnabled, isMobilePlatform);
+            string primaryActionCheck = keyboardHints ? "Enter: 강조 다음 행동" : "강조 버튼: 다음 행동";
             return BuildPrototypeScopeContractLine()
                 + "\n동작 확인: 위험→동작 / 바닥↑점·상단↓숙·측면↔틀 / " + BuildPrototypePayoffGoalChecklistText()
-                + BuildPrototypeInteractionShortcutChecklistText(devToolsEnabled)
+                + BuildPrototypeInteractionShortcutChecklistTextForPlatform(devToolsEnabled, isMobilePlatform)
                 + "\n" + primaryActionCheck + " / 일시정지 재개목표·배경차단 / 선택·정산 큐 숨김 / 태그·흔적·잔상·끊김 숨김"
-                + "\nGO 첫 함정 / 복기 약점 반복 / 보정 빠름·추천·늦음 / 감각 소리%·진동 / 터치 탭"
+                + "\nGO 첫 함정 / 복기 약점 반복 / 보정 빠름·추천·늦음 / 감각 소리%"
+                + (GreedLastPlayerInputPolicy.ShowHapticsSetting(devToolsEnabled, isMobilePlatform) ? "·진동" : string.Empty)
+                + (keyboardHints ? " / 키·클릭" : " / 터치 탭")
                 + "\n" + PrototypeCompletionLoopContract
                 + "\n무한: " + infiniteCheck
                 + "\n저장: " + saveUseCheck;
@@ -2915,6 +2941,14 @@ namespace GreedLast
 
             return "\n상태줄 보상·코치 목표·3동작 HUD / 최근 흐름 / 박자공간·주자 / 터치 레인 좌·중·우"
                 + "\n모바일 조작: 중앙/레인 큐 / 일시정지 / 소리%·진동 / 터치 탭"
+                + "\n개발 테스트키 숨김 / 기록·흔적 체크로 검증";
+        }
+
+        private static string BuildPrototypeInteractionShortcutChecklistTextForPlatform(bool devToolsEnabled, bool isMobilePlatform)
+        {
+            if (devToolsEnabled || isMobilePlatform) return BuildPrototypeInteractionShortcutChecklistText(devToolsEnabled);
+            return "\n상태줄 보상·코치 목표·3동작 HUD / 최근 흐름 / 박자공간·주자 / 좌·중·우 대응"
+                + "\nPC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 소리% / 키·클릭"
                 + "\n개발 테스트키 숨김 / 기록·흔적 체크로 검증";
         }
 
@@ -3007,7 +3041,8 @@ namespace GreedLast
                 || infiniteRunCount > 0;
             return BuildPrototypeCueChecklistTextForMode(
                 hasRunTrace,
-                GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild));
+                GreedLastPlayerInputPolicy.ShowKeyboardHints(
+                    GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild), Application.isMobilePlatform));
         }
 
         private static string BuildPrototypeCueChecklistTextForMode(bool hasRunTrace, bool devToolsEnabled)
@@ -4005,7 +4040,7 @@ namespace GreedLast
                     switch (part)
                     {
                     default:
-                        if (part.StartsWith("Enter/", StringComparison.Ordinal) || part.StartsWith("Enter:", StringComparison.Ordinal) || part.StartsWith("강조:", StringComparison.Ordinal) || part.StartsWith("강조 버튼", StringComparison.Ordinal) || part.StartsWith("테스트키", StringComparison.Ordinal) || part.StartsWith("개발 테스트키", StringComparison.Ordinal) || part.StartsWith("모바일 조작", StringComparison.Ordinal) || part.StartsWith("터치 레인", StringComparison.Ordinal) || part.StartsWith("기록·흔적 체크", StringComparison.Ordinal) || part.StartsWith("상태:", StringComparison.Ordinal) || part.StartsWith("채널:", StringComparison.Ordinal) || part.StartsWith("판정:", StringComparison.Ordinal) || part.StartsWith("흐름:", StringComparison.Ordinal) || part.StartsWith("집중:", StringComparison.Ordinal) || part.StartsWith("회피:", StringComparison.Ordinal) || part.StartsWith("강점:", StringComparison.Ordinal) || part.StartsWith("타이밍 진단", StringComparison.Ordinal) || part.StartsWith("다음 목표", StringComparison.Ordinal) || part.StartsWith("목표 정산", StringComparison.Ordinal) || part.StartsWith("목표 구간", StringComparison.Ordinal) || part.StartsWith("목표 보정", StringComparison.Ordinal) || IsRecordBoardJudgementSummaryPart(part) || part.StartsWith("저장 후보", StringComparison.Ordinal) || part.StartsWith("후보는 ", StringComparison.Ordinal) || part.StartsWith("저장 조합 소모", StringComparison.Ordinal) || part.StartsWith("저장 소모", StringComparison.Ordinal) || part.StartsWith("저장 조합 없음", StringComparison.Ordinal) || part.StartsWith("저장 조합이 비어", StringComparison.Ordinal) || part.StartsWith("저장 조합이 비었", StringComparison.Ordinal) || part.StartsWith("저장 조합이 필요", StringComparison.Ordinal) || part.StartsWith("먼저 저장 조합", StringComparison.Ordinal) || part.StartsWith("남은 저장 조합 없음", StringComparison.Ordinal) || part.Contains("저장 조합 없음", StringComparison.Ordinal) || part.Contains("저장 조합이 비어", StringComparison.Ordinal) || part.Contains("저장 조합이 비었", StringComparison.Ordinal) || part.Contains("남은 저장 조합 없음", StringComparison.Ordinal) || part.StartsWith("일반 런을 클리어", StringComparison.Ordinal) || part.StartsWith("후보 우선", StringComparison.Ordinal) || part.StartsWith("저장:", StringComparison.Ordinal) || part.StartsWith("저장 기회", StringComparison.Ordinal) || part.StartsWith("저장하거나 포기", StringComparison.Ordinal) || part.Contains("저장 또는 포기", StringComparison.Ordinal) || part.StartsWith("저장 슬롯 선택", StringComparison.Ordinal) || part.StartsWith("저장 후", StringComparison.Ordinal) || part.StartsWith("저장 포기는", StringComparison.Ordinal) || part.StartsWith("포기 취소", StringComparison.Ordinal) || part.StartsWith("포기 확정", StringComparison.Ordinal) || part == "포기" || part.StartsWith("후보 처리", StringComparison.Ordinal) || part.StartsWith("신규:", StringComparison.Ordinal) || part.StartsWith("교체 전:", StringComparison.Ordinal) || part.StartsWith("요약:", StringComparison.Ordinal) || part.StartsWith("다시 포기", StringComparison.Ordinal) || part.StartsWith("작업:", StringComparison.Ordinal) || part.StartsWith("선택 슬롯", StringComparison.Ordinal) || part.StartsWith("선택 불가", StringComparison.Ordinal) || part.StartsWith("선택 전 저장 잠김", StringComparison.Ordinal) || part.StartsWith("선택:", StringComparison.Ordinal) || part.StartsWith("좌 · 중 · 우", StringComparison.Ordinal) || part == "슬롯" || part.StartsWith("슬롯 ", StringComparison.Ordinal) || part.StartsWith("> 슬롯 ", StringComparison.Ordinal) || part.StartsWith("품질 ", StringComparison.Ordinal) || part.StartsWith("현재 품질", StringComparison.Ordinal) || part.StartsWith("차이:", StringComparison.Ordinal) || part.StartsWith("조합 ", StringComparison.Ordinal) || part.StartsWith("사용 상태", StringComparison.Ordinal) || part.StartsWith("사용 흐름", StringComparison.Ordinal) || part.StartsWith("사용 결과", StringComparison.Ordinal) || part.StartsWith("사용 가능 횟수", StringComparison.Ordinal) || part.StartsWith("사용 횟수", StringComparison.Ordinal) || part.StartsWith("남은 사용", StringComparison.Ordinal) || part.StartsWith("다음 소모", StringComparison.Ordinal) || part.StartsWith("다음 조합", StringComparison.Ordinal) || part.StartsWith("모두 쓰면", StringComparison.Ordinal) || part.StartsWith("소진 대기", StringComparison.Ordinal) || IsSaveLoadoutUseStatePart(part) || part.StartsWith("보정:", StringComparison.Ordinal) || part.StartsWith("보정 ", StringComparison.Ordinal) || part.StartsWith("관리 모드", StringComparison.Ordinal) || part.StartsWith("저장 모드", StringComparison.Ordinal) || part.StartsWith("기존 슬롯", StringComparison.Ordinal) || part.StartsWith("이름 변경", StringComparison.Ordinal) || part.StartsWith("삭제", StringComparison.Ordinal) || part.StartsWith("새 저장은", StringComparison.Ordinal) || part.StartsWith("새 저장 조합", StringComparison.Ordinal) || part.StartsWith("새 조합", StringComparison.Ordinal) || part.StartsWith("저장 확인", StringComparison.Ordinal) || part.StartsWith("저장 완료", StringComparison.Ordinal) || part.StartsWith("저장 조합 저장 완료", StringComparison.Ordinal) || part.StartsWith("같은 클리어", StringComparison.Ordinal) || part.StartsWith("상세 보기", StringComparison.Ordinal) || part.StartsWith("상세 비교", StringComparison.Ordinal) || part.StartsWith("보충 안내", StringComparison.Ordinal) || part.StartsWith("보충 확인", StringComparison.Ordinal) || part.StartsWith("보충 완료", StringComparison.Ordinal) || part.StartsWith("보충 런 버튼", StringComparison.Ordinal) || part.StartsWith("무한 시작 전", StringComparison.Ordinal) || part.Contains("soft-blur", StringComparison.Ordinal) || part.Contains("soft blur", StringComparison.Ordinal) || part.Contains("responsive detail", StringComparison.Ordinal) || part.Contains("master sfx", StringComparison.Ordinal) || part.Contains("mobile haptic", StringComparison.Ordinal) || part.Contains("judgement haptic", StringComparison.Ordinal) || part.Contains("countdown haptic", StringComparison.Ordinal) || part.Contains("countdown beat schedule", StringComparison.Ordinal) || part.Contains("카운트 전용 비트", StringComparison.Ordinal) || part.Contains("일반 박자음", StringComparison.Ordinal) || part.Contains("라이브 조작 가능", StringComparison.Ordinal) || part.Contains("live-control", StringComparison.Ordinal) || part.StartsWith("audio gate", StringComparison.Ordinal) || part.Contains("박자 긴급도", StringComparison.Ordinal) || part.Contains("박자공간", StringComparison.Ordinal) || part.Contains("beat-cue urgency", StringComparison.Ordinal) || part.Contains("beat-cue audio", StringComparison.Ordinal) || part.Contains("lane input ripple beat-cue", StringComparison.Ordinal) || part.Contains("rapid lane input", StringComparison.Ordinal) || part.Contains("input boundaries", StringComparison.Ordinal) || part.Contains("judgement-line beat-cue", StringComparison.Ordinal) || part.Contains("beat cue urgency", StringComparison.Ordinal) || part.Contains("beat cue threshold", StringComparison.Ordinal) || part.Contains("timing guide word", StringComparison.Ordinal) || part.Contains("pause header", StringComparison.Ordinal) || part.Contains("pause body", StringComparison.Ordinal) || part.Contains("mobile pause", StringComparison.Ordinal) || part.Contains("블러", StringComparison.Ordinal) || part.Contains("일시정지 본문", StringComparison.Ordinal) || part.Contains("재개 버튼", StringComparison.Ordinal) || part.Contains("앞 박자 여유", StringComparison.Ordinal) || part.StartsWith("카운트와", StringComparison.Ordinal) || part.StartsWith("앱 전환", StringComparison.Ordinal) || part.StartsWith("카운트 ", StringComparison.Ordinal) || part.StartsWith("재개 ", StringComparison.Ordinal) || part.StartsWith("입장 체크", StringComparison.Ordinal) || part.StartsWith("시작 전 확인", StringComparison.Ordinal) || part.StartsWith("시작 정비", StringComparison.Ordinal) || part.StartsWith("기프트 선택", StringComparison.Ordinal) || part.StartsWith("유물 선택", StringComparison.Ordinal) || part.StartsWith("기프트:", StringComparison.Ordinal) || part.StartsWith("시작 기프트:", StringComparison.Ordinal) || part.StartsWith("유물:", StringComparison.Ordinal) || part.StartsWith("이번 런 전용", StringComparison.Ordinal) || part.StartsWith("성향:", StringComparison.Ordinal) || part.StartsWith("조합 성향:", StringComparison.Ordinal) || part.StartsWith("기프트 누적:", StringComparison.Ordinal) || part.StartsWith("기록 기준", StringComparison.Ordinal) || part.StartsWith("구성:", StringComparison.Ordinal) || part.StartsWith("현재 구성:", StringComparison.Ordinal) || part.StartsWith("핵 직후", StringComparison.Ordinal) || part.StartsWith("탈출 직전", StringComparison.Ordinal) || part.StartsWith("자동 ", StringComparison.Ordinal) || part.StartsWith("GO 뒤", StringComparison.Ordinal) || part == "중앙" || part.StartsWith("레인 큐", StringComparison.Ordinal) || part.StartsWith("중앙/레인 큐", StringComparison.Ordinal) || part.StartsWith("상태줄", StringComparison.Ordinal) || part.StartsWith("코치", StringComparison.Ordinal) || part.StartsWith("코칭", StringComparison.Ordinal) || part.StartsWith("동작 ", StringComparison.Ordinal) || part.StartsWith("동작 확인", StringComparison.Ordinal) || part.StartsWith("예비 자세", StringComparison.Ordinal) || part.StartsWith("준비선", StringComparison.Ordinal) || part.StartsWith("대응 준비선", StringComparison.Ordinal) || part.StartsWith("압박 그림자", StringComparison.Ordinal) || part.StartsWith("위험 그림자", StringComparison.Ordinal) || part.StartsWith("함정 그림자", StringComparison.Ordinal) || part.StartsWith("통로 그림자", StringComparison.Ordinal) || part.StartsWith("통로 압박 스퀴즈", StringComparison.Ordinal) || part.StartsWith("압박 스퀴즈", StringComparison.Ordinal) || part.StartsWith("판정 웨이크", StringComparison.Ordinal) || part.StartsWith("충격 웨이크", StringComparison.Ordinal) || part.StartsWith("회피 웨이크", StringComparison.Ordinal) || part.StartsWith("피격 웨이크", StringComparison.Ordinal) || part.StartsWith("준비 기호", StringComparison.Ordinal) || part.StartsWith("대응 기호", StringComparison.Ordinal) || part.StartsWith("발밑 접지", StringComparison.Ordinal) || part.StartsWith("발자국", StringComparison.Ordinal) || part.StartsWith("입력 전", StringComparison.Ordinal) || part.StartsWith("아바타", StringComparison.Ordinal) || part.StartsWith("3동작", StringComparison.Ordinal) || part.StartsWith("프로토타입:", StringComparison.Ordinal) || part.StartsWith("프로토타입 완성", StringComparison.Ordinal) || part.StartsWith("프로토타입 체크", StringComparison.Ordinal) || IsPrototypePlaytestOrderPart(part) || IsRecordBoardVisualChecklistPart(part) || IsRecordBoardWorkflowNotePart(part) || part.StartsWith("기획 체감", StringComparison.Ordinal) || part.StartsWith("단계:", StringComparison.Ordinal) || part.StartsWith("그래픽 후", StringComparison.Ordinal) || part.StartsWith("완성 루프", StringComparison.Ordinal) || part.StartsWith("완성 진행", StringComparison.Ordinal) || part.StartsWith("완성 기준", StringComparison.Ordinal) || part.StartsWith("완성 기록", StringComparison.Ordinal) || part.StartsWith("프로토 완성", StringComparison.Ordinal) || part.StartsWith("시작→런 확인", StringComparison.Ordinal) || part.StartsWith("런 확인", StringComparison.Ordinal) || part.StartsWith("조작 체크", StringComparison.Ordinal) || part.StartsWith("현재 추천", StringComparison.Ordinal) || part.StartsWith("검증 모드", StringComparison.Ordinal) || part.StartsWith("진행:", StringComparison.Ordinal) || part.StartsWith("진행 피프", StringComparison.Ordinal) || part.StartsWith("진행칸", StringComparison.Ordinal) || part.StartsWith("첫 함정", StringComparison.Ordinal) || part.StartsWith("복기 후 탈출", StringComparison.Ordinal) || part.StartsWith("일반 탈출", StringComparison.Ordinal) || part.StartsWith("저장 후보 생성", StringComparison.Ordinal) || part.StartsWith("첫 무한", StringComparison.Ordinal) || part.StartsWith("무한 기록", StringComparison.Ordinal) || part.StartsWith("보충 재진입", StringComparison.Ordinal) || part.StartsWith("탈출 게이트", StringComparison.Ordinal) || part.StartsWith("입구 직전 게이트", StringComparison.Ordinal) || part.Contains("탈출 게이트 박자", StringComparison.Ordinal) || part.StartsWith("입구 탈출 완료", StringComparison.Ordinal) || part.StartsWith("탈출 검증", StringComparison.Ordinal) || part.StartsWith("남은:", StringComparison.Ordinal) || part.StartsWith("남은 ", StringComparison.Ordinal) || part.StartsWith("보충 필요", StringComparison.Ordinal) || part.StartsWith("체크 ", StringComparison.Ordinal) || part.StartsWith("루프", StringComparison.Ordinal) || part.StartsWith("확인 목적", StringComparison.Ordinal) || part.StartsWith("바로 체크", StringComparison.Ordinal) || part.StartsWith("목적:", StringComparison.Ordinal) || part.StartsWith("감각", StringComparison.Ordinal) || part.StartsWith("설정:", StringComparison.Ordinal) || part.StartsWith("소리", StringComparison.Ordinal) || part.StartsWith("진동", StringComparison.Ordinal) || part.StartsWith("기울임 ", StringComparison.Ordinal) || part.StartsWith("회피 ", StringComparison.Ordinal) || part.StartsWith("복기 약점", StringComparison.Ordinal) || part.StartsWith("무한 복기 약점", StringComparison.Ordinal) || part.StartsWith("무한 약점", StringComparison.Ordinal) || part.StartsWith("기초연습", StringComparison.Ordinal) || part.StartsWith("다음 행동", StringComparison.Ordinal) || IsRecordBoardDetachedProgressOrInputPart(part) || part.StartsWith("다음 확인", StringComparison.Ordinal) || part.StartsWith("다음:", StringComparison.Ordinal) || part.StartsWith("실행", StringComparison.Ordinal) || part.StartsWith("좌로 ", StringComparison.Ordinal) || part.StartsWith("중으로 ", StringComparison.Ordinal) || part.StartsWith("우로 ", StringComparison.Ordinal) || part.StartsWith("흔적 ", StringComparison.Ordinal) || part.StartsWith("무한:", StringComparison.Ordinal) || part.StartsWith("GO ", StringComparison.Ordinal) || part.StartsWith("종료 흐름", StringComparison.Ordinal) || part.StartsWith("다른 슬롯", StringComparison.Ordinal) || part.StartsWith("위험→동작", StringComparison.Ordinal) || part.StartsWith("정확→", StringComparison.Ordinal) || part.StartsWith("위기→", StringComparison.Ordinal) || part.Contains("→정확→", StringComparison.Ordinal) || part.StartsWith("폭·보상", StringComparison.Ordinal) || part.StartsWith("타이밍:", StringComparison.Ordinal) || part.EndsWith(" 타이밍", StringComparison.Ordinal) || IsRecordBoardBeatTimingCuePart(part) || IsRecordBoardPrototypePayoffGoalPart(part) || part.StartsWith("빠름 ", StringComparison.Ordinal) || part.StartsWith("늦음 ", StringComparison.Ordinal) || part.StartsWith("적용 완료", StringComparison.Ordinal) || part.StartsWith("0ms 복귀", StringComparison.Ordinal) || IsRecordBoardCountdownSecondsPart(part) || part.StartsWith("다음은 살짝", StringComparison.Ordinal) || part.StartsWith("다음은 조금", StringComparison.Ordinal) || part.StartsWith("정답 채널", StringComparison.Ordinal) || part.StartsWith("다음 함정 입력", StringComparison.Ordinal) || part.StartsWith("오입력", StringComparison.Ordinal))
+                        if (part.StartsWith("Enter/", StringComparison.Ordinal) || part.StartsWith("Enter:", StringComparison.Ordinal) || part.StartsWith("강조:", StringComparison.Ordinal) || part.StartsWith("강조 버튼", StringComparison.Ordinal) || part.StartsWith("테스트키", StringComparison.Ordinal) || part.StartsWith("개발 테스트키", StringComparison.Ordinal) || part.StartsWith("모바일 조작", StringComparison.Ordinal) || part.StartsWith("PC 조작", StringComparison.Ordinal) || part.StartsWith("터치 레인", StringComparison.Ordinal) || part.StartsWith("기록·흔적 체크", StringComparison.Ordinal) || part.StartsWith("상태:", StringComparison.Ordinal) || part.StartsWith("채널:", StringComparison.Ordinal) || part.StartsWith("판정:", StringComparison.Ordinal) || part.StartsWith("흐름:", StringComparison.Ordinal) || part.StartsWith("집중:", StringComparison.Ordinal) || part.StartsWith("회피:", StringComparison.Ordinal) || part.StartsWith("강점:", StringComparison.Ordinal) || part.StartsWith("타이밍 진단", StringComparison.Ordinal) || part.StartsWith("다음 목표", StringComparison.Ordinal) || part.StartsWith("목표 정산", StringComparison.Ordinal) || part.StartsWith("목표 구간", StringComparison.Ordinal) || part.StartsWith("목표 보정", StringComparison.Ordinal) || IsRecordBoardJudgementSummaryPart(part) || part.StartsWith("저장 후보", StringComparison.Ordinal) || part.StartsWith("후보는 ", StringComparison.Ordinal) || part.StartsWith("저장 조합 소모", StringComparison.Ordinal) || part.StartsWith("저장 소모", StringComparison.Ordinal) || part.StartsWith("저장 조합 없음", StringComparison.Ordinal) || part.StartsWith("저장 조합이 비어", StringComparison.Ordinal) || part.StartsWith("저장 조합이 비었", StringComparison.Ordinal) || part.StartsWith("저장 조합이 필요", StringComparison.Ordinal) || part.StartsWith("먼저 저장 조합", StringComparison.Ordinal) || part.StartsWith("남은 저장 조합 없음", StringComparison.Ordinal) || part.Contains("저장 조합 없음", StringComparison.Ordinal) || part.Contains("저장 조합이 비어", StringComparison.Ordinal) || part.Contains("저장 조합이 비었", StringComparison.Ordinal) || part.Contains("남은 저장 조합 없음", StringComparison.Ordinal) || part.StartsWith("일반 런을 클리어", StringComparison.Ordinal) || part.StartsWith("후보 우선", StringComparison.Ordinal) || part.StartsWith("저장:", StringComparison.Ordinal) || part.StartsWith("저장 기회", StringComparison.Ordinal) || part.StartsWith("저장하거나 포기", StringComparison.Ordinal) || part.Contains("저장 또는 포기", StringComparison.Ordinal) || part.StartsWith("저장 슬롯 선택", StringComparison.Ordinal) || part.StartsWith("저장 후", StringComparison.Ordinal) || part.StartsWith("저장 포기는", StringComparison.Ordinal) || part.StartsWith("포기 취소", StringComparison.Ordinal) || part.StartsWith("포기 확정", StringComparison.Ordinal) || part == "포기" || part.StartsWith("후보 처리", StringComparison.Ordinal) || part.StartsWith("신규:", StringComparison.Ordinal) || part.StartsWith("교체 전:", StringComparison.Ordinal) || part.StartsWith("요약:", StringComparison.Ordinal) || part.StartsWith("다시 포기", StringComparison.Ordinal) || part.StartsWith("작업:", StringComparison.Ordinal) || part.StartsWith("선택 슬롯", StringComparison.Ordinal) || part.StartsWith("선택 불가", StringComparison.Ordinal) || part.StartsWith("선택 전 저장 잠김", StringComparison.Ordinal) || part.StartsWith("선택:", StringComparison.Ordinal) || part.StartsWith("좌 · 중 · 우", StringComparison.Ordinal) || part == "슬롯" || part.StartsWith("슬롯 ", StringComparison.Ordinal) || part.StartsWith("> 슬롯 ", StringComparison.Ordinal) || part.StartsWith("품질 ", StringComparison.Ordinal) || part.StartsWith("현재 품질", StringComparison.Ordinal) || part.StartsWith("차이:", StringComparison.Ordinal) || part.StartsWith("조합 ", StringComparison.Ordinal) || part.StartsWith("사용 상태", StringComparison.Ordinal) || part.StartsWith("사용 흐름", StringComparison.Ordinal) || part.StartsWith("사용 결과", StringComparison.Ordinal) || part.StartsWith("사용 가능 횟수", StringComparison.Ordinal) || part.StartsWith("사용 횟수", StringComparison.Ordinal) || part.StartsWith("남은 사용", StringComparison.Ordinal) || part.StartsWith("다음 소모", StringComparison.Ordinal) || part.StartsWith("다음 조합", StringComparison.Ordinal) || part.StartsWith("모두 쓰면", StringComparison.Ordinal) || part.StartsWith("소진 대기", StringComparison.Ordinal) || IsSaveLoadoutUseStatePart(part) || part.StartsWith("보정:", StringComparison.Ordinal) || part.StartsWith("보정 ", StringComparison.Ordinal) || part.StartsWith("관리 모드", StringComparison.Ordinal) || part.StartsWith("저장 모드", StringComparison.Ordinal) || part.StartsWith("기존 슬롯", StringComparison.Ordinal) || part.StartsWith("이름 변경", StringComparison.Ordinal) || part.StartsWith("삭제", StringComparison.Ordinal) || part.StartsWith("새 저장은", StringComparison.Ordinal) || part.StartsWith("새 저장 조합", StringComparison.Ordinal) || part.StartsWith("새 조합", StringComparison.Ordinal) || part.StartsWith("저장 확인", StringComparison.Ordinal) || part.StartsWith("저장 완료", StringComparison.Ordinal) || part.StartsWith("저장 조합 저장 완료", StringComparison.Ordinal) || part.StartsWith("같은 클리어", StringComparison.Ordinal) || part.StartsWith("상세 보기", StringComparison.Ordinal) || part.StartsWith("상세 비교", StringComparison.Ordinal) || part.StartsWith("보충 안내", StringComparison.Ordinal) || part.StartsWith("보충 확인", StringComparison.Ordinal) || part.StartsWith("보충 완료", StringComparison.Ordinal) || part.StartsWith("보충 런 버튼", StringComparison.Ordinal) || part.StartsWith("무한 시작 전", StringComparison.Ordinal) || part.Contains("soft-blur", StringComparison.Ordinal) || part.Contains("soft blur", StringComparison.Ordinal) || part.Contains("responsive detail", StringComparison.Ordinal) || part.Contains("master sfx", StringComparison.Ordinal) || part.Contains("mobile haptic", StringComparison.Ordinal) || part.Contains("judgement haptic", StringComparison.Ordinal) || part.Contains("countdown haptic", StringComparison.Ordinal) || part.Contains("countdown beat schedule", StringComparison.Ordinal) || part.Contains("카운트 전용 비트", StringComparison.Ordinal) || part.Contains("일반 박자음", StringComparison.Ordinal) || part.Contains("라이브 조작 가능", StringComparison.Ordinal) || part.Contains("live-control", StringComparison.Ordinal) || part.StartsWith("audio gate", StringComparison.Ordinal) || part.Contains("박자 긴급도", StringComparison.Ordinal) || part.Contains("박자공간", StringComparison.Ordinal) || part.Contains("beat-cue urgency", StringComparison.Ordinal) || part.Contains("beat-cue audio", StringComparison.Ordinal) || part.Contains("lane input ripple beat-cue", StringComparison.Ordinal) || part.Contains("rapid lane input", StringComparison.Ordinal) || part.Contains("input boundaries", StringComparison.Ordinal) || part.Contains("judgement-line beat-cue", StringComparison.Ordinal) || part.Contains("beat cue urgency", StringComparison.Ordinal) || part.Contains("beat cue threshold", StringComparison.Ordinal) || part.Contains("timing guide word", StringComparison.Ordinal) || part.Contains("pause header", StringComparison.Ordinal) || part.Contains("pause body", StringComparison.Ordinal) || part.Contains("mobile pause", StringComparison.Ordinal) || part.Contains("블러", StringComparison.Ordinal) || part.Contains("일시정지 본문", StringComparison.Ordinal) || part.Contains("재개 버튼", StringComparison.Ordinal) || part.Contains("앞 박자 여유", StringComparison.Ordinal) || part.StartsWith("카운트와", StringComparison.Ordinal) || part.StartsWith("앱 전환", StringComparison.Ordinal) || part.StartsWith("카운트 ", StringComparison.Ordinal) || part.StartsWith("재개 ", StringComparison.Ordinal) || part.StartsWith("입장 체크", StringComparison.Ordinal) || part.StartsWith("시작 전 확인", StringComparison.Ordinal) || part.StartsWith("시작 정비", StringComparison.Ordinal) || part.StartsWith("기프트 선택", StringComparison.Ordinal) || part.StartsWith("유물 선택", StringComparison.Ordinal) || part.StartsWith("기프트:", StringComparison.Ordinal) || part.StartsWith("시작 기프트:", StringComparison.Ordinal) || part.StartsWith("유물:", StringComparison.Ordinal) || part.StartsWith("이번 런 전용", StringComparison.Ordinal) || part.StartsWith("성향:", StringComparison.Ordinal) || part.StartsWith("조합 성향:", StringComparison.Ordinal) || part.StartsWith("기프트 누적:", StringComparison.Ordinal) || part.StartsWith("기록 기준", StringComparison.Ordinal) || part.StartsWith("구성:", StringComparison.Ordinal) || part.StartsWith("현재 구성:", StringComparison.Ordinal) || part.StartsWith("핵 직후", StringComparison.Ordinal) || part.StartsWith("탈출 직전", StringComparison.Ordinal) || part.StartsWith("자동 ", StringComparison.Ordinal) || part.StartsWith("GO 뒤", StringComparison.Ordinal) || part == "중앙" || part.StartsWith("레인 큐", StringComparison.Ordinal) || part.StartsWith("중앙/레인 큐", StringComparison.Ordinal) || part.StartsWith("상태줄", StringComparison.Ordinal) || part.StartsWith("코치", StringComparison.Ordinal) || part.StartsWith("코칭", StringComparison.Ordinal) || part.StartsWith("동작 ", StringComparison.Ordinal) || part.StartsWith("동작 확인", StringComparison.Ordinal) || part.StartsWith("예비 자세", StringComparison.Ordinal) || part.StartsWith("준비선", StringComparison.Ordinal) || part.StartsWith("대응 준비선", StringComparison.Ordinal) || part.StartsWith("압박 그림자", StringComparison.Ordinal) || part.StartsWith("위험 그림자", StringComparison.Ordinal) || part.StartsWith("함정 그림자", StringComparison.Ordinal) || part.StartsWith("통로 그림자", StringComparison.Ordinal) || part.StartsWith("통로 압박 스퀴즈", StringComparison.Ordinal) || part.StartsWith("압박 스퀴즈", StringComparison.Ordinal) || part.StartsWith("판정 웨이크", StringComparison.Ordinal) || part.StartsWith("충격 웨이크", StringComparison.Ordinal) || part.StartsWith("회피 웨이크", StringComparison.Ordinal) || part.StartsWith("피격 웨이크", StringComparison.Ordinal) || part.StartsWith("준비 기호", StringComparison.Ordinal) || part.StartsWith("대응 기호", StringComparison.Ordinal) || part.StartsWith("발밑 접지", StringComparison.Ordinal) || part.StartsWith("발자국", StringComparison.Ordinal) || part.StartsWith("입력 전", StringComparison.Ordinal) || part.StartsWith("아바타", StringComparison.Ordinal) || part.StartsWith("3동작", StringComparison.Ordinal) || part.StartsWith("프로토타입:", StringComparison.Ordinal) || part.StartsWith("프로토타입 완성", StringComparison.Ordinal) || part.StartsWith("프로토타입 체크", StringComparison.Ordinal) || IsPrototypePlaytestOrderPart(part) || IsRecordBoardVisualChecklistPart(part) || IsRecordBoardWorkflowNotePart(part) || part.StartsWith("기획 체감", StringComparison.Ordinal) || part.StartsWith("단계:", StringComparison.Ordinal) || part.StartsWith("그래픽 후", StringComparison.Ordinal) || part.StartsWith("완성 루프", StringComparison.Ordinal) || part.StartsWith("완성 진행", StringComparison.Ordinal) || part.StartsWith("완성 기준", StringComparison.Ordinal) || part.StartsWith("완성 기록", StringComparison.Ordinal) || part.StartsWith("프로토 완성", StringComparison.Ordinal) || part.StartsWith("시작→런 확인", StringComparison.Ordinal) || part.StartsWith("런 확인", StringComparison.Ordinal) || part.StartsWith("조작 체크", StringComparison.Ordinal) || part.StartsWith("현재 추천", StringComparison.Ordinal) || part.StartsWith("검증 모드", StringComparison.Ordinal) || part.StartsWith("진행:", StringComparison.Ordinal) || part.StartsWith("진행 피프", StringComparison.Ordinal) || part.StartsWith("진행칸", StringComparison.Ordinal) || part.StartsWith("첫 함정", StringComparison.Ordinal) || part.StartsWith("복기 후 탈출", StringComparison.Ordinal) || part.StartsWith("일반 탈출", StringComparison.Ordinal) || part.StartsWith("저장 후보 생성", StringComparison.Ordinal) || part.StartsWith("첫 무한", StringComparison.Ordinal) || part.StartsWith("무한 기록", StringComparison.Ordinal) || part.StartsWith("보충 재진입", StringComparison.Ordinal) || part.StartsWith("탈출 게이트", StringComparison.Ordinal) || part.StartsWith("입구 직전 게이트", StringComparison.Ordinal) || part.Contains("탈출 게이트 박자", StringComparison.Ordinal) || part.StartsWith("입구 탈출 완료", StringComparison.Ordinal) || part.StartsWith("탈출 검증", StringComparison.Ordinal) || part.StartsWith("남은:", StringComparison.Ordinal) || part.StartsWith("남은 ", StringComparison.Ordinal) || part.StartsWith("보충 필요", StringComparison.Ordinal) || part.StartsWith("체크 ", StringComparison.Ordinal) || part.StartsWith("루프", StringComparison.Ordinal) || part.StartsWith("확인 목적", StringComparison.Ordinal) || part.StartsWith("바로 체크", StringComparison.Ordinal) || part.StartsWith("목적:", StringComparison.Ordinal) || part.StartsWith("감각", StringComparison.Ordinal) || part.StartsWith("설정:", StringComparison.Ordinal) || part.StartsWith("소리", StringComparison.Ordinal) || part.StartsWith("진동", StringComparison.Ordinal) || part.StartsWith("기울임 ", StringComparison.Ordinal) || part.StartsWith("회피 ", StringComparison.Ordinal) || part.StartsWith("복기 약점", StringComparison.Ordinal) || part.StartsWith("무한 복기 약점", StringComparison.Ordinal) || part.StartsWith("무한 약점", StringComparison.Ordinal) || part.StartsWith("기초연습", StringComparison.Ordinal) || part.StartsWith("다음 행동", StringComparison.Ordinal) || IsRecordBoardDetachedProgressOrInputPart(part) || part.StartsWith("다음 확인", StringComparison.Ordinal) || part.StartsWith("다음:", StringComparison.Ordinal) || part.StartsWith("실행", StringComparison.Ordinal) || part.StartsWith("좌로 ", StringComparison.Ordinal) || part.StartsWith("중으로 ", StringComparison.Ordinal) || part.StartsWith("우로 ", StringComparison.Ordinal) || part.StartsWith("흔적 ", StringComparison.Ordinal) || part.StartsWith("무한:", StringComparison.Ordinal) || part.StartsWith("GO ", StringComparison.Ordinal) || part.StartsWith("종료 흐름", StringComparison.Ordinal) || part.StartsWith("다른 슬롯", StringComparison.Ordinal) || part.StartsWith("위험→동작", StringComparison.Ordinal) || part.StartsWith("정확→", StringComparison.Ordinal) || part.StartsWith("위기→", StringComparison.Ordinal) || part.Contains("→정확→", StringComparison.Ordinal) || part.StartsWith("폭·보상", StringComparison.Ordinal) || part.StartsWith("타이밍:", StringComparison.Ordinal) || part.EndsWith(" 타이밍", StringComparison.Ordinal) || IsRecordBoardBeatTimingCuePart(part) || IsRecordBoardPrototypePayoffGoalPart(part) || part.StartsWith("빠름 ", StringComparison.Ordinal) || part.StartsWith("늦음 ", StringComparison.Ordinal) || part.StartsWith("적용 완료", StringComparison.Ordinal) || part.StartsWith("0ms 복귀", StringComparison.Ordinal) || IsRecordBoardCountdownSecondsPart(part) || part.StartsWith("다음은 살짝", StringComparison.Ordinal) || part.StartsWith("다음은 조금", StringComparison.Ordinal) || part.StartsWith("정답 채널", StringComparison.Ordinal) || part.StartsWith("다음 함정 입력", StringComparison.Ordinal) || part.StartsWith("오입력", StringComparison.Ordinal))
                         {
                             break;
                         }
@@ -4825,7 +4860,8 @@ namespace GreedLast
         private string BuildProfileNextActionText()
         {
             string action = BuildProfileNextActionCoreText(out var highlightAction);
-            return FormatProfileNextActionTextForMode(highlightAction, action, GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild));
+            return FormatProfileNextActionTextForPlatform(highlightAction, action,
+                GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild), Application.isMobilePlatform);
         }
 
         private string BuildProfileNextActionCoreText(out string highlightAction)
@@ -4907,11 +4943,17 @@ namespace GreedLast
 
         private static string FormatProfileNextActionTextForMode(string highlightAction, string action, bool devToolsEnabled)
         {
+            return FormatProfileNextActionTextForPlatform(highlightAction, action, devToolsEnabled, isMobilePlatform: true);
+        }
+
+        private static string FormatProfileNextActionTextForPlatform(
+            string highlightAction, string action, bool devToolsEnabled, bool isMobilePlatform)
+        {
             if (string.IsNullOrEmpty(highlightAction))
             {
                 return action;
             }
-            string prefix = (devToolsEnabled ? "Enter/강조" : "강조 버튼");
+            string prefix = GreedLastPlayerInputPolicy.PrimaryActionPrefix(devToolsEnabled, isMobilePlatform);
             if (string.IsNullOrEmpty(action))
             {
                 return prefix + ": " + highlightAction;
@@ -17207,7 +17249,8 @@ namespace GreedLast
             SetButtonLabel(nextPatternButton, practiceCandidateHandoff ? "저장 후보 확인"
                 : BuildRunPrimaryButtonLabelForMode(snapshot, normalClearReady, UsePlayerRunControls));
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
-            SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForMode(snapshot, showDevTools));
+            SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForPlatform(
+                snapshot, DevToolsEnabled, Application.isMobilePlatform));
             if (!UsePlayerRunControls) UpdateRunDebugButtonLabels(snapshot);
             if (!UsePlayerRunControls || snapshot.Paused || snapshot.Stopped)
                 UpdateRunSettingsButtonLabels(snapshot);
@@ -17814,7 +17857,7 @@ namespace GreedLast
                 }
                 else
                 {
-                    pauseMenuBodyText.text = BuildPauseMenuResumeLineForMode(DevToolsEnabled)
+                    pauseMenuBodyText.text = GreedLastPlayerInputPolicy.ResumeHint(DevToolsEnabled, Application.isMobilePlatform)
                         + coachBlock
                         + "\n" + BuildPauseExitHintLine(snapshot)
                         + "\n" + settingsLine;
@@ -18287,7 +18330,7 @@ namespace GreedLast
 
         private static bool ShouldShowHapticsSetting(bool devToolsEnabled, bool isMobilePlatform)
         {
-            return devToolsEnabled || isMobilePlatform;
+            return GreedLastPlayerInputPolicy.ShowHapticsSetting(devToolsEnabled, isMobilePlatform);
         }
 
         private void SetRunMenuButtonLayout(bool pauseMenu)
@@ -25076,22 +25119,19 @@ namespace GreedLast
 
         private static string BuildPauseMenuResumeLineForMode(bool devToolsEnabled)
         {
-            return devToolsEnabled ? "ESC/P 또는 재개로 이어가기" : "재개 버튼으로 이어가기";
+            return GreedLastPlayerInputPolicy.ResumeHint(devToolsEnabled, isMobilePlatform: true);
         }
 
         private static string BuildRunPauseButtonLabelForMode(GreedLastRunSnapshot snapshot, bool devToolsEnabled)
         {
-            if (snapshot.ResumeCountdownActive)
-            {
-                return "재개 준비";
-            }
+            return BuildRunPauseButtonLabelForPlatform(snapshot, devToolsEnabled, isMobilePlatform: true);
+        }
 
-            if (snapshot.Paused)
-            {
-                return "재개";
-            }
-
-            return devToolsEnabled ? "ESC/P 메뉴" : "일시정지";
+        private static string BuildRunPauseButtonLabelForPlatform(
+            GreedLastRunSnapshot snapshot, bool devToolsEnabled, bool isMobilePlatform)
+        {
+            return GreedLastPlayerInputPolicy.PauseButtonLabel(snapshot.Paused, snapshot.ResumeCountdownActive,
+                devToolsEnabled, isMobilePlatform);
         }
 
         private static int BuildProfileBoardFontSize(string detail)
@@ -47134,11 +47174,12 @@ namespace GreedLast
                 DevToolsEnabled,
                 Application.isMobilePlatform,
                 SystemInfo.supportsAccelerometer);
-            return BuildSensorySettingsChecklistTextWithTilt(
+            return BuildSensorySettingsChecklistTextForCapabilities(
                 volume,
                 hapticsOn,
                 IsRotationTiltEnabledFromPrefs(),
-                showRotationTiltSetting);
+                showRotationTiltSetting,
+                GreedLastPlayerInputPolicy.ShowHapticsSetting(DevToolsEnabled, Application.isMobilePlatform));
         }
 
         public static string BuildSensorySettingsChecklistText(float volume, bool hapticsOn)
@@ -47156,11 +47197,19 @@ namespace GreedLast
             bool rotationTiltOn,
             bool showRotationTiltSetting)
         {
+            return BuildSensorySettingsChecklistTextForCapabilities(volume, hapticsOn,
+                rotationTiltOn, showRotationTiltSetting, showHapticsSetting: true);
+        }
+
+        private static string BuildSensorySettingsChecklistTextForCapabilities(
+            float volume, bool hapticsOn, bool rotationTiltOn, bool showRotationTiltSetting, bool showHapticsSetting)
+        {
             int volumePercent = Mathf.RoundToInt(NormalizeSfxVolume(volume) * 100f);
             string rotationTiltText = showRotationTiltSetting
                 ? "·기울임 " + (rotationTiltOn ? "ON" : "OFF")
                 : string.Empty;
-            return "감각: 소리 " + volumePercent + "%·진동 " + (hapticsOn ? "ON" : "OFF") + rotationTiltText;
+            string hapticsText = showHapticsSetting ? "·진동 " + (hapticsOn ? "ON" : "OFF") : string.Empty;
+            return "감각: 소리 " + volumePercent + "%" + hapticsText + rotationTiltText;
         }
 
         private AudioClip CreateTone(string name, float frequency, float duration, float gain)
@@ -48007,11 +48056,11 @@ namespace GreedLast
             switch (channel)
             {
                 case GreedLastRunChannel.Left:
-                    return devToolsEnabled ? "A/←" : "좌 탭";
+                    return devToolsEnabled ? GreedLastPlayerInputPolicy.ChannelKeyHint(0) : "좌 탭";
                 case GreedLastRunChannel.Center:
-                    return devToolsEnabled ? "S/Space" : "중 탭";
+                    return devToolsEnabled ? GreedLastPlayerInputPolicy.ChannelKeyHint(1) : "중 탭";
                 case GreedLastRunChannel.Right:
-                    return devToolsEnabled ? "D/→" : "우 탭";
+                    return devToolsEnabled ? GreedLastPlayerInputPolicy.ChannelKeyHint(2) : "우 탭";
                 default:
                     return string.Empty;
             }
@@ -48657,7 +48706,7 @@ namespace GreedLast
         private static string BuildRunLaneBaseLabel(int laneIndex, bool compact)
         {
             return BuildRunLaneBaseLabelForMode(laneIndex, compact,
-                DevToolsEnabled || !Application.isMobilePlatform);
+                GreedLastPlayerInputPolicy.ShowKeyboardHints(DevToolsEnabled, Application.isMobilePlatform));
         }
 
         private static string BuildCleanRunLaneLabelForPlatform(int laneIndex, GreedLastPatternModel pattern,
