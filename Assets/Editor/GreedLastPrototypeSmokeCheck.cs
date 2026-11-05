@@ -10921,10 +10921,10 @@ namespace GreedLast.Editor
                 && !pcChecklist.Contains("PgUp", StringComparison.Ordinal),
                 "PC player profile checks must describe supported input without mobile or development-only controls.");
             Require(InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
-                    "일반 런", "첫 탈출", false, false).StartsWith("Enter/강조:", StringComparison.Ordinal)
+                    "일반 런", "첫 탈출", false, false).StartsWith("로비에서 Enter/강조:", StringComparison.Ordinal)
                 && InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
-                    "일반 런", "첫 탈출", false, true).StartsWith("강조 버튼:", StringComparison.Ordinal),
-                "Profile next-action help must match the actual PC/touch confirmation controls.");
+                    "일반 런", "첫 탈출", false, true).StartsWith("로비에서 강조 버튼:", StringComparison.Ordinal),
+                "Profile recommendations must name the lobby context; Enter in the profile changes pages.");
             string pcGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", false);
             Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine",
                     "[S] 1000점 / PC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 콤9")
@@ -15516,7 +15516,8 @@ namespace GreedLast.Editor
                 string pendingSaveProfileText = backend.BuildProfileBoardText(1);
                 Require(
                     pendingSaveProfileText.Contains("Enter/강조: 저장 조합", StringComparison.Ordinal)
-                        && pendingSaveProfileText.Contains("저장 후보를 첫 슬롯에 저장", StringComparison.Ordinal)
+                        && pendingSaveProfileText.Contains("원하는 슬롯을 고른 뒤 후보 저장", StringComparison.Ordinal)
+                        && pendingSaveProfileText.Contains("로비에서 Enter/강조:", StringComparison.Ordinal)
                         && pendingSaveProfileText.Contains("포기", StringComparison.Ordinal),
                     "A pending save candidate profile page must name the highlighted save-loadout action and the skip path.");
                 string saveDraftText = backend.BuildSaveLoadoutDraftText();
@@ -19104,10 +19105,10 @@ namespace GreedLast.Editor
                 "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인",
                 true);
             Require(
-                releaseNextActionText.StartsWith("강조 버튼: 무한모드", StringComparison.Ordinal)
+                releaseNextActionText.StartsWith("로비에서 강조 버튼: 무한모드", StringComparison.Ordinal)
                     && !releaseNextActionText.Contains("Enter/강조", StringComparison.Ordinal)
-                    && editorNextActionText.StartsWith("Enter/강조: 무한모드", StringComparison.Ordinal),
-                "Profile next-action summaries must use highlighted-button wording for release/mobile and Enter wording for editor/debug.");
+                    && editorNextActionText.StartsWith("로비에서 Enter/강조: 무한모드", StringComparison.Ordinal),
+                "Profile recommendations must qualify both highlighted-button and keyboard actions as lobby actions.");
             string compactPlaytestOrder =
                 "1 일반 런: 첫 탈출 / 위험→동작·박자·보상·상태줄·코치"
                 + "\n2 저장 조합: 저장됨 / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진"

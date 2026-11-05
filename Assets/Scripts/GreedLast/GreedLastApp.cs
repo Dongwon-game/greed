@@ -4045,6 +4045,8 @@ namespace GreedLast
 
         private static bool IsRecordBoardCoachingPart(string part)
         {
+            if (part.StartsWith("로비에서 Enter/강조:", StringComparison.Ordinal)
+                || part.StartsWith("로비에서 강조 버튼:", StringComparison.Ordinal)) return true;
             if (part.StartsWith("종료 구간 실수 ", StringComparison.Ordinal)
                 || part.StartsWith("종료 구간 보정 ", StringComparison.Ordinal))
             {
@@ -4899,7 +4901,7 @@ namespace GreedLast
                 highlightAction = "저장 조합";
                 if (!HasAnySaveLoadoutSlot())
                 {
-                    return "저장 후보를 첫 슬롯에 저장 또는 포기";
+                    return "원하는 슬롯을 고른 뒤 후보 저장 또는 포기";
                 }
                 return "저장 조합에서 후보 비교 후 저장/포기";
             }
@@ -4981,7 +4983,8 @@ namespace GreedLast
             {
                 return action;
             }
-            string prefix = GreedLastPlayerInputPolicy.PrimaryActionPrefix(devToolsEnabled, isMobilePlatform);
+            // Enter changes pages inside the profile; this recommendation is a lobby action.
+            string prefix = "로비에서 " + GreedLastPlayerInputPolicy.PrimaryActionPrefix(devToolsEnabled, isMobilePlatform);
             if (string.IsNullOrEmpty(action))
             {
                 return prefix + ": " + highlightAction;

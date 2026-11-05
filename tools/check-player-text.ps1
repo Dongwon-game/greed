@@ -62,7 +62,7 @@ foreach ($dev in @($false,$true)) {
             foreach ($key in @('A/←','S/Space','D/→','ESC/P','Enter:')) { Check "PC release $key" ($text.Contains($key)) }
             foreach ($wrong in @('모바일','터치','진동','F1 무적','PgUp')) { Check "PC release omits $wrong" (!$text.Contains($wrong)) }
         }
-        $prefix = if ($dev -or !$mobile) {'Enter/강조'} else {'강조 버튼'}
+        $prefix = if ($dev -or !$mobile) {'로비에서 Enter/강조'} else {'로비에서 강조 버튼'}
         Check "$mode next action" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('일반모드','다음 구간',$dev,$mobile)) -ceq "$($prefix): 일반모드 - 다음 구간")
         Check "$mode empty action" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('일반모드','',$dev,$mobile)) -ceq "$($prefix): 일반모드")
         Check "$mode no highlight" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('','다음 구간',$dev,$mobile)) -ceq '다음 구간')
@@ -70,6 +70,8 @@ foreach ($dev in @($false,$true)) {
     }
 }
 $records = @(
+    @('[S] 1000점 / 로비에서 Enter/강조: 저장 조합 - 원하는 슬롯 선택 / 콤9','[S] 1000점 / 콤9'),
+    @('[S] 1000점 / 로비에서 강조 버튼: 저장 조합 - 원하는 슬롯 선택 / 콤9','[S] 1000점 / 콤9'),
     @('[S] 1000점 / PC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 콤9','[S] 1000점 / 콤9'),
     @('PC 조작: A/← · S/Space · D/→','기록 없음'),
     @('[S] 1120점 / 검증 모드: 에디터 테스트키 ON / 체크 6/7 / Enter/강조: 무한모드 / 콤10','[S] 1120점 / 콤10'),
