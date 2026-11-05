@@ -3,12 +3,13 @@ param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [switch]$CueOnly,
-    [switch]$MenuOnly
+    [switch]$MenuOnly,
+    [switch]$SmokeOnly
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($CueOnly -and $MenuOnly) { throw 'Choose only one focused engine check.' }
+if (@(@($CueOnly,$MenuOnly,$SmokeOnly) | Where-Object {$_}).Count -gt 1) { throw 'Choose only one focused engine check.' }
 if ($env:OS -ne 'Windows_NT') { throw 'This isolated editor runner supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
@@ -17,7 +18,7 @@ $dirty = @(git -C $project status --porcelain --untracked-files=all -- $inputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Review and commit changed game/editor inputs before exporting a check.' }
 $head = (git -C $project rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'A committed source identity is required.' }
-$mode = if ($MenuOnly) { 'menu' } elseif ($CueOnly) { 'cue' } else { 'full' }
+$mode = if ($SmokeOnly) { 'smoke' } elseif ($MenuOnly) { 'menu' } elseif ($CueOnly) { 'cue' } else { 'full' }
 if (!$PSCmdlet.ShouldProcess($project, ('Export a private test product, seed its asset index and run the '+$mode+' engine check'))) { return }
 $projectArgument = '(?i)(?:^|\s)-projectPath\s+(?:"'+[regex]::Escape($project.Replace('\','/'))+'"|'+[regex]::Escape($project.Replace('\','/'))+'(?=\s|$))'
 $existing = @(Get-CimInstance Win32_Process | Where-Object {
@@ -61,7 +62,11 @@ $report = [ordered]@{Id=$id;SourceHead=$head;RunnerSHA256=(Get-FileHash -Literal
     StartedUtc=[DateTime]::UtcNow.ToString('O');CompletedUtc='';Succeeded=$false;Error='';
     Scope='Fresh exported editor product; seeded asset-index definition, engine frames and synthetic input in two reload modes. Not native OS input, new screen captures, audible output or device performance.';
     Product=$product;Processes=$processes;EngineReport='';EngineReportSHA256='';IndexSHA256='';SourceArchiveSHA256='';
+    SmokeOnly=[bool]$SmokeOnly;SmokePassed=$false;SmokeLogSHA256='';
     PersonalPreferencesUnchanged=$false;ProjectSettingsUnchanged=$false;OwnTestPreferencesRetained=$true}
+if ($SmokeOnly) {
+    $report.Scope = 'Fresh exported private editor product, headless Edit-mode smoke assertions only. No Play-mode engine cycles, native desktop input, screen captures or player build.'
+}
 
 function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) {
     $p = Start-Process -FilePath $unity -ArgumentList $Arguments -WindowStyle Hidden -PassThru
@@ -124,6 +129,16 @@ try {
     if ($prepared.id -cne $id -or $prepared.company -cne 'GreedLastPrototypeChecks' -or $prepared.product -cne $product) {
         throw 'Prepared identity mismatch.'
     }
+    if ($SmokeOnly) {
+        $smokeLog = Join-Path $root 'smoke.log'
+        Invoke-OwnedEditor @('-batchmode','-nographics','-quit','-projectPath',('"'+$copy+'"'),
+            '-executeMethod','GreedLast.Editor.GreedLastEngineLoopBootstrap.RunSmoke','-greed-engine-id',$id,
+            '-logFile',('"'+$smokeLog+'"')) 600000 'smoke'
+        $report.SmokePassed = [bool](Select-String -LiteralPath $smokeLog -SimpleMatch 'Greed Last prototype smoke check passed:')
+        $report.SmokeLogSHA256 = (Get-FileHash -LiteralPath $smokeLog).Hash
+        if (!$report.SmokePassed) { throw 'The isolated editor exited without a completed smoke check.' }
+        $report.Succeeded=$true
+    } else {
     $timeout = if ($CueOnly -or $MenuOnly) { 600000 } else { 1200000 }
     Invoke-OwnedEditor @('-batchmode','-force-d3d11','-projectPath',('"'+$copy+'"'),
         '-executeMethod','GreedLast.Editor.GreedLastEngineLoopBootstrap.Run','-greed-engine-id',$id,'-greed-engine-kind',$mode,
@@ -139,6 +154,7 @@ try {
         throw 'Required engine coverage or fixture preference restoration did not complete.'
     }
     $report.Succeeded=$true
+    }
 }
 catch {
     $report.Error=$_.Exception.ToString()

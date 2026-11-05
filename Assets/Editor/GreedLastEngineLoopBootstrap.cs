@@ -61,5 +61,15 @@ namespace GreedLast.Editor
             else if (kind == "menu") GreedLastPrototypePlayModeCheck.RunMenuComparison();
             else GreedLastPrototypePlayModeCheck.RunTrapCueBoundary();
         }
+
+        public static void RunSmoke()
+        {
+            string root = RequireOwnedExport(out string id);
+            if (!File.Exists(Path.Combine(root, "prepared-engine-project.json"))
+                || PlayerSettings.companyName != Company || Application.companyName != Company
+                || PlayerSettings.productName != "EngineLoop-" + id || Application.productName != PlayerSettings.productName)
+                throw new InvalidOperationException("Smoke checks require a fresh editor with the prepared private product identity.");
+            GreedLastPrototypeSmokeCheck.Run();
+        }
     }
 }

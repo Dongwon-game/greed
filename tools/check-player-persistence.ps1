@@ -39,15 +39,6 @@ if ($InteractiveMenus -and ($CaptureFrames -or $InteractiveWindow -or $Backgroun
 }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
-$release = if ($VerifiedReleasePath) { (Resolve-Path -LiteralPath $VerifiedReleasePath).Path }
-    else { Join-Path $project 'Builds\GreedLastPrototype' }
-if (!(Test-Path -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json') -PathType Leaf)) {
-    throw 'Provide -VerifiedReleasePath for an existing verified Windows build before exporting or launching a probe.'
-}
-# This read-only check also rejects stale/tampered metadata, development builds
-# and leaked probe types before spending time building an isolated product.
-$releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1') -ProjectPath $project -BuildPath $release -UnityEditorPath $unity | ConvertFrom-Json
-$releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
 $runtimeInputs = @('Assets', 'Packages', 'ProjectSettings')
@@ -90,6 +81,15 @@ $operation = if ($GiftHistory) { 'Seed three synthetic gift histories in a uniqu
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
+$release = if ($VerifiedReleasePath) { (Resolve-Path -LiteralPath $VerifiedReleasePath).Path }
+    else { Join-Path $project 'Builds\GreedLastPrototype' }
+if (!(Test-Path -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json') -PathType Leaf)) {
+    throw 'Provide -VerifiedReleasePath for an existing verified Windows build before exporting or launching a probe.'
+}
+# Preserve dirty-source and -WhatIf precedence; then validate before any export
+# or Unity launch, including metadata, file digests and fixture exclusion.
+$releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1') -ProjectPath $project -BuildPath $release -UnityEditorPath $unity | ConvertFrom-Json
+$releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
 $before = Read-PersonalPreferences
 $id = [Guid]::NewGuid().ToString('N')
 $root = [IO.Path]::GetFullPath((Join-Path $project ('Logs\PlayerPersistenceChecks\' + $id)))
