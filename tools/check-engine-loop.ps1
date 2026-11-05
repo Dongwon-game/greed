@@ -4,12 +4,13 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [switch]$CueOnly,
     [switch]$MenuOnly,
-    [switch]$SmokeOnly
+    [switch]$SmokeOnly,
+    [switch]$BuildCandidate
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if (@(@($CueOnly,$MenuOnly,$SmokeOnly) | Where-Object {$_}).Count -gt 1) { throw 'Choose only one focused engine check.' }
+if (@(@($CueOnly,$MenuOnly,$SmokeOnly,$BuildCandidate) | Where-Object {$_}).Count -gt 1) { throw 'Choose only one focused engine check.' }
 if ($env:OS -ne 'Windows_NT') { throw 'This isolated editor runner supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
@@ -18,7 +19,7 @@ $dirty = @(git -C $project status --porcelain --untracked-files=all -- $inputs)
 if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Review and commit changed game/editor inputs before exporting a check.' }
 $head = (git -C $project rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'A committed source identity is required.' }
-$mode = if ($SmokeOnly) { 'smoke' } elseif ($MenuOnly) { 'menu' } elseif ($CueOnly) { 'cue' } else { 'full' }
+$mode = if ($BuildCandidate) { 'candidate' } elseif ($SmokeOnly) { 'smoke' } elseif ($MenuOnly) { 'menu' } elseif ($CueOnly) { 'cue' } else { 'full' }
 if (!$PSCmdlet.ShouldProcess($project, ('Export a private test product, seed its asset index and run the '+$mode+' engine check'))) { return }
 $projectArgument = '(?i)(?:^|\s)-projectPath\s+(?:"'+[regex]::Escape($project.Replace('\','/'))+'"|'+[regex]::Escape($project.Replace('\','/'))+'(?=\s|$))'
 $existing = @(Get-CimInstance Win32_Process | Where-Object {
@@ -63,9 +64,13 @@ $report = [ordered]@{Id=$id;SourceHead=$head;RunnerSHA256=(Get-FileHash -Literal
     Scope='Fresh exported editor product; seeded asset-index definition, engine frames and synthetic input in two reload modes. Not native OS input, new screen captures, audible output or device performance.';
     Product=$product;Processes=$processes;EngineReport='';EngineReportSHA256='';IndexSHA256='';SourceArchiveSHA256='';
     SmokeOnly=[bool]$SmokeOnly;SmokePassed=$false;SmokeLogSHA256='';
+    BuildCandidate=[bool]$BuildCandidate;CandidateBuildPath='';CandidateBuildInfoSHA256='';CandidateVerificationSHA256='';
     PersonalPreferencesUnchanged=$false;ProjectSettingsUnchanged=$false;OwnTestPreferencesRetained=$true}
 if ($SmokeOnly) {
     $report.Scope = 'Fresh exported private editor product, headless Edit-mode smoke assertions only. No Play-mode engine cycles, native desktop input, screen captures or player build.'
+}
+if ($BuildCandidate) {
+    $report.Scope = 'Fresh private editor product, headless smoke and nondevelopment Windows candidate build with static artifact/IL verification. Does not replace the user release or verify native input, screen layout, sound or Play-mode engine cycles.'
 }
 
 function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) {
@@ -137,6 +142,21 @@ try {
         $report.SmokePassed = [bool](Select-String -LiteralPath $smokeLog -SimpleMatch 'Greed Last prototype smoke check passed:')
         $report.SmokeLogSHA256 = (Get-FileHash -LiteralPath $smokeLog).Hash
         if (!$report.SmokePassed) { throw 'The isolated editor exited without a completed smoke check.' }
+        $report.Succeeded=$true
+    } elseif ($BuildCandidate) {
+        $buildLog = Join-Path $root 'candidate-build.log'
+        Invoke-OwnedEditor @('-batchmode','-nographics','-quit','-projectPath',('"'+$copy+'"'),
+            '-executeMethod','GreedLast.Editor.GreedLastEngineLoopBootstrap.BuildReviewCandidate','-greed-engine-id',$id,
+            '-logFile',('"'+$buildLog+'"')) 900000 'candidate-build'
+        $report.SmokePassed = [bool](Select-String -LiteralPath $buildLog -SimpleMatch 'Greed Last prototype smoke check passed:')
+        $report.SmokeLogSHA256 = (Get-FileHash -LiteralPath $buildLog).Hash
+        if (!$report.SmokePassed) { throw 'The candidate build did not complete its smoke check.' }
+        $report.CandidateBuildPath = Join-Path $copy 'Builds/GreedLastPrototype'
+        $report.CandidateBuildInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $report.CandidateBuildPath 'VerifiedBuildInfo.json')).Hash
+        $verification = & (Join-Path $project 'tools/verify-prototype-build.ps1') -ProjectPath $copy -UnityEditorPath $unity
+        $verificationPath = Join-Path $root 'candidate-verification.json'
+        [IO.File]::WriteAllText($verificationPath,[string]$verification)
+        $report.CandidateVerificationSHA256 = (Get-FileHash -LiteralPath $verificationPath).Hash
         $report.Succeeded=$true
     } else {
     $timeout = if ($CueOnly -or $MenuOnly) { 600000 } else { 1200000 }

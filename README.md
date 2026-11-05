@@ -43,6 +43,7 @@ Android 설치·APK·휴대폰 센서/지연/FPS 확인은 현재 완료 조건�
 - 무적·바로가기·위협 조절은 에디터/개발 빌드 전용이다. 확인용으로 개인 진행도나 보관할 조합을 초기화·소모하지 않는다.
 - 실제 종료/새 프로세스의 저장 검사는 [실행 파일 검증](Docs/GreedLast_Prototype_PlayerChecks.md)을 따른다. 시험 전용 복사본/제품을 쓰며 정식 실행본에 시험 코드를 넣지 않는다.
 - 새 사본의 전체 엔진 검사는 `tools/check-engine-loop.ps1`, 짧은 함정 예고/재개 검사는 `-CueOnly`다. 개인 저장소와 분리해 두 재로딩 방식을 확인하며, 준비 조건/범위는 같은 [검증 절차](Docs/GreedLast_Prototype_PlayerChecks.md#새-사본의-엔진-검사-도구)를 따른다.
+- `check-engine-loop.ps1 -SmokeOnly`는 격리 사본에서 그래픽/창 없이 편집기 스모크만 실행한다. 전체 Play-mode 사이클과 실제 PC 입력/손맛 확인은 별개다. 저장 검사에서 기본 실행본 폴더가 없으면 `check-player-persistence.ps1 -VerifiedReleasePath '<검증 실행본 폴더>'`를 사용한다.
 
 ## 저장소 구성
 

@@ -323,10 +323,12 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 1. 개인 Greed 플레이어와 해당 프로젝트 Unity 에디터를 닫는다. 도구는 열려 있으면 건드리지 않고 중단한다.
 2. Unity `6000.4.3f1`, Windows Build Support, 정식 Windows 빌드를 준비한다. 게임 소스·장면·자원·패키지·설정 변경을 먼저 검토/커밋한다.
-3. PowerShell에서 프로젝트의 `tools/check-player-persistence.ps1`을 실행한다. `-WhatIf`는 생성 전 중단한다. `-CaptureFrames`를 명시한 경우에만 별도 오프스크린 렌더 일곱 장을 먼저 검사한다.
+3. PowerShell에서 프로젝트의 `tools/check-player-persistence.ps1`을 실행한다. 기본 `Builds/GreedLastPrototype`이 없는 복구 사본/worktree에서는 `-VerifiedReleasePath '<검증된 Windows 실행본 폴더>'`를 명시한다. `-WhatIf`는 생성 전 중단한다. `-CaptureFrames`를 명시한 경우에만 별도 오프스크린 렌더 일곱 장을 먼저 검사한다.
 4. 마지막 출력의 `Report`에서 `Succeeded`, 단계별 해시, 소유 프로세스 종료, 개인 설정/원본 설정 불변을 확인한다. 실패 JSON과 로그는 삭제하거나 성공으로 덮어쓰지 않는다.
 
 새 복사본의 Library/실행본을 만들므로 여유 디스크와 컴파일 시간이 필요하다. 생성 자료는 `Logs` 아래에 보존하고 GitHub에는 포함하지 않는다. 이 도구는 알림·관리자 창·예약 작업·PC 종료를 설치하지 않는다.
+
+명시 실행본은 누출 시험 코드가 사용자 제품에 들어가면 거부되는지 확인하는 읽기 전용 baseline이다. 파일 해시/Unity 버전/비개발·스모크 메타데이터/IL을 시작 전에 검증한다. 이 과거 실행본으로 새 소스의 성공을 대신하지 않는다. `-VerifiedReleasePath`는 다른 저장 검사 옵션과 함께 쓸 수 있다. 폴더가 없으면 export/Unity 실행 전에 멈춘다. 읽기 전용 실행본 확인은 `verify-prototype-build.ps1 -BuildPath '<폴더>'`로도 가능하다.
 
 ## 열 번의 새 프로세스
 
@@ -368,9 +370,15 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 ./tools/check-engine-loop.ps1
 ./tools/check-engine-loop.ps1 -CueOnly
 ./tools/check-engine-loop.ps1 -MenuOnly
+./tools/check-engine-loop.ps1 -SmokeOnly
+./tools/check-engine-loop.ps1 -BuildCandidate
 ```
 
-모든 명령을 연속 실행해야 하는 것은 아니다. `-WhatIf`는 파일/시험 제품 생성 전 미리 보기다. 기본 모드는 대표 전체 루프, `-CueOnly`는 함정 예고/재개, `-MenuOnly`는 위 실제 저장 비교 내용/데이터 보존만 두 재로딩 방식에서 검사한다. 두 집중 옵션을 섞으면 파일 생성 전에 거부한다. 짧은 성공을 전체 완주/저장/사용권 검사의 성공으로 세지 않는다. 기본 검사는 준비/컴파일 외 실제 엔진 구간에 약 15분이 걸렸고 시간은 PC 상태에 따라 달라진다.
+모든 명령을 연속 실행해야 하는 것은 아니다. `-WhatIf`는 파일/시험 제품 생성 전 미리 보기다. 기본 모드는 대표 전체 루프, `-CueOnly`는 함정 예고/재개, `-MenuOnly`는 위 실제 저장 비교 내용/데이터 보존만 두 재로딩 방식에서 검사한다. 집중 옵션들을 섞으면 파일 생성 전에 거부한다. 짧은 성공을 전체 완주/저장/사용권 검사의 성공으로 세지 않는다. 기본 검사는 준비/컴파일 외 실제 엔진 구간에 약 15분이 걸렸고 시간은 PC 상태에 따라 달라진다.
+
+`-SmokeOnly`는 같은 사본/제품 격리를 사용하지만 그래픽 없는 Edit-mode 스모크만 실행한다. 두 재로딩 방식의 Play-mode 사이클을 실행하지 않는다. 준비/스모크 프로세스 모두 숨김 `-batchmode -nographics -quit`이며, 최종 보고서는 `Kind=smoke`, `SmokePassed`, `SmokeLogSHA256`를 포함한다. 성공 종료 코드와 완료 마커를 함께 요구한다. 직접 창/입력/가청 소리 확인을 대신하지 않는다.
+
+`-BuildCandidate`는 같은 격리 제품에서 스모크 후 비개발 Windows 후보를 만들고 파일 해시·IL·시험 코드 제외를 확인한다. 결과의 `CandidateBuildPath`는 사본 안의 별도 실행본이다. 기존 사용자 배포본/ZIP/`PCReview-current.json`을 교체하지 않는다. 실제 화면/입력 확인 전에는 배포 완료로 표시하지 않는다. 스모크가 포함되므로 같은 입력에서 후보 빌드 직전에 `-SmokeOnly`를 따로 실행할 필요는 없다.
 
 도구는 커밋을 `Logs/EngineLoopChecks/<새 GUID>/Project`에 내보내고 기본 Assets 인덱스 정의를 직접 만든다. 개인 `Search.settings`·검색 기록·계정 파일을 복사하지 않는다. SDK로 시험 회사/제품을 준비하는 편집기를 먼저 종료한 뒤, 해당 고유 제품으로 새 편집기를 시작한다. 열린 개인 편집기/플레이어는 종료시키지 않고 도구가 중단한다. 개인 Greed 저장값과 원본 PlayerSettings는 전후 읽기 전용 비교다.
 

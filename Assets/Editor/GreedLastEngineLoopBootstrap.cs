@@ -71,5 +71,15 @@ namespace GreedLast.Editor
                 throw new InvalidOperationException("Smoke checks require a fresh editor with the prepared private product identity.");
             GreedLastPrototypeSmokeCheck.Run();
         }
+
+        public static void BuildReviewCandidate()
+        {
+            string root = RequireOwnedExport(out string id);
+            if (!File.Exists(Path.Combine(root, "prepared-engine-project.json"))
+                || PlayerSettings.companyName != Company || Application.companyName != Company
+                || PlayerSettings.productName != "EngineLoop-" + id || Application.productName != PlayerSettings.productName)
+                throw new InvalidOperationException("Candidate builds require the prepared private product; preserve the user release.");
+            GreedLastSceneBuilder.BuildVerifiedWindowsPrototype();
+        }
     }
 }
