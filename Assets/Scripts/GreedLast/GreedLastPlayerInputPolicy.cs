@@ -40,5 +40,11 @@ namespace GreedLast
             => ShowKeyboardHints(devToolsEnabled, isMobilePlatform)
                 ? "ESC/P 또는 재개를 누르면 카운트와 앞 박자 여유 뒤에 이어집니다."
                 : "재개 버튼을 누르면 카운트와 앞 박자 여유 뒤에 이어집니다.";
+
+        public static string PauseActionLabel(bool paused, bool devToolsEnabled, bool isMobilePlatform)
+        {
+            string action = paused ? "재개" : "일시정지";
+            return ShowKeyboardHints(devToolsEnabled, isMobilePlatform) ? action + " (ESC/P)" : action;
+        }
     }
 }

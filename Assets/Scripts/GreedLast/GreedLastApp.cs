@@ -17275,7 +17275,8 @@ namespace GreedLast
                 && GreedLastApp.ShouldContinuePracticeToFirstNormal(snapshot,
                     PlayerPrefs.GetInt(GreedLastApp.PracticeCompletedPrefsKey, 0) == 1);
             SetButtonLabel(nextPatternButton, practiceCandidateHandoff ? "저장 후보 확인"
-                : BuildRunPrimaryButtonLabelForMode(snapshot, normalClearReady, UsePlayerRunControls));
+                : BuildRunPrimaryButtonLabelForPlatform(snapshot, normalClearReady, UsePlayerRunControls,
+                    DevToolsEnabled, Application.isMobilePlatform));
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForPlatform(
                 snapshot, DevToolsEnabled, Application.isMobilePlatform));
@@ -18049,6 +18050,16 @@ namespace GreedLast
             if (playerControls && !snapshot.Stopped && !snapshot.Paused && !snapshot.ChoiceActive)
                 return snapshot.CountdownActive ? "시작 준비" : snapshot.AutoFlow ? "일시정지" : "함정 재개";
             return BuildRunNextActionButtonLabel(snapshot, normalClearReady);
+        }
+
+        private static string BuildRunPrimaryButtonLabelForPlatform(GreedLastRunSnapshot snapshot,
+            bool normalClearReady, bool playerControls, bool devToolsEnabled, bool isMobilePlatform)
+        {
+            bool resumeAction = snapshot.Paused && !snapshot.ResumeCountdownActive;
+            bool pauseAction = !snapshot.Paused && !snapshot.CountdownActive && snapshot.AutoFlow;
+            if (!snapshot.Stopped && !snapshot.ChoiceActive && (resumeAction || (playerControls && pauseAction)))
+                return GreedLastPlayerInputPolicy.PauseActionLabel(snapshot.Paused, devToolsEnabled, isMobilePlatform);
+            return BuildRunPrimaryButtonLabelForMode(snapshot, normalClearReady, playerControls);
         }
 
         private static string BuildRunNextActionButtonLabel(GreedLastRunSnapshot snapshot, bool normalClearReady)

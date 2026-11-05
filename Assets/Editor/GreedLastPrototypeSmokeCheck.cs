@@ -9880,6 +9880,11 @@ namespace GreedLast.Editor
             Require(InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", runSnapshot, false, true) == "일시정지"
                 && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForMode", runSnapshot, false, false) == autoRunningNextLabel,
                 "Player controls must use real pause while detailed controls retain the development auto-flow action.");
+            Require(InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForPlatform", runSnapshot, false, true, false, false)
+                    == "일시정지 (ESC/P)"
+                && InvokeRuntimeUiLabel("BuildRunPrimaryButtonLabelForPlatform", runSnapshot, false, true, false, true)
+                    == "일시정지",
+                "The primary PC pause action must show its shortcut at readable size while mobile retains touch wording.");
             Require(
                 runSnapshot.AutoFlow && autoRunningNextLabel == "자동 정지",
                 "A normal run released from the opening countdown must default to auto-flow and expose auto-stop. Actual: "

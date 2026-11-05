@@ -3497,14 +3497,14 @@ namespace GreedLast.Editor
                     "Enter must not bypass or pause the opening countdown through a disabled clean action.");
                 core.Tick(Time.realtimeSinceStartup + 2f);
                 core.RequestNextPattern(Time.realtimeSinceStartup);
-                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지",
+                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)",
                     "Live clean play must offer a real pause while automatic traps remain enabled.");
                 GreedLastRunSnapshot before = latest();
                 Require(!Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "Clean gameplay must keep abandonment inside the pause menu, not next to the live action.");
                 Click(primary);
                 Require(latest().Paused && !latest().AutoFlow && Read<bool>(core, "autoFlowBeforePause")
-                    && Label() == "재개"
+                    && Label() == "재개 (ESC/P)"
                     && Read<GameObject>(ui, "pauseMenuOverlay").activeInHierarchy,
                     "The app-bound clean primary press must open the separate pause menu, not disable trap spawning.");
                 Require(Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
@@ -3516,7 +3516,7 @@ namespace GreedLast.Editor
                 for (int toggle = 0; toggle < 2; toggle++)
                 {
                     ui.ToggleDevCleanView();
-                    Require(Label() == "재개" && latest().Paused,
+                    Require(Label() == "재개 (ESC/P)" && latest().Paused,
                         "F11 must not change or dismiss the paused primary action.");
                 }
                 Click(primary);
@@ -3527,7 +3527,7 @@ namespace GreedLast.Editor
                 Require(Read<float>(core, "resumeCountdownEndsAt") == resumeEnd,
                     "Repeated Enter during resume preparation must not alter its deadline.");
                 core.Tick(resumeEnd + 0.01f);
-                Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow && Label() == "일시정지"
+                Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)"
                     && !Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "Resuming must restore the same trap and automatic flow, with pause as the clean action.");
                 VerifyHeldModeChange();
@@ -3543,7 +3543,7 @@ namespace GreedLast.Editor
                     && !latest().Paused && !latest().AutoFlow,
                     "Clean view must expose a way to resume development-stopped traps without silently changing run state.");
                 Click(primary);
-                Require(latest().AutoFlow && !latest().Paused && Label() == "일시정지"
+                Require(latest().AutoFlow && !latest().Paused && Label() == "일시정지 (ESC/P)"
                     && latest().ActivePattern == beforeFlowRestart.ActivePattern
                     && latest().Pattern.PatternId == beforeFlowRestart.Pattern.PatternId
                     && latest().Health == beforeFlowRestart.Health && latest().Score == beforeFlowRestart.Score
@@ -3555,7 +3555,7 @@ namespace GreedLast.Editor
                 Require(!latest().Paused && latest().AutoFlow && Label() == "자동 정지",
                     "The development command must still re-enable automatic trap generation.");
                 VerifyHeldModeChange();
-                Require(ui.UsePlayerRunControls && Label() == "일시정지",
+                Require(ui.UsePlayerRunControls && Label() == "일시정지 (ESC/P)",
                     "Returning to clean play must immediately restore the matching primary label.");
                 GreedLastRunSnapshot active = latest();
                 core.HandleInput(active.Pattern.Channel, Read<float>(core, "patternStartedAt")
@@ -3574,7 +3574,7 @@ namespace GreedLast.Editor
                     && Mathf.Approximately(latest().Distance, gap.Distance),
                     "Resuming a gap must preserve totals and schedule the next trap instead of starting a pause countdown.");
                 core.Tick(Read<float>(core, "nextPatternAt") + 0.01f);
-                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지"
+                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)"
                     && latest().Pattern.PatternId != active.Pattern.PatternId,
                     "After the real automatic delay, gap recovery must generate the next practice trap and restore pause.");
                 Method(app, "RequestNextRunPattern").Invoke(app, null);

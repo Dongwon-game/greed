@@ -37,6 +37,12 @@ foreach($dev in @($false,$true)) {
         Require ($instruction.Contains('ESC/P') -eq $keyboard) 'Pause header instructions lost the player keyboard capability.'
         Require ($instruction.Contains('카운트와 앞 박자 여유')) 'Resume help must preserve the countdown and safe lead-in contract.'
         Require ($primary.Contains('Enter') -eq $keyboard) 'Menu confirmation instructions lost the player keyboard capability.'
+        foreach($paused in @($false,$true)) {
+            $action=[GreedLast.GreedLastPlayerInputPolicy]::PauseActionLabel($paused,$dev,$mobile)
+            $expected=if($paused){'재개'}else{'일시정지'}
+            if($keyboard){$expected+=' (ESC/P)'}
+            Require ($action -ceq $expected) 'The large pause/resume action must advertise the actual keyboard shortcut.'
+        }
     }
 }
 $keys=@(0..2|ForEach-Object {[GreedLast.GreedLastPlayerInputPolicy]::ChannelKeyHint($_)})
