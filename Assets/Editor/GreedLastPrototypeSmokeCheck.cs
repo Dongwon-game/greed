@@ -10916,6 +10916,10 @@ namespace GreedLast.Editor
                     "일반 런", "첫 탈출", false, true).StartsWith("강조 버튼:", StringComparison.Ordinal),
                 "Profile next-action help must match the actual PC/touch confirmation controls.");
             string pcGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", false);
+            Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine",
+                    "[S] 1000점 / PC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 콤9")
+                    == "[S] 1000점 / 콤9",
+                "Keyboard alias slashes must not leave Space or arrow fragments in record rows.");
             string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
             Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
                 && pcGuide.Contains("A/← · S/Space · D/→", StringComparison.Ordinal)

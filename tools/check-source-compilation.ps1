@@ -40,6 +40,9 @@ $playerRsp = @($candidates | Where-Object {
 if ($editorRsp.Count -ne 1 -or $playerRsp.Count -ne 1) { throw 'Require one unambiguous editor and nondevelopment Windows reference response file.' }
 $editorChecksRsp = Join-Path $editorRsp[0].DirectoryName 'Assembly-CSharp-Editor.rsp'
 if (!(Test-Path -LiteralPath $editorChecksRsp)) { throw 'Editor check compilation references are missing.' }
+$runtimeSources = @(Get-ChildItem -LiteralPath (Join-Path $project 'Assets/Scripts') -Recurse -Filter '*.cs' | Sort-Object FullName)
+$checkSources = @(Get-ChildItem -LiteralPath (Join-Path $project 'Assets/Editor') -Recurse -Filter '*.cs' | Sort-Object FullName)
+if (!$runtimeSources.Count -or !$checkSources.Count) { throw 'Require nonempty runtime and editor source sets; an empty assembly is not a project check.' }
 if ($ValidateOnly) {
     [pscustomobject]@{Validated=$true;CompilerInvoked=$false;UnityInvoked=$false;
         PlannedCompilations=@('EditorRuntime','WindowsReleaseRuntime','EditorChecks')} | ConvertTo-Json -Compress
@@ -47,28 +50,29 @@ if ($ValidateOnly) {
 }
 $root = Join-Path $project ('Logs/SourceCompilationChecks/' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($root)
-$runtimeSources = @(Get-ChildItem -LiteralPath (Join-Path $project 'Assets/Scripts') -Recurse -Filter '*.cs' | Sort-Object FullName)
-$checkSources = @(Get-ChildItem -LiteralPath (Join-Path $project 'Assets/Editor') -Recurse -Filter '*.cs' | Sort-Object FullName)
 $sourceHashes = @($runtimeSources + $checkSources | ForEach-Object {
     @{Path=$_.FullName;SHA256=(Get-FileHash -LiteralPath $_.FullName).Hash}
 })
 $watch = @((Join-Path $reference 'ProjectSettings/ProjectSettings.asset'), (Join-Path $project 'ProjectSettings/ProjectSettings.asset'),
     $editorRsp[0].FullName,$playerRsp[0].FullName,$editorChecksRsp)
 $before = @($watch | ForEach-Object { (Get-FileHash -LiteralPath $_).Hash })
-$report = [ordered]@{BaseHead=(git -C $project rev-parse HEAD).Trim();SourceTreeStatus=@(git -C $project status --porcelain -- Assets Packages ProjectSettings);Succeeded=$false;Error='';CompilerSHA256=(Get-FileHash -LiteralPath $compiler).Hash;
+$report = [ordered]@{BaseHead=(git -C $project rev-parse HEAD).Trim();SourceTreeStatus=@(git -C $project status --porcelain -- Assets Packages ProjectSettings);Succeeded=$false;Error='';CompilerSHA256=(Get-FileHash -LiteralPath $compiler).Hash;RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath).Hash;
     Scope='C# compilation against an existing matching Unity reference cache only. No Unity editor/player launch, UI, asset import, Play mode, build, save access or gameplay verification.';
     StartedUtc=[DateTime]::UtcNow.ToString('o');CompletedUtc='';Inputs=$sourceHashes;Compilations=@();WatchedInputsUnchanged=$false}
 function Compile([string]$Name, [string]$RspPath, $Sources, [string]$AssemblyName, [string]$RuntimeRef='') {
     $output = Join-Path $root $Name
     [void][IO.Directory]::CreateDirectory($output)
     $arguments = [Collections.Generic.List[string]]::new()
+    $runtimeReferenceCount = 0
     foreach ($line in (Get-Content -LiteralPath $RspPath)) {
         if ($line -match '^"Assets/.+\.cs"$' -or $line -match '^[-/](out|refout|errorlog|pdb|doc|generatedfilesout):') { continue }
         if ($line.StartsWith('@') -or $line -match '^[-/]recurse:') { throw 'Nested response files or recursive source inputs require review.' }
         if ($RuntimeRef -and $line -match '^[-/]r:"[^"]*/Assembly-CSharp\.ref\.dll"$') {
+            $runtimeReferenceCount++
             $arguments.Add('-r:"' + $RuntimeRef.Replace('\','/') + '"')
         } else { $arguments.Add($line) }
     }
+    if ($RuntimeRef -and $runtimeReferenceCount -ne 1) { throw 'Editor checks must reference exactly one newly compiled runtime assembly.' }
     $arguments.Add('-out:"' + (Join-Path $output ($AssemblyName+'.dll')).Replace('\','/') + '"')
     $arguments.Add('-refout:"' + (Join-Path $output ($AssemblyName+'.ref.dll')).Replace('\','/') + '"')
     $arguments.Add('-errorlog:"' + (Join-Path $output 'diagnostics.sarif').Replace('\','/') + '"')
@@ -80,17 +84,25 @@ function Compile([string]$Name, [string]$RspPath, $Sources, [string]$AssemblyNam
     finally { Pop-Location }
     $report.Compilations += @{Name=$Name;ExitCode=$exitCode;SourceCount=@($Sources).Count;ReferenceRspSHA256=(Get-FileHash -LiteralPath $RspPath).Hash}
     if ($exitCode -ne 0) { throw ($Name+' C# compilation failed; inspect preserved diagnostics.') }
+    foreach ($path in @((Join-Path $output ($AssemblyName+'.dll')), (Join-Path $output ($AssemblyName+'.ref.dll')))) {
+        if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            throw ($Name+' returned without a usable compiled assembly.')
+        }
+    }
 }
 try {
+    Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $root 'runner.ps1')
     Compile 'EditorRuntime' $editorRsp[0].FullName $runtimeSources 'Assembly-CSharp'
     Compile 'WindowsReleaseRuntime' $playerRsp[0].FullName $runtimeSources 'Assembly-CSharp'
     Compile 'EditorChecks' $editorChecksRsp $checkSources 'Assembly-CSharp-Editor' (Join-Path $root 'EditorRuntime/Assembly-CSharp.ref.dll')
     $report.Succeeded=$true
 } catch { $report.Error=$_.Exception.Message }
 finally {
-    $after = @($watch | ForEach-Object { (Get-FileHash -LiteralPath $_).Hash })
-    $sameSources = @($sourceHashes | Where-Object { (Get-FileHash -LiteralPath $_.Path).Hash -cne $_.SHA256 }).Count -eq 0
-    $report.WatchedInputsUnchanged=($before -join ',') -ceq ($after -join ',') -and $sameSources
+    try {
+        $after = @($watch | ForEach-Object { (Get-FileHash -LiteralPath $_).Hash })
+        $sameSources = @($sourceHashes | Where-Object { (Get-FileHash -LiteralPath $_.Path).Hash -cne $_.SHA256 }).Count -eq 0
+        $report.WatchedInputsUnchanged=($before -join ',') -ceq ($after -join ',') -and $sameSources
+    } catch { $report.Error += ' Input preservation check failed: '+$_.Exception.Message }
     $report.Succeeded=$report.Succeeded -and $report.WatchedInputsUnchanged
     $report.CompletedUtc=[DateTime]::UtcNow.ToString('o')
     $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $root 'report.json') -Encoding utf8

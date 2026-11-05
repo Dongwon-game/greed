@@ -3822,6 +3822,12 @@ namespace GreedLast
                 }
                 if (text[i] == '/')
                 {
+                    // A slash inside a keyboard alias is not a record-field separator.
+                    // Keep the token intact so control-overlay filtering removes it whole.
+                    if (IsRecordBoardKeyboardAliasSlash(text, i))
+                    {
+                        continue;
+                    }
                     bool num = i > 0 && char.IsDigit(text[i - 1]);
                     bool nextIsDigit = i + 1 < text.Length && char.IsDigit(text[i + 1]);
                     if (num & nextIsDigit)
@@ -3834,6 +3840,23 @@ namespace GreedLast
             }
             parts.Add(text.Substring(partStartIndex));
             return parts.ToArray();
+        }
+
+        private static bool IsRecordBoardKeyboardAliasSlash(string text, int index)
+        {
+            foreach (string alias in new[] { "A/←", "S/Space", "D/→", "ESC/P", "Enter/강조" })
+            {
+                int start = index - alias.IndexOf('/');
+                int end = start + alias.Length;
+                if (start >= 0 && end <= text.Length
+                    && string.CompareOrdinal(text, start, alias, 0, alias.Length) == 0
+                    && (start == 0 || !char.IsLetterOrDigit(text[start - 1]))
+                    && (end == text.Length || !char.IsLetterOrDigit(text[end])))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool IsRecordBoardSanitizationSeparator(string text, int index)
@@ -4229,6 +4252,11 @@ namespace GreedLast
                 return false;
             }
             string trimmed = part.Trim();
+            if (trimmed == "A/←" || trimmed == "S/Space" || trimmed == "D/→" || trimmed == "키·클릭"
+                || trimmed.StartsWith("ESC/P ", StringComparison.Ordinal))
+            {
+                return true;
+            }
             if (trimmed.StartsWith("조작:", StringComparison.Ordinal) || trimmed.StartsWith("조작 ", StringComparison.Ordinal) || trimmed == "다음" || trimmed == "이전" || trimmed.StartsWith("다음 기록", StringComparison.Ordinal) || trimmed.StartsWith("이전 기록", StringComparison.Ordinal) || trimmed.StartsWith("페이지 이동", StringComparison.Ordinal) || trimmed.StartsWith("요약 화면", StringComparison.Ordinal) || trimmed.StartsWith("일반 요약", StringComparison.Ordinal) || trimmed.StartsWith("무한 요약", StringComparison.Ordinal) || trimmed.StartsWith("일반 랭킹", StringComparison.Ordinal) || trimmed.StartsWith("무한 랭킹", StringComparison.Ordinal))
             {
                 return true;
