@@ -341,6 +341,9 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
+        if ($CaptureFrames -and $phase -eq 'clear' -and !$result.practiceCompletedBeforeCourseEntry) {
+            throw 'The post-render course must preserve and explicitly handle prior practice completion.'
+        }
         if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
             $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60 -or $result.recordInvalidControls -ne 9) {
             throw ('Full-record comparison controls are incomplete: ' + $phase)
@@ -397,6 +400,7 @@ try {
         }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
+            PracticeCompletedBeforeCourseEntry=$result.practiceCompletedBeforeCourseEntry;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
             InputUnavailableWaitFrames=$result.inputUnavailableWaitFrames; ResumeCountdownWaitFrames=$result.resumeCountdownWaitFrames;
             NativeLoadoutLoopCompleted=$result.nativeLoopCompleted; NativeMenuCandidatePreserved=$result.nativeMenuCandidatePreserved;

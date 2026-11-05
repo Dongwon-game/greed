@@ -31,6 +31,7 @@ namespace GreedLast.PlayerChecks
             public string phase, startedUtc, completedUtc, company, product, error, screen;
             public string scope = "Pre-exit assertions in an isolated Windows player. Later processes verify actual persistence. Real frames and app commands; not physical input, OS window close, process-kill recovery, audio or device performance.";
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
+            public bool practiceCompletedBeforeCourseEntry;
             public bool quitCallbackObserved;
             public bool backgroundResultsRequested;
             public bool scopedGoalsRequested, normalReviewGoalEarned, normalReviewGoalPersisted;
@@ -392,14 +393,24 @@ namespace GreedLast.PlayerChecks
                         && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0
                         && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
                         "Closing interactive practice must not create normal attempts or rewards.");
+                result.practiceCompletedBeforeCourseEntry = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1;
                 Call(app, "RequestPracticeRun");
                 yield return DriveCourse();
-                Require(core.IsPracticeComplete, "The real first practice must finish without developer shortcuts.");
+                Require(core.IsPracticeComplete, "The real practice must finish without developer shortcuts.");
                 if (scopedGoals && phase == "clear")
                 {
                     Call(app, "RequestReturnToLobby");
                     yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
                     state.ShowLocalNotice("탈출 실패 기록 저장\n재도전 목표: " + NormalReviewGoal);
+                    Call(app, "RequestNormalRun");
+                }
+                else if (result.practiceCompletedBeforeCourseEntry)
+                {
+                    // A preceding offscreen render legitimately completed practice.
+                    // Replayed practice offers replay, so enter normal play explicitly
+                    // through the lobby rather than resetting the private completion flag.
+                    Call(app, "RequestReturnToLobby");
+                    yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
                     Call(app, "RequestNormalRun");
                 }
                 else Call(app, "RequestNextRunPattern");
