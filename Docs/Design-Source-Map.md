@@ -9,6 +9,12 @@
 
 알려진 기준 문서 36개 중 35개는 Word 원본을 확보했고 나머지는 최신 본문 Markdown이 있다. 기획 작업/구현 대조 전 해당 문서를 읽는다. 원시 자료와 과거 수정본은 공개 게임 저장소에 복사하지 않는다.
 
+### 별도 Git 작업 사본에서 읽을 때
+
+`.local`은 Git에 포함되지 않으므로 새 worktree에는 위 상대 폴더가 자동으로 생기지 않는다. 현재 작업 사본에 없으면 원래 작업 폴더 `C:\Users\ehddn\OneDrive\문서\ChatGPT\greed\.local\Design-Recovery-20261104\summary` 또는 위 비공개 Obsidian 백업을 읽는다. 2026-11-05 두 위치와 백업의 최신1Node Markdown 존재를 확인했다. 없다는 이유로 기획서를 새로 만들거나 옛2노드판으로 대체하지 않는다.
+
+참고 대화 목록도 같은 이유로 원래 작업 폴더의 `.local\ChatGPT-Greed-20261104\00_대화목록.md`에 있다. 새 작업 사본에서 참고할 때 이 경로를 쓰며 원시 대화를 공개 저장소로 옮기지 않는다.
+
 | 제작 단계 | 사용할 파일 | 복구 상태 |
 | --- | --- | --- |
 | 6-1 | Production_process/greed_6-1_lock_final_completed.docx | Word 원본 |
