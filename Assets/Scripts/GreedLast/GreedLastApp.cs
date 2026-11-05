@@ -5163,7 +5163,7 @@ namespace GreedLast
             {
                 return HasAnySaveLoadoutSlot()
                     ? "다음: 저장 조합에서 후보 비교 / 저장 또는 포기"
-                    : "다음: 저장 조합에서 첫 슬롯 저장 또는 포기";
+                    : "다음: 슬롯 선택 후 저장 또는 포기";
             }
 
             if (firstSaveCompleted && !HasAnyUsableSaveLoadoutSlot())

@@ -15552,7 +15552,8 @@ namespace GreedLast.Editor
                     "A clean clear result must keep the jump-slide-twist and three-action mastery summary in the result detail.");
                 Require(clearMessage.Contains("복기: 전 구간 정확 흐름", StringComparison.Ordinal), "A clean clear must expose a compact success review line.");
                 Require(
-                    clearMessage.Contains("다음: 저장 조합에서 첫 슬롯 저장 또는 포기", StringComparison.Ordinal),
+                    clearMessage.Contains("다음: 슬롯 선택 후 저장 또는 포기", StringComparison.Ordinal)
+                        && InvokeRuntimeUiLabel("ResolveLobbyNextActionTarget", clearMessage) == "저장",
                     "A first clean clear must send the player toward saving or skipping the new candidate.");
                 Require(
                     clearMessage.Contains("저장 기회: 1회 / 저장하거나 포기하면 사라짐", StringComparison.Ordinal),
