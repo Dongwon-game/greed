@@ -37203,7 +37203,7 @@ namespace GreedLast
                 approachLaneX
                     + BuildTrapVisualHorizontalOffset(latestRunSnapshot.Pattern.TimingType, progress, coreProgress)
                     + BuildTrapApproachSweepX(latestRunSnapshot.Pattern, visualProgress));
-            float y = Mathf.Lerp(BuildTrapApproachStartY(latestRunSnapshot.Pattern), 0.18f, visualProgress);
+            float y = BuildTrapApproachY(latestRunSnapshot.Pattern, visualProgress, coreProgress);
             float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
             RectTransform rect = trapMarker.rectTransform;
             rect.anchorMin = new Vector2(markerX, y);
@@ -39503,7 +39503,7 @@ namespace GreedLast
                 BuildTrapApproachLaneX(channelX, ghostVisualProgress, coreProgress)
                     + BuildTrapVisualHorizontalOffset(pattern.TimingType, ghostProgress, coreProgress)
                     + BuildTrapApproachSweepX(pattern, ghostVisualProgress));
-            float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, ghostVisualProgress);
+            float y = BuildTrapApproachY(pattern, ghostVisualProgress, coreProgress);
             Vector4 shape = BuildTrapMarkerShapeLayout(pattern, Mathf.Clamp01(1f - safeIndex * 0.22f));
             float scale = Mathf.Clamp(0.76f - safeIndex * 0.12f, 0.46f, 0.80f);
             return new Vector4(x, y, shape.x * scale, shape.y * scale);
@@ -40262,6 +40262,18 @@ namespace GreedLast
 
         private static float BuildTrapApproachLaneX(float channelX, float visualProgress, float coreProgress)
             => Mathf.Lerp(0.5f, channelX, Mathf.Lerp(0.48f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress)));
+
+        private static float BuildTrapApproachY(GreedLastPatternModel pattern, float visualProgress, float coreProgress)
+        {
+            float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, visualProgress);
+            if (BuildRunnerResponseType(pattern) == RunnerResponseType.Jump)
+            {
+                // Keep distant floor traps visible ahead of the runner's silhouette.
+                y += 0.16f * (1f - BuildTrapApproachDepth(visualProgress, coreProgress));
+            }
+
+            return y;
+        }
 
         private static float BuildTrapApproachStartY(GreedLastPatternModel pattern)
         {
@@ -43802,7 +43814,7 @@ namespace GreedLast
                 BuildTrapApproachLaneX(channelX, visualProgress, coreProgress)
                     + BuildTrapVisualHorizontalOffset(pattern.TimingType, linearProgress, coreProgress)
                     + BuildTrapApproachSweepX(pattern, visualProgress));
-            float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, visualProgress);
+            float y = BuildTrapApproachY(pattern, visualProgress, coreProgress);
             float emphasis = Mathf.Clamp01(1f - safeIndex * 0.24f);
             float width = Mathf.Lerp(72f, 126f, emphasis);
             float height = Mathf.Lerp(5f, 9f, emphasis);
