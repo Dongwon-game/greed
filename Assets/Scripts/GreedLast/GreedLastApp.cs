@@ -39638,6 +39638,7 @@ namespace GreedLast
 
             float variationPressure = BuildTrapVariationPressure(latestRunSnapshot.Pattern);
             float visualPressure = Mathf.Clamp01(Mathf.Max(coreNear, threatStrength * 0.7f) + Mathf.Max(0f, variationPressure) * 0.42f);
+            float illustratedApproachScale = UsePlayerRunControls && trapIllustration != null ? approachScale : 1f;
             int dangerAlpha = Mathf.RoundToInt((Mathf.Lerp(28f, 116f, visualPressure) + entryPulse * 52f + variationPressure * 34f) * Mathf.Lerp(0.78f, 1.18f, warningPulse))
                 + BuildTrapDangerBandDownbeatAlphaLift(safeDownbeatLift);
             int glowAlpha = Mathf.RoundToInt(Mathf.Lerp(35f, 154f, Mathf.Max(coreNear, entryPulse * 0.65f)) + threatStrength * 32f + variationPressure * 28f)
@@ -39700,16 +39701,13 @@ namespace GreedLast
                 glowRect.anchorMin = new Vector2(markerX, y);
                 glowRect.anchorMax = new Vector2(markerX, y);
                 glowRect.anchoredPosition = Vector2.zero;
-                glowRect.localScale = Vector3.one * (Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f + Mathf.Max(0f, variationPressure) * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f)) + entryPulse * 0.24f + BuildTrapDangerGlowDownbeatScaleLift(safeDownbeatLift));
+                glowRect.localScale = Vector3.one * illustratedApproachScale
+                    * (Mathf.Lerp(0.72f, 1.44f + threatStrength * 0.22f + Mathf.Max(0f, variationPressure) * 0.22f, Mathf.Max(coreNear, warningPulse * 0.42f)) + entryPulse * 0.24f + BuildTrapDangerGlowDownbeatScaleLift(safeDownbeatLift));
                 Color32 glowColor = safeDownbeatLift > 0f
                     ? Color32.Lerp(baseColor, new Color32(255, 214, 105, 255), BuildTrapDangerGlowDownbeatColorBlend(safeDownbeatLift))
                     : baseColor;
                 // Give the distant illustration more contrast against its warning fill.
-                if (UsePlayerRunControls && trapIllustration != null)
-                {
-                    glowAlpha = Mathf.RoundToInt(glowAlpha * approachScale);
-                }
-                trapGlow.color = WithAlpha(glowColor, glowAlpha);
+                trapGlow.color = WithAlpha(glowColor, Mathf.RoundToInt(glowAlpha * illustratedApproachScale));
             }
 
             if (trapStrike != null)
@@ -39737,7 +39735,8 @@ namespace GreedLast
                             Mathf.Lerp(150f, 220f, strikePressure));
                         break;
                 }
-                float strikeBaseScale = Mathf.Lerp(0.82f, 1.18f, warningPulse) + entryPulse * 0.16f;
+                float strikeBaseScale = (Mathf.Lerp(0.82f, 1.18f, warningPulse) + entryPulse * 0.16f)
+                    * illustratedApproachScale;
                 strikeRect.localScale = new Vector3(
                     strikeBaseScale * BuildTrapStrikeDownbeatScaleX(latestRunSnapshot.Pattern, safeDownbeatLift),
                     strikeBaseScale * BuildTrapStrikeDownbeatScaleY(latestRunSnapshot.Pattern, safeDownbeatLift),
