@@ -679,7 +679,7 @@ namespace GreedLast.Editor
             float originalAt = Read<float>(app, "lastGrowthUpgradeAt");
             try
             {
-                for (int scenario = 0; scenario < 5; scenario++)
+                for (int scenario = 0; scenario < 6; scenario++)
                 {
                     var backend = new GreedLastMockBackend(loadPersistedData: false, persistData: false);
                     backend.AddGrowthPointsForTest(9);
@@ -700,6 +700,16 @@ namespace GreedLast.Editor
                         growthCommand.OnPointerDown(heldSecond);
                         growthCommand.OnPointerUp(firstPointer);
                         if (firstPointer.eligibleForClick) growthCommand.OnPointerClick(firstPointer);
+                    }
+                    else if (scenario == 5)
+                    {
+                        bool primaryHandled = (bool)Method(app, "TryHandlePrimaryKeyboardFrame")
+                            .Invoke(app, new object[] { true, true });
+                        Require(!primaryHandled && backend.LoadLobby().GrowthPoints == before.GrowthPoints,
+                            "A compound growth key frame must leave the recommendation untouched before lane routing.");
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { GreedLastRunChannel.Center });
+                        Require(backend.LoadLobby().GrowthFocusLevel == 1,
+                            "The explicit focus key must win over the default survival recommendation.");
                     }
                     else if (scenario < 2) Click(ui, "nextPatternButton");
                     else Click(Read<Button[]>(ui, "laneButtons")[0]);

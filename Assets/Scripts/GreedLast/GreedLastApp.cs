@@ -11405,10 +11405,11 @@ namespace GreedLast
 
         private bool TryHandlePrimaryKeyboardFrame(bool primaryPressed, bool lanePressed)
         {
-            // In selection screens the direction must win; confirmation requires a separate fresh Enter.
+            // Explicit channel input takes precedence over the default action in these menus.
             if (primaryPressed && lanePressed && (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
-                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady)) return false;
+                || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
+                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)) return false;
             return TryHandlePrimaryKeyboardCommand(primaryPressed);
         }
 
