@@ -16691,6 +16691,12 @@ namespace GreedLast
                     UpdateLaneJudgementTag(i, judgementPulse);
 
                     float missShake = transientFeedbackActive ? BuildLaneMissShake(i) : 0f;
+                    if (UsePlayerRunControls && runModeActive && activeRunTargetIndex >= 0)
+                    {
+                        float emphasis = Mathf.Max(Mathf.Max(pressPulse, holdAmount), judgementPulse);
+                        float restingOpacity = i == activeRunTargetIndex ? 0.58f : 0.30f;
+                        baseColor.a = (byte)Mathf.RoundToInt(baseColor.a * Mathf.Lerp(restingOpacity, 1f, emphasis));
+                    }
                     laneImages[i].color = baseColor;
                     laneImages[i].rectTransform.anchoredPosition = new Vector2(missShake, 0f);
                     float growthLevel = growthBoardModeActive ? GetGrowthLaneLevel(i) : 0f;
@@ -37276,7 +37282,10 @@ namespace GreedLast
                 BuildRunEntryTrapRevealStrength(),
                 trapAccentColor);
             UpdateTrapActionSymbol(latestRunSnapshot.Pattern, coreNear, entryPulse, markerExactPulse, markerDownbeatLift, markerColor);
-            judgementLine.color = Color32.Lerp(new Color32(255, 238, 181, 150), new Color32(255, 255, 255, 255), coreNear);
+            judgementLine.color = Color32.Lerp(
+                new Color32(255, 238, 181, UsePlayerRunControls ? (byte)74 : (byte)150),
+                new Color32(255, 255, 255, UsePlayerRunControls ? (byte)185 : (byte)255),
+                coreNear);
             ApplyJudgementLinePulse();
             UpdateRhythmBreakLine();
             ApplyStaggerRecoveryVisuals();
