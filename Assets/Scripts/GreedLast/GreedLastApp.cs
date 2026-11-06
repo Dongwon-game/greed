@@ -40517,6 +40517,10 @@ namespace GreedLast
                     1f);
 
                 float alpha = BuildFloorBeatTileAlpha(visible, running, motionStrength, phase, forwardPulse, focusActive, tilePulse);
+                if (UsePlayerRunControls && running)
+                {
+                    alpha *= 0.62f;
+                }
                 Color32 tileColor = Color32.Lerp(new Color32(67, 105, 103, 255), atmosphereAccent, 0.22f + phase * 0.36f);
                 if (compression > 0f)
                 {
