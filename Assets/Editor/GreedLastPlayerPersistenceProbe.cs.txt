@@ -1187,18 +1187,27 @@ namespace GreedLast.PlayerChecks
             Frame far = frames[frames.Count - 1];
             Require(!string.IsNullOrEmpty(far.pattern) && far.coreDeltaSeconds < 0f,
                 "The far frame must contain a live trap before its judgement point.");
-            yield return WaitFor(() => RunState().ActivePattern
-                && RunState().Pattern.PatternId == far.pattern && RunState().CoreDeltaSeconds >= -0.27f);
-            yield return CaptureFrame(name + "-near", frames);
+            float nearDelta = far.coreDeltaSeconds * 0.35f;
+            yield return WaitFor(() =>
+            {
+                GreedLastRunSnapshot run = RunState();
+                Require(run.ActivePattern && !run.Paused && run.Pattern.PatternId == far.pattern,
+                    "The approach ended or paused before the near frame could be rendered.");
+                return run.CoreDeltaSeconds >= nearDelta;
+            });
+            yield return CaptureFrame(name + "-near", frames, settleSeconds: 0f);
             Frame near = frames[frames.Count - 1];
             Require(near.pattern == far.pattern && near.channel == far.channel && near.coreDeltaSeconds <= 0f
                 && near.coreDeltaSeconds > far.coreDeltaSeconds && near.misses == far.misses,
                 "The two renders must show the same live trap without a miss between frames.");
         }
 
-        private IEnumerator CaptureFrame(string name, List<Frame> frames)
+        private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f)
         {
-            yield return new WaitForSecondsRealtime(0.12f);
+            if (settleSeconds > 0f)
+            {
+                yield return new WaitForSecondsRealtime(settleSeconds);
+            }
             string path = Path.Combine(root, "frame-" + name + ".png");
             Require(!File.Exists(path), "A rendered frame must never overwrite earlier evidence.");
             GreedLastRunSnapshot run = RunState();
