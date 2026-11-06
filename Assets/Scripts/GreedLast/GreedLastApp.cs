@@ -17243,6 +17243,7 @@ namespace GreedLast
                     judgementFeedbackUntil = 0f;
                     runEntryTrapRevealStartedAt = 0f;
                     runEntryTrapRevealUntil = 0f;
+                    HideRunEntryTrapReveal();
                     UpdateJudgementFeedbackText();
                 }
             }
