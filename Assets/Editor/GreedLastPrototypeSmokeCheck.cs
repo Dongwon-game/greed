@@ -10932,10 +10932,12 @@ namespace GreedLast.Editor
                 "Keyboard alias slashes must not leave Space or arrow fragments in record rows.");
             string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
             Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
+                && pcGuide.Contains("Enter 또는 연습 버튼", StringComparison.Ordinal)
                 && pcGuide.Contains("A/← · S/Space · D/→", StringComparison.Ordinal)
                 && pcGuide.Contains("이동이 아닌 대응", StringComparison.Ordinal)
                 && pcGuide.Contains("판정선", StringComparison.Ordinal)
                 && mobileGuide.Contains("영역", StringComparison.Ordinal)
+                && !mobileGuide.Contains("Enter", StringComparison.Ordinal)
                 && !mobileGuide.Contains("Space", StringComparison.Ordinal),
                 "First practice must teach same-channel response, timing and actual platform controls before starting.");
             foreach (bool dev in new[] { false, true })

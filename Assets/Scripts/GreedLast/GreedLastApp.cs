@@ -24894,7 +24894,7 @@ namespace GreedLast
 
         private static string BuildFirstPracticeInputGuide(bool isMobilePlatform)
         {
-            return (isMobilePlatform ? string.Empty : "Enter 또는 기초 연습 버튼으로 시작하세요.\n")
+            return (isMobilePlatform ? string.Empty : "Enter 또는 연습 버튼으로 시작하세요.\n")
                 + "위험이 오는 채널과 같은 좌 · 중 · 우를 누르세요."
                 + (isMobilePlatform ? "\n화면의 좌 · 중 · 우 영역으로 대응합니다."
                     : "\nA/← · S/Space · D/→ 또는 해당 영역 클릭")
