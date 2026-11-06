@@ -37234,7 +37234,7 @@ namespace GreedLast
             UpdateTimingBeatPips(channelX);
             UpdateThreeActionExactBurst();
 
-            SetJudgementLineY(coreY);
+            SetJudgementLineY(coreY, channelX);
 
             Color32 trapBaseColor = BuildPrototypeTrapBaseColor(latestRunSnapshot.Pattern);
             Color32 trapAccentColor = BuildPrototypeTrapAccentColor(latestRunSnapshot.Pattern);
@@ -44115,11 +44115,14 @@ namespace GreedLast
             }
         }
 
-        private void SetJudgementLineY(float y)
+        private void SetJudgementLineY(float y, float? targetLaneX = null)
         {
             RectTransform lineRect = judgementLine.rectTransform;
-            lineRect.anchorMin = new Vector2(0.08f, y);
-            lineRect.anchorMax = new Vector2(0.92f, y);
+            bool focusOnLane = UsePlayerRunControls && targetLaneX.HasValue;
+            float centerX = focusOnLane ? targetLaneX.Value : 0.5f;
+            float halfWidth = focusOnLane ? 0.15f : 0.42f;
+            lineRect.anchorMin = new Vector2(centerX - halfWidth, y);
+            lineRect.anchorMax = new Vector2(centerX + halfWidth, y);
             lineRect.anchoredPosition = Vector2.zero;
         }
 
