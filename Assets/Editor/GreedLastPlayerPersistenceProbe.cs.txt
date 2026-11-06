@@ -411,8 +411,10 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
                 yield return DriveCourse(untilFirstTrap: true);
                 yield return CaptureTrapApproach("normal-trap", frames);
-                yield return DriveCourse(untilSideTrap: true);
-                Require(RunState().ActivePattern && RunState().Pattern.Channel != GreedLastRunChannel.Center,
+                string openingPattern = RunState().Pattern.PatternId;
+                yield return DriveCourse(untilSideTrapAfter: openingPattern);
+                Require(RunState().ActivePattern && IsSideTrap(RunState())
+                    && RunState().Pattern.PatternId != openingPattern,
                     "The normal course must reach a live side trap before its comparison.");
                 yield return CaptureTrapApproach("normal-side-trap", frames);
                 Require(Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
@@ -1183,12 +1185,13 @@ namespace GreedLast.PlayerChecks
         {
             yield return CaptureFrame(name + "-far", frames);
             Frame far = frames[frames.Count - 1];
-            Require(!string.IsNullOrEmpty(far.pattern), "The far frame must contain a live trap.");
+            Require(!string.IsNullOrEmpty(far.pattern) && far.coreDeltaSeconds < 0f,
+                "The far frame must contain a live trap before its judgement point.");
             yield return WaitFor(() => RunState().ActivePattern
                 && RunState().Pattern.PatternId == far.pattern && RunState().CoreDeltaSeconds >= -0.27f);
             yield return CaptureFrame(name + "-near", frames);
             Frame near = frames[frames.Count - 1];
-            Require(near.pattern == far.pattern && near.channel == far.channel
+            Require(near.pattern == far.pattern && near.channel == far.channel && near.coreDeltaSeconds <= 0f
                 && near.coreDeltaSeconds > far.coreDeltaSeconds && near.misses == far.misses,
                 "The two renders must show the same live trap without a miss between frames.");
         }
@@ -1281,8 +1284,11 @@ namespace GreedLast.PlayerChecks
                 "The real player record must retain its earned scoped review outcome: " + goal);
         }
 
+        private static bool IsSideTrap(GreedLastRunSnapshot run)
+            => run.Pattern.Channel == GreedLastRunChannel.Left || run.Pattern.Channel == GreedLastRunChannel.Right;
+
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
-            bool chapterTwoGood = false, int maxResponses = int.MaxValue, bool untilSideTrap = false)
+            bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1292,7 +1298,8 @@ namespace GreedLast.PlayerChecks
                 CheckDeadline();
                 GreedLastRunSnapshot run = RunState();
                 if (run.ActivePattern && !run.CountdownActive && !run.Paused
-                    && (untilFirstTrap || (untilSideTrap && run.Pattern.Channel != GreedLastRunChannel.Center))) break;
+                    && (untilFirstTrap || (untilSideTrapAfter != null && IsSideTrap(run)
+                        && run.Pattern.PatternId != untilSideTrapAfter))) break;
                 // Foreground waits and an in-flight countdown are not new interruptions.
                 if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {
