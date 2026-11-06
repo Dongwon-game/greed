@@ -646,9 +646,17 @@ namespace GreedLast.Editor
                         "No primary key stays unhandled; live run Enter must retain its existing command priority.");
                     core.Exit();
                     state.SetLobbyReady(backend.LoadLobby());
+                    Method(app, "RequestNormalRun").Invoke(app, null);
+                    Require(state.CurrentState == GreedLastScreenState.RunCoreTest
+                        && Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot").ChoiceActive
+                        && !Frame(true, true),
+                        "Direction+Enter must reach channel routing during the opening gift choice.");
+                    cases++;
+                    core.Exit();
+                    state.SetLobbyReady(backend.LoadLobby());
                 }
-                Require(cases == 10, "All clean/detailed compound keyboard paths must complete.");
-                Debug.Log("Greed compound menu keyboard passed: ten clean/detailed save, slot and preparation paths; explicit S3 single save, no compound-frame start consumption, fresh Enter start and live command priority. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
+                Require(cases == 12, "All clean/detailed compound keyboard paths must complete.");
+                Debug.Log("Greed compound menu keyboard passed: save, slot, preparation and opening gift paths in both views. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
             }
             finally
             {
