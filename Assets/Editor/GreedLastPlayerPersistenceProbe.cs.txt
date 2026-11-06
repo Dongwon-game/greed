@@ -410,17 +410,13 @@ namespace GreedLast.PlayerChecks
                 Call(app, "RequestNormalRun");
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
                 yield return DriveCourse(untilFirstTrap: true);
-                yield return CaptureFrame("normal-trap-far", frames);
-                string normalPattern = RunState().Pattern.PatternId;
-                yield return WaitFor(() => RunState().ActivePattern
-                    && RunState().Pattern.PatternId == normalPattern && RunState().CoreDeltaSeconds >= -0.27f);
-                yield return CaptureFrame("normal-trap-near", frames);
-                Frame far = frames[frames.Count - 2];
-                Frame near = frames[frames.Count - 1];
-                Require(!string.IsNullOrEmpty(far.pattern) && near.pattern == far.pattern
-                    && near.elapsed > far.elapsed && near.misses == far.misses
-                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
-                    "Normal trap renders must show the same live approach without settling an attempt.");
+                yield return CaptureTrapApproach("normal-trap", frames);
+                yield return DriveCourse(untilSideTrap: true);
+                Require(RunState().ActivePattern && RunState().Pattern.Channel != GreedLastRunChannel.Center,
+                    "The normal course must reach a live side trap before its comparison.");
+                yield return CaptureTrapApproach("normal-side-trap", frames);
+                Require(Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
+                    "Rendering the two approaches must not settle an attempt.");
                 result.frames = frames.ToArray();
                 result.scope = "Isolated Windows-player offscreen camera renders of practice and the opening normal trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
@@ -1183,6 +1179,19 @@ namespace GreedLast.PlayerChecks
             using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(frame, true));
         }
 
+        private IEnumerator CaptureTrapApproach(string name, List<Frame> frames)
+        {
+            yield return CaptureFrame(name + "-far", frames);
+            Frame far = frames[frames.Count - 1];
+            Require(!string.IsNullOrEmpty(far.pattern), "The far frame must contain a live trap.");
+            yield return WaitFor(() => RunState().ActivePattern
+                && RunState().Pattern.PatternId == far.pattern && RunState().CoreDeltaSeconds >= -0.27f);
+            yield return CaptureFrame(name + "-near", frames);
+            Frame near = frames[frames.Count - 1];
+            Require(near.pattern == far.pattern && near.elapsed > far.elapsed && near.misses == far.misses,
+                "The two renders must show the same live trap without a miss between frames.");
+        }
+
         private IEnumerator CaptureFrame(string name, List<Frame> frames)
         {
             yield return new WaitForSecondsRealtime(0.12f);
@@ -1270,7 +1279,7 @@ namespace GreedLast.PlayerChecks
         }
 
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
-            bool chapterTwoGood = false, int maxResponses = int.MaxValue)
+            bool chapterTwoGood = false, int maxResponses = int.MaxValue, bool untilSideTrap = false)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1279,7 +1288,8 @@ namespace GreedLast.PlayerChecks
             {
                 CheckDeadline();
                 GreedLastRunSnapshot run = RunState();
-                if (untilFirstTrap && run.ActivePattern && !run.CountdownActive && !run.Paused) break;
+                if (run.ActivePattern && !run.CountdownActive && !run.Paused
+                    && (untilFirstTrap || (untilSideTrap && run.Pattern.Channel != GreedLastRunChannel.Center))) break;
                 // Foreground waits and an in-flight countdown are not new interruptions.
                 if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {

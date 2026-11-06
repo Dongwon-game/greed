@@ -307,7 +307,7 @@ try {
         $report.PlayerLogChecks += Assert-CleanPlayerLog $renderLog
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
-        if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or $render.frames.Count -ne 9 -or
+        if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or $render.frames.Count -ne 11 -or
             $render.candidate -or $render.clears -ne 0 -or $render.infiniteRuns -ne 0 -or $render.growthPoints -ne 0) {
             throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
@@ -317,7 +317,7 @@ try {
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash
-        if (@($report.RenderedFrames.SHA256 | Select-Object -Unique).Count -ne 9) {
+        if (@($report.RenderedFrames.SHA256 | Select-Object -Unique).Count -ne 11) {
             throw 'Different real player states must not silently reuse the same captured image.'
         }
     }
