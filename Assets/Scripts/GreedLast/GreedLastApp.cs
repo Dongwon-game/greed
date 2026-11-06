@@ -37192,7 +37192,7 @@ namespace GreedLast
                 coreProgress);
             visualProgress = ApplyDevTrapVisualPreviewProgress(visualProgress, coreProgress);
             float markerX = Mathf.Clamp01(
-                channelX
+                BuildTrapApproachLaneX(channelX, visualProgress, coreProgress)
                     + BuildTrapVisualHorizontalOffset(latestRunSnapshot.Pattern.TimingType, progress, coreProgress)
                     + BuildTrapApproachSweepX(latestRunSnapshot.Pattern, visualProgress));
             float y = Mathf.Lerp(BuildTrapApproachStartY(latestRunSnapshot.Pattern), 0.18f, visualProgress);
@@ -37257,7 +37257,7 @@ namespace GreedLast
             trapMarker.color = WithAlpha(
                 markerColor,
                 BuildPrototypeTrapProceduralAlpha(trapIllustration != null, markerColor.a));
-            UpdatePrototypeTrapIllustration(latestRunSnapshot.Pattern, markerColor);
+            UpdatePrototypeTrapIllustration(latestRunSnapshot.Pattern, markerColor, visualProgress, coreProgress);
             float markerBaseScale = Mathf.Lerp(0.88f, 1.22f, coreNear) + entryPulse * 0.18f;
             trapMarker.rectTransform.localScale = new Vector3(
                 markerBaseScale * BuildTrapMarkerResponseScaleX(latestRunSnapshot.Pattern, coreNear, markerExactPulse, entryPulse)
@@ -38772,7 +38772,8 @@ namespace GreedLast
             UpdateResolvedJudgementImpactWake(resolvedTrapPattern, resolvedTrapResult, progress, fade);
         }
 
-        private void UpdatePrototypeTrapIllustration(GreedLastPatternModel pattern, Color32 markerColor)
+        private void UpdatePrototypeTrapIllustration(
+            GreedLastPatternModel pattern, Color32 markerColor, float visualProgress, float coreProgress)
         {
             if (trapIllustration == null)
             {
@@ -38782,9 +38783,10 @@ namespace GreedLast
             Vector4 uv = BuildPrototypeTrapAtlasUv(pattern);
             trapIllustration.uvRect = new Rect(uv.x, uv.y, uv.z, uv.w);
             trapIllustration.color = BuildPrototypeTrapIllustrationTint(markerColor);
+            float approachScale = Mathf.Lerp(0.54f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress));
             trapIllustration.rectTransform.localScale = new Vector3(
-                BuildPrototypeTrapIllustrationMirrorX(pattern),
-                1f,
+                BuildPrototypeTrapIllustrationMirrorX(pattern) * approachScale,
+                approachScale,
                 1f);
         }
 
@@ -39488,7 +39490,7 @@ namespace GreedLast
             float ghostVisualProgress = BuildTrapVisualProgress(pattern.TimingType, ghostProgress, coreProgress);
             ghostVisualProgress = BuildTrapVisualPreviewProgress(ghostVisualProgress, coreProgress, previewMode, true);
             float x = Mathf.Clamp01(
-                channelX
+                BuildTrapApproachLaneX(channelX, ghostVisualProgress, coreProgress)
                     + BuildTrapVisualHorizontalOffset(pattern.TimingType, ghostProgress, coreProgress)
                     + BuildTrapApproachSweepX(pattern, ghostVisualProgress));
             float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, ghostVisualProgress);
@@ -40243,6 +40245,12 @@ namespace GreedLast
                 Mathf.Clamp01(channelX + halfWidth),
                 Mathf.Clamp01(maxY));
         }
+
+        private static float BuildTrapApproachDepth(float visualProgress, float coreProgress)
+            => Mathf.Clamp01(visualProgress / Mathf.Max(0.01f, coreProgress));
+
+        private static float BuildTrapApproachLaneX(float channelX, float visualProgress, float coreProgress)
+            => Mathf.Lerp(0.5f, channelX, Mathf.Lerp(0.48f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress)));
 
         private static float BuildTrapApproachStartY(GreedLastPatternModel pattern)
         {
@@ -43780,7 +43788,7 @@ namespace GreedLast
             float visualProgress = BuildTrapVisualProgress(pattern.TimingType, linearProgress, coreProgress);
             visualProgress = BuildTrapVisualPreviewProgress(visualProgress, coreProgress, previewMode, true);
             float x = Mathf.Clamp01(
-                channelX
+                BuildTrapApproachLaneX(channelX, visualProgress, coreProgress)
                     + BuildTrapVisualHorizontalOffset(pattern.TimingType, linearProgress, coreProgress)
                     + BuildTrapApproachSweepX(pattern, visualProgress));
             float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, visualProgress);

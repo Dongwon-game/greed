@@ -14175,6 +14175,14 @@ namespace GreedLast.Editor
                         && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewButtonLabel", 2) == "낙하 빠름"
                         && InvokeRuntimeUiLabel("BuildDevTrapVisualPreviewFeedbackText", 1).Contains("판정 위치 유지", StringComparison.Ordinal),
                     "Dev-only trap visual preview must change only pre-core approach speed, preserve the core timing point, and stay off in release policy.");
+                float farLeft = InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.2f, 0f, ghostCoreProgress);
+                float farRight = InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.8f, 0f, ghostCoreProgress);
+                Require(farLeft > 0.2f && farLeft < 0.5f && farRight > 0.5f && farRight < 0.8f
+                    && Mathf.Approximately(farLeft + farRight, 1f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.5f, 0f, ghostCoreProgress), 0.5f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.2f, ghostCoreProgress, ghostCoreProgress), 0.2f)
+                    && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.8f, 1f, ghostCoreProgress), 0.8f),
+                    "Trap approach perspective must converge distant lanes and preserve the original lanes at judgement and beyond.");
                 Vector4 leadGhost = InvokeRuntimeUiVector4(
                     "BuildTrapApproachGhostLayout",
                     snapshot.Pattern,
