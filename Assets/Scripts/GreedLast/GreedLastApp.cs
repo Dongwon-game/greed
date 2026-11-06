@@ -12207,17 +12207,13 @@ namespace GreedLast
                 return false;
             }
 
-            if (!IsRunState())
-            {
-                return true;
-            }
-
-            if (runCore.IsPaused
+            if (!IsRunState()
+                || runCore.IsPaused
                 || !hasLatestAppRunSnapshot
                 || !latestAppRunSnapshot.ActivePattern
                 || !GreedLastRunCore.IsRotationPattern(latestAppRunSnapshot.Pattern))
             {
-                return true;
+                return false;
             }
 
             HandleRunChannelInput(leftRotation ? GreedLastRunChannel.Left : GreedLastRunChannel.Right);
