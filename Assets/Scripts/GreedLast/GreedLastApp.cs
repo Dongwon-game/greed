@@ -2090,7 +2090,11 @@ namespace GreedLast
         {
             return "검증 순서\n" + BuildPrototypeRuntimeModeChecklistTextForPlatform(devToolsEnabled, isMobilePlatform)
                 + "\n" + playtestOrderText
-                + "\n\n조작 체크\n" + BuildPrototypeInteractionChecklistTextForPlatform(
+                + "\n\n조작 체크"
+                + (GreedLastPlayerInputPolicy.ShowKeyboardHints(devToolsEnabled, isMobilePlatform)
+                    ? " · 이 화면에서 Enter는 다음 페이지"
+                    : string.Empty)
+                + "\n" + BuildPrototypeInteractionChecklistTextForPlatform(
                     devToolsEnabled,
                     infiniteCheck,
                     saveUseCheck, isMobilePlatform)
@@ -2917,7 +2921,7 @@ namespace GreedLast
             bool devToolsEnabled, string infiniteCheck, string saveUseCheck, bool isMobilePlatform)
         {
             bool keyboardHints = GreedLastPlayerInputPolicy.ShowKeyboardHints(devToolsEnabled, isMobilePlatform);
-            string primaryActionCheck = keyboardHints ? "Enter: 강조 다음 행동" : "강조 버튼: 다음 행동";
+            string primaryActionCheck = keyboardHints ? "로비에서 Enter: 강조 다음 행동" : "로비에서 강조 버튼: 다음 행동";
             return BuildPrototypeScopeContractLine()
                 + "\n동작 확인: 위험→동작 / 바닥↑점·상단↓숙·측면↔틀 / " + BuildPrototypePayoffGoalChecklistText()
                 + BuildPrototypeInteractionShortcutChecklistTextForPlatform(devToolsEnabled, isMobilePlatform)

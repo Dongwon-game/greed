@@ -19161,7 +19161,9 @@ namespace GreedLast.Editor
                     && editorVerificationPage.Contains("Enter/강조: 무한모드", StringComparison.Ordinal)
                     && editorVerificationPage.Contains("정산 종료", StringComparison.Ordinal),
                 "The editor/debug verification page must preserve fast-test shortcuts and settlement wording.");
-            Require(verificationText.Contains("Enter: 강조 다음 행동", StringComparison.Ordinal), "The verification page must include the keyboard primary-action check.");
+            Require(verificationText.Contains("이 화면에서 Enter는 다음 페이지", StringComparison.Ordinal)
+                    && verificationText.Contains("로비에서 Enter: 강조 다음 행동", StringComparison.Ordinal),
+                "The verification page must distinguish profile navigation from the lobby primary action.");
             Require(verificationText.Contains("일시정지", StringComparison.Ordinal), "The verification page must include the pause-and-resume check.");
             Require(verificationText.Contains("재개목표", StringComparison.Ordinal), "The verification page must include the pause resume-goal check.");
             Require(verificationText.Contains("배경차단", StringComparison.Ordinal), "The verification page must include the pause-backdrop input block check.");
