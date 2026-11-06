@@ -44148,11 +44148,12 @@ namespace GreedLast
                 ShouldShowDownbeatPulse(latestRunSnapshot) ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime) : 0f,
                 readiness,
                 exactBand);
+            bool showBandInTargetLane = focusedLaneOnly || UsePlayerRunControls;
             float laneHalfWidth = focusedLaneOnly
                 ? BuildSuccessTimingBandLaneHalfWidth(exactPulse, readiness)
-                : 0f;
-            float minX = focusedLaneOnly ? Mathf.Clamp01(channelX - laneHalfWidth) : 0.08f;
-            float maxX = focusedLaneOnly ? Mathf.Clamp01(channelX + laneHalfWidth) : 0.92f;
+                : 0.135f;
+            float minX = showBandInTargetLane ? Mathf.Clamp01(channelX - laneHalfWidth) : 0.08f;
+            float maxX = showBandInTargetLane ? Mathf.Clamp01(channelX + laneHalfWidth) : 0.92f;
             rect.anchorMin = new Vector2(minX, Mathf.Min(yA, yB));
             rect.anchorMax = new Vector2(maxX, Mathf.Max(yA, yB));
             rect.offsetMin = Vector2.zero;
