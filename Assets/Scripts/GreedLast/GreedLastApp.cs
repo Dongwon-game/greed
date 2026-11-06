@@ -37291,7 +37291,7 @@ namespace GreedLast
             UpdateRunEntryTrapReveal(
                 markerX,
                 y,
-                rect.sizeDelta,
+                rect.sizeDelta * (UsePlayerRunControls && trapIllustration != null ? approachScale : 1f),
                 BuildRunEntryTrapRevealStrength(),
                 trapAccentColor);
             UpdateTrapActionSymbol(latestRunSnapshot.Pattern, coreNear, entryPulse, markerExactPulse, markerDownbeatLift, markerColor);
