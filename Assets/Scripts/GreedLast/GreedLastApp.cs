@@ -12197,6 +12197,9 @@ namespace GreedLast
 
         private bool TryHandleRotationKeyboardInput()
         {
+            // Disabled developer keys must not consume a frame before normal lane input.
+            if (!DevToolsEnabled) return false;
+
             bool leftRotation = Input.GetKeyDown(KeyCode.Q);
             bool rightRotation = Input.GetKeyDown(KeyCode.E);
             if (!leftRotation && !rightRotation)
@@ -12204,7 +12207,7 @@ namespace GreedLast
                 return false;
             }
 
-            if (!DevToolsEnabled || !IsRunState())
+            if (!IsRunState())
             {
                 return true;
             }
