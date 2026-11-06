@@ -10848,9 +10848,11 @@ namespace GreedLast.Editor
             Require(beforePause.LastResult == GreedLastJudgementResult.None,
                 "The live prompt check needs an unjudged trap.");
             SetRuntimeUiField(ui, "judgementFeedbackUntil", Time.unscaledTime + 5f);
+            SetRuntimeUiField(ui, "runEntryTrapRevealUntil", Time.unscaledTime + 5f);
             ui.RenderRun(beforePause);
-            Require(GetRuntimeUiValueField<float>(ui, "judgementFeedbackUntil") == 0f,
-                "Reentering an unjudged live trap must release the prompt from stale result text.");
+            Require(GetRuntimeUiValueField<float>(ui, "judgementFeedbackUntil") == 0f
+                && GetRuntimeUiValueField<float>(ui, "runEntryTrapRevealUntil") == 0f,
+                "Reentering an unjudged live trap must clear stale result text and the opening reveal.");
             Rect hudBounds = BoundsInRoot(hud.rectTransform, root);
             Require(!hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").GetComponent<RectTransform>(), root))
                 && !hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<Button>(ui, "nextPatternButton").GetComponent<RectTransform>(), root)),

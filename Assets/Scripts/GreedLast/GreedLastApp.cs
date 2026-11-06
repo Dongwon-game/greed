@@ -17239,6 +17239,8 @@ namespace GreedLast
                 {
                     // The next trap's prompt must not wait for the previous result text to fade.
                     judgementFeedbackUntil = 0f;
+                    runEntryTrapRevealStartedAt = 0f;
+                    runEntryTrapRevealUntil = 0f;
                 }
             }
             latestRunSnapshot = snapshot;
