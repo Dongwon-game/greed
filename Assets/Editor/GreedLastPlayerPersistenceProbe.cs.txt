@@ -418,7 +418,7 @@ namespace GreedLast.PlayerChecks
                 Require(Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
                     "Rendering the two approaches must not settle an attempt.");
                 result.frames = frames.ToArray();
-                result.scope = "Isolated Windows-player offscreen camera renders of practice and the opening normal trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
+                result.scope = "Isolated Windows-player offscreen camera renders of practice, the opening normal trap and the first side trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
             else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
             {
