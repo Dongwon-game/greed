@@ -17234,6 +17234,12 @@ namespace GreedLast
             {
                 lastActivePatternVisual = false;
                 targetCuePlayed = false;
+                if (hadPreviousSnapshot && ShouldShowActivePatternVisuals(snapshot)
+                    && snapshot.LastResult == GreedLastJudgementResult.None)
+                {
+                    // The next trap's prompt must not wait for the previous result text to fade.
+                    judgementFeedbackUntil = 0f;
+                }
             }
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
