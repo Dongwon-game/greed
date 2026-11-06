@@ -30306,16 +30306,16 @@ namespace GreedLast
             float urgencyPulse = BuildFocusStateUrgencyPulse(latestRunSnapshot.FocusStateRemainingSeconds, livePulse);
             float focusPulse = Mathf.Max(activationImpact, Mathf.Max(0.32f + livePulse * 0.34f, urgencyPulse));
 
-            float lineY = judgementLine.rectTransform.anchorMin.y;
-            float halfHeight = Mathf.Lerp(0.016f, 0.038f, focusPulse) + urgencyPulse * 0.010f;
             RectTransform bandRect = goodTimingBand.rectTransform;
-            bool keepTargetLane = UsePlayerRunControls && latestRunSnapshot.ActivePattern;
-            float minX = keepTargetLane ? bandRect.anchorMin.x : 0.10f;
-            float maxX = keepTargetLane ? bandRect.anchorMax.x : 0.90f;
-            bandRect.anchorMin = new Vector2(minX, Mathf.Clamp01(lineY - halfHeight));
-            bandRect.anchorMax = new Vector2(maxX, Mathf.Clamp01(lineY + halfHeight));
-            bandRect.offsetMin = Vector2.zero;
-            bandRect.offsetMax = Vector2.zero;
+            if (!UsePlayerRunControls || !latestRunSnapshot.ActivePattern)
+            {
+                float lineY = judgementLine.rectTransform.anchorMin.y;
+                float halfHeight = Mathf.Lerp(0.016f, 0.038f, focusPulse) + urgencyPulse * 0.010f;
+                bandRect.anchorMin = new Vector2(0.10f, Mathf.Clamp01(lineY - halfHeight));
+                bandRect.anchorMax = new Vector2(0.90f, Mathf.Clamp01(lineY + halfHeight));
+                bandRect.offsetMin = Vector2.zero;
+                bandRect.offsetMax = Vector2.zero;
+            }
             bandRect.localScale = Vector3.one * (1f + activationImpact * 0.055f + urgencyPulse * 0.07f);
             goodTimingBand.color = new Color32(255, 196, 74, (byte)Mathf.RoundToInt(Mathf.Lerp(24f, 92f, focusPulse) + urgencyPulse * 54f));
 
