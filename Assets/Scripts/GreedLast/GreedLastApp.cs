@@ -17226,6 +17226,8 @@ namespace GreedLast
                 ResetRunPresentation(snapshot);
                 hadPreviousSnapshot = false;
             }
+            latestRunSnapshot = snapshot;
+            hasRunSnapshot = true;
             // Publications can cross a trap boundary before the UI receives another Update.
             if (!hadPreviousSnapshot || !ShouldShowActivePatternVisuals(snapshot)
                 || !ShouldShowActivePatternVisuals(previousSnapshot)
@@ -17241,10 +17243,9 @@ namespace GreedLast
                     judgementFeedbackUntil = 0f;
                     runEntryTrapRevealStartedAt = 0f;
                     runEntryTrapRevealUntil = 0f;
+                    UpdateJudgementFeedbackText();
                 }
             }
-            latestRunSnapshot = snapshot;
-            hasRunSnapshot = true;
             if (runEntranceHandoffPending && snapshot.StartCountdownActive
                 && !snapshot.Paused && !snapshot.ChoiceActive && !snapshot.Stopped)
             {
