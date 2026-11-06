@@ -70,10 +70,10 @@ namespace GreedLast.PlayerChecks
         [Serializable]
         private sealed class Frame
         {
-            public string name, pattern, graphicsDevice;
+            public string name, pattern, channel, graphicsDevice;
             public string utc;
             public int width, height, sampledColors, health, misses;
-            public float distance, elapsed;
+            public float distance, elapsed, coreDeltaSeconds;
             public bool paused, opening, resuming;
         }
 
@@ -1188,7 +1188,8 @@ namespace GreedLast.PlayerChecks
                 && RunState().Pattern.PatternId == far.pattern && RunState().CoreDeltaSeconds >= -0.27f);
             yield return CaptureFrame(name + "-near", frames);
             Frame near = frames[frames.Count - 1];
-            Require(near.pattern == far.pattern && near.elapsed > far.elapsed && near.misses == far.misses,
+            Require(near.pattern == far.pattern && near.channel == far.channel
+                && near.coreDeltaSeconds > far.coreDeltaSeconds && near.misses == far.misses,
                 "The two renders must show the same live trap without a miss between frames.");
         }
 
@@ -1241,6 +1242,8 @@ namespace GreedLast.PlayerChecks
                 frames.Add(new Frame { name = name, width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
+                    channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
+                    coreDeltaSeconds = run.CoreDeltaSeconds,
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
             }
