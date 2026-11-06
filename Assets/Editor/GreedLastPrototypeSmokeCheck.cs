@@ -10827,7 +10827,16 @@ namespace GreedLast.Editor
             VerifyUnchangedRunHud(ui, beforePause, hud);
             Require(GetRuntimeUiField<string>(ui, "detailedRunHud") == hiddenHudSentinel,
                 "Clean play must not rebuild a hidden diagnostic paragraph for every run snapshot.");
+            RectTransform judgementRect = GetRuntimeUiField<Image>(ui, "judgementLine").rectTransform;
+            judgementRect.anchorMin = new Vector2(0.65f, 0.52f);
+            judgementRect.anchorMax = new Vector2(0.95f, 0.52f);
+            judgementRect.localScale = new Vector3(1f, 1.4f, 1f);
             ui.RenderRun(paused);
+            Require(Mathf.Approximately(judgementRect.anchorMin.x, 0.08f)
+                && Mathf.Approximately(judgementRect.anchorMax.x, 0.92f)
+                && Mathf.Approximately(judgementRect.anchorMin.y, 0.22f)
+                && judgementRect.localScale == Vector3.one,
+                "The first paused render must clear a live lane's judgement line and pulse before the next update.");
             Text pauseBody = GetRuntimeUiField<Text>(ui, "pauseMenuBodyText");
             Require(pauseBody.fontSize == 36 && pauseBody.text.Split('\n').Length == 3
                 && pauseBody.text.Contains("보정 ", StringComparison.Ordinal),
