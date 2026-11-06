@@ -14424,9 +14424,13 @@ namespace GreedLast.Editor
                             && dangerBounds.y <= 0.18f
                             && dangerBounds.w >= 0.88f,
                         "Twist traps must read as a narrow side strike through the lane.");
+                    float ghostVisualProgress = InvokeRuntimeUiFloat(
+                        "BuildTrapVisualProgress", snapshot.Pattern.TimingType, 0.68f - 0.105f, ghostCoreProgress);
+                    float projectedGhostLane = InvokeRuntimeUiFloat(
+                        "BuildTrapApproachLaneX", ghostChannelX, ghostVisualProgress, ghostCoreProgress);
                     Require(
                         leadGhost.w > leadGhost.z * 2.8f
-                            && Mathf.Abs(leadGhost.x - ghostChannelX) > 0.015f,
+                            && Mathf.Abs(leadGhost.x - projectedGhostLane) > 0.015f,
                         "Twist approach ghosts must preserve a narrow side-strike trail with horizontal sweep.");
                     Require(
                         nearContactCue.w > nearContactCue.z * 10f
