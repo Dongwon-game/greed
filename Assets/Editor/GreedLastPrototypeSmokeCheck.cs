@@ -10849,9 +10849,12 @@ namespace GreedLast.Editor
                 "The live prompt check needs an unjudged trap.");
             SetRuntimeUiField(ui, "judgementFeedbackUntil", Time.unscaledTime + 5f);
             SetRuntimeUiField(ui, "runEntryTrapRevealUntil", Time.unscaledTime + 5f);
+            Text staleFeedback = GetRuntimeUiField<Text>(ui, "judgementFeedbackText");
+            staleFeedback.color = Color.white;
             ui.RenderRun(beforePause);
             Require(GetRuntimeUiValueField<float>(ui, "judgementFeedbackUntil") == 0f
-                && GetRuntimeUiValueField<float>(ui, "runEntryTrapRevealUntil") == 0f,
+                && GetRuntimeUiValueField<float>(ui, "runEntryTrapRevealUntil") == 0f
+                && staleFeedback.color.a == 0f,
                 "Reentering an unjudged live trap must clear stale result text and the opening reveal.");
             Rect hudBounds = BoundsInRoot(hud.rectTransform, root);
             Require(!hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").GetComponent<RectTransform>(), root))
