@@ -39702,6 +39702,11 @@ namespace GreedLast
                 Color32 glowColor = safeDownbeatLift > 0f
                     ? Color32.Lerp(baseColor, new Color32(255, 214, 105, 255), BuildTrapDangerGlowDownbeatColorBlend(safeDownbeatLift))
                     : baseColor;
+                // Give the distant illustration more contrast against its warning fill.
+                if (UsePlayerRunControls && trapIllustration != null)
+                {
+                    glowAlpha = Mathf.RoundToInt(glowAlpha * approachScale);
+                }
                 trapGlow.color = WithAlpha(glowColor, glowAlpha);
             }
 
