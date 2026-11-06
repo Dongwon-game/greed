@@ -1194,7 +1194,7 @@ namespace GreedLast.PlayerChecks
                 Require(run.ActivePattern && !run.Paused && run.Pattern.PatternId == far.pattern,
                     "The approach ended or paused before the near frame could be rendered.");
                 return run.CoreDeltaSeconds >= nearDelta;
-            });
+            }, settleFrame: false);
             yield return CaptureFrame(name + "-near", frames, settleSeconds: 0f);
             Frame near = frames[frames.Count - 1];
             Require(near.pattern == far.pattern && near.channel == far.channel && near.coreDeltaSeconds <= 0f
@@ -1360,10 +1360,10 @@ namespace GreedLast.PlayerChecks
             yield return null;
         }
 
-        private IEnumerator WaitFor(Func<bool> condition)
+        private IEnumerator WaitFor(Func<bool> condition, bool settleFrame = true)
         {
             while (!condition()) { CheckDeadline(); yield return null; }
-            yield return null;
+            if (settleFrame) yield return null;
         }
 
         private GreedLastRunSnapshot RunState() => Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
