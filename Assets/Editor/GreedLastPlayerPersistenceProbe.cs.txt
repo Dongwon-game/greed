@@ -405,8 +405,24 @@ namespace GreedLast.PlayerChecks
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
                     "Actual rendered practice must not create normal/infinite progression.");
                 yield return CaptureFrame("practice-result", frames);
+                Call(app, "RequestReturnToLobby");
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+                Call(app, "RequestNormalRun");
+                yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
+                yield return DriveCourse(untilFirstTrap: true);
+                yield return CaptureFrame("normal-trap-far", frames);
+                string normalPattern = RunState().Pattern.PatternId;
+                yield return WaitFor(() => RunState().ActivePattern
+                    && RunState().Pattern.PatternId == normalPattern && RunState().CoreDeltaSeconds >= -0.27f);
+                yield return CaptureFrame("normal-trap-near", frames);
+                Frame far = frames[frames.Count - 2];
+                Frame near = frames[frames.Count - 1];
+                Require(!string.IsNullOrEmpty(far.pattern) && near.pattern == far.pattern
+                    && near.elapsed > far.elapsed && near.misses == far.misses
+                    && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
+                    "Normal trap renders must show the same live approach without settling an attempt.");
                 result.frames = frames.ToArray();
-                result.scope = "Isolated Windows-player offscreen camera renders of the live UI and real-frame practice app commands. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
+                result.scope = "Isolated Windows-player offscreen camera renders of practice and the opening normal trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
             else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
             {

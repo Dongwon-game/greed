@@ -298,7 +298,7 @@ try {
     if ($report.SafetyControls.Count -ne 4) { throw 'Required probe safety controls are incomplete.' }
 
     if ($CaptureFrames) {
-        Write-Verbose 'Capturing seven offscreen live-UI camera renders in the isolated player practice control.'
+        Write-Verbose 'Capturing practice and normal trap offscreen renders in the isolated player.'
         $report.FailedPhase = 'render'
         $renderLog = Join-Path $root 'render.log'
         Invoke-OwnedProcess $exe @('-batchmode','-screen-fullscreen','0','-screen-width','1280','-screen-height','720',
@@ -307,9 +307,9 @@ try {
         $report.PlayerLogChecks += Assert-CleanPlayerLog $renderLog
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
-        if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or $render.frames.Count -ne 7 -or
+        if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or $render.frames.Count -ne 9 -or
             $render.candidate -or $render.clears -ne 0 -or $render.infiniteRuns -ne 0 -or $render.growthPoints -ne 0) {
-            throw 'Actual rendered practice must pass without creating normal/infinite progression.'
+            throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             $imagePath = Join-Path $root ('frame-'+$_.name+'.png')
@@ -317,7 +317,7 @@ try {
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash
-        if (@($report.RenderedFrames.SHA256 | Select-Object -Unique).Count -ne 7) {
+        if (@($report.RenderedFrames.SHA256 | Select-Object -Unique).Count -ne 9) {
             throw 'Different real player states must not silently reuse the same captured image.'
         }
     }
