@@ -17338,6 +17338,13 @@ namespace GreedLast
             PlayJudgementFeedback(snapshot);
             if (!IsLiveRunControlWindow(snapshot))
             {
+                if (judgementLine != null)
+                {
+                    // A paused or choice screen can render before the next timing update.
+                    SetJudgementLineY(0.22f);
+                    judgementLine.color = new Color32(255, 238, 181, 120);
+                    judgementLine.rectTransform.localScale = Vector3.one;
+                }
                 HideRunTimingFeedback();
                 HideResolvedTrapAfterimage();
                 ClearFeedbackFlash();
