@@ -30307,7 +30307,8 @@ namespace GreedLast
             float focusPulse = Mathf.Max(activationImpact, Mathf.Max(0.32f + livePulse * 0.34f, urgencyPulse));
 
             RectTransform bandRect = goodTimingBand.rectTransform;
-            if (!UsePlayerRunControls || !latestRunSnapshot.ActivePattern)
+            bool showFocusBand = !UsePlayerRunControls || !latestRunSnapshot.ActivePattern;
+            if (showFocusBand)
             {
                 float lineY = judgementLine.rectTransform.anchorMin.y;
                 float halfHeight = Mathf.Lerp(0.016f, 0.038f, focusPulse) + urgencyPulse * 0.010f;
@@ -30315,9 +30316,9 @@ namespace GreedLast
                 bandRect.anchorMax = new Vector2(0.90f, Mathf.Clamp01(lineY + halfHeight));
                 bandRect.offsetMin = Vector2.zero;
                 bandRect.offsetMax = Vector2.zero;
+                bandRect.localScale = Vector3.one * (1f + activationImpact * 0.055f + urgencyPulse * 0.07f);
+                goodTimingBand.color = new Color32(255, 196, 74, (byte)Mathf.RoundToInt(Mathf.Lerp(24f, 92f, focusPulse) + urgencyPulse * 54f));
             }
-            bandRect.localScale = Vector3.one * (1f + activationImpact * 0.055f + urgencyPulse * 0.07f);
-            goodTimingBand.color = new Color32(255, 196, 74, (byte)Mathf.RoundToInt(Mathf.Lerp(24f, 92f, focusPulse) + urgencyPulse * 54f));
 
             judgementLine.color = Color32.Lerp(judgementLine.color, new Color32(255, 214, 105, 255), focusPulse * (0.44f + urgencyPulse * 0.18f));
             float currentLineScaleY = judgementLine.rectTransform.localScale.y;
