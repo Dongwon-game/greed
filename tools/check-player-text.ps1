@@ -39,7 +39,7 @@ function Check([string]$Name,[bool]$Pass) {
     $checks.Add($Name)
 }
 function Invoke-Text([string]$Name,[object[]]$Arguments) {
-    if ($Name -notin @('BuildPrototypeInteractionChecklistTextForPlatform','FormatProfileNextActionTextForPlatform','CompactRecordBoardLine')) {
+    if ($Name -notin @('BuildPrototypeInteractionChecklistTextForPlatform','FormatProfileNextActionText','CompactRecordBoardLine')) {
         throw 'Only the reviewed string-only methods are allowed.'
     }
     $method = $backend.GetMethod($Name,$flags)
@@ -62,14 +62,14 @@ foreach ($dev in @($false,$true)) {
             foreach ($key in @('A/←','S/Space','D/→','ESC/P','Enter:')) { Check "PC release $key" ($text.Contains($key)) }
             foreach ($wrong in @('모바일','터치','진동','F1 무적','PgUp')) { Check "PC release omits $wrong" (!$text.Contains($wrong)) }
         }
-        $prefix = if ($dev -or !$mobile) {'로비에서 Enter/강조'} else {'로비에서 강조 버튼'}
-        Check "$mode next action" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('일반모드','다음 구간',$dev,$mobile)) -ceq "$($prefix): 일반모드 - 다음 구간")
-        Check "$mode empty action" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('일반모드','',$dev,$mobile)) -ceq "$($prefix): 일반모드")
-        Check "$mode no highlight" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('','다음 구간',$dev,$mobile)) -ceq '다음 구간')
-        Check "$mode long action bounded" ((Invoke-Text 'FormatProfileNextActionTextForPlatform' @('일반모드',('가'*100),$dev,$mobile)).EndsWith(('가'*63)+'...'))
     }
 }
+Check 'profile recommends a button without an Enter promise' ((Invoke-Text 'FormatProfileNextActionText' @('일반모드','다음 구간')) -ceq '로비 추천 버튼: 일반모드 - 다음 구간')
+Check 'profile empty action' ((Invoke-Text 'FormatProfileNextActionText' @('일반모드','')) -ceq '로비 추천 버튼: 일반모드')
+Check 'profile no recommendation' ((Invoke-Text 'FormatProfileNextActionText' @('','다음 구간')) -ceq '다음 구간')
+Check 'profile long action bounded' ((Invoke-Text 'FormatProfileNextActionText' @('일반모드',('가'*100))).EndsWith(('가'*63)+'...'))
 $records = @(
+    @('[S] 1000점 / 로비 추천 버튼: 저장 조합 - 원하는 슬롯 선택 / 콤9','[S] 1000점 / 콤9'),
     @('[S] 1000점 / 로비에서 Enter/강조: 저장 조합 - 원하는 슬롯 선택 / 콤9','[S] 1000점 / 콤9'),
     @('[S] 1000점 / 로비에서 Enter: 강조 다음 행동 / 콤9','[S] 1000점 / 콤9'),
     @('[S] 1000점 / 로비에서 강조 버튼: 저장 조합 - 원하는 슬롯 선택 / 콤9','[S] 1000점 / 콤9'),

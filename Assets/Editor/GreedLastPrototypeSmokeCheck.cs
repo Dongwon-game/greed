@@ -10920,11 +10920,9 @@ namespace GreedLast.Editor
                 && !pcChecklist.Contains("F1", StringComparison.Ordinal)
                 && !pcChecklist.Contains("PgUp", StringComparison.Ordinal),
                 "PC player profile checks must describe supported input without mobile or development-only controls.");
-            Require(InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
-                    "일반 런", "첫 탈출", false, false).StartsWith("로비에서 Enter/강조:", StringComparison.Ordinal)
-                && InvokeMockBackendStaticLabel("FormatProfileNextActionTextForPlatform",
-                    "일반 런", "첫 탈출", false, true).StartsWith("로비에서 강조 버튼:", StringComparison.Ordinal),
-                "Profile recommendations must name the lobby context; Enter in the profile changes pages.");
+            Require(InvokeMockBackendStaticLabel("FormatProfileNextActionText",
+                    "일반 런", "첫 탈출") == "로비 추천 버튼: 일반 런 - 첫 탈출",
+                "Profile recommendations must name a lobby button without promising an Enter target.");
             string pcGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", false);
             Require(InvokeMockBackendStaticLabel("CompactRecordBoardLine",
                     "[S] 1000점 / PC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 콤9")
@@ -15474,7 +15472,7 @@ namespace GreedLast.Editor
                     "A failed first attempt must show that the remaining prototype loop is review practice before escape.");
                 Require(
                     reviewChecklistText.Contains("다음 행동", StringComparison.Ordinal)
-                        && reviewChecklistText.Contains("Enter/강조: 복기 연습", StringComparison.Ordinal)
+                        && reviewChecklistText.Contains("로비 추천 버튼: 복기 연습", StringComparison.Ordinal)
                         && reviewChecklistText.Contains("복기 연습으로 기초연습 숙이기 단계 반복", StringComparison.Ordinal),
                     "The profile next action must name the highlighted practice action and prioritize the current avoidance drill over passive growth.");
                 string goodAttemptMessage = backend.BuildRunAttemptResultMessage(chapterGoodAttempt);
@@ -15517,9 +15515,8 @@ namespace GreedLast.Editor
                     "Opening profile must clear only the NEW marker while keeping the pending save action label.");
                 string pendingSaveProfileText = backend.BuildProfileBoardText(1);
                 Require(
-                    pendingSaveProfileText.Contains("Enter/강조: 저장 조합", StringComparison.Ordinal)
+                    pendingSaveProfileText.Contains("로비 추천 버튼: 저장 조합", StringComparison.Ordinal)
                         && pendingSaveProfileText.Contains("원하는 슬롯을 고른 뒤 후보 저장", StringComparison.Ordinal)
-                        && pendingSaveProfileText.Contains("로비에서 Enter/강조:", StringComparison.Ordinal)
                         && pendingSaveProfileText.Contains("포기", StringComparison.Ordinal),
                     "A pending save candidate profile page must name the highlighted save-loadout action and the skip path.");
                 string saveDraftText = backend.BuildSaveLoadoutDraftText();
@@ -15926,7 +15923,7 @@ namespace GreedLast.Editor
                 string growthProfileText = backend.BuildProfileBoardText(1);
                 Require(
                     growthProfileText.Contains("성장 흔적", StringComparison.Ordinal)
-                        && growthProfileText.Contains("Enter/강조: 성장 보정", StringComparison.Ordinal),
+                        && growthProfileText.Contains("로비 추천 버튼: 성장 보정", StringComparison.Ordinal),
                     "The growth-action profile page must show growth traces and the highlighted growth action.");
                 Require(
                     growthProfileText.Contains("S1 2/2 2회", StringComparison.Ordinal),
@@ -16053,7 +16050,7 @@ namespace GreedLast.Editor
                         && partialGrowthLobby.ProfileButtonSummary.Contains("NEW", StringComparison.Ordinal),
                     "A profile with leftover growth points must keep the profile button action-specific even before the next upgrade cost is met.");
                 Require(
-                    partialGrowthBackend.BuildProfileBoardText(1).Contains("Enter/강조: 성장 보정", StringComparison.Ordinal),
+                    partialGrowthBackend.BuildProfileBoardText(1).Contains("로비 추천 버튼: 성장 보정", StringComparison.Ordinal),
                     "A leftover growth-point profile page must still highlight growth correction as the next action.");
                 string refillResumeNotice = InvokeAppStaticLabel("BuildRefillResumeNotice", lobby);
                 Require(
@@ -16284,7 +16281,7 @@ namespace GreedLast.Editor
                     InvokeMockBackendLabel(backend, "BuildPrototypeRemainingLoopStepText") == "2회 소진",
                     "The remaining-loop helper must keep the second save-use check visible after the first infinite run.");
                 Require(
-                    backend.BuildProfileBoardText(0).Contains("Enter/강조: 무한모드 - 정산 종료 확인 완료 / 실제 무한 런으로 생존 흐름 확인", StringComparison.Ordinal),
+                    backend.BuildProfileBoardText(0).Contains("로비 추천 버튼: 무한모드 - 정산 종료 확인 완료 / 실제 무한 런으로 생존 흐름 확인", StringComparison.Ordinal),
                     "After a forced infinite settlement, the profile next action must prefer real infinite play over review noise.");
                 GreedLastInfiniteRunRecord coachedInfiniteRecord = WithInfiniteMissReason(infiniteRecord, "too_late");
                 Require(backend.RegisterInfiniteRun(coachedInfiniteRecord), "The latest-section coaching test must register a non-test-stop infinite record.");
@@ -16574,7 +16571,7 @@ namespace GreedLast.Editor
                     InvokeMockBackendLabel(completedLoopBackend, "BuildPrototypeRemainingLoopStepText") == "완성 기록",
                     "The remaining-loop helper must resolve a completed prototype loop to final record verification.");
                 Require(
-                    completedLoopProfile.Contains("Enter/강조: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
+                    completedLoopProfile.Contains("로비 추천 버튼: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
                     "A completed loop must keep the profile next-action highlight on the final record check even when growth points remain.");
                 Require(
                 !completedLoopProfile.Contains("다음 확인: 보충 재진입", StringComparison.Ordinal)
@@ -16614,7 +16611,7 @@ namespace GreedLast.Editor
                 Require(
                 completedLoopWithReviewNoiseProfile.Contains("다음 확인: 완성 기록 / 실행: 기록 보기", StringComparison.Ordinal)
                         && completedLoopWithReviewNoiseProfile.Contains("남은: 완성 기록", StringComparison.Ordinal)
-                        && completedLoopWithReviewNoiseProfile.Contains("Enter/강조: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
+                        && completedLoopWithReviewNoiseProfile.Contains("로비 추천 버튼: 기록 보기 - 완성 루프 기록 확인", StringComparison.Ordinal),
                     "A completed prototype loop must keep final record verification ahead of lingering review practice noise.");
                 Require(
                     completedLoopBackend.LoadLobby().ProfileButtonSummary.Contains("완성", StringComparison.Ordinal)
@@ -16622,7 +16619,7 @@ namespace GreedLast.Editor
                     "A completed prototype loop profile button must keep the completion label even when a later attempt carries review noise.");
                 Require(
                     backend.BuildProfileBoardText(1).Contains("필요 행동: 무한 조합 보충", StringComparison.Ordinal)
-                        && backend.BuildProfileBoardText(1).Contains("Enter/강조: 무한 조합 보충", StringComparison.Ordinal),
+                        && backend.BuildProfileBoardText(1).Contains("로비 추천 버튼: 무한 조합 보충", StringComparison.Ordinal),
                     "The profile storage page must point empty save-loadout state and Enter highlight to refill.");
                 Require(
                     backend.BuildProfileBoardText(1).Contains("무한 조합 보충 필요", StringComparison.Ordinal),
@@ -18837,7 +18834,7 @@ namespace GreedLast.Editor
             Require(profileText.Contains("실행:", StringComparison.Ordinal), "The profile checklist must name the button or test shortcut that runs the next checkpoint.");
             Require(profileText.Contains("바로 체크:", StringComparison.Ordinal), "The profile checklist must group the next checkpoint, action, and purpose into one immediate-check line.");
             Require(profileText.Contains("목적:", StringComparison.Ordinal), "The profile checklist must explain why the current checkpoint matters.");
-            Require(profileText.Contains("Enter/강조:", StringComparison.Ordinal), "The profile checklist must name the currently highlighted lobby action.");
+            Require(profileText.Contains("로비 추천 버튼:", StringComparison.Ordinal), "The profile checklist must name the recommended lobby button.");
             Require(profileText.Contains("중앙/레인 큐", StringComparison.Ordinal), "The profile checklist must expose active action and lane cue status together.");
             Require(profileText.Contains("상태줄", StringComparison.Ordinal), "The profile checklist must expose status-line payoff readability from the first page.");
             Require(profileText.Contains("상태줄·코치", StringComparison.Ordinal), "The profile checklist must expose status-line and live-coach payoff readability from the first page.");
@@ -18995,7 +18992,7 @@ namespace GreedLast.Editor
                 "The verification page must use the shared prototype scope contract line.");
             Require(verificationText.Contains("검증 순서", StringComparison.Ordinal), "The profile board must expose a verification-order page.");
             Require(verificationText.Contains("검증 모드: 에디터 테스트키 ON", StringComparison.Ordinal), "The verification-order page must keep the current shortcut policy visible.");
-            Require(verificationText.Contains("Enter/강조:", StringComparison.Ordinal), "The verification page must preserve the highlighted lobby action summary.");
+            Require(verificationText.Contains("로비 추천 버튼:", StringComparison.Ordinal), "The verification page must preserve the recommended lobby button.");
             Require(verificationText.Contains("1 일반 런", StringComparison.Ordinal), "The verification page must start with the normal-run check.");
             Require(verificationText.Contains("위험→동작·박자", StringComparison.Ordinal), "The verification order must start normal-run testing from hazard-action readability.");
             Require(verificationText.Contains("박자·보상", StringComparison.Ordinal), "The verification page must remind the player to check rhythm and score-reward feedback.");
@@ -19097,21 +19094,10 @@ namespace GreedLast.Editor
                 InvokeMockBackendStaticLabel("BuildPrototypeInfiniteInteractionCheckText", true, true, true) == "무한 위협 +/- / 폭·보상 읽기 / 정산 종료"
                     && InvokeMockBackendStaticLabel("BuildPrototypeInfiniteInteractionCheckText", false, true, true) == "무한 위협 변화 / 폭·보상 읽기 / 종료 흐름",
                 "The infinite verification line must distinguish editor settlement shortcuts from release end-flow wording.");
-            string releaseNextActionText = InvokeMockBackendStaticLabel(
-                "FormatProfileNextActionTextForMode",
+            string nextActionText = InvokeMockBackendStaticLabel(
+                "FormatProfileNextActionText",
                 "무한모드",
-                "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인",
-                false);
-            string editorNextActionText = InvokeMockBackendStaticLabel(
-                "FormatProfileNextActionTextForMode",
-                "무한모드",
-                "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인",
-                true);
-            Require(
-                releaseNextActionText.StartsWith("로비에서 강조 버튼: 무한모드", StringComparison.Ordinal)
-                    && !releaseNextActionText.Contains("Enter/강조", StringComparison.Ordinal)
-                    && editorNextActionText.StartsWith("로비에서 Enter/강조: 무한모드", StringComparison.Ordinal),
-                "Profile recommendations must qualify both highlighted-button and keyboard actions as lobby actions.");
+                "저장 조합으로 무한모드 첫 기록 남기기 / 위협 폭·보상 확인");
             string compactPlaytestOrder =
                 "1 일반 런: 첫 탈출 / 위험→동작·박자·보상·상태줄·코치"
                 + "\n2 저장 조합: 저장됨 / 입구로 나가기→클리어 요약→슬롯 선택 / 저장 없이 로비→클리어 요약→클리어 복기 / 2회 소진"
@@ -19123,7 +19109,7 @@ namespace GreedLast.Editor
                 false,
                 "무한 위협 변화 / 폭·보상 읽기 / 종료 흐름",
                 "소진 대기 S1 2/2 2회 / 2회 소진 후 자동 비움",
-                releaseNextActionText);
+                nextActionText);
             RequireTextLayoutBudget(releaseVerificationPage, 23, 92, "release/mobile prototype verification page");
             RequireTextOmitsTokens(
                 releaseVerificationPage,
@@ -19134,7 +19120,7 @@ namespace GreedLast.Editor
                     && releaseVerificationPage.Contains("검증 모드: 모바일/릴리스 테스트키 숨김", StringComparison.Ordinal)
                     && releaseVerificationPage.Contains("조작 체크", StringComparison.Ordinal)
                     && releaseVerificationPage.Contains("현재 추천", StringComparison.Ordinal)
-                    && releaseVerificationPage.Contains("강조 버튼: 무한모드", StringComparison.Ordinal)
+                    && releaseVerificationPage.Contains("로비 추천 버튼: 무한모드", StringComparison.Ordinal)
                     && !releaseVerificationPage.Contains("Enter/강조", StringComparison.Ordinal)
                     && !releaseVerificationPage.Contains("Enter:", StringComparison.Ordinal)
                     && releaseVerificationPage.Contains("개발 테스트키 숨김", StringComparison.Ordinal)
@@ -19150,7 +19136,7 @@ namespace GreedLast.Editor
                 true,
                 "무한 위협 +/- / 폭·보상 읽기 / 정산 종료",
                 "최근 소모 1/2 마지막 / 자동 비움 대기",
-                editorNextActionText);
+                nextActionText);
             RequireTextLayoutBudget(editorVerificationPage, 23, 92, "editor/debug prototype verification page");
             Require(
                 editorVerificationPage.Contains("검증 모드: 에디터 테스트키 ON", StringComparison.Ordinal)
@@ -19160,7 +19146,7 @@ namespace GreedLast.Editor
                     && editorVerificationPage.Contains("F9 동작", StringComparison.Ordinal)
                     && editorVerificationPage.Contains("F10 낙하 보기", StringComparison.Ordinal)
                     && editorVerificationPage.Contains("PgUp·PgDn·End", StringComparison.Ordinal)
-                    && editorVerificationPage.Contains("Enter/강조: 무한모드", StringComparison.Ordinal)
+                    && editorVerificationPage.Contains("로비 추천 버튼: 무한모드", StringComparison.Ordinal)
                     && editorVerificationPage.Contains("정산 종료", StringComparison.Ordinal),
                 "The editor/debug verification page must preserve fast-test shortcuts and settlement wording.");
             Require(verificationText.Contains("이 화면에서 Enter는 다음 페이지", StringComparison.Ordinal)

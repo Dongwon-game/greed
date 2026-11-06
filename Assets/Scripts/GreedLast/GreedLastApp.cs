@@ -4051,6 +4051,7 @@ namespace GreedLast
         {
             if (part.StartsWith("로비에서 Enter/강조:", StringComparison.Ordinal)
                 || part.StartsWith("로비에서 Enter:", StringComparison.Ordinal)
+                || part.StartsWith("로비 추천 버튼:", StringComparison.Ordinal)
                 || part.StartsWith("로비에서 강조 버튼:", StringComparison.Ordinal)) return true;
             if (part.StartsWith("종료 구간 실수 ", StringComparison.Ordinal)
                 || part.StartsWith("종료 구간 보정 ", StringComparison.Ordinal))
@@ -4895,8 +4896,7 @@ namespace GreedLast
         private string BuildProfileNextActionText()
         {
             string action = BuildProfileNextActionCoreText(out var highlightAction);
-            return FormatProfileNextActionTextForPlatform(highlightAction, action,
-                GreedLastDevToolPolicy.ShouldEnable(Application.isEditor, Debug.isDebugBuild), Application.isMobilePlatform);
+            return FormatProfileNextActionText(highlightAction, action);
         }
 
         private string BuildProfileNextActionCoreText(out string highlightAction)
@@ -4973,23 +4973,12 @@ namespace GreedLast
 
         private static string FormatProfileNextActionText(string highlightAction, string action)
         {
-            return FormatProfileNextActionTextForMode(highlightAction, action, devToolsEnabled: true);
-        }
-
-        private static string FormatProfileNextActionTextForMode(string highlightAction, string action, bool devToolsEnabled)
-        {
-            return FormatProfileNextActionTextForPlatform(highlightAction, action, devToolsEnabled, isMobilePlatform: true);
-        }
-
-        private static string FormatProfileNextActionTextForPlatform(
-            string highlightAction, string action, bool devToolsEnabled, bool isMobilePlatform)
-        {
             if (string.IsNullOrEmpty(highlightAction))
             {
                 return action;
             }
-            // Enter changes pages inside the profile; this recommendation is a lobby action.
-            string prefix = "로비에서 " + GreedLastPlayerInputPolicy.PrimaryActionPrefix(devToolsEnabled, isMobilePlatform);
+            // The lobby's Enter target can differ from the profile recommendation.
+            const string prefix = "로비 추천 버튼";
             if (string.IsNullOrEmpty(action))
             {
                 return prefix + ": " + highlightAction;

@@ -34,12 +34,10 @@ foreach($dev in @($false,$true)) {
             }
         }
         $resume=[GreedLast.GreedLastPlayerInputPolicy]::ResumeHint($dev,$mobile)
-        $primary=[GreedLast.GreedLastPlayerInputPolicy]::PrimaryActionPrefix($dev,$mobile)
         Require ($resume.Contains('ESC/P') -eq $keyboard) 'Resume instructions lost the player keyboard capability.'
         $instruction=[GreedLast.GreedLastPlayerInputPolicy]::ResumeInstruction($dev,$mobile)
         Require ($instruction.Contains('ESC/P') -eq $keyboard) 'Pause header instructions lost the player keyboard capability.'
         Require ($instruction.Contains('카운트와 앞 박자 여유')) 'Resume help must preserve the countdown and safe lead-in contract.'
-        Require ($primary.Contains('Enter') -eq $keyboard) 'Menu confirmation instructions lost the player keyboard capability.'
         foreach($paused in @($false,$true)) {
             $action=[GreedLast.GreedLastPlayerInputPolicy]::PauseActionLabel($paused,$dev,$mobile)
             $expected=if($paused){'재개'}else{'일시정지'}
