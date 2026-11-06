@@ -37130,7 +37130,8 @@ namespace GreedLast
 
                 HideTrapDangerVisuals();
                 SetJudgementLineY(0.22f);
-                judgementLine.color = new Color32(255, 238, 181, 120);
+                bool waitingForTrap = ShouldShowRunWaitingTimingGuide(latestRunSnapshot);
+                judgementLine.color = new Color32(255, 238, 181, UsePlayerRunControls && waitingForTrap ? (byte)58 : (byte)120);
                 ApplyJudgementLinePulse();
                 UpdateRhythmBreakLine();
                 HideTimingBands();
@@ -37138,7 +37139,7 @@ namespace GreedLast
                 if (timingGuideText != null)
                 {
                     timingGuideText.fontSize = !DevToolsEnabled || devCleanViewEnabled ? 36 : 28;
-                    timingGuideText.text = ShouldShowRunWaitingTimingGuide(latestRunSnapshot)
+                    timingGuideText.text = waitingForTrap
                         ? "다음 함정 대기"
                         : string.Empty;
                     timingGuideText.color = new Color32(125, 139, 143, 180);
