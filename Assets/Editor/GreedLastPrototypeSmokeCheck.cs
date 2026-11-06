@@ -10845,7 +10845,12 @@ namespace GreedLast.Editor
             Require(GetRuntimeUiField<Button>(ui, "motionComfortButton").GetComponentInChildren<Text>().fontSize == 36
                 && GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons")[1].GetComponentInChildren<Text>().fontSize == 36,
                 "Pause setting buttons must use the readable menu font, including the shared calibration action.");
+            Require(beforePause.LastResult == GreedLastJudgementResult.None,
+                "The live prompt check needs an unjudged trap.");
+            SetRuntimeUiField(ui, "judgementFeedbackUntil", Time.unscaledTime + 5f);
             ui.RenderRun(beforePause);
+            Require(GetRuntimeUiValueField<float>(ui, "judgementFeedbackUntil") == 0f,
+                "Reentering an unjudged live trap must release the prompt from stale result text.");
             Rect hudBounds = BoundsInRoot(hud.rectTransform, root);
             Require(!hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<GameObject>(ui, "runGaugeRoot").GetComponent<RectTransform>(), root))
                 && !hudBounds.Overlaps(BoundsInRoot(GetRuntimeUiField<Button>(ui, "nextPatternButton").GetComponent<RectTransform>(), root)),
