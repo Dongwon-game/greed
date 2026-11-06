@@ -16862,6 +16862,9 @@ namespace GreedLast
             bool growthBoardLike = snapshot.State == GreedLastScreenState.GrowthBoard;
             bool profileBoardLike = snapshot.State == GreedLastScreenState.ProfileBoard;
             bool showDevTools = DevToolsEnabled;
+            string boardNextKeyHint = GreedLastPlayerInputPolicy.ShowKeyboardHints(showDevTools, Application.isMobilePlatform)
+                ? " (Enter)"
+                : string.Empty;
             subtitleText.text = BuildModeSubtitleForScreen(snapshot.State);
             bool growthDevLike = showDevTools && growthBoardLike;
             bool lobbyDevLike = showDevTools && snapshot.State == GreedLastScreenState.LobbyReady;
@@ -17167,7 +17170,7 @@ namespace GreedLast
             else if (recordBoardLike)
             {
                 SetRecordBoardButtonLayout();
-                SetButtonLabel(nextPatternButton, GetRecordBoardNavigationButtonLabel(1));
+                SetButtonLabel(nextPatternButton, GetRecordBoardNavigationButtonLabel(1) + boardNextKeyHint);
                 SetButtonLabel(saveSlotDetailButton, GetRecordBoardNavigationButtonLabel(-1));
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
@@ -17189,7 +17192,7 @@ namespace GreedLast
             {
                 SetRecordBoardButtonLayout();
                 SetButtonLabel(saveSlotDetailButton, "이전: " + GetProfileBoardPageButtonLabel(snapshot.RecordBoardPageIndex - 1));
-                SetButtonLabel(nextPatternButton, "다음: " + GetProfileBoardPageButtonLabel(snapshot.RecordBoardPageIndex + 1));
+                SetButtonLabel(nextPatternButton, "다음: " + GetProfileBoardPageButtonLabel(snapshot.RecordBoardPageIndex + 1) + boardNextKeyHint);
                 SetButtonLabel(returnLobbyButton, "로비로");
             }
             else if (infinitePrepLike)

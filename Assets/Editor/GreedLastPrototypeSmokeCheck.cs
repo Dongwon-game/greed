@@ -10638,7 +10638,7 @@ namespace GreedLast.Editor
                         && returnLobbyButton.gameObject.activeSelf,
                     "Record-board rendering must keep only the compact navigation buttons visible.");
                 Require(
-                    recordNavigationLabels == "다음 / 이전 / 로비로",
+                    recordNavigationLabels == "다음 (Enter) / 이전 / 로비로",
                     "Record-board navigation buttons must stay short and must not repeat page names. Actual: "
                         + recordNavigationLabels);
                 Require(
@@ -10686,7 +10686,7 @@ namespace GreedLast.Editor
                     + " / "
                     + GetButtonLabel(returnLobbyButton);
                 Require(
-                    profileNavigationLabels == "이전: 1/4 요약 / 다음: 3/4 장식 / 로비로",
+                    profileNavigationLabels == "이전: 1/4 요약 / 다음: 3/4 장식 (Enter) / 로비로",
                     "Profile-board page-one navigation must stay clear when profile NEW shortcuts open storage/growth details. Actual: "
                         + profileNavigationLabels);
                 Require(
