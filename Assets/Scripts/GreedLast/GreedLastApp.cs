@@ -11410,6 +11410,7 @@ namespace GreedLast
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
                 || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard
+                || stateMachine.CurrentState == GreedLastScreenState.ProfileBoard
                 || (IsRunState() && hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive
                     && !latestAppRunSnapshot.Paused))) return false;
             return TryHandlePrimaryKeyboardCommand(primaryPressed);
