@@ -11405,11 +11405,13 @@ namespace GreedLast
 
         private bool TryHandlePrimaryKeyboardFrame(bool primaryPressed, bool lanePressed)
         {
-            // Explicit channel input takes precedence over the default action in these menus.
+            // Explicit channel input takes precedence over the default action while choosing.
             if (primaryPressed && lanePressed && (stateMachine.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteLoadoutSelect
                 || stateMachine.CurrentState == GreedLastScreenState.InfiniteStartReady
-                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard)) return false;
+                || stateMachine.CurrentState == GreedLastScreenState.GrowthBoard
+                || (IsRunState() && hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive
+                    && !latestAppRunSnapshot.Paused))) return false;
             return TryHandlePrimaryKeyboardCommand(primaryPressed);
         }
 
