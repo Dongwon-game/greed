@@ -37191,8 +37191,10 @@ namespace GreedLast
                 progress,
                 coreProgress);
             visualProgress = ApplyDevTrapVisualPreviewProgress(visualProgress, coreProgress);
+            float approachLaneX = BuildTrapApproachLaneX(channelX, visualProgress, coreProgress);
+            float approachScale = Mathf.Lerp(0.54f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress));
             float markerX = Mathf.Clamp01(
-                BuildTrapApproachLaneX(channelX, visualProgress, coreProgress)
+                approachLaneX
                     + BuildTrapVisualHorizontalOffset(latestRunSnapshot.Pattern.TimingType, progress, coreProgress)
                     + BuildTrapApproachSweepX(latestRunSnapshot.Pattern, visualProgress));
             float y = Mathf.Lerp(BuildTrapApproachStartY(latestRunSnapshot.Pattern), 0.18f, visualProgress);
@@ -37218,7 +37220,7 @@ namespace GreedLast
                 0f,
                 BuildTrapMarkerResponseAngleLift(latestRunSnapshot.Pattern, coreNear, markerExactPulse)
                     + BuildTrapMarkerDownbeatAngleLift(latestRunSnapshot.Pattern, markerDownbeatLift));
-            UpdateTrapDangerVisuals(channelX, markerX, y, coreNear, markerDownbeatLift);
+            UpdateTrapDangerVisuals(channelX, approachLaneX, markerX, y, coreNear, markerDownbeatLift, approachScale);
             UpdateTrapApproachGhosts(channelX, progress, coreProgress, coreNear);
             SetTimingBand(goodTimingBand, latestRunSnapshot.Pattern.GoodWindowSeconds, channelX, false);
             SetTimingBand(successTimingBand, latestRunSnapshot.Pattern.SuccessWindowSeconds, channelX, true);
@@ -37257,7 +37259,7 @@ namespace GreedLast
             trapMarker.color = WithAlpha(
                 markerColor,
                 BuildPrototypeTrapProceduralAlpha(trapIllustration != null, markerColor.a));
-            UpdatePrototypeTrapIllustration(latestRunSnapshot.Pattern, markerColor, visualProgress, coreProgress);
+            UpdatePrototypeTrapIllustration(latestRunSnapshot.Pattern, markerColor, approachScale);
             float markerBaseScale = Mathf.Lerp(0.88f, 1.22f, coreNear) + entryPulse * 0.18f;
             trapMarker.rectTransform.localScale = new Vector3(
                 markerBaseScale * BuildTrapMarkerResponseScaleX(latestRunSnapshot.Pattern, coreNear, markerExactPulse, entryPulse)
@@ -38773,7 +38775,7 @@ namespace GreedLast
         }
 
         private void UpdatePrototypeTrapIllustration(
-            GreedLastPatternModel pattern, Color32 markerColor, float visualProgress, float coreProgress)
+            GreedLastPatternModel pattern, Color32 markerColor, float approachScale)
         {
             if (trapIllustration == null)
             {
@@ -38783,7 +38785,6 @@ namespace GreedLast
             Vector4 uv = BuildPrototypeTrapAtlasUv(pattern);
             trapIllustration.uvRect = new Rect(uv.x, uv.y, uv.z, uv.w);
             trapIllustration.color = BuildPrototypeTrapIllustrationTint(markerColor);
-            float approachScale = Mathf.Lerp(0.54f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress));
             trapIllustration.rectTransform.localScale = new Vector3(
                 BuildPrototypeTrapIllustrationMirrorX(pattern) * approachScale,
                 approachScale,
@@ -39604,7 +39605,8 @@ namespace GreedLast
             return baseAngle * Mathf.Clamp01(downbeatLift) * Mathf.Clamp(0.030f - safeIndex * 0.006f, 0.012f, 0.030f);
         }
 
-        private void UpdateTrapDangerVisuals(float channelX, float markerX, float y, float coreNear, float downbeatLift)
+        private void UpdateTrapDangerVisuals(
+            float channelX, float approachLaneX, float markerX, float y, float coreNear, float downbeatLift, float approachScale)
         {
             float safeDownbeatLift = Mathf.Clamp01(downbeatLift);
             float threatStrength = latestRunSnapshot.InfiniteMode
@@ -39649,7 +39651,7 @@ namespace GreedLast
             {
                 Vector4 shadowLayout = BuildTrapCorridorShadowLayout(
                     latestRunSnapshot.Pattern,
-                    channelX,
+                    approachLaneX,
                     markerX,
                     y,
                     coreNear);
@@ -39658,7 +39660,7 @@ namespace GreedLast
                 shadowRect.anchorMax = shadowRect.anchorMin;
                 shadowRect.anchoredPosition = Vector2.zero;
                 shadowRect.sizeDelta = new Vector2(shadowLayout.z, shadowLayout.w);
-                float shadowScale = BuildTrapCorridorShadowScale(safeDownbeatLift, coreNear);
+                float shadowScale = BuildTrapCorridorShadowScale(safeDownbeatLift, coreNear) * approachScale;
                 shadowRect.localScale = new Vector3(shadowScale, shadowScale, 1f);
                 shadowRect.localEulerAngles = new Vector3(
                     0f,
