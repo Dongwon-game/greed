@@ -654,9 +654,18 @@ namespace GreedLast.Editor
                     cases++;
                     core.Exit();
                     state.SetLobbyReady(backend.LoadLobby());
+                    Method(app, "RequestProfileBoard").Invoke(app, null);
+                    FinishPreparationTransition(app);
+                    Require(state.CurrentState == GreedLastScreenState.ProfileBoard && !Frame(true, true),
+                        "Direction+Enter must reach channel routing on the profile board.");
+                    Lane(GreedLastRunChannel.Center);
+                    Require(state.CurrentState == GreedLastScreenState.InfiniteRecordBoard,
+                        "The compound frame's center command must open records from the profile board.");
+                    cases++;
+                    state.SetLobbyReady(backend.LoadLobby());
                 }
-                Require(cases == 12, "All clean/detailed compound keyboard paths must complete.");
-                Debug.Log("Greed compound menu keyboard passed: save, slot, preparation and opening gift paths in both views. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
+                Require(cases == 14, "All clean/detailed compound keyboard paths must complete.");
+                Debug.Log("Greed compound menu keyboard passed: save, slot, preparation, opening gift and profile paths in both views. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
             }
             finally
             {
