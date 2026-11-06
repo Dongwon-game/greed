@@ -4050,6 +4050,7 @@ namespace GreedLast
         private static bool IsRecordBoardCoachingPart(string part)
         {
             if (part.StartsWith("로비에서 Enter/강조:", StringComparison.Ordinal)
+                || part.StartsWith("로비에서 Enter:", StringComparison.Ordinal)
                 || part.StartsWith("로비에서 강조 버튼:", StringComparison.Ordinal)) return true;
             if (part.StartsWith("종료 구간 실수 ", StringComparison.Ordinal)
                 || part.StartsWith("종료 구간 보정 ", StringComparison.Ordinal))
