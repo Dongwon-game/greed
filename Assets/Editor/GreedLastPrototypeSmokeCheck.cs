@@ -14192,6 +14192,17 @@ namespace GreedLast.Editor
                     && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.2f, ghostCoreProgress, ghostCoreProgress), 0.2f)
                     && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.8f, 1f, ghostCoreProgress), 0.8f),
                     "Trap approach perspective must converge distant lanes and preserve the original lanes at judgement and beyond.");
+                float originalStartY = InvokeRuntimeUiFloat("BuildTrapApproachStartY", snapshot.Pattern);
+                float projectedCoreY = InvokeRuntimeUiFloat(
+                    "BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress, ghostCoreProgress);
+                Require(Mathf.Approximately(projectedCoreY, Mathf.Lerp(originalStartY, 0.18f, ghostCoreProgress)),
+                    "The floor trap reveal must not move the marker at its judgement progress.");
+                if (snapshot.Pattern.AvoidanceType == GreedLastAvoidanceType.Jump)
+                {
+                    float projectedStartY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, 0f, ghostCoreProgress);
+                    Require(projectedStartY > originalStartY && projectedStartY < 1f,
+                        "A distant floor trap must rise above its former start without leaving the lane panel.");
+                }
                 Vector4 leadGhost = InvokeRuntimeUiVector4(
                     "BuildTrapApproachGhostLayout",
                     snapshot.Pattern,
