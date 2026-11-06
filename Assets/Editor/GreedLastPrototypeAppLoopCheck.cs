@@ -584,6 +584,9 @@ namespace GreedLast.Editor
             GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core)
         {
             bool originalClean = ui.UsePlayerRunControls;
+            int originalProfilePage = Read<int>(app, "profileBoardPageIndex");
+            int originalRecordPage = Read<int>(app, "recordBoardPageIndex");
+            int originalPreferredRecordPage = Read<int>(app, "preferredRecordBoardPageIndex");
             bool Frame(bool primary, bool lane) => (bool)Method(app, "TryHandlePrimaryKeyboardFrame")
                 .Invoke(app, new object[] { primary, lane });
             void Lane(GreedLastRunChannel channel) => Method(app, "HandleRunChannelInput")
@@ -655,7 +658,6 @@ namespace GreedLast.Editor
                     core.Exit();
                     state.SetLobbyReady(backend.LoadLobby());
                     Method(app, "RequestProfileBoard").Invoke(app, null);
-                    FinishPreparationTransition(app);
                     Require(state.CurrentState == GreedLastScreenState.ProfileBoard && !Frame(true, true),
                         "Direction+Enter must reach channel routing on the profile board.");
                     Lane(GreedLastRunChannel.Center);
@@ -673,6 +675,9 @@ namespace GreedLast.Editor
                 Method(app, "ResetInfinitePreparation").Invoke(app, null);
                 Method(app, "ClearInfinitePreparationContext").Invoke(app, null);
                 Write(app, "backend", originalBackend);
+                Write(app, "profileBoardPageIndex", originalProfilePage);
+                Write(app, "recordBoardPageIndex", originalRecordPage);
+                Write(app, "preferredRecordBoardPageIndex", originalPreferredRecordPage);
                 state.SetLobbyReady(originalBackend.LoadLobby());
                 if (ui.UsePlayerRunControls != originalClean) ui.ToggleDevCleanView();
             }
