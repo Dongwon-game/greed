@@ -417,10 +417,14 @@ namespace GreedLast.PlayerChecks
                     && RunState().Pattern.PatternId != openingPattern,
                     "The normal course must reach a live side trap before its comparison.");
                 yield return CaptureTrapApproach("normal-side-trap", frames);
+                yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
+                Require(RunState().ActivePattern && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Twist,
+                    "The normal course must reach a live twist trap before its comparison.");
+                yield return CaptureTrapApproach("normal-twist-trap", frames);
                 Require(Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0,
                     "Rendering the two approaches must not settle an attempt.");
                 result.frames = frames.ToArray();
-                result.scope = "Isolated Windows-player offscreen camera renders of practice, the opening normal trap and the first side trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
+                result.scope = "Isolated Windows-player offscreen camera renders of practice, the opening normal trap, first side trap and first twist trap. The canvas is temporarily camera-routed and restored. Not window/framebuffer or OS desktop capture, physical input, audible output or device performance. Personal product untouched.";
             }
             else if (phase == "clear" || phase == "window-clear" || phase == "window-loadout" || phase == "window-menu")
             {
@@ -1317,7 +1321,8 @@ namespace GreedLast.PlayerChecks
             => run.Pattern.Channel == GreedLastRunChannel.Left || run.Pattern.Channel == GreedLastRunChannel.Right;
 
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
-            bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null)
+            bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null,
+            GreedLastAvoidanceType? untilAvoidance = null)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1328,7 +1333,8 @@ namespace GreedLast.PlayerChecks
                 GreedLastRunSnapshot run = RunState();
                 if (run.ActivePattern && !run.CountdownActive && !run.Paused
                     && (untilFirstTrap || (untilSideTrapAfter != null && IsSideTrap(run)
-                        && run.Pattern.PatternId != untilSideTrapAfter))) break;
+                        && run.Pattern.PatternId != untilSideTrapAfter)
+                        || (untilAvoidance.HasValue && run.Pattern.AvoidanceType == untilAvoidance.Value))) break;
                 // Foreground waits and an in-flight countdown are not new interruptions.
                 if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {
