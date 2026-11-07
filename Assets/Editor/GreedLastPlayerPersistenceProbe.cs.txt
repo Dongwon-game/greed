@@ -1189,6 +1189,7 @@ namespace GreedLast.PlayerChecks
         {
             yield return CaptureFrame(name + "-far", frames);
             Frame far = frames[frames.Count - 1];
+            float exactWindow = RunState().Pattern.SuccessWindowSeconds;
             Require(!string.IsNullOrEmpty(far.pattern) && far.coreDeltaSeconds < 0f,
                 "The far frame must contain a live trap before its judgement point.");
             float nearDelta = far.coreDeltaSeconds * 0.35f;
@@ -1216,7 +1217,7 @@ namespace GreedLast.PlayerChecks
             Frame contact = frames[frames.Count - 1];
             Require(contact.pattern == far.pattern && contact.channel == far.channel
                 && contact.coreDeltaSeconds >= 0f
-                && contact.coreDeltaSeconds <= RunState().Pattern.SuccessWindowSeconds
+                && contact.coreDeltaSeconds <= exactWindow
                 && Mathf.Abs(contact.markerY - contact.judgementY) < 0.04f
                 && contact.misses == far.misses,
                 "The rendered trap must meet its judgement line inside the actual exact window.");
