@@ -16694,7 +16694,7 @@ namespace GreedLast
                     if (UsePlayerRunControls && runModeActive && activeRunTargetIndex >= 0)
                     {
                         float emphasis = Mathf.Max(Mathf.Max(pressPulse, holdAmount), judgementPulse);
-                        float restingOpacity = i == activeRunTargetIndex ? 0.58f : 0.30f;
+                        float restingOpacity = i == activeRunTargetIndex ? 0.40f : 0.30f;
                         baseColor.a = (byte)Mathf.RoundToInt(baseColor.a * Mathf.Lerp(restingOpacity, 1f, emphasis));
                     }
                     laneImages[i].color = baseColor;
