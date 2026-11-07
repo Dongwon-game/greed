@@ -1269,7 +1269,8 @@ namespace GreedLast.PlayerChecks
                 Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
                 Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
                 float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
-                frames.Add(new Frame { name = name, width = texture.width, height = texture.height,
+                frames.Add(new Frame { name = name, utc = DateTime.UtcNow.ToString("O"),
+                    width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,

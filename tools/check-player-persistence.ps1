@@ -317,7 +317,7 @@ try {
         }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             $imagePath = Join-Path $root ('frame-'+$_.name+'.png')
-            @{Name=$_.name; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
+            @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
