@@ -1212,7 +1212,7 @@ namespace GreedLast.PlayerChecks
                     "The approach ended or paused before its judgement frame.");
                 return run.CoreDeltaSeconds >= 0f;
             }, settleFrame: false);
-            yield return CaptureFrame(name + "-contact", frames, settleSeconds: 0f);
+            yield return CaptureFrame(name + "-contact", frames, settleSeconds: 0f, respondAfterRender: true);
             Frame contact = frames[frames.Count - 1];
             Require(contact.pattern == far.pattern && contact.channel == far.channel
                 && contact.coreDeltaSeconds >= 0f
@@ -1222,7 +1222,8 @@ namespace GreedLast.PlayerChecks
                 "The rendered trap must meet its judgement line inside the actual exact window.");
         }
 
-        private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f)
+        private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f,
+            bool respondAfterRender = false)
         {
             if (settleSeconds > 0f)
             {
@@ -1255,6 +1256,13 @@ namespace GreedLast.PlayerChecks
                 canvas.planeDistance = 1f;
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
+                if (respondAfterRender)
+                {
+                    // Submit before GPU readback/PNG encoding can consume the input window.
+                    Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                    Require(RunState().LastResult == GreedLastJudgementResult.Success,
+                        "The contact render must earn exact input before its image is saved.");
+                }
                 RenderTexture.active = target;
                 texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 texture.Apply();
