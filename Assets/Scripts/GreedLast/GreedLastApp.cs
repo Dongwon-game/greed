@@ -39528,7 +39528,8 @@ namespace GreedLast
                     + BuildTrapApproachSweepX(pattern, ghostVisualProgress));
             float y = BuildTrapApproachY(pattern, ghostVisualProgress, coreProgress);
             Vector4 shape = BuildTrapMarkerShapeLayout(pattern, Mathf.Clamp01(1f - safeIndex * 0.22f));
-            float scale = Mathf.Clamp(0.76f - safeIndex * 0.12f, 0.46f, 0.80f);
+            float scale = Mathf.Clamp(0.76f - safeIndex * 0.12f, 0.46f, 0.80f)
+                * Mathf.Lerp(0.54f, 1f, BuildTrapApproachDepth(ghostVisualProgress, coreProgress));
             return new Vector4(x, y, shape.x * scale, shape.y * scale);
         }
 
