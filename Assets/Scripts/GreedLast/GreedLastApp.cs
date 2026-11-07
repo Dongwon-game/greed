@@ -29616,9 +29616,14 @@ namespace GreedLast
                 color = Color32.Lerp(color, GetLaneJudgementPulseColor(index), judgementPulse * 0.62f);
             }
 
+            int glowAlpha = BuildLaneTargetGlowAlpha(targetGlow, beatPulse, judgementPulse);
+            if (UsePlayerRunControls)
+            {
+                glowAlpha = Mathf.RoundToInt(glowAlpha * 0.62f);
+            }
             glow.color = WithAlpha(
                 color,
-                BuildLaneTargetGlowAlpha(targetGlow, beatPulse, judgementPulse)
+                glowAlpha
                     + BuildLaneTargetGlowExactLockAlphaLift(exactLock)
                     + BuildLaneTargetGlowDownbeatAlphaLift(downbeatLift)
                     + BuildLaneTargetGlowUrgencyAlphaLift(urgency));
