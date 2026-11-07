@@ -14209,6 +14209,15 @@ namespace GreedLast.Editor
                     "BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress, ghostCoreProgress);
                 Require(Mathf.Approximately(projectedCoreY, Mathf.Lerp(originalStartY, 0.18f, ghostCoreProgress)),
                     "The floor trap reveal must not move the marker at its judgement progress.");
+                float timingCoreY = InvokeRuntimeUiFloat(
+                    "BuildTrapTimingY", snapshot.Pattern, ghostCoreProgress, ghostCoreProgress);
+                float timingEarlyY = InvokeRuntimeUiFloat(
+                    "BuildTrapTimingY", snapshot.Pattern, Mathf.Max(0f, ghostCoreProgress - 0.05f), ghostCoreProgress);
+                float timingLateY = InvokeRuntimeUiFloat(
+                    "BuildTrapTimingY", snapshot.Pattern, Mathf.Min(1f, ghostCoreProgress + 0.05f), ghostCoreProgress);
+                Require(Mathf.Abs(timingCoreY - projectedCoreY) < 0.001f
+                    && timingEarlyY > timingCoreY && timingLateY < timingCoreY,
+                    "Timing bands and input traces must follow the trap through the judgement line in order.");
                 if (snapshot.Pattern.AvoidanceType == GreedLastAvoidanceType.Jump)
                 {
                     float projectedStartY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, 0f, ghostCoreProgress);
