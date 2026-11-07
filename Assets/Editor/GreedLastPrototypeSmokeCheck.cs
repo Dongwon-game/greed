@@ -10953,7 +10953,7 @@ namespace GreedLast.Editor
             Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
                 && pcGuide.Contains("Enter 또는 연습 버튼", StringComparison.Ordinal)
                 && pcGuide.Contains("A/← · S/Space · D/→", StringComparison.Ordinal)
-                && pcGuide.Contains("해당 회피 동작이 나옵니다", StringComparison.Ordinal)
+                && pcGuide.Contains("좌우 이동 대신 회피 동작", StringComparison.Ordinal)
                 && pcGuide.Contains("판정선", StringComparison.Ordinal)
                 && mobileGuide.Contains("영역", StringComparison.Ordinal)
                 && !mobileGuide.Contains("Enter", StringComparison.Ordinal)

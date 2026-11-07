@@ -24917,7 +24917,7 @@ namespace GreedLast
                 + (isMobilePlatform ? "\n화면의 좌 · 중 · 우 영역으로 대응합니다."
                     : "\nA/← · S/Space · D/→ 또는 해당 영역 클릭")
                 + (isMobilePlatform ? "\n좌우 이동이 아닌 대응입니다. 판정선에 맞춰 누르세요."
-                    : "\n판정선에 맞춰 누르면 해당 회피 동작이 나옵니다.");
+                    : "\n판정선에 맞춰 누르면 좌우 이동 대신 회피 동작이 나옵니다.");
         }
 
         private static string BuildPreparedInfiniteDisplayDetail(string detail)
