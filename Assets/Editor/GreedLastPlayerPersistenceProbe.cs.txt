@@ -1220,7 +1220,9 @@ namespace GreedLast.PlayerChecks
                 && contact.coreDeltaSeconds <= exactWindow
                 && Mathf.Abs(contact.markerY - contact.judgementY) < 0.04f
                 && contact.misses == far.misses,
-                "The rendered trap must meet its judgement line inside the actual exact window.");
+                "The rendered trap must meet its judgement line inside the actual exact window: "
+                    + contact.name + ", delta=" + contact.coreDeltaSeconds
+                    + ", markerY=" + contact.markerY + ", judgementY=" + contact.judgementY);
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f,
@@ -1257,6 +1259,8 @@ namespace GreedLast.PlayerChecks
                 canvas.planeDistance = 1f;
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
+                Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
+                float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
                 if (respondAfterRender)
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
@@ -1280,8 +1284,6 @@ namespace GreedLast.PlayerChecks
                         colors.Add(((c.r >> 3) << 10) | ((c.g >> 3) << 5) | (c.b >> 3));
                     }
                 Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
-                Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
-                float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
                 frames.Add(new Frame { name = name, utc = DateTime.UtcNow.ToString("O"),
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
@@ -1291,6 +1293,7 @@ namespace GreedLast.PlayerChecks
                     markerX = markerAnchor.x, markerY = markerAnchor.y, judgementY = judgementY,
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
+                result.frames = frames.ToArray();
             }
             finally
             {
