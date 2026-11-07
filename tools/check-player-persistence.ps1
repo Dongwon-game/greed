@@ -308,7 +308,8 @@ try {
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
         $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-result',
-            'normal-trap-far','normal-trap-near','normal-side-trap-far','normal-side-trap-near')
+            'normal-trap-far','normal-trap-near','normal-trap-contact',
+            'normal-side-trap-far','normal-side-trap-near','normal-side-trap-contact')
         if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or
             ($render.frames.name -join ',') -cne ($expectedFrames -join ',') -or
             $render.candidate -or $render.clears -ne 0 -or $render.infiniteRuns -ne 0 -or $render.growthPoints -ne 0) {

@@ -1201,6 +1201,21 @@ namespace GreedLast.PlayerChecks
                 && near.coreDeltaSeconds > far.coreDeltaSeconds && near.misses == far.misses
                 && far.markerY > near.markerY && Mathf.Approximately(far.judgementY, near.judgementY),
                 "The two renders must show the same live trap without a miss between frames.");
+            yield return WaitFor(() =>
+            {
+                GreedLastRunSnapshot run = RunState();
+                Require(run.ActivePattern && !run.Paused && run.Pattern.PatternId == far.pattern,
+                    "The approach ended or paused before its judgement frame.");
+                return run.CoreDeltaSeconds >= 0f;
+            }, settleFrame: false);
+            yield return CaptureFrame(name + "-contact", frames, settleSeconds: 0f);
+            Frame contact = frames[frames.Count - 1];
+            Require(contact.pattern == far.pattern && contact.channel == far.channel
+                && contact.coreDeltaSeconds >= 0f
+                && contact.coreDeltaSeconds <= RunState().Pattern.SuccessWindowSeconds
+                && Mathf.Abs(contact.markerY - contact.judgementY) < 0.04f
+                && contact.misses == far.misses,
+                "The rendered trap must meet its judgement line inside the actual exact window.");
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f)
