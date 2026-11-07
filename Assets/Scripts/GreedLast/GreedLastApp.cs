@@ -37227,7 +37227,7 @@ namespace GreedLast
                     + BuildTrapVisualHorizontalOffset(latestRunSnapshot.Pattern.TimingType, progress, coreProgress)
                     + BuildTrapApproachSweepX(latestRunSnapshot.Pattern, visualProgress));
             float y = BuildTrapApproachY(latestRunSnapshot.Pattern, visualProgress, coreProgress);
-            float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
+            float coreY = BuildTrapApproachY(latestRunSnapshot.Pattern, coreProgress, coreProgress);
             RectTransform rect = trapMarker.rectTransform;
             rect.anchorMin = new Vector2(markerX, y);
             rect.anchorMax = new Vector2(markerX, y);
@@ -40301,6 +40301,10 @@ namespace GreedLast
 
             return y;
         }
+
+        private static float BuildTrapTimingY(GreedLastPatternModel pattern, float progress, float coreProgress)
+            => BuildTrapApproachY(pattern,
+                BuildTrapVisualProgress(pattern.TimingType, progress, coreProgress), coreProgress);
 
         private static float BuildTrapApproachStartY(GreedLastPatternModel pattern)
         {
@@ -44183,8 +44187,8 @@ namespace GreedLast
             float hitSeconds = Mathf.Max(0.01f, pattern.HitSeconds);
             float startProgress = Mathf.Clamp01((pattern.CoreSeconds - windowSeconds) / hitSeconds);
             float endProgress = Mathf.Clamp01((pattern.CoreSeconds + windowSeconds) / hitSeconds);
-            float yA = Mathf.Lerp(0.88f, 0.18f, startProgress);
-            float yB = Mathf.Lerp(0.88f, 0.18f, endProgress);
+            float yA = BuildTrapTimingY(pattern, startProgress, coreProgress: pattern.CoreSeconds / hitSeconds);
+            float yB = BuildTrapTimingY(pattern, endProgress, coreProgress: pattern.CoreSeconds / hitSeconds);
             RectTransform rect = band.rectTransform;
             float exactPulse = band == successTimingBand ? BuildExactTimingPulse() : 0f;
             float readiness = BuildTrapReadinessAtmosphereStrength(latestRunSnapshot);
@@ -44260,8 +44264,8 @@ namespace GreedLast
             float windowSeconds = BuildCenterHitWindow(pattern);
             float startProgress = Mathf.Clamp01((pattern.CoreSeconds - windowSeconds) / hitSeconds);
             float endProgress = Mathf.Clamp01((pattern.CoreSeconds + windowSeconds) / hitSeconds);
-            float yA = Mathf.Lerp(0.88f, 0.18f, startProgress);
-            float yB = Mathf.Lerp(0.88f, 0.18f, endProgress);
+            float yA = BuildTrapTimingY(pattern, startProgress, coreProgress: pattern.CoreSeconds / hitSeconds);
+            float yB = BuildTrapTimingY(pattern, endProgress, coreProgress: pattern.CoreSeconds / hitSeconds);
             RectTransform rect = centerTimingBand.rectTransform;
             rect.anchorMin = new Vector2(Mathf.Clamp01(channelX - 0.062f), Mathf.Min(yA, yB));
             rect.anchorMax = new Vector2(Mathf.Clamp01(channelX + 0.062f), Mathf.Max(yA, yB));
@@ -45223,11 +45227,11 @@ namespace GreedLast
             float signedDeltaSeconds = snapshot.LastInputTimingDeltaSeconds;
             float hitSeconds = Mathf.Max(0.01f, feedbackPattern.HitSeconds);
             float coreProgress = Mathf.Clamp01(feedbackPattern.CoreSeconds / hitSeconds);
-            float coreY = Mathf.Lerp(0.88f, 0.18f, coreProgress);
             GreedLastRunChannel traceChannel = snapshot.LastJudgedInputChannel != GreedLastRunChannel.None
                 ? snapshot.LastJudgedInputChannel : feedbackPattern.Channel;
             inputTimingTraceX = GetChannelAnchorX(traceChannel);
-            inputTimingTraceY = Mathf.Clamp(coreY - signedDeltaSeconds / hitSeconds * 0.70f, 0.18f, 0.88f);
+            inputTimingTraceY = BuildTrapTimingY(feedbackPattern,
+                Mathf.Clamp01(coreProgress + signedDeltaSeconds / hitSeconds), coreProgress);
             inputTimingTraceSignedDeltaSeconds = signedDeltaSeconds;
             inputTimingTraceResult = snapshot.LastResult;
             inputTimingTraceColor = WithAlpha(GetJudgementFeedbackColor(snapshot), 225);
