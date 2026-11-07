@@ -323,7 +323,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 1. 개인 Greed 플레이어와 해당 프로젝트 Unity 에디터를 닫는다. 도구는 열려 있으면 건드리지 않고 중단한다.
 2. Unity `6000.4.3f1`, Windows Build Support, 정식 Windows 빌드를 준비한다. 게임 소스·장면·자원·패키지·설정 변경을 먼저 검토/커밋한다.
-3. PowerShell에서 프로젝트의 `tools/check-player-persistence.ps1`을 실행한다. 기본 `Builds/GreedLastPrototype`이 없는 복구 사본/worktree에서는 `-VerifiedReleasePath '<검증된 Windows 실행본 폴더>'`를 명시한다. `-WhatIf`는 생성 전 중단한다. `-CaptureFrames`를 명시하면 연습 일곱 장과 일반 런 첫 함정 및 첫 좌우 함정의 원거리·근거리·판정 순간 여섯 장을 오프스크린으로 렌더한다. 판정 순간 추가분은 실행 검증 대기다.
+3. PowerShell에서 프로젝트의 `tools/check-player-persistence.ps1`을 실행한다. 기본 `Builds/GreedLastPrototype`이 없는 복구 사본/worktree에서는 `-VerifiedReleasePath '<검증된 Windows 실행본 폴더>'`를 명시한다. `-WhatIf`는 생성 전 중단한다. `-CaptureFrames`를 명시하면 연습 일곱 장과 일반 런 첫 함정 및 첫 좌우 함정의 원거리·근거리·판정 순간 여섯 장을 오프스크린으로 렌더한다. 11월 7일 해당 13장과 후속 10단계가 통과했다. [확인 이력](GreedLast_Prototype_CheckHistory.md)
 4. 마지막 출력의 `Report`에서 `Succeeded`, 단계별 해시, 소유 프로세스 종료, 개인 설정/원본 설정 불변을 확인한다. 실패 JSON과 로그는 삭제하거나 성공으로 덮어쓰지 않는다.
 
 새 복사본의 Library/실행본을 만들므로 여유 디스크와 컴파일 시간이 필요하다. 생성 자료는 `Logs` 아래에 보존하고 GitHub에는 포함하지 않는다. 이 도구는 알림·관리자 창·예약 작업·PC 종료를 설치하지 않는다.
