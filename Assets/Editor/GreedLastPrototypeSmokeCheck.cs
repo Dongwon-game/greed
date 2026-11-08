@@ -10941,6 +10941,8 @@ namespace GreedLast.Editor
                     default(GreedLastRunSnapshot), false, true).StartsWith("재개 버튼", StringComparison.Ordinal),
                 "Pause header instructions must match PC keyboard and mobile touch presentation.");
             RequireTextLayoutBudget(pcChecklist, 10, 92, "PC player interaction checklist");
+            const string menuScrollHint = " / 휠·PgUp/PgDn 본문";
+            string pcWithoutMenuScrollHint = pcChecklist.Replace(menuScrollHint, string.Empty);
             Require(pcChecklist.Contains("PC 조작", StringComparison.Ordinal)
                 && pcChecklist.Contains("A/←", StringComparison.Ordinal)
                 && pcChecklist.Contains("S/Space", StringComparison.Ordinal)
@@ -10950,7 +10952,10 @@ namespace GreedLast.Editor
                 && !pcChecklist.Contains("터치", StringComparison.Ordinal)
                 && !pcChecklist.Contains("진동", StringComparison.Ordinal)
                 && !pcChecklist.Contains("F1", StringComparison.Ordinal)
-                && !pcChecklist.Contains("PgUp", StringComparison.Ordinal),
+                && pcChecklist.Contains(menuScrollHint, StringComparison.Ordinal)
+                && !pcWithoutMenuScrollHint.Contains("PgUp", StringComparison.Ordinal)
+                && !pcWithoutMenuScrollHint.Contains("PgDn", StringComparison.Ordinal)
+                && !pcWithoutMenuScrollHint.Contains("End", StringComparison.Ordinal),
                 "PC player profile checks must describe supported input without mobile or development-only controls.");
             Require(InvokeMockBackendStaticLabel("FormatProfileNextActionText",
                     "일반 런", "첫 탈출") == "로비 추천 버튼: 일반 런 - 첫 탈출",
