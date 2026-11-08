@@ -1539,6 +1539,7 @@ namespace GreedLast.Editor
             RequireSustainedRunPhase("BuildSceneryPillarPhase", new object[] { true, 0f, 1f, 1f, 0f, 0, 4 });
             RequireSustainedRunPhase("BuildRunnerStridePhase", new object[] { true, 0f, 1f, 0f });
             RequireForwardLineSpeedContinuity();
+            RequireSustainedRunPhase("BuildForwardMotionLinePhase", new object[] { true, 0f, 1f, 1f, 0f, 0, 6 });
             float baseFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1f, 0f, 0);
             float boostedFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1.4f, 1f, 0);
             float staggerFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 0.62f, 0f, 0);

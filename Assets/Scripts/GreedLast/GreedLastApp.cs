@@ -16114,7 +16114,7 @@ namespace GreedLast
             public bool HasBeat;
         }
         private RunMotionClock runnerStrideClock, floorTileClock, sceneryPillarClock, corridorGateClock,
-            sideWallStripeClock, speedStreakClock, centerSeamClock, paceMarkerClock, pathSegmentClock;
+            sideWallStripeClock, speedStreakClock, centerSeamClock, paceMarkerClock, pathSegmentClock, forwardLineClock;
 
         private static float AdvanceRunMotionClock(ref RunMotionClock clock, bool running, float beat, float speed)
         {
@@ -16131,6 +16131,7 @@ namespace GreedLast
             runnerStrideClock.HasBeat = floorTileClock.HasBeat = sceneryPillarClock.HasBeat = false;
             corridorGateClock.HasBeat = sideWallStripeClock.HasBeat = speedStreakClock.HasBeat = false;
             centerSeamClock.HasBeat = paceMarkerClock.HasBeat = pathSegmentClock.HasBeat = false;
+            forwardLineClock.HasBeat = false;
         }
         private float rhythmPulseStartedAt = -1f;
         private float rhythmPulseInterval = 0.5f;
@@ -30319,7 +30320,8 @@ namespace GreedLast
             float motionSpeedBias, float threatStrength, int lineIndex, int lineCount)
         {
             float speed = (0.46f + Mathf.Clamp01(threatStrength) * 0.2f) * motionSpeedBias * stageMotionScale;
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + lineIndex / (float)Mathf.Max(1, lineCount), 1f);
+            float phase = AdvanceRunMotionClock(ref forwardLineClock, running, beatProgress, speed);
+            return Mathf.Repeat(phase + lineIndex / (float)Mathf.Max(1, lineCount), 1f);
         }
 
         private static bool ShouldAdvanceRunMotion(GreedLastRunSnapshot snapshot)

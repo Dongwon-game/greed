@@ -78,7 +78,7 @@ namespace GreedLast.PlayerChecks
         private sealed class MotionSample
         {
             public int frame;
-            public float clock, floorY, pillarY;
+            public float clock, floorY, pillarY, lineY;
         }
 
         [Serializable]
@@ -425,13 +425,15 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => !RunState().Paused && !RunState().CountdownActive && RunState().ActivePattern);
                 Require(RunState().Pattern.PatternId == pattern && RunState().Health == paused.Health
                     && RunState().MissCount == paused.MissCount, "The rendered recovery must retain the same trap without hidden damage.");
-                yield return CaptureFrame("resumed-trap", frames);
                 result.resumedMotion = ReadSceneryMotionSample();
                 float floorTravel = Mathf.Repeat((result.countdownMotion.floorY - result.resumedMotion.floorY) / 0.65f, 1f);
                 float pillarTravel = Mathf.Repeat((result.countdownMotion.pillarY - result.resumedMotion.pillarY) / 0.64f, 1f);
-                Require(floorTravel > 0.00001f && pillarTravel > 0.00001f && floorTravel < 0.25f && pillarTravel < 0.25f,
+                float lineTravel = Mathf.Repeat((result.countdownMotion.lineY - result.resumedMotion.lineY) / 0.66f, 1f);
+                Require(floorTravel > 0.00001f && pillarTravel > 0.00001f && lineTravel > 0.00001f
+                    && floorTravel < 0.25f && pillarTravel < 0.25f && lineTravel < 0.25f,
                     "Resumed scenery must continue forward without catching up the inactive countdown time.");
                 result.pausedSceneryObserved = true;
+                yield return CaptureFrame("resumed-trap", frames);
                 yield return DriveCourse();
                 Require(core.IsPracticeComplete && !backend.HasSaveLoadoutCandidate && EmptySlots()
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
@@ -1225,13 +1227,15 @@ namespace GreedLast.PlayerChecks
             var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
             return new MotionSample { frame = Time.frameCount, clock = Read<float>(ui, "beatPhase"),
                 floorY = Read<Image[]>(ui, "runFloorBeatTiles")[0].rectTransform.anchorMin.y,
-                pillarY = Read<Image[]>(ui, "runSceneryPillars")[0].rectTransform.anchorMin.y };
+                pillarY = Read<Image[]>(ui, "runSceneryPillars")[0].rectTransform.anchorMin.y,
+                lineY = Read<Image[]>(ui, "runMotionLines")[0].rectTransform.anchorMin.y };
         }
 
         private static void RequireSameSceneryPhase(MotionSample before, MotionSample after, string message)
         {
             Require(Mathf.Abs(before.floorY - after.floorY) < 0.00001f
-                && Mathf.Abs(before.pillarY - after.pillarY) < 0.00001f, message);
+                && Mathf.Abs(before.pillarY - after.pillarY) < 0.00001f
+                && Mathf.Abs(before.lineY - after.lineY) < 0.00001f, message);
         }
 
         private IEnumerator ObserveSustainedRunMotion()
@@ -1239,6 +1243,7 @@ namespace GreedLast.PlayerChecks
             var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
             var tiles = Read<Image[]>(ui, "runFloorBeatTiles");
             var pillars = Read<Image[]>(ui, "runSceneryPillars");
+            var lines = Read<Image[]>(ui, "runMotionLines");
             GreedLastRunSnapshot initial = RunState();
             var samples = new List<MotionSample>();
             Require(core.IsPracticeRun && initial.ActivePattern && Read<float>(ui, "beatPhase") > 1f,
@@ -1251,19 +1256,21 @@ namespace GreedLast.PlayerChecks
                     && !run.CountdownActive && run.Health == initial.Health && run.MissCount == initial.MissCount,
                     "The motion sample must retain one live trap without synthetic clock changes or damage.");
                 samples.Add(new MotionSample { frame = Time.frameCount, clock = Read<float>(ui, "beatPhase"),
-                    floorY = tiles[0].rectTransform.anchorMin.y, pillarY = pillars[0].rectTransform.anchorMin.y });
+                    floorY = tiles[0].rectTransform.anchorMin.y, pillarY = pillars[0].rectTransform.anchorMin.y,
+                    lineY = lines[0].rectTransform.anchorMin.y });
                 result.liveMotionSamples = samples.ToArray();
                 yield return null;
             }
             MotionSample first = samples[0];
-            bool floorMoved = false, pillarMoved = false;
+            bool floorMoved = false, pillarMoved = false, lineMoved = false;
             foreach (MotionSample sample in samples)
             {
                 floorMoved |= Mathf.Abs(sample.floorY - first.floorY) > 0.0001f;
                 pillarMoved |= Mathf.Abs(sample.pillarY - first.pillarY) > 0.0001f;
+                lineMoved |= Mathf.Abs(sample.lineY - first.lineY) > 0.0001f;
             }
-            Require(samples[7].frame > first.frame && samples[7].clock > first.clock && floorMoved && pillarMoved,
-                "Actual floor and pillar transforms must keep moving across live frames beyond the first accumulated beat.");
+            Require(samples[7].frame > first.frame && samples[7].clock > first.clock && floorMoved && pillarMoved && lineMoved,
+                "Actual floor, pillar and forward-line transforms must keep moving across live frames beyond the first accumulated beat.");
             result.sustainedRunMotionObserved = true;
         }
 
