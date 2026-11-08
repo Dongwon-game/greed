@@ -4568,7 +4568,7 @@ namespace GreedLast.Editor
             Require(
                 refillPauseSnapshot.Paused
                     && InvokeRuntimeUiLabel("BuildRunPauseTitle", refillPauseSnapshot) == "보충 런 메뉴"
-                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", refillPauseSnapshot, false) == "보충 중단"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", refillPauseSnapshot, false) == "메뉴로 돌아가기"
                     && InvokeRuntimeUiLabel("BuildPauseExitHintLine", refillPauseSnapshot).Contains("보충 런 중단 기록", StringComparison.Ordinal),
                 "A paused refill run must keep its refill menu title and refill-abandonment exit copy.");
             string refillPauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", refillPauseSnapshot);
@@ -4587,7 +4587,7 @@ namespace GreedLast.Editor
             Require(
                 infinitePauseSnapshot.Paused
                     && InvokeRuntimeUiLabel("BuildRunPauseTitle", infinitePauseSnapshot) == "무한모드 메뉴"
-                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", infinitePauseSnapshot, false) == "정산 후 로비"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", infinitePauseSnapshot, false) == "메뉴로 돌아가기"
                     && InvokeRuntimeUiLabel("BuildPauseExitHintLine", infinitePauseSnapshot).Contains("무한 기록", StringComparison.Ordinal),
                 "A paused infinite run must keep its infinite menu title and settlement exit copy.");
             string infinitePauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", infinitePauseSnapshot);
@@ -19023,6 +19023,7 @@ namespace GreedLast.Editor
                 "ESC",
                 "A/←",
                 "S/Space",
+                "S/↓",
                 "D/→",
             };
             string releasePrototypeInteraction = InvokeMockBackendStaticLabel(
