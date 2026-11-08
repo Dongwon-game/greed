@@ -40994,7 +40994,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref corridorGateClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -41108,7 +41107,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref sideWallStripeClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -41227,7 +41225,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref speedStreakClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -41348,7 +41345,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref centerSeamClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -41458,7 +41454,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref paceMarkerClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -42780,7 +42775,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref pathSegmentClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -43531,7 +43525,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref floorTileClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
@@ -43550,7 +43543,6 @@ namespace GreedLast
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
             float phase = AdvanceRunMotionClock(ref sceneryPillarClock, running, beatProgress, speed);
-            if (!running) return indexOffset;
             return Mathf.Repeat(phase + indexOffset, 1f);
         }
 

@@ -429,7 +429,7 @@ namespace GreedLast.PlayerChecks
                 result.resumedMotion = ReadSceneryMotionSample();
                 float floorTravel = Mathf.Repeat((result.countdownMotion.floorY - result.resumedMotion.floorY) / 0.65f, 1f);
                 float pillarTravel = Mathf.Repeat((result.countdownMotion.pillarY - result.resumedMotion.pillarY) / 0.64f, 1f);
-                Require(floorTravel < 0.25f && pillarTravel < 0.25f,
+                Require(floorTravel > 0.00001f && pillarTravel > 0.00001f && floorTravel < 0.25f && pillarTravel < 0.25f,
                     "Resumed scenery must continue forward without catching up the inactive countdown time.");
                 result.pausedSceneryObserved = true;
                 yield return DriveCourse();
