@@ -2961,7 +2961,7 @@ namespace GreedLast
         {
             if (devToolsEnabled || isMobilePlatform) return BuildPrototypeInteractionShortcutChecklistText(devToolsEnabled);
             return "\n상태줄 보상·코치 목표·3동작 HUD / 최근 흐름 / 박자공간·주자 / 좌·중·우 대응"
-                + "\nPC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 소리% / 키·클릭 / 휠·PgUp/PgDn 본문"
+                + "\nPC 조작: A/← · S/↓ · D/→ / ESC/P 정지 / 소리% / 키·클릭 / 휠·PgUp/PgDn 본문"
                 + "\n개발 테스트키 숨김 / 기록·흔적 체크로 검증";
         }
 
@@ -3857,7 +3857,7 @@ namespace GreedLast
 
         private static bool IsRecordBoardKeyboardAliasSlash(string text, int index)
         {
-            foreach (string alias in new[] { "A/←", "S/Space", "D/→", "ESC/P", "Enter/강조" })
+            foreach (string alias in new[] { "A/←", "S/Space", "S/↓", "D/→", "ESC/P", "Enter/강조" })
             {
                 int start = index - alias.IndexOf('/');
                 int end = start + alias.Length;
@@ -4269,7 +4269,7 @@ namespace GreedLast
                 return false;
             }
             string trimmed = part.Trim();
-            if (trimmed == "A/←" || trimmed == "S/Space" || trimmed == "D/→" || trimmed == "키·클릭"
+            if (trimmed == "A/←" || trimmed == "S/Space" || trimmed == "S/↓" || trimmed == "D/→" || trimmed == "키·클릭"
                 || trimmed.StartsWith("ESC/P ", StringComparison.Ordinal))
             {
                 return true;
@@ -10939,6 +10939,7 @@ namespace GreedLast
         private GreedLastStateMachine stateMachine;
         private GreedLastRunCore runCore;
         private GreedLastRuntimeUi runtimeUi;
+        private Action quitApplication = () => Application.Quit();
         private bool presentationSettingsCaptured;
         private int previousQualityLevel, previousVSyncCount, previousTargetFrameRate, previousSleepTimeout;
         private bool applicationPaused;
@@ -11075,6 +11076,7 @@ namespace GreedLast
             runtimeUi.ViewportChanged += HandleViewportChanged;
             runtimeUi.PresentationSuspended += HandlePresentationSuspended;
             runtimeUi.PresentationReleased += HandlePresentationReleased;
+            runtimeUi.QuitRequested += RequestQuitGame;
 
             stateMachine.StateChanged += HandleScreenStateChanged;
             runCore.SnapshotChanged += HandleRunSnapshotChanged;
@@ -12880,6 +12882,11 @@ namespace GreedLast
 
         private bool TryHandleBackKeyboardInput()
         {
+            if (IsPreRunExitScreen(stateMachine.CurrentState))
+            {
+                RequestQuitGame();
+                return true;
+            }
             if (IsRunState() && hasLatestAppRunSnapshot && latestAppRunSnapshot.Stopped)
             {
                 runtimeUi?.CancelPendingUiInput();
@@ -12902,6 +12909,24 @@ namespace GreedLast
             }
 
             return false;
+        }
+
+        internal static bool IsPreRunExitScreen(GreedLastScreenState screen)
+        {
+            return screen == GreedLastScreenState.BootInit || screen == GreedLastScreenState.ConnectChecking
+                || screen == GreedLastScreenState.ConnectBlocked || screen == GreedLastScreenState.LobbyLoading
+                || screen == GreedLastScreenState.LobbyReady || screen == GreedLastScreenState.ReSyncPending;
+        }
+
+        private void RequestQuitGame()
+        {
+            if (stateMachine == null) return;
+            bool pausedRun = IsRunState() && hasLatestAppRunSnapshot && latestAppRunSnapshot.Paused
+                && !latestAppRunSnapshot.ResumeCountdownActive;
+            if ((!IsPreRunExitScreen(stateMachine.CurrentState) && !pausedRun) || !CanAcceptPlayerInput()
+                || HasUnpresentedScreenTransition || HasUnpresentedRunCommandTransition) return;
+            runtimeUi.CancelPendingUiInput();
+            quitApplication();
         }
 
         private void OnApplicationPause(bool pauseStatus)
@@ -15958,6 +15983,7 @@ namespace GreedLast
         private Button debugConnectionButton;
         private Button nextPatternButton;
         private Button returnLobbyButton;
+        private Button pauseQuitButton;
         private Button saveSlotDetailButton;
         private Button saveSlotRenameButton;
         private Button saveSlotDeleteButton;
@@ -16338,6 +16364,8 @@ namespace GreedLast
         public event Action ViewportChanged;
         public event Action PresentationSuspended;
         public event Action<GreedLastRuntimeUi> PresentationReleased;
+        public event Action QuitRequested;
+        private bool returnButtonExitsGame;
 
         public void Initialize(
             Action onPracticeRunRequested,
@@ -16907,6 +16935,7 @@ namespace GreedLast
 
             bool lobbyLike = snapshot.State == GreedLastScreenState.LobbyReady
                 || snapshot.State == GreedLastScreenState.ReSyncPending;
+            returnButtonExitsGame = lobbyLike;
             bool runLike = snapshot.State == GreedLastScreenState.RunCoreTest
                 || snapshot.State == GreedLastScreenState.InfiniteRun;
             bool infiniteRunLike = snapshot.State == GreedLastScreenState.InfiniteRun;
@@ -17058,7 +17087,7 @@ namespace GreedLast
             profileButton.gameObject.SetActive(lobbyLike && onboardingComplete);
             retryButton.gameObject.SetActive(snapshot.RetryVisible || snapshot.State == GreedLastScreenState.ConnectBlocked);
             nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
-            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
+            returnLobbyButton.gameObject.SetActive(lobbyLike || runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
             saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike || profileBoardLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
@@ -17107,7 +17136,7 @@ namespace GreedLast
             debugConnectionButton.interactable = showConnectionDevButton && !snapshot.Busy;
             bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
             nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
-            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
+            returnLobbyButton.interactable = lobbyLike || runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
             saveSlotDetailButton.interactable = BuildSaveSlotDetailActionEnabled(snapshot, recordBoardLike, profileBoardLike, saveDraftLike);
             saveSlotRenameButton.interactable = BuildSaveSlotRenameOrDeleteActionEnabled(snapshot, saveDraftLike, selectedSaveSlotOccupied);
             saveSlotDeleteButton.interactable = BuildSaveSlotRenameOrDeleteActionEnabled(snapshot, saveDraftLike, selectedSaveSlotOccupied);
@@ -17203,6 +17232,7 @@ namespace GreedLast
             SetButtonLabel(retryButton, "동기화 재시도");
             if (lobbyLike)
             {
+                SetButtonLabel(returnLobbyButton, "게임 종료 (ESC)");
                 SetAnchored(
                     practiceRunButton.GetComponent<RectTransform>(),
                     0.5f,
@@ -17925,6 +17955,11 @@ namespace GreedLast
             }
 
             pauseMenuOverlay.SetActive(snapshot.Paused);
+            if (pauseQuitButton != null)
+            {
+                pauseQuitButton.gameObject.SetActive(!Application.isMobilePlatform);
+                pauseQuitButton.interactable = snapshot.Paused && !snapshot.ResumeCountdownActive;
+            }
             if (!snapshot.Paused)
             {
                 return;
@@ -18102,6 +18137,7 @@ namespace GreedLast
 
         private static string BuildRunReturnButtonLabel(GreedLastRunSnapshot snapshot, bool normalClearReady)
         {
+            if (snapshot.Paused) return "메뉴로 돌아가기";
             if (snapshot.PracticeMode)
             {
                 return snapshot.Stopped ? "연습 마치기" : "연습 그만두기";
@@ -18485,6 +18521,7 @@ namespace GreedLast
                     - (showRotationTiltSetting ? 132f : 0f)
                     - (hapticsButton.gameObject.activeSelf ? 132f : 0f);
                 SetPauseMenuControl(motionComfortButton, 0f, comfortY, 820f);
+                SetPauseMenuControl(pauseQuitButton, 0f, comfortY - 132f, 820f);
                 return;
             }
 
@@ -24974,7 +25011,7 @@ namespace GreedLast
             return (isMobilePlatform ? string.Empty : "Enter 또는 연습 버튼으로 시작하세요.\n")
                 + "위험이 오는 채널과 같은 좌 · 중 · 우를 누르세요."
                 + (isMobilePlatform ? "\n화면의 좌 · 중 · 우 영역으로 대응합니다."
-                    : "\nA/← · S/Space · D/→ 또는 해당 영역 클릭")
+                    : "\nA/← · S/↓ · D/→ 또는 해당 영역 클릭")
                 + (isMobilePlatform ? "\n좌우 이동이 아닌 대응입니다. 판정선에 맞춰 누르세요."
                     : "\n판정선에 맞춰 누르면 좌우 이동 대신 회피 동작이 나옵니다.");
         }
@@ -27307,7 +27344,11 @@ namespace GreedLast
             AddGuardedCommand(retryButton, () => retryRequested?.Invoke());
             AddGuardedCommand(debugConnectionButton, () => debugConnectionRequested?.Invoke());
             AddGuardedCommand(nextPatternButton, () => nextPatternRequested?.Invoke());
-            AddGuardedCommand(returnLobbyButton, () => returnLobbyRequested?.Invoke());
+            AddGuardedCommand(returnLobbyButton, () =>
+            {
+                if (returnButtonExitsGame) QuitRequested?.Invoke();
+                else returnLobbyRequested?.Invoke();
+            });
             AddGuardedCommand(saveSlotDetailButton, () => saveSlotDetailRequested?.Invoke());
             AddGuardedCommand(saveSlotRenameButton, () => saveSlotRenameRequested?.Invoke());
             AddGuardedCommand(saveSlotDeleteButton, () => saveSlotDeleteRequested?.Invoke());
@@ -27384,6 +27425,8 @@ namespace GreedLast
             SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.5f, 900f, 238f);
             pauseMenuBodyText.rectTransform.anchoredPosition = new Vector2(0f, 478f);
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
+            pauseQuitButton = CreateButton(pauseMenuPanel.transform, "PauseQuitButton", "게임 종료");
+            AddGuardedCommand(pauseQuitButton, () => QuitRequested?.Invoke());
         }
 
         private Image CreatePauseSoftBlurBand(string name, Vector2 anchorMin, Vector2 anchorMax, Color32 color)
@@ -48926,7 +48969,7 @@ namespace GreedLast
                     break;
                 case 1:
                     label = "중";
-                    keyHint = "S/Space";
+                    keyHint = "S/↓";
                     break;
                 case 2:
                     label = "우";

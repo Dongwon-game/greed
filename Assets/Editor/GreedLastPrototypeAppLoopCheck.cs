@@ -272,6 +272,7 @@ namespace GreedLast.Editor
                 Bind(ui, app, "nextPatternRequested", "RequestNextRunPattern");
                 Bind(ui, app, "returnLobbyRequested", "RequestReturnToLobby");
                 Bind(ui, app, "pauseRequested", "RequestToggleRunPause");
+                ui.QuitRequested += () => Method(app, "RequestQuitGame").Invoke(app, null);
                 Bind(ui, app, "saveSlotDetailRequested", "RequestShowSaveLoadoutDetail");
                 Bind(ui, app, "saveSlotRenameRequested", "RequestRenameSaveLoadoutSlot");
                 Bind(ui, app, "saveSlotDeleteRequested", "RequestDeleteSaveLoadoutSlot");
@@ -288,6 +289,7 @@ namespace GreedLast.Editor
                 PlayerPrefs.SetInt(PracticeKey, 0);
                 VerifyBootAndReconnect(app, ui, backend, state, gate);
                 VerifyDefaultPlayerEntry(ui);
+                VerifyQuitControl(app, ui, backend, lobby: true);
                 if (hiddenPresentationOnly)
                 {
                     VerifyHiddenPresentation(app, ui, backend, state, core, () => run);
@@ -1928,6 +1930,38 @@ namespace GreedLast.Editor
                 "The transition must cancel registered callback presses before release: " + button.name);
         }
 
+        private static void VerifyQuitControl(GreedLastApp app, GreedLastRuntimeUi ui,
+            GreedLastMockBackend backend, bool lobby)
+        {
+            Action original = Read<Action>(app, "quitApplication");
+            int quitCalls = 0;
+            int clears = Read<int>(backend, "normalClearCount");
+            bool candidate = backend.HasSaveLoadoutCandidate;
+            int[] uses = (int[])Read<int[]>(backend, "saveLoadoutUsesRemaining").Clone();
+            Write(app, "quitApplication", (Action)(() => quitCalls++));
+            try
+            {
+                if (lobby)
+                    Require((bool)Method(app, "TryHandlePauseOrBackKeyboardInput").Invoke(app, new object[] { true, false }),
+                        "Lobby Escape must route a normal application exit.");
+                Button button = Read<Button>(ui, lobby ? "returnLobbyButton" : "pauseQuitButton");
+                Require(button.gameObject.activeInHierarchy && button.IsInteractable(), "The exit control must be visible and actionable.");
+                Click(button);
+                Require(quitCalls == (lobby ? 2 : 1), "The actual exit button must request one normal quit without terminating the fixture.");
+                ui.SetAppInputAvailable(false);
+                Method(app, "RequestQuitGame").Invoke(app, null);
+                Require(quitCalls == (lobby ? 2 : 1), "Suspended input must not request another quit.");
+                Require(Read<int>(backend, "normalClearCount") == clears && backend.HasSaveLoadoutCandidate == candidate
+                    && Array.TrueForAll(new[] { 0, 1, 2 }, slot => Read<int[]>(backend, "saveLoadoutUsesRemaining")[slot] == uses[slot]),
+                    "Exit routing must not save, consume or discard a loadout or duplicate a clear.");
+            }
+            finally
+            {
+                ui.SetAppInputAvailable(true);
+                Write(app, "quitApplication", original);
+            }
+        }
+
         private static void VerifyHeldPauseCommands(GreedLastApp app, GreedLastRuntimeUi ui,
             GreedLastMockBackend originalBackend, GreedLastStateMachine state, GreedLastRunCore core,
             Func<GreedLastRunSnapshot> latest)
@@ -1983,6 +2017,7 @@ namespace GreedLast.Editor
                     Method(app, "RequestToggleRunPause").Invoke(app, null);
                     GreedLastRunSnapshot paused = latest();
                     Require(paused.Paused && !paused.ResumeCountdownActive, "The actual pause callback must open only the pause menu.");
+                    VerifyQuitControl(app, ui, backend, lobby: false);
                     RequireCanceledPresses(primary, primaryPointer, secondaryPointer);
                     if (detailedControls) RequireCanceledPresses(secondary, secondaryPointer);
                     foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })

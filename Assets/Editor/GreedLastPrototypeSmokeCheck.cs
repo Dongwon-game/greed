@@ -4547,7 +4547,7 @@ namespace GreedLast.Editor
             Require(
                 practicePauseSnapshot.Paused
                     && InvokeRuntimeUiLabel("BuildRunPauseTitle", practicePauseSnapshot) == "기초연습 메뉴"
-                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", practicePauseSnapshot, false) == "연습 그만두기"
+                    && InvokeRuntimeUiLabel("BuildRunReturnButtonLabel", practicePauseSnapshot, false) == "메뉴로 돌아가기"
                     && InvokeRuntimeUiLabel("BuildPauseExitHintLine", practicePauseSnapshot).Contains("저장 기회", StringComparison.Ordinal),
                 "A paused practice drill must keep its own menu title and explain that leaving will not affect save chances.");
             string practicePauseHeader = InvokeRuntimeUiLabel("BuildRunPauseHeaderDetail", practicePauseSnapshot);
@@ -5111,7 +5111,7 @@ namespace GreedLast.Editor
                 "Mobile input hints must expose touch targets for every lane.");
             Require(
                 InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Left, true) == "정답키 A/←"
-                    && InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Center, true) == "정답키 S/Space"
+                    && InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Center, true) == "정답키 S/↓"
                     && InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Right, true) == "정답키 D/→"
                     && InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Left, false) == "정답 좌 탭"
                     && InvokeRuntimeUiLabel("BuildTargetChannelInputFeedback", GreedLastRunChannel.Center, false) == "정답 중 탭"
@@ -6098,7 +6098,7 @@ namespace GreedLast.Editor
                 "Section-jump dev-tool labels must expose each target test section.");
             Require(
                 InvokeRuntimeUiLabel("BuildRunLaneBaseLabel", 0, true).Contains("A/←", StringComparison.Ordinal)
-                    && InvokeRuntimeUiLabel("BuildRunLaneBaseLabel", 1, true).Contains("S/Space", StringComparison.Ordinal)
+                    && InvokeRuntimeUiLabel("BuildRunLaneBaseLabel", 1, true).Contains("S/↓", StringComparison.Ordinal)
                     && InvokeRuntimeUiLabel("BuildRunLaneBaseLabel", 2, true).Contains("D/→", StringComparison.Ordinal),
                 "Editor run lane labels must expose compact keyboard hints.");
             Require(
@@ -7546,7 +7546,7 @@ namespace GreedLast.Editor
                 mobileWrongChannelFeedback.Contains(expectedMobileTargetFeedback, StringComparison.Ordinal)
                     && !mobileWrongChannelFeedback.Contains("정답키", StringComparison.Ordinal)
                     && !mobileWrongChannelFeedback.Contains("A/←", StringComparison.Ordinal)
-                    && !mobileWrongChannelFeedback.Contains("S/Space", StringComparison.Ordinal)
+                    && !mobileWrongChannelFeedback.Contains("S/↓", StringComparison.Ordinal)
                     && !mobileWrongChannelFeedback.Contains("D/→", StringComparison.Ordinal),
                 "A mobile/release wrong-channel miss must expose the target tap lane without editor key names. Actual: "
                     + mobileWrongChannelFeedback);
@@ -10945,7 +10945,7 @@ namespace GreedLast.Editor
             string pcWithoutMenuScrollHint = pcChecklist.Replace(menuScrollHint, string.Empty);
             Require(pcChecklist.Contains("PC 조작", StringComparison.Ordinal)
                 && pcChecklist.Contains("A/←", StringComparison.Ordinal)
-                && pcChecklist.Contains("S/Space", StringComparison.Ordinal)
+                && pcChecklist.Contains("S/↓", StringComparison.Ordinal)
                 && pcChecklist.Contains("D/→", StringComparison.Ordinal)
                 && pcChecklist.Contains("Enter: 강조 다음 행동", StringComparison.Ordinal)
                 && !pcChecklist.Contains("모바일", StringComparison.Ordinal)
@@ -10968,7 +10968,7 @@ namespace GreedLast.Editor
             string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
             Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
                 && pcGuide.Contains("Enter 또는 연습 버튼", StringComparison.Ordinal)
-                && pcGuide.Contains("A/← · S/Space · D/→", StringComparison.Ordinal)
+                && pcGuide.Contains("A/← · S/↓ · D/→", StringComparison.Ordinal)
                 && pcGuide.Contains("좌우 이동 대신 회피 동작", StringComparison.Ordinal)
                 && pcGuide.Contains("판정선", StringComparison.Ordinal)
                 && mobileGuide.Contains("영역", StringComparison.Ordinal)
@@ -11122,7 +11122,7 @@ namespace GreedLast.Editor
             core.Enter();
             float clock = Time.realtimeSinceStartup;
             string[] directions = { "좌", "중", "우" };
-            string[] keys = { "A/←", "S/Space", "D/→" };
+            string[] keys = { "A/←", "S/↓", "D/→" };
             for (int action = 0; action < 5; action++)
             {
                 core.JumpToDevShortcut(GreedLastDevShortcut.AvoidanceCycle, clock);
@@ -12731,7 +12731,7 @@ namespace GreedLast.Editor
                 mobileNoInputFeedback.Contains(expectedMobileNoInputTargetFeedback, StringComparison.Ordinal)
                     && !mobileNoInputFeedback.Contains("정답키", StringComparison.Ordinal)
                     && !mobileNoInputFeedback.Contains("A/←", StringComparison.Ordinal)
-                    && !mobileNoInputFeedback.Contains("S/Space", StringComparison.Ordinal)
+                    && !mobileNoInputFeedback.Contains("S/↓", StringComparison.Ordinal)
                     && !mobileNoInputFeedback.Contains("D/→", StringComparison.Ordinal),
                 "A mobile/release input-omission miss must show the target tap lane without editor key names. Actual: "
                     + mobileNoInputFeedback);
@@ -13954,7 +13954,7 @@ namespace GreedLast.Editor
                     !string.IsNullOrEmpty(expectedMobileLaneHint)
                         && mobileActionCue.Contains(expectedMobileLaneHint, StringComparison.Ordinal)
                         && !mobileActionCue.Contains("A/←", StringComparison.Ordinal)
-                        && !mobileActionCue.Contains("S/Space", StringComparison.Ordinal)
+                        && !mobileActionCue.Contains("S/↓", StringComparison.Ordinal)
                         && !mobileActionCue.Contains("D/→", StringComparison.Ordinal),
                     "Every mobile/release avoidance cue must use tap hints instead of editor key names. Actual: "
                         + mobileActionCue);
@@ -19050,7 +19050,7 @@ namespace GreedLast.Editor
                     && !releasePrototypeInteraction.Contains("PgDn", StringComparison.Ordinal)
                     && !releasePrototypeInteraction.Contains("End", StringComparison.Ordinal)
                     && !releasePrototypeInteraction.Contains("A/←", StringComparison.Ordinal)
-                    && !releasePrototypeInteraction.Contains("S/Space", StringComparison.Ordinal)
+                    && !releasePrototypeInteraction.Contains("S/↓", StringComparison.Ordinal)
                     && !releasePrototypeInteraction.Contains("D/→", StringComparison.Ordinal),
                 "The full release/mobile prototype interaction checklist must hide dev shortcuts and editor key names. Actual: "
                     + releasePrototypeInteraction);
