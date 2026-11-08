@@ -823,7 +823,7 @@ namespace GreedLast.Editor
                     Require(!backend.HasSaveLoadoutCandidate && Read<int>(backend, "normalClearCount") == 0
                         && Read<int>(backend, "normalFailCount") == 0 && Read<int>(backend, "infiniteRunCount") == 0,
                         "Practice back navigation must not create normal/infinite records or save opportunities.");
-                    Require(!Back(), "A second Escape in the lobby must not repeat terminal settlement.");
+                    VerifyQuitControl(app, ui, backend, lobby: true);
                 }
 
                 for (int scenario = 0; scenario < 2; scenario++)
