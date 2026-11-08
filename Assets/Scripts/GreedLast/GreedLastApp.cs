@@ -30315,6 +30315,13 @@ namespace GreedLast
             return IsLiveRunControlWindow(snapshot);
         }
 
+        private float BuildForwardMotionLinePhase(bool running, float beatProgress, float stageMotionScale,
+            float motionSpeedBias, float threatStrength, int lineIndex, int lineCount)
+        {
+            float speed = (0.46f + Mathf.Clamp01(threatStrength) * 0.2f) * motionSpeedBias * stageMotionScale;
+            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + lineIndex / (float)Mathf.Max(1, lineCount), 1f);
+        }
+
         private static bool ShouldAdvanceRunMotion(GreedLastRunSnapshot snapshot)
         {
             return IsLiveRunControlWindow(snapshot);
@@ -30462,10 +30469,8 @@ namespace GreedLast
                     continue;
                 }
 
-                float phase = Mathf.Repeat(
-                    beatPhase * (0.46f + threatStrength * 0.2f) * speedBias * stageMotionScale
-                        + i / (float)runMotionLines.Length,
-                    1f);
+                float phase = BuildForwardMotionLinePhase(true, beatPhase, stageMotionScale, speedBias,
+                    threatStrength, i, runMotionLines.Length);
                 float downbeatLift = BuildForwardMotionLineDownbeatLift(
                     downbeatPulse,
                     latestRunSnapshot.ActivePattern,

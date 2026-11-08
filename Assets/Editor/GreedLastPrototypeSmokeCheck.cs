@@ -1538,6 +1538,7 @@ namespace GreedLast.Editor
                 RequireSustainedRunPhase(method, new object[] { true, 0f, 1f, 1f, 0f, 0 });
             RequireSustainedRunPhase("BuildSceneryPillarPhase", new object[] { true, 0f, 1f, 1f, 0f, 0, 4 });
             RequireSustainedRunPhase("BuildRunnerStridePhase", new object[] { true, 0f, 1f, 0f });
+            RequireForwardLineSpeedContinuity();
             float baseFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1f, 0f, 0);
             float boostedFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1.4f, 1f, 0);
             float staggerFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 0.62f, 0f, 0);
@@ -11963,6 +11964,24 @@ namespace GreedLast.Editor
             {
                 UnityEngine.Object.DestroyImmediate(created);
             }
+        }
+
+        private static void RequireForwardLineSpeedContinuity()
+        {
+            var owner = new GameObject("IsolatedForwardLineClock");
+            owner.SetActive(false);
+            var ui = owner.AddComponent<GreedLastRuntimeUi>();
+            try
+            {
+                MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod("BuildForwardMotionLinePhase", BindingFlags.Instance | BindingFlags.NonPublic);
+                method.Invoke(ui, new object[] { true, 0f, 1f, 1.4f, 0f, 0, 6 });
+                float before = (float)method.Invoke(ui, new object[] { true, 200.25f, 1f, 1.4f, 0f, 0, 6 });
+                float after = (float)method.Invoke(ui, new object[] { true, 200.26f, 1f, 1.399f, 0f, 0, 6 });
+                float travel = Mathf.Repeat(after - before, 1f);
+                Require(travel > 0f && travel < 0.05f,
+                    "Forward motion lines must not jump or backtrack when speed changes at a late animation clock.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(owner); }
         }
 
         private static void RequireSustainedRunPhase(string methodName, object[] args)
