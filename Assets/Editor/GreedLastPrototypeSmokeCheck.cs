@@ -11991,6 +11991,9 @@ namespace GreedLast.Editor
                 args[0] = false;
                 args[1] = 100.25f;
                 float idleBefore = Evaluate();
+                if (methodName != "BuildRunnerStridePhase")
+                    Require(Mathf.Approximately(lastLivePhase, idleBefore),
+                        methodName + " must freeze the current scenery phase when paused, not jump to its idle layout.");
                 args[1] = 100.75f;
                 Require(Mathf.Approximately(idleBefore, Evaluate()),
                     methodName + " must keep its existing non-running motion gate.");
