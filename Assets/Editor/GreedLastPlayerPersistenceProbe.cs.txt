@@ -70,6 +70,8 @@ namespace GreedLast.PlayerChecks
             public Frame[] frames;
             public bool sustainedRunMotionObserved;
             public MotionSample[] liveMotionSamples;
+            public bool pausedSceneryObserved;
+            public MotionSample beforePauseMotion, pausedMotion, heldPauseMotion, countdownMotion, resumedMotion;
         }
 
         [Serializable]
@@ -399,21 +401,37 @@ namespace GreedLast.PlayerChecks
                 yield return ObserveSustainedRunMotion();
                 yield return CaptureFrame("trap", frames);
                 string pattern = RunState().Pattern.PatternId;
+                result.beforePauseMotion = ReadSceneryMotionSample();
                 Call(app, "RequestToggleRunPause");
                 yield return WaitFor(() => RunState().Paused && !RunState().ResumeCountdownActive);
                 yield return CaptureFrame("paused", frames);
+                result.pausedMotion = ReadSceneryMotionSample();
+                RequireSameSceneryPhase(result.beforePauseMotion, result.pausedMotion,
+                    "Entering pause must freeze current scenery positions instead of resetting the idle layout.");
                 GreedLastRunSnapshot paused = RunState();
                 yield return new WaitForSecondsRealtime(0.4f);
                 Require(RunState().Distance == paused.Distance && RunState().ElapsedSeconds == paused.ElapsedSeconds
                     && RunState().Health == paused.Health && RunState().MissCount == paused.MissCount,
                     "Rendering the actual pause menu must not advance gameplay.");
+                result.heldPauseMotion = ReadSceneryMotionSample();
+                RequireSameSceneryPhase(result.pausedMotion, result.heldPauseMotion,
+                    "Scenery must retain the frozen phase throughout the pause.");
                 Call(app, "RequestToggleRunPause");
                 yield return WaitFor(() => RunState().ResumeCountdownActive);
                 yield return CaptureFrame("resume-countdown", frames);
+                result.countdownMotion = ReadSceneryMotionSample();
+                RequireSameSceneryPhase(result.pausedMotion, result.countdownMotion,
+                    "The resume countdown must not advance frozen scenery phases.");
                 yield return WaitFor(() => !RunState().Paused && !RunState().CountdownActive && RunState().ActivePattern);
                 Require(RunState().Pattern.PatternId == pattern && RunState().Health == paused.Health
                     && RunState().MissCount == paused.MissCount, "The rendered recovery must retain the same trap without hidden damage.");
                 yield return CaptureFrame("resumed-trap", frames);
+                result.resumedMotion = ReadSceneryMotionSample();
+                float floorTravel = Mathf.Repeat((result.countdownMotion.floorY - result.resumedMotion.floorY) / 0.65f, 1f);
+                float pillarTravel = Mathf.Repeat((result.countdownMotion.pillarY - result.resumedMotion.pillarY) / 0.64f, 1f);
+                Require(floorTravel < 0.25f && pillarTravel < 0.25f,
+                    "Resumed scenery must continue forward without catching up the inactive countdown time.");
+                result.pausedSceneryObserved = true;
                 yield return DriveCourse();
                 Require(core.IsPracticeComplete && !backend.HasSaveLoadoutCandidate && EmptySlots()
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
@@ -1200,6 +1218,20 @@ namespace GreedLast.PlayerChecks
                 paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive };
             using (var file = new FileStream(Path.Combine(root, phase + "-" + name + ".json"), FileMode.CreateNew))
             using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(frame, true));
+        }
+
+        private MotionSample ReadSceneryMotionSample()
+        {
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            return new MotionSample { frame = Time.frameCount, clock = Read<float>(ui, "beatPhase"),
+                floorY = Read<Image[]>(ui, "runFloorBeatTiles")[0].rectTransform.anchorMin.y,
+                pillarY = Read<Image[]>(ui, "runSceneryPillars")[0].rectTransform.anchorMin.y };
+        }
+
+        private static void RequireSameSceneryPhase(MotionSample before, MotionSample after, string message)
+        {
+            Require(Mathf.Abs(before.floorY - after.floorY) < 0.00001f
+                && Mathf.Abs(before.pillarY - after.pillarY) < 0.00001f, message);
         }
 
         private IEnumerator ObserveSustainedRunMotion()

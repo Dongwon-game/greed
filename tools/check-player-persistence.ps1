@@ -326,6 +326,9 @@ try {
             throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
         }
         $report.LiveMotionSamples = $render.liveMotionSamples
+        if (!$render.pausedSceneryObserved) { throw 'Pause, hold, resume countdown and resumed scenery evidence is required.' }
+        $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
+            $render.countdownMotion, $render.resumedMotion)
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             $imagePath = Join-Path $root ('frame-'+$_.name+'.png')
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
