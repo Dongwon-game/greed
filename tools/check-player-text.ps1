@@ -59,7 +59,7 @@ foreach ($dev in @($false,$true)) {
         Check "$mode development keys" ($text.Contains('F1 무적') -eq $dev)
         Check "$mode sensory capabilities" ($text.Contains('진동') -eq ($dev -or $mobile))
         if (!$dev -and !$mobile) {
-            foreach ($key in @('A/←','S/Space','D/→','ESC/P','Enter:')) { Check "PC release $key" ($text.Contains($key)) }
+            foreach ($key in @('A/←','S/↓','D/→','ESC/P','Enter:')) { Check "PC release $key" ($text.Contains($key)) }
             foreach ($wrong in @('모바일','터치','진동','F1 무적','PgUp')) { Check "PC release omits $wrong" (!$text.Contains($wrong)) }
         }
     }

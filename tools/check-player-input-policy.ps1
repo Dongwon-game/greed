@@ -47,7 +47,7 @@ foreach($dev in @($false,$true)) {
     }
 }
 $keys=@(0..2|ForEach-Object {[GreedLast.GreedLastPlayerInputPolicy]::ChannelKeyHint($_)})
-Require ($keys[0] -eq 'A/←' -and $keys[1] -eq 'S/Space' -and $keys[2] -eq 'D/→') 'The three response channels must retain the actual supported keys in lane order.'
+Require ($keys[0] -eq 'A/←' -and $keys[1] -eq 'S/↓' -and $keys[2] -eq 'D/→') 'The three response channels must retain the actual supported keys in lane order.'
 Require (@($keys|Select-Object -Unique).Count -eq 3) 'Channel hints must not duplicate another lane.'
 foreach($invalid in @(-1,3,[int]::MinValue,[int]::MaxValue)) {
     Require ([GreedLast.GreedLastPlayerInputPolicy]::ChannelKeyHint($invalid) -eq '') 'An invalid lane must not advertise another channel key.'
