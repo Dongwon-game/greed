@@ -15,7 +15,7 @@ namespace GreedLast
             switch (laneIndex)
             {
                 case 0: return "A/←";
-                case 1: return "S/Space";
+                case 1: return "S/↓";
                 case 2: return "D/→";
                 default: return string.Empty;
             }
