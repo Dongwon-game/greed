@@ -1948,7 +1948,7 @@ namespace GreedLast.Editor
                 Require(button.gameObject.activeInHierarchy && button.IsInteractable(), "The exit control must be visible and actionable.");
                 Click(button);
                 Require(quitCalls == (lobby ? 2 : 1), "The actual exit button must request one normal quit without terminating the fixture.");
-                ui.SetAppInputAvailable(false);
+                Method(ui, "SetAppInputAvailable").Invoke(ui, new object[] { false });
                 Method(app, "RequestQuitGame").Invoke(app, null);
                 Require(quitCalls == (lobby ? 2 : 1), "Suspended input must not request another quit.");
                 Require(Read<int>(backend, "normalClearCount") == clears && backend.HasSaveLoadoutCandidate == candidate
@@ -1957,7 +1957,7 @@ namespace GreedLast.Editor
             }
             finally
             {
-                ui.SetAppInputAvailable(true);
+                Method(ui, "SetAppInputAvailable").Invoke(ui, new object[] { true });
                 Write(app, "quitApplication", original);
             }
         }
