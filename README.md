@@ -14,9 +14,9 @@
 
 <img src="Assets/Resources/GreedLast/PrototypeEgyptianRunner.png" alt="이집트풍 인간 주자의 기본 달리기 자원" width="220">
 
-위 이미지는 캐릭터 자원이다. 아래는 10월 30일 소스의 [격리 카메라 플레이 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)이며 실제 사용자 화면 촬영이나 손맛 확인은 아니다. [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 이전 캐릭터의 기록으로 보존한다.
+위 이미지는 캐릭터 자원이다. 아래는 11월 8일 움직임 시계 수정 후보의 내부 카메라 한 프레임이다. 누적 시간 뒤 주행 고정과 속도 전환 역행의 수정·검증 범위, 로컬 체험 후보는 [움직임 기록](Docs/Motion-Clock-20261108.md)을 따른다. 한 장의 사진을 연속 움직임·청음·손맛 성공의 근거로 사용하지 않는다. [10월 30일 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)와 [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 과거 기록으로 보존한다.
 
-![이집트풍 인간 주자의 첫 연습 함정 미리보기](Docs/Images/GreedLast-Egyptian-Run-20261030.png)
+![움직임 시계 수정 후보의 왼쪽 비틀기 함정 — 내부 카메라 한 프레임](Docs/Images/GreedLast-Run-20261108.png)
 
 ## 시작
 
