@@ -21,6 +21,7 @@ namespace GreedLast.PlayerChecks
         private GreedLastStateMachine state;
         private string root, phase;
         private float deadline;
+        private int menuWaitSeconds;
         private bool finished, outputValidated;
         private bool backgroundResults, scopedGoals, giftHistory;
         private bool windowAwaitingClose, windowReady;
@@ -46,6 +47,8 @@ namespace GreedLast.PlayerChecks
             public bool nativeMenuComparisonObserved, nativeMenuBodyDragObserved, nativeMenuHandleBeforeFocus;
             public bool nativeMenuFocusLossObserved, nativeMenuHandleAfterFocus, nativeMenuCandidatePreserved;
             public float nativeMenuBodyTravelPixels, nativeMenuHandleBeforePixels, nativeMenuHandleAfterPixels;
+            public int nativeMenuWaitSeconds;
+            public string nativeMenuReadyUtc;
             public int nativeProfilePagesMask;
             public bool nativeRecordBoardObserved, nativeBoardsCompleted;
             public int nativeGestureObserverControls;
@@ -153,6 +156,7 @@ namespace GreedLast.PlayerChecks
                 && Application.productName == "Persistence-" + id,
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
+            menuWaitSeconds = ParseMenuWaitSeconds(Environment.GetCommandLineArgs(), phase);
             Require(giftHistory == phase.StartsWith("gift-history-", StringComparison.Ordinal)
                 && (!giftHistory || (!backgroundResults && !scopedGoals)), "Gift history checks require their dedicated noninteractive mode.");
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
@@ -978,6 +982,9 @@ namespace GreedLast.PlayerChecks
             var handleTrace = bar.gameObject.AddComponent<GreedLastNativeGestureTrace>();
             bodyTrace.Configure(root, "body", scroll);
             handleTrace.Configure(root, "handle", scroll);
+            deadline = Time.realtimeSinceStartup + menuWaitSeconds;
+            result.nativeMenuWaitSeconds = menuWaitSeconds;
+            result.nativeMenuReadyUtc = DateTime.UtcNow.ToString("O");
             windowAwaitingClose = true;
             WriteObservation("window-menu-ready");
             while (true)
@@ -1516,6 +1523,20 @@ namespace GreedLast.PlayerChecks
         private static T Read<T>(object target, string field) => (T)target.GetType().GetField(field, Fields).GetValue(target);
         private static object Call(object target, string method, params object[] args)
             => target.GetType().GetMethod(method, Fields).Invoke(target, args);
+        private static int ParseMenuWaitSeconds(string[] args, string requestedPhase)
+        {
+            const string key = "-greed-probe-menu-wait-minutes";
+            int index = Array.IndexOf(args, key);
+            if (index < 0) return requestedPhase == "window-menu" ? 600 : 0;
+            if (requestedPhase != "window-menu" || Array.LastIndexOf(args, key) != index
+                || index + 1 >= args.Length
+                || !int.TryParse(args[index + 1], System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out int minutes)
+                || minutes < 1 || minutes > 60)
+                throw new InvalidOperationException("Native menu wait requires one integer from 1 to 60 minutes, only in window-menu.");
+            return minutes * 60;
+        }
+
         private static string Argument(string key)
         {
             string[] args = Environment.GetCommandLineArgs();

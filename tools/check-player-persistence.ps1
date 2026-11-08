@@ -7,6 +7,8 @@ param(
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
+    [ValidateRange(1, 60)]
+    [int]$MenuWaitMinutes = 10,
     [switch]$InteractiveBoards,
     [switch]$BackgroundResults,
     [switch]$UnreadableSave,
@@ -17,6 +19,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($PSBoundParameters.ContainsKey('MenuWaitMinutes') -and !$InteractiveMenus) {
+    throw 'MenuWaitMinutes requires InteractiveMenus.'
+}
 if ($InteractiveBoards -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
     throw 'Choose native profile/record inspection separately from every other mode.'
 }
@@ -120,6 +125,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
+$report.MenuWaitMinutes = if ($InteractiveMenus) { $MenuWaitMinutes } else { 0 }
 $report.InteractiveBoardsRequested = [bool]$InteractiveBoards
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
@@ -350,13 +356,21 @@ try {
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
         if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
         if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
-        $timeout = if ($phase -in @('window-loadout','window-menu')) { 630000 } elseif ($interactive) { 360000 } else { 180000 }
+        if ($phase -eq 'window-menu') { $playerArguments += @('-greed-probe-menu-wait-minutes', [string]$MenuWaitMinutes) }
+        # Native menu setup remains bounded at 600s. The operator then receives
+        # a full, separate wait budget after the comparison observers are ready.
+        $timeout = if ($phase -eq 'window-menu') { (600 + 60 * $MenuWaitMinutes + 30) * 1000 }
+            elseif ($phase -eq 'window-loadout') { 630000 } elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
         $path = Join-Path $root ($phase + '.json')
         $result = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
+        }
+        if ($phase -eq 'window-menu' -and ($result.nativeMenuWaitSeconds -ne 60 * $MenuWaitMinutes -or
+            [string]::IsNullOrWhiteSpace($result.nativeMenuReadyUtc))) {
+            throw 'The native menu must report its configured wait and actual ready timestamp.'
         }
         if ($result.nativeGestureObserverControls -ne 4) {
             throw ('Native drag observer click/begin/travel/release controls are incomplete: ' + $phase)
