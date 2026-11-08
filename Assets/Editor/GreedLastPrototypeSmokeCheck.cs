@@ -11983,6 +11983,17 @@ namespace GreedLast.Editor
             args[1] = 100.75f;
             Require(Mathf.Approximately(idleBefore, InvokeRuntimeUiFloat(methodName, args)),
                 methodName + " must keep its existing non-running motion gate.");
+            args[0] = true;
+            int speedIndex = methodName == "BuildRunnerStridePhase" ? 2 : 3;
+            args[speedIndex] = 1.4f;
+            args[1] = 200.25f;
+            float transitionBefore = InvokeRuntimeUiFloat(methodName, args);
+            args[speedIndex] = 1.399f;
+            args[1] = 200.26f;
+            float transitionAfter = InvokeRuntimeUiFloat(methodName, args);
+            float travel = Mathf.Repeat(transitionAfter - transitionBefore, 1f);
+            Require(travel > 0f && travel < 0.05f,
+                methodName + " must not jump or backtrack when speed changes at a late animation clock.");
         }
 
         private static float InvokeRuntimeUiFloat(string methodName, params object[] args)
