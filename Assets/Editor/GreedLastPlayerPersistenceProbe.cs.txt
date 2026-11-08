@@ -68,6 +68,15 @@ namespace GreedLast.PlayerChecks
             public Record nativeLastInfiniteRecord;
             public Record nativeMenuSavedSlot;
             public Frame[] frames;
+            public bool sustainedRunMotionObserved;
+            public MotionSample[] liveMotionSamples;
+        }
+
+        [Serializable]
+        private sealed class MotionSample
+        {
+            public int frame;
+            public float clock, floorY, pillarY;
         }
 
         [Serializable]
@@ -387,6 +396,7 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
                 yield return CaptureFrame("opening", frames);
                 yield return WaitFor(() => RunState().ActivePattern && !RunState().CountdownActive && !RunState().Paused);
+                yield return ObserveSustainedRunMotion();
                 yield return CaptureFrame("trap", frames);
                 string pattern = RunState().Pattern.PatternId;
                 Call(app, "RequestToggleRunPause");
@@ -1190,6 +1200,39 @@ namespace GreedLast.PlayerChecks
                 paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive };
             using (var file = new FileStream(Path.Combine(root, phase + "-" + name + ".json"), FileMode.CreateNew))
             using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(frame, true));
+        }
+
+        private IEnumerator ObserveSustainedRunMotion()
+        {
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            var tiles = Read<Image[]>(ui, "runFloorBeatTiles");
+            var pillars = Read<Image[]>(ui, "runSceneryPillars");
+            GreedLastRunSnapshot initial = RunState();
+            var samples = new List<MotionSample>();
+            Require(core.IsPracticeRun && initial.ActivePattern && Read<float>(ui, "beatPhase") > 1f,
+                "Observe sustained motion in an actual live practice after the accumulated clock exceeds one.");
+            for (int i = 0; i < 8; i++)
+            {
+                CheckDeadline();
+                GreedLastRunSnapshot run = RunState();
+                Require(run.ActivePattern && run.Pattern.PatternId == initial.Pattern.PatternId && !run.Paused
+                    && !run.CountdownActive && run.Health == initial.Health && run.MissCount == initial.MissCount,
+                    "The motion sample must retain one live trap without synthetic clock changes or damage.");
+                samples.Add(new MotionSample { frame = Time.frameCount, clock = Read<float>(ui, "beatPhase"),
+                    floorY = tiles[0].rectTransform.anchorMin.y, pillarY = pillars[0].rectTransform.anchorMin.y });
+                result.liveMotionSamples = samples.ToArray();
+                yield return null;
+            }
+            MotionSample first = samples[0];
+            bool floorMoved = false, pillarMoved = false;
+            foreach (MotionSample sample in samples)
+            {
+                floorMoved |= Mathf.Abs(sample.floorY - first.floorY) > 0.0001f;
+                pillarMoved |= Mathf.Abs(sample.pillarY - first.pillarY) > 0.0001f;
+            }
+            Require(samples[7].frame > first.frame && samples[7].clock > first.clock && floorMoved && pillarMoved,
+                "Actual floor and pillar transforms must keep moving across live frames beyond the first accumulated beat.");
+            result.sustainedRunMotionObserved = true;
         }
 
         private IEnumerator CaptureTrapApproach(string name, List<Frame> frames)

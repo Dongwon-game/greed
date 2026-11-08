@@ -322,6 +322,10 @@ try {
             $render.candidate -or $render.clears -ne 0 -or $render.infiniteRuns -ne 0 -or $render.growthPoints -ne 0) {
             throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
+        if (!$render.sustainedRunMotionObserved -or @($render.liveMotionSamples).Count -ne 8) {
+            throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
+        }
+        $report.LiveMotionSamples = $render.liveMotionSamples
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             $imagePath = Join-Path $root ('frame-'+$_.name+'.png')
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
