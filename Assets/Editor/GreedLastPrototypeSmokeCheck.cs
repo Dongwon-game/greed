@@ -11987,6 +11987,7 @@ namespace GreedLast.Editor
                         && !Mathf.Approximately(before, after),
                         methodName + " must keep advancing when accumulated animation time exceeds one beat.");
                 }
+                float lastLivePhase = Evaluate();
                 args[0] = false;
                 args[1] = 100.25f;
                 float idleBefore = Evaluate();
@@ -11999,6 +12000,8 @@ namespace GreedLast.Editor
                 args[speedIndex] = 1.4f;
                 args[1] = 200.25f;
                 float transitionBefore = Evaluate();
+                Require(Mathf.Approximately(lastLivePhase, transitionBefore),
+                    methodName + " must preserve its phase instead of catching up hidden animation time.");
                 args[speedIndex] = 1.399f;
                 args[1] = 200.26f;
                 float transitionAfter = Evaluate();
@@ -12006,7 +12009,7 @@ namespace GreedLast.Editor
                 Require(travel > 0f && travel < 0.05f,
                     methodName + " must not jump or backtrack when speed changes at a late animation clock.");
                 Require(Mathf.Approximately(transitionAfter, Evaluate()), methodName + " must advance only once for a shared frame clock.");
-                }
+            }
             finally { UnityEngine.Object.DestroyImmediate(owner); }
         }
 
