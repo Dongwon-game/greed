@@ -11,6 +11,29 @@ namespace GreedLast
 
         internal bool HasActiveGesture => activePointer != null;
 
+        public bool TryKeyboardScroll(GreedLastMenuScrollCommand command)
+        {
+            if (!IsActive() || !vertical || content == null || viewport == null || activePointer != null
+                || (verticalScrollbar is GreedLastMenuScrollbar bar && bar.HasActiveGesture)
+                || (Application.isPlaying && canceledFrame == Time.frameCount)) return false;
+            float overflow = content.rect.height - viewport.rect.height;
+            if (overflow <= 1f || viewport.rect.height <= 1f) return false;
+            float current = Mathf.Clamp01(verticalNormalizedPosition);
+            float page = viewport.rect.height * 0.85f / overflow;
+            float target;
+            switch (command)
+            {
+                case GreedLastMenuScrollCommand.PageUp: target = current + page; break;
+                case GreedLastMenuScrollCommand.PageDown: target = current - page; break;
+                case GreedLastMenuScrollCommand.Top: target = 1f; break;
+                case GreedLastMenuScrollCommand.Bottom: target = 0f; break;
+                default: return false;
+            }
+            StopMovement();
+            verticalNormalizedPosition = Mathf.Clamp01(target);
+            return true;
+        }
+
         public void OnPointerDown(PointerEventData pointer)
         {
             if (!IsActive() || pointer.button != PointerEventData.InputButton.Left || activePointer != null

@@ -672,6 +672,7 @@ namespace GreedLast.Editor
             GreedLastPrototypePlayModeCheck.VerifyPreferenceCaptureCoverage();
             GreedLastPrototypeKeyboardCheck.VerifyShortcutModifiers();
             GreedLastPrototypeKeyboardCheck.VerifyShortcutHoldVisuals();
+            GreedLastPrototypeKeyboardCheck.VerifyMenuKeyboardScrollGeometry();
             GreedLastPrototypeKeyboardCheck.VerifyInputBorrowingPolicy();
             GreedLastPrototypeAndroidReadinessCheck.VerifyPolicy();
             GreedLastAndroidPreviewBuilder.VerifyPolicy();

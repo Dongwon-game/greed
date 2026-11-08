@@ -422,6 +422,8 @@ namespace GreedLast.Editor
                 results.succeeded = results.cycles.TrueForAll(cycle => cycle.savedComparisonGestureCases == 8
                     && cycle.savedComparisonFreshRecoveries == 8 && cycle.savedComparisonViews == 2
                     && cycle.savedComparisonWheelCases == 6 && cycle.savedComparisonWheelRecoveries == 6
+                    && cycle.savedComparisonKeyboardCommands == 10 && cycle.savedComparisonKeyboardCancellations == 6
+                    && cycle.savedComparisonKeyboardRecoveries == 6
                     && cycle.savedComparisonSlotHandoffs == 4
                     && cycle.savedComparisonMinimumTravelPixels > 1f && cycle.savedComparisonDataPreserved);
                 if (!results.succeeded) results.error = "Required actual saved-comparison menu coverage did not complete.";
@@ -661,6 +663,7 @@ namespace GreedLast.Editor
             public int engineMenuCrossControlCases;
             public int savedComparisonGestureCases, savedComparisonFreshRecoveries, savedComparisonViews, savedComparisonSlotHandoffs;
             public int savedComparisonWheelCases, savedComparisonWheelRecoveries;
+            public int savedComparisonKeyboardCommands, savedComparisonKeyboardCancellations, savedComparisonKeyboardRecoveries;
             public float savedComparisonMinimumTravelPixels;
             public bool savedComparisonDataPreserved;
             public bool recoveredCandidateSlotsPreserved;
@@ -3573,6 +3576,7 @@ namespace GreedLast.Editor
                         }
                         AssertPreserved();
                         report.savedComparisonViews++;
+                        yield return VerifySavedComparisonKeyboard(scroll, () => AssertPreserved());
                         yield return VerifySavedComparisonWheel(scroll, camera, () => AssertPreserved());
                         foreach (bool handle in new[] { false, true })
                         foreach (bool viewport in new[] { false, true })
@@ -3680,6 +3684,54 @@ namespace GreedLast.Editor
                     if (ui.UsePlayerRunControls != playerControls) ui.ToggleDevCleanView();
                 }
                 Debug.Log("Greed actual saved-comparison menu passed: clean/detailed occupied S3 plus unsaved candidate, eight body/handle interruptions and fresh recoveries, four two-finger slot handoffs, canceled release over save, full records/uses/candidate/rewards unchanged. In-memory fixtures and synthetic EventSystem only; no desktop or personal-save interaction.");
+            }
+
+            private IEnumerator VerifySavedComparisonKeyboard(ScrollRect scroll, Action assertPreserved)
+            {
+                input.Touches = Array.Empty<Touch>();
+                input.MouseDown = input.MouseHeld = input.MouseUp = false;
+                input.ScrollDelta = Vector2.zero;
+                yield return null;
+                foreach (GreedLastMenuScrollCommand command in new[] { GreedLastMenuScrollCommand.Top,
+                    GreedLastMenuScrollCommand.PageDown, GreedLastMenuScrollCommand.PageUp,
+                    GreedLastMenuScrollCommand.Bottom, GreedLastMenuScrollCommand.Top })
+                {
+                    float before = scroll.verticalNormalizedPosition;
+                    Require((bool)Call(app, "TryHandleMenuScrollKeyboardFrame", command), "The visible comparison must accept keyboard body navigation.");
+                    yield return null;
+                    float after = scroll.verticalNormalizedPosition;
+                    Require(command == GreedLastMenuScrollCommand.Top ? after > 0.999f
+                        : command == GreedLastMenuScrollCommand.Bottom ? after < 0.001f
+                        : command == GreedLastMenuScrollCommand.PageDown ? after < before : after > before,
+                        "Keyboard navigation must move the real comparison in its requested direction: " + command);
+                    assertPreserved();
+                    report.savedComparisonKeyboardCommands++;
+                }
+                foreach (string reason in new[] { "command", "focus", "app" })
+                {
+                    yield return null;
+                    Require((bool)Call(app, "TryHandleMenuScrollKeyboardFrame", GreedLastMenuScrollCommand.Top), "Prepare a fresh top position.");
+                    Vector2 before = scroll.content.anchoredPosition;
+                    if (reason == "command") Call(ui, "CancelPendingUiInput");
+                    else
+                    {
+                        string signal = reason == "focus" ? "OnApplicationFocus" : "SetAppInputAvailable";
+                        Call(ui, signal, false);
+                        Call(ui, signal, true);
+                    }
+                    Require(!(bool)Call(app, "TryHandleMenuScrollKeyboardFrame", GreedLastMenuScrollCommand.PageDown)
+                        && Vector2.Distance(before, scroll.content.anchoredPosition) < 0.1f,
+                        "Canceled-frame keyboard input must not move newly recovered comparison content: " + reason);
+                    assertPreserved();
+                    report.savedComparisonKeyboardCancellations++;
+                    yield return null;
+                    Require((bool)Call(app, "TryHandleMenuScrollKeyboardFrame", GreedLastMenuScrollCommand.PageDown)
+                        && Vector2.Distance(before, scroll.content.anchoredPosition) > 1f,
+                        "A later fresh keyboard page must recover without pointer input: " + reason);
+                    assertPreserved();
+                    report.savedComparisonKeyboardRecoveries++;
+                }
+                Debug.Log("Greed saved-comparison keyboard passed: viewport paging/top/bottom, command/focus/app cancellation and later-frame recovery, unchanged candidate/slots/uses/rewards. App frame commands, not OS keyboard or native drag.");
             }
 
             private IEnumerator VerifySavedComparisonWheel(ScrollRect scroll, Camera camera, Action assertPreserved)

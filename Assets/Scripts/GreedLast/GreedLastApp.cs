@@ -36,6 +36,15 @@ namespace GreedLast
         ProfileBoard = 14,
     }
 
+    public enum GreedLastMenuScrollCommand
+    {
+        None = 0,
+        PageUp = 1,
+        PageDown = 2,
+        Top = 3,
+        Bottom = 4,
+    }
+
     public enum GreedLastRequestKind
     {
         BootInit = 0,
@@ -2952,7 +2961,7 @@ namespace GreedLast
         {
             if (devToolsEnabled || isMobilePlatform) return BuildPrototypeInteractionShortcutChecklistText(devToolsEnabled);
             return "\n상태줄 보상·코치 목표·3동작 HUD / 최근 흐름 / 박자공간·주자 / 좌·중·우 대응"
-                + "\nPC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 소리% / 키·클릭"
+                + "\nPC 조작: A/← · S/Space · D/→ / ESC/P 정지 / 소리% / 키·클릭 / 휠·PgUp/PgDn 본문"
                 + "\n개발 테스트키 숨김 / 기록·흔적 체크로 검증";
         }
 
@@ -11382,6 +11391,28 @@ namespace GreedLast
             {
                 return;
             }
+            if (keyboardAllowed) TryHandleMenuScrollKeyboardInput();
+        }
+
+        private bool TryHandleMenuScrollKeyboardInput()
+        {
+            GreedLastMenuScrollCommand command = Input.GetKeyDown(KeyCode.Home) ? GreedLastMenuScrollCommand.Top
+                : Input.GetKeyDown(KeyCode.End) ? GreedLastMenuScrollCommand.Bottom
+                : Input.GetKeyDown(KeyCode.PageUp) ? GreedLastMenuScrollCommand.PageUp
+                : Input.GetKeyDown(KeyCode.PageDown) ? GreedLastMenuScrollCommand.PageDown
+                : GreedLastMenuScrollCommand.None;
+            return TryHandleMenuScrollKeyboardFrame(command);
+        }
+
+        private bool TryHandleMenuScrollKeyboardFrame(GreedLastMenuScrollCommand command)
+        {
+            if (command == GreedLastMenuScrollCommand.None || stateMachine == null || runtimeUi == null
+                || !CanAcceptPlayerInput()) return false;
+            GreedLastScreenState screen = stateMachine.CurrentState;
+            if (screen != GreedLastScreenState.ProfileBoard && screen != GreedLastScreenState.InfiniteRecordBoard
+                && screen != GreedLastScreenState.SaveLoadoutDraft) return false;
+            if (HasUnpresentedScreenTransition || HasUnpresentedRunCommandTransition) return true;
+            return runtimeUi.TryScrollMenuDetailFromKeyboard(command);
         }
 
         internal static bool CanUsePrototypeKeyboardInput()
@@ -28672,6 +28703,12 @@ namespace GreedLast
         {
             if (laneHeldPointers == null) return;
             for (int i = 0; i < laneHeldPointers.Length; i++) ClearLanePointerHold(i);
+        }
+
+        internal bool TryScrollMenuDetailFromKeyboard(GreedLastMenuScrollCommand command)
+        {
+            return AcceptsPlayerInput && menuDetailScroll is GreedLastMenuScrollRect scroll
+                && scroll.TryKeyboardScroll(command);
         }
 
         internal void CancelPendingUiInput()

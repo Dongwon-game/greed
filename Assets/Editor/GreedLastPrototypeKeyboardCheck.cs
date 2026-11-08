@@ -16,6 +16,71 @@ namespace GreedLast.Editor
             GreedLastPrototypeVisualCheck.RunMenuScrollInput();
         }
 
+        public static void VerifyMenuKeyboardScrollGeometry()
+        {
+            Require(!EditorApplication.isPlayingOrWillChangePlaymode, "Menu geometry checks require idle Edit mode.");
+            var host = new GameObject("GreedLastMenuKeyboardGeometry", typeof(RectTransform));
+            try
+            {
+                var scroll = host.AddComponent<GreedLastMenuScrollRect>();
+                var viewport = new GameObject("Viewport", typeof(RectTransform)).GetComponent<RectTransform>();
+                viewport.SetParent(host.transform, false);
+                viewport.sizeDelta = new Vector2(240f, 180f);
+                var content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+                content.SetParent(viewport, false);
+                content.anchorMin = new Vector2(0f, 1f); content.anchorMax = Vector2.one;
+                content.pivot = new Vector2(0.5f, 1f); content.sizeDelta = new Vector2(0f, 900f);
+                scroll.viewport = viewport; scroll.content = content; scroll.horizontal = false; scroll.vertical = true;
+                scroll.movementType = ScrollRect.MovementType.Clamped;
+                Canvas.ForceUpdateCanvases();
+                scroll.verticalNormalizedPosition = 1f;
+                scroll.velocity = new Vector2(0f, 100f);
+                float top = content.anchoredPosition.y;
+                Require(scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageDown)
+                    && content.anchoredPosition.y - top > 90f && content.anchoredPosition.y - top < 180f
+                    && scroll.velocity == Vector2.zero,
+                    "PageDown must move most of the real viewport with reading overlap and stop old inertia.");
+                Require(scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageUp)
+                    && Mathf.Abs(content.anchoredPosition.y - top) < 0.5f, "PageUp must retain reading overlap and reverse the page step.");
+                Require(scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.Bottom) && scroll.verticalNormalizedPosition < 0.001f,
+                    "End must reach the actual bottom.");
+                scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageDown);
+                Require(scroll.verticalNormalizedPosition < 0.001f, "PageDown must clamp at the bottom without wrapping.");
+                Require(scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.Top) && scroll.verticalNormalizedPosition > 0.999f,
+                    "Home must reach the actual top.");
+                scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageUp);
+                Vector2 held = content.anchoredPosition;
+                Require(scroll.verticalNormalizedPosition > 0.999f
+                    && !scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.None)
+                    && content.anchoredPosition == held, "Top and empty keyboard commands must not overscroll.");
+                content.sizeDelta = new Vector2(0f, 180f);
+                Require(!scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageDown), "Text that fits the viewport must not scroll.");
+                content.sizeDelta = new Vector2(0f, 900f);
+                scroll.verticalNormalizedPosition = 1f;
+                scroll.vertical = false;
+                Require(!scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageDown), "Nonvertical panels must reject body scrolling.");
+                scroll.vertical = true;
+                var pointer = new PointerEventData(EventSystem.current) { pointerId = -1, button = PointerEventData.InputButton.Left };
+                scroll.OnPointerDown(pointer);
+                held = content.anchoredPosition;
+                Require(!scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.Bottom) && content.anchoredPosition == held,
+                    "Keyboard scrolling must not take over an owned body pointer.");
+                scroll.OnPointerUp(pointer);
+                var bar = new GameObject("Scrollbar", typeof(RectTransform), typeof(GreedLastMenuScrollbar)).GetComponent<GreedLastMenuScrollbar>();
+                bar.transform.SetParent(host.transform, false);
+                scroll.verticalScrollbar = bar;
+                FieldInfo active = typeof(GreedLastMenuScrollbar).GetField("activePointer", BindingFlags.Instance | BindingFlags.NonPublic);
+                active.SetValue(bar, pointer);
+                Require(!scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.Bottom),
+                    "Keyboard scrolling must not take over an owned scrollbar pointer.");
+                active.SetValue(bar, null);
+                host.SetActive(false);
+                Require(!scroll.TryKeyboardScroll(GreedLastMenuScrollCommand.PageDown), "Hidden panels must reject keyboard body movement.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(host); }
+            Debug.Log("Greed menu keyboard geometry passed: viewport page overlap, top/bottom clamps, inertia stop, fitting/hidden/nonvertical panels and owned body/handle guards. Synthetic UI geometry only; not native drag or saved-data testing.");
+        }
+
         public static void VerifyShortcutModifiers()
         {
             MethodInfo policy = typeof(GreedLastApp).GetMethod("ShouldAllowPrototypeKeyboardInput", BindingFlags.Static | BindingFlags.NonPublic);
