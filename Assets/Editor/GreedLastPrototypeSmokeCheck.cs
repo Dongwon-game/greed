@@ -1530,6 +1530,14 @@ namespace GreedLast.Editor
                         > InvokeRuntimeUiFloat("BuildFloorBeatTileBeatCueUrgencyColorBlend", farFloorBeatCueUrgency),
                 "Floor beat tiles must receive beat-cue urgency strongest near the judgement line and foreground.");
             float idleFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", false, 0.20f, 1f, 1.4f, 1f, 0);
+            // beatPhase is accumulated across frames, not a normalized one-beat input.
+            // Check sustained motion as well as the existing first-beat speed comparisons.
+            foreach (string method in new[] { "BuildStraightRunCorridorGatePhase", "BuildStraightRunSideWallStripePhase",
+                "BuildStraightRunSpeedStreakPhase", "BuildStraightRunCenterSeamDashPhase", "BuildStraightRunForwardPaceMarkerPhase",
+                "BuildStraightRunPathSegmentPhase", "BuildFloorBeatTilePhase" })
+                RequireSustainedRunPhase(method, new object[] { true, 0f, 1f, 1f, 0f, 0 });
+            RequireSustainedRunPhase("BuildSceneryPillarPhase", new object[] { true, 0f, 1f, 1f, 0f, 0, 4 });
+            RequireSustainedRunPhase("BuildRunnerStridePhase", new object[] { true, 0f, 1f, 0f });
             float baseFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1f, 0f, 0);
             float boostedFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 1.4f, 1f, 0);
             float staggerFloorTilePhase = InvokeRuntimeUiFloat("BuildFloorBeatTilePhase", true, 0.20f, 1f, 0.62f, 0f, 0);
@@ -11955,6 +11963,26 @@ namespace GreedLast.Editor
             {
                 UnityEngine.Object.DestroyImmediate(created);
             }
+        }
+
+        private static void RequireSustainedRunPhase(string methodName, object[] args)
+        {
+            foreach (float start in new[] { 0.99f, 2.25f, 100.25f })
+            {
+                args[1] = start;
+                float before = InvokeRuntimeUiFloat(methodName, args);
+                args[1] = start + (start < 1f ? 0.02f : 0.50f);
+                float after = InvokeRuntimeUiFloat(methodName, args);
+                Require(before >= 0f && before < 1f && after >= 0f && after < 1f
+                    && !Mathf.Approximately(before, after),
+                    methodName + " must keep advancing when accumulated animation time exceeds one beat.");
+            }
+            args[0] = false;
+            args[1] = 100.25f;
+            float idleBefore = InvokeRuntimeUiFloat(methodName, args);
+            args[1] = 100.75f;
+            Require(Mathf.Approximately(idleBefore, InvokeRuntimeUiFloat(methodName, args)),
+                methodName + " must keep its existing non-running motion gate.");
         }
 
         private static float InvokeRuntimeUiFloat(string methodName, params object[] args)
