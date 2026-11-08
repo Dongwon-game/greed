@@ -11967,42 +11967,67 @@ namespace GreedLast.Editor
 
         private static void RequireSustainedRunPhase(string methodName, object[] args)
         {
+            var owner = new GameObject("IsolatedRunMotionClock");
+            owner.SetActive(false);
+            var ui = owner.AddComponent<GreedLastRuntimeUi>();
+            MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Require(method != null, "Missing stateful run motion helper: " + methodName);
+            float Evaluate() => (float)method.Invoke(ui, args);
+            try
+            {
+            args[1] = 0f;
+            Evaluate();
             foreach (float start in new[] { 0.99f, 2.25f, 100.25f })
             {
                 args[1] = start;
-                float before = InvokeRuntimeUiFloat(methodName, args);
+                float before = Evaluate();
                 args[1] = start + (start < 1f ? 0.02f : 0.50f);
-                float after = InvokeRuntimeUiFloat(methodName, args);
+                float after = Evaluate();
                 Require(before >= 0f && before < 1f && after >= 0f && after < 1f
                     && !Mathf.Approximately(before, after),
                     methodName + " must keep advancing when accumulated animation time exceeds one beat.");
             }
             args[0] = false;
             args[1] = 100.25f;
-            float idleBefore = InvokeRuntimeUiFloat(methodName, args);
+            float idleBefore = Evaluate();
             args[1] = 100.75f;
-            Require(Mathf.Approximately(idleBefore, InvokeRuntimeUiFloat(methodName, args)),
+            Require(Mathf.Approximately(idleBefore, Evaluate()),
                 methodName + " must keep its existing non-running motion gate.");
+            typeof(GreedLastRuntimeUi).GetMethod("InvalidateRunMotionClockSamples", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(ui, null);
             args[0] = true;
             int speedIndex = methodName == "BuildRunnerStridePhase" ? 2 : 3;
             args[speedIndex] = 1.4f;
             args[1] = 200.25f;
-            float transitionBefore = InvokeRuntimeUiFloat(methodName, args);
+            float transitionBefore = Evaluate();
             args[speedIndex] = 1.399f;
             args[1] = 200.26f;
-            float transitionAfter = InvokeRuntimeUiFloat(methodName, args);
+            float transitionAfter = Evaluate();
             float travel = Mathf.Repeat(transitionAfter - transitionBefore, 1f);
             Require(travel > 0f && travel < 0.05f,
                 methodName + " must not jump or backtrack when speed changes at a late animation clock.");
+            Require(Mathf.Approximately(transitionAfter, Evaluate()), methodName + " must advance only once for a shared frame clock.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(owner); }
         }
 
         private static float InvokeRuntimeUiFloat(string methodName, params object[] args)
         {
             MethodInfo method = typeof(GreedLastRuntimeUi).GetMethod(
                 methodName,
-                BindingFlags.Static | BindingFlags.NonPublic);
+                BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic);
             Require(method != null, "Missing runtime UI float helper: " + methodName);
-            return (float)method.Invoke(null, args);
+            if (method.IsStatic) return (float)method.Invoke(null, args);
+            var owner = new GameObject("IsolatedRunPhaseRate");
+            owner.SetActive(false);
+            var ui = owner.AddComponent<GreedLastRuntimeUi>();
+            try
+            {
+                object[] initial = (object[])args.Clone();
+                initial[1] = 0f;
+                method.Invoke(ui, initial);
+                return (float)method.Invoke(ui, args);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(owner); }
         }
 
         private static int InvokeRuntimeUiInt(string methodName, params object[] args)

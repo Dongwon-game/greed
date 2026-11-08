@@ -16108,6 +16108,30 @@ namespace GreedLast
         private Action<GreedLastRunChannel> runChannelRequested;
         // Accumulated animation time; phase builders wrap it after applying speed.
         private float beatPhase;
+        private struct RunMotionClock
+        {
+            public float Phase, PreviousBeat;
+            public bool HasBeat;
+        }
+        private RunMotionClock runnerStrideClock, floorTileClock, sceneryPillarClock, corridorGateClock,
+            sideWallStripeClock, speedStreakClock, centerSeamClock, paceMarkerClock, pathSegmentClock;
+
+        private static float AdvanceRunMotionClock(ref RunMotionClock clock, bool running, float beat, float speed)
+        {
+            float current = Mathf.Max(0f, beat);
+            float delta = clock.HasBeat ? Mathf.Max(0f, current - clock.PreviousBeat) : 0f;
+            clock.PreviousBeat = current;
+            clock.HasBeat = true;
+            if (running) clock.Phase = Mathf.Repeat(clock.Phase + delta * Mathf.Max(0f, speed), 1f);
+            return clock.Phase;
+        }
+
+        private void InvalidateRunMotionClockSamples()
+        {
+            runnerStrideClock.HasBeat = floorTileClock.HasBeat = sceneryPillarClock.HasBeat = false;
+            corridorGateClock.HasBeat = sideWallStripeClock.HasBeat = speedStreakClock.HasBeat = false;
+            centerSeamClock.HasBeat = paceMarkerClock.HasBeat = pathSegmentClock.HasBeat = false;
+        }
         private float rhythmPulseStartedAt = -1f;
         private float rhythmPulseInterval = 0.5f;
         private float nextBeatSoundAt;
@@ -16526,6 +16550,8 @@ namespace GreedLast
                     BuildForwardPayoffBurstPulse(forwardPayoffBurstUntil - Time.unscaledTime, forwardPayoffBurstStrength));
             }
             float beatSpeed = BuildBeatVisualSpeed(latestRunSnapshot);
+            if (!runModeActive || !hasRunSnapshot || !ShouldAdvanceRunMotion(latestRunSnapshot))
+                InvalidateRunMotionClockSamples();
             beatPhase += Time.unscaledDeltaTime * beatSpeed;
             float pulse = runModeActive ? GetGameplayBeatPulse() : 0.5f + Mathf.Sin(beatPhase * Mathf.PI * 2f) * 0.5f;
             bool transientFeedbackActive = CanShowRunTransientFeedback();
@@ -36757,19 +36783,16 @@ namespace GreedLast
             return new Vector4(stride * 27f, -stride * 27f, -stride * 22f, stride * 22f);
         }
 
-        private static float BuildRunnerStridePhase(
+        private float BuildRunnerStridePhase(
             bool running,
             float beatProgress,
             float motionSpeedBias,
             float forwardPulse)
         {
-            if (!running)
-            {
-                return 0f;
-            }
-
             float speed = Mathf.Max(0.1f, motionSpeedBias) * (1f + Mathf.Clamp01(forwardPulse) * 0.12f);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed, 1f);
+            float phase = AdvanceRunMotionClock(ref runnerStrideClock, running, beatProgress, speed);
+            if (!running) return 0f;
+            return Mathf.Repeat(phase, 1f);
         }
 
         private static float BuildRunnerGroundContactStrength(
@@ -40958,7 +40981,7 @@ namespace GreedLast
             return Mathf.RoundToInt(baseAlpha + motionAlpha + rotationAlpha);
         }
 
-        private static float BuildStraightRunCorridorGatePhase(
+        private float BuildStraightRunCorridorGatePhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -40967,15 +40990,12 @@ namespace GreedLast
             int gateIndex)
         {
             float indexOffset = Mathf.Clamp(gateIndex, 0, StraightRunCorridorGateCount - 1) / (float)StraightRunCorridorGateCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.30f + Mathf.Clamp01(forwardPulse) * 0.12f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref corridorGateClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunCorridorGateAnchorY(float phase)
@@ -41075,7 +41095,7 @@ namespace GreedLast
                     + Mathf.Clamp01(rotationReadiness) * 0.22f);
         }
 
-        private static float BuildStraightRunSideWallStripePhase(
+        private float BuildStraightRunSideWallStripePhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -41084,15 +41104,12 @@ namespace GreedLast
             int depthIndex)
         {
             float indexOffset = Mathf.Clamp(depthIndex, 0, StraightRunSideWallStripeCount - 1) / (float)StraightRunSideWallStripeCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.38f + Mathf.Clamp01(forwardPulse) * 0.14f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref sideWallStripeClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunSideWallStripeAnchorX(
@@ -41197,7 +41214,7 @@ namespace GreedLast
                     + Mathf.Clamp01(rotationReadiness) * 0.12f);
         }
 
-        private static float BuildStraightRunSpeedStreakPhase(
+        private float BuildStraightRunSpeedStreakPhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -41206,15 +41223,12 @@ namespace GreedLast
             int streakIndex)
         {
             float indexOffset = Mathf.Clamp(streakIndex, 0, StraightRunSpeedStreakPairCount - 1) / (float)StraightRunSpeedStreakPairCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.58f + Mathf.Clamp01(forwardPulse) * 0.22f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref speedStreakClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunSpeedStreakAnchorX(
@@ -41321,7 +41335,7 @@ namespace GreedLast
                     + Mathf.Clamp01(rotationReadiness) * 0.08f);
         }
 
-        private static float BuildStraightRunCenterSeamDashPhase(
+        private float BuildStraightRunCenterSeamDashPhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -41330,15 +41344,12 @@ namespace GreedLast
             int dashIndex)
         {
             float indexOffset = Mathf.Clamp(dashIndex, 0, StraightRunCenterSeamDashCount - 1) / (float)StraightRunCenterSeamDashCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.42f + Mathf.Clamp01(forwardPulse) * 0.15f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref centerSeamClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunCenterSeamDashAnchorY(float phase)
@@ -41434,7 +41445,7 @@ namespace GreedLast
                     + Mathf.Clamp01(rotationReadiness) * 0.12f);
         }
 
-        private static float BuildStraightRunForwardPaceMarkerPhase(
+        private float BuildStraightRunForwardPaceMarkerPhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -41443,15 +41454,12 @@ namespace GreedLast
             int markerIndex)
         {
             float indexOffset = Mathf.Clamp(markerIndex, 0, StraightRunForwardPaceMarkerCount - 1) / (float)StraightRunForwardPaceMarkerCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.34f + Mathf.Clamp01(forwardPulse) * 0.20f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref paceMarkerClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunForwardPaceMarkerAnchorY(float phase)
@@ -42759,7 +42767,7 @@ namespace GreedLast
             return Mathf.Clamp01(0.44f + Mathf.Clamp01(pulse) * 0.32f + Mathf.Clamp01(rotationReadiness) * 0.24f);
         }
 
-        private static float BuildStraightRunPathSegmentPhase(
+        private float BuildStraightRunPathSegmentPhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -42768,15 +42776,12 @@ namespace GreedLast
             int segmentIndex)
         {
             float indexOffset = Mathf.Clamp(segmentIndex, 0, StraightRunPathSegmentCount - 1) / (float)StraightRunPathSegmentCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.46f + Mathf.Clamp01(forwardPulse) * 0.16f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref pathSegmentClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildStraightRunPathSegmentY(float phase)
@@ -43513,7 +43518,7 @@ namespace GreedLast
                 : Mathf.Clamp01(0.14f + readiness * 0.18f);
         }
 
-        private static float BuildFloorBeatTilePhase(
+        private float BuildFloorBeatTilePhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -43522,18 +43527,15 @@ namespace GreedLast
             int tileIndex)
         {
             float indexOffset = Mathf.Clamp(tileIndex, 0, FloorBeatTileCount - 1) / (float)FloorBeatTileCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.34f + Mathf.Clamp01(forwardPulse) * 0.10f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref floorTileClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
-        private static float BuildSceneryPillarPhase(
+        private float BuildSceneryPillarPhase(
             bool running,
             float beatProgress,
             float stageMotionScale,
@@ -43544,15 +43546,12 @@ namespace GreedLast
         {
             int safeDepthCount = Mathf.Max(1, depthCount);
             float indexOffset = Mathf.Clamp(depthIndex, 0, safeDepthCount - 1) / (float)safeDepthCount;
-            if (!running)
-            {
-                return indexOffset;
-            }
-
             float speed = (0.24f + Mathf.Clamp01(forwardPulse) * 0.07f)
                 * Mathf.Max(0.1f, stageMotionScale)
                 * Mathf.Max(0.1f, motionSpeedBias);
-            return Mathf.Repeat(Mathf.Max(0f, beatProgress) * speed + indexOffset, 1f);
+            float phase = AdvanceRunMotionClock(ref sceneryPillarClock, running, beatProgress, speed);
+            if (!running) return indexOffset;
+            return Mathf.Repeat(phase + indexOffset, 1f);
         }
 
         private static float BuildSceneryPillarDownbeatLift(float downbeatPulse, float phase, int depthIndex, int depthCount)
