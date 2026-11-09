@@ -611,6 +611,16 @@ namespace GreedLast.PlayerChecks
                 result.savedSlot = From(Read<GreedLastRunRecord[]>(backend, "saveLoadoutSlots")[2]);
                 Require(result.savedSlot.valid && string.IsNullOrEmpty(result.savedSlot.relic),
                     "The actual saved-slot baseline must contain the gift-only saved record, not the ordinary clear relic.");
+                if (state.CurrentState == GreedLastScreenState.SaveLoadoutDraft)
+                    Call(app, "RequestReturnToLobby");
+                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+                Button quit = Read<Button>(Read<GreedLastRuntimeUi>(app, "runtimeUi"), "lobbyQuitButton");
+                Require(quit.gameObject.activeInHierarchy && quit.IsInteractable(), "The saved lobby must offer normal application exit.");
+                result.scope = "Real lobby quit button callback in a hidden isolated Windows player after saving S3. The next process verifies saved record and uses. No desktop click injection.";
+                windowAwaitingClose = windowReady = true;
+                quit.onClick.Invoke();
+                yield return WaitFor(() => finished, settleFrame: false);
+                yield break;
             }
             else if (phase == "first-use" || phase == "last-use")
             {
@@ -1694,7 +1704,7 @@ namespace GreedLast.PlayerChecks
             result.quitCallbackObserved = true;
             result.completedUtc = DateTime.UtcNow.ToString("O");
             result.error = windowReady ? string.Empty : "The interactive window closed before its required stages completed.";
-            if (phase != "practice-live" && phase != "practice-lobby-quit")
+            if (phase != "practice-live" && phase != "practice-lobby-quit" && phase != "save")
                 result.scope = "Interactive isolated player OnApplicationQuit observed. The external UI evidence, not this callback, identifies the actual close trigger. Fresh processes verify persistence; not physical timing, audio or device performance.";
             try { WriteObservation(phase); }
             catch (Exception error) { Debug.LogException(error); }
