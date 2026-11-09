@@ -15983,6 +15983,7 @@ namespace GreedLast
         private Button debugConnectionButton;
         private Button nextPatternButton;
         private Button returnLobbyButton;
+        private Button lobbyQuitButton;
         private Button pauseQuitButton;
         private Button saveSlotDetailButton;
         private Button saveSlotRenameButton;
@@ -16365,7 +16366,6 @@ namespace GreedLast
         public event Action PresentationSuspended;
         public event Action<GreedLastRuntimeUi> PresentationReleased;
         public event Action QuitRequested;
-        private bool returnButtonExitsGame;
 
         public void Initialize(
             Action onPracticeRunRequested,
@@ -16935,7 +16935,6 @@ namespace GreedLast
 
             bool lobbyLike = snapshot.State == GreedLastScreenState.LobbyReady
                 || snapshot.State == GreedLastScreenState.ReSyncPending;
-            returnButtonExitsGame = lobbyLike;
             bool runLike = snapshot.State == GreedLastScreenState.RunCoreTest
                 || snapshot.State == GreedLastScreenState.InfiniteRun;
             bool infiniteRunLike = snapshot.State == GreedLastScreenState.InfiniteRun;
@@ -17087,7 +17086,8 @@ namespace GreedLast
             profileButton.gameObject.SetActive(lobbyLike && onboardingComplete);
             retryButton.gameObject.SetActive(snapshot.RetryVisible || snapshot.State == GreedLastScreenState.ConnectBlocked);
             nextPatternButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
-            returnLobbyButton.gameObject.SetActive(lobbyLike || runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
+            returnLobbyButton.gameObject.SetActive(runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike);
+            lobbyQuitButton.gameObject.SetActive(lobbyLike && !Application.isMobilePlatform);
             saveSlotDetailButton.gameObject.SetActive(saveDraftLike || recordBoardLike || profileBoardLike);
             saveSlotRenameButton.gameObject.SetActive(saveDraftLike);
             saveSlotDeleteButton.gameObject.SetActive(saveDraftLike);
@@ -17136,7 +17136,7 @@ namespace GreedLast
             debugConnectionButton.interactable = showConnectionDevButton && !snapshot.Busy;
             bool selectedSaveSlotOccupied = IsSelectedSaveSlotOccupied(snapshot);
             nextPatternButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
-            returnLobbyButton.interactable = lobbyLike || runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
+            returnLobbyButton.interactable = runLike || saveDraftLike || recordBoardLike || infinitePrepLike || growthBoardLike || profileBoardLike;
             saveSlotDetailButton.interactable = BuildSaveSlotDetailActionEnabled(snapshot, recordBoardLike, profileBoardLike, saveDraftLike);
             saveSlotRenameButton.interactable = BuildSaveSlotRenameOrDeleteActionEnabled(snapshot, saveDraftLike, selectedSaveSlotOccupied);
             saveSlotDeleteButton.interactable = BuildSaveSlotRenameOrDeleteActionEnabled(snapshot, saveDraftLike, selectedSaveSlotOccupied);
@@ -17232,7 +17232,6 @@ namespace GreedLast
             SetButtonLabel(retryButton, "동기화 재시도");
             if (lobbyLike)
             {
-                SetButtonLabel(returnLobbyButton, "게임 종료 (ESC)");
                 SetAnchored(
                     practiceRunButton.GetComponent<RectTransform>(),
                     0.5f,
@@ -27225,6 +27224,8 @@ namespace GreedLast
             debugConnectionButton = CreateButton(rootPanel.transform, "DebugConnectionButton", "연결 전환");
             nextPatternButton = CreateButton(rootPanel.transform, "NextPatternButton", "자동 시작");
             returnLobbyButton = CreateButton(rootPanel.transform, "ReturnLobbyButton", "로비로");
+            lobbyQuitButton = CreateButton(rootPanel.transform, "LobbyQuitButton", "게임 종료 (ESC)");
+            lobbyQuitButton.gameObject.SetActive(false);
             saveSlotDetailButton = CreateButton(rootPanel.transform, "SaveSlotDetailButton", "상세 비교");
             saveSlotRenameButton = CreateButton(rootPanel.transform, "SaveSlotRenameButton", "이름 변경");
             saveSlotDeleteButton = CreateButton(rootPanel.transform, "SaveSlotDeleteButton", "슬롯 삭제");
@@ -27279,6 +27280,7 @@ namespace GreedLast
             SetAnchored(nextPatternButton.GetComponent<RectTransform>(), 0.5f, 0.155f, 690f, 86f);
             SetAnchored(returnLobbyButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(saveSlotDetailButton.GetComponent<RectTransform>(), 0.895f, 0.475f, 250f, 66f);
+            SetAnchored(lobbyQuitButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.895f, 0.407f, 250f, 66f);
             SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.895f, 0.339f, 250f, 66f);
             SetAnchored(pauseButton.GetComponent<RectTransform>(), 0.91f, 0.735f, 180f, 54f);
@@ -27344,11 +27346,8 @@ namespace GreedLast
             AddGuardedCommand(retryButton, () => retryRequested?.Invoke());
             AddGuardedCommand(debugConnectionButton, () => debugConnectionRequested?.Invoke());
             AddGuardedCommand(nextPatternButton, () => nextPatternRequested?.Invoke());
-            AddGuardedCommand(returnLobbyButton, () =>
-            {
-                if (returnButtonExitsGame) QuitRequested?.Invoke();
-                else returnLobbyRequested?.Invoke();
-            });
+            AddGuardedCommand(returnLobbyButton, () => returnLobbyRequested?.Invoke());
+            AddGuardedCommand(lobbyQuitButton, () => QuitRequested?.Invoke());
             AddGuardedCommand(saveSlotDetailButton, () => saveSlotDetailRequested?.Invoke());
             AddGuardedCommand(saveSlotRenameButton, () => saveSlotRenameRequested?.Invoke());
             AddGuardedCommand(saveSlotDeleteButton, () => saveSlotDeleteRequested?.Invoke());

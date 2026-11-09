@@ -1947,7 +1947,7 @@ namespace GreedLast.Editor
                 if (lobby)
                     Require((bool)Method(app, "TryHandlePauseOrBackKeyboardInput").Invoke(app, new object[] { true, false }),
                         "Lobby Escape must route a normal application exit.");
-                Button button = Read<Button>(ui, lobby ? "returnLobbyButton" : "pauseQuitButton");
+                Button button = Read<Button>(ui, lobby ? "lobbyQuitButton" : "pauseQuitButton");
                 Require(button.gameObject.activeInHierarchy && button.IsInteractable(), "The exit control must be visible and actionable.");
                 Click(button);
                 Require(quitCalls == (lobby ? 2 : 1), "The actual exit button must request one normal quit without terminating the fixture.");
