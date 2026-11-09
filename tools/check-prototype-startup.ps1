@@ -1,6 +1,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+    [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
+    [string]$CandidateManifest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,6 +9,41 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This startup check supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $build = Join-Path $project 'Builds\GreedLastPrototype'
+$candidate = $null
+if ($CandidateManifest) {
+    $candidate = Get-Content -LiteralPath $CandidateManifest -Raw | ConvertFrom-Json
+    if ($candidate.CandidateOnly -isnot [bool] -or !$candidate.CandidateOnly -or
+        $candidate.PrivateCompany -cne 'GreedLastPrototypeChecks' -or
+        $candidate.PrivateProduct -cnotmatch '^EngineLoop-([0-9a-f]{32})$') {
+        throw 'The manifest must identify an isolated engine candidate.'
+    }
+    $id = $Matches[1]
+    $candidateRoot = Join-Path $project ('Logs/EngineLoopChecks/' + $id)
+    $engineReportPath = Join-Path $candidateRoot 'report.json'
+    if ((Get-FileHash -LiteralPath $engineReportPath).Hash -cne $candidate.BuildReportSHA256) {
+        throw 'The original engine report differs from the candidate manifest.'
+    }
+    $engine = Get-Content -LiteralPath $engineReportPath -Raw | ConvertFrom-Json
+    $privateProject = Join-Path $candidateRoot 'Project'
+    $build = Join-Path $privateProject 'Builds/GreedLastPrototype'
+    if ($engine.Id -cne $id -or $engine.Kind -cne 'candidate' -or !$engine.Succeeded -or !$engine.SmokePassed -or
+        $engine.Product -cne $candidate.PrivateProduct -or $engine.SourceHead -cne $candidate.SourceHead -or
+        (Resolve-Path -LiteralPath $engine.CandidateBuildPath).Path -ine (Resolve-Path -LiteralPath $build).Path -or
+        (Get-FileHash -LiteralPath (Join-Path $build 'VerifiedBuildInfo.json')).Hash -cne $engine.CandidateBuildInfoSHA256) {
+        throw 'The manifest does not match the verified isolated build.'
+    }
+    $privateSettings = Get-Content -LiteralPath (Join-Path $privateProject 'ProjectSettings/ProjectSettings.asset') -Raw
+    if ($privateSettings -cnotmatch '(?m)^  companyName: GreedLastPrototypeChecks\r?$' -or
+        $privateSettings -cnotmatch ('(?m)^  productName: ' + [regex]::Escape($candidate.PrivateProduct) + '\r?$')) {
+        throw 'The source candidate product is not isolated.'
+    }
+    $archive = (Resolve-Path -LiteralPath $candidate.Zip).Path
+    $verification = & (Join-Path $PSScriptRoot 'verify-prototype-build.ps1') -ProjectPath $project -BuildPath $build -PackagePath $archive | ConvertFrom-Json
+    if ($verification.Package.Sha256 -cne $candidate.ZipSHA256 -or
+        $verification.RuntimeAssemblySha256 -cne $candidate.RuntimeAssemblySHA256) {
+        throw 'The verified archive or runtime digest differs from the manifest.'
+    }
+}
 $info = Get-Content -LiteralPath (Join-Path $build 'VerifiedBuildInfo.json') -Raw | ConvertFrom-Json
 if ($info.executablePath -cne 'GreedLastPrototype.exe' -or
     $info.runtimeAssemblyPath -cne 'GreedLastPrototype_Data/Managed/Assembly-CSharp.dll' -or
@@ -48,12 +84,12 @@ function Read-PersonalPreferences {
 
 $before = Read-PersonalPreferences
 $running = @(Get-Process -ErrorAction Stop | Where-Object { $_.ProcessName -eq 'GreedLastPrototype' })
-if ($before.Count -gt 0 -or $running.Count -gt 0) {
+if (($null -eq $candidate -and $before.Count -gt 0) -or $running.Count -gt 0) {
     [ordered]@{Skipped=$true; Reason='Existing personal Greed values or player process; left untouched.';
         PersonalValues=$before.Count; ExistingPlayers=$running.Count} | ConvertTo-Json
     return
 }
-if (!$PSCmdlet.ShouldProcess($exe, 'Start an isolated headless 20-second check and stop only its own process')) { return }
+if (!$PSCmdlet.ShouldProcess($(if ($candidate) { $archive } else { $exe }), 'Start a hidden 20-second check and stop only its own process')) { return }
 
 $directory = Join-Path $project 'Logs\StandaloneChecks'
 [void][System.IO.Directory]::CreateDirectory($directory)
@@ -65,10 +101,17 @@ $report = [ordered]@{Scope='Headless Windows startup only, not rendered frames, 
     VerifiedBuildUtc=([DateTimeOffset]$info.verifiedAtUtc).ToUniversalTime().ToString('O'); RuntimeAssemblySha256=$info.runtimeAssemblySha256;
     Log=$log; ProcessId=0; AliveFor20Seconds=$false; OwnProcessStopped=$false;
     PersonalValuesBefore=$before.Count; PersonalValuesAfter=-1; PersonalPreferencesUnchanged=$false;
-    ExceptionLines=0; Error=''}
+    ExceptionLines=0; EngineInitialized=$false; CandidateSource=''; ArchiveSHA256=''; Error=''}
 $player = $null
 try {
-    $player = Start-Process -FilePath $exe -ArgumentList @('-batchmode','-nographics','-logFile', ('"' + $log + '"')) -WindowStyle Hidden -PassThru
+    if ($candidate) {
+        $extracted = Join-Path $directory ('extracted-' + $stamp)
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $extracted)
+        $exe = Join-Path $extracted $info.executablePath
+        $report.CandidateSource = $candidate.SourceHead
+        $report.ArchiveSHA256 = $verification.Package.Sha256
+    }
+    $player = Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) -ArgumentList @('-batchmode','-nographics','-logFile', ('"' + $log + '"')) -WindowStyle Hidden -PassThru
     $report.ProcessId = $player.Id
     $report.AliveFor20Seconds = !$player.WaitForExit(20000)
     if (!$report.AliveFor20Seconds) { throw 'The startup process exited before the 20-second observation completed.' }
@@ -91,11 +134,12 @@ finally {
         $report.PersonalPreferencesUnchanged = ($before | ConvertTo-Json -Depth 8 -Compress) -ceq ($after | ConvertTo-Json -Depth 8 -Compress)
         if (!(Test-Path -LiteralPath $log)) { throw 'The startup log was not produced.' }
         $logText = Get-Content -LiteralPath $log -Raw
+        $report.EngineInitialized = $logText -match '(?m)^Initialize engine version:' -and $logText -match '(?m)^Begin MonoManager ReloadAssembly'
         $report.ExceptionLines = [regex]::Matches($logText, '(?m)^[^\r\n]*(?:Exception(?=:|[\s(])|error CS\d+)[^\r\n]*$').Count
     }
     catch { $report.Error += ' Result collection failed: ' + $_.Exception.Message }
     $report.CompletedUtc = [DateTime]::UtcNow.ToString('O')
-    $report.Succeeded = $report.AliveFor20Seconds -and $report.OwnProcessStopped -and
+    $report.Succeeded = $report.EngineInitialized -and $report.AliveFor20Seconds -and $report.OwnProcessStopped -and
         $report.PersonalPreferencesUnchanged -and $report.ExceptionLines -eq 0 -and !$report.Error
     [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 8))
 }

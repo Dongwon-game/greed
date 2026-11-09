@@ -1,5 +1,9 @@
 # 실행 파일의 종료와 재실행 확인
 
+## 전달용 ZIP의 숨김 시작 확인
+
+`./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261109-7cb1d41.json'`은 후보를 만든 원본 엔진 보고서와 빌드가 있는 작업 사본에서 실행한다. 격리 제품명과 빌드 식별을 대조하고 ZIP의 모든 파일을 원본과 검증한다. ZIP을 새 로그 하위 폴더에 푼 뒤 그 폴더에서 20초 동안 숨김으로 시작한다. 엔진 초기화, 관리 코드 예외, 개인 환경설정 보존과 해당 시험 프로세스의 종료를 기록한다. 정상 종료와 저장 재실행은 별도 플레이어 검사에서 확인한다. `-WhatIf`로 파일과 격리 조건만 대조할 수 있다.
+
 ## 직접 저장 비교의 준비·조작 대기 시간
 
 `tools/check-player-persistence.ps1 -InteractiveMenus -MenuWaitMinutes 30 -VerifiedReleasePath <검증된 후보 폴더>`처럼 조작 대기를 1~60분으로 정할 수 있다. 기본은 10분이다. 비교용 두 기록을 준비하는 시간은 최대 600초로 별도 제한하며, `window-menu-ready.json`에 기록되는 준비 완료 뒤부터 조작 대기가 시작된다. 보고서의 `nativeMenuReadyUtc`와 `nativeMenuWaitSeconds`를 확인한다. 외부 프로세스 감시도 준비 상한+지정 대기+30초로 제한한다.
