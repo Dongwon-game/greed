@@ -116,6 +116,7 @@ if (Test-Path -LiteralPath $registryPath) { throw 'The unique test product must 
 $processes = [Collections.Generic.List[object]]::new()
 $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash;
     VerifiedReleasePath=$release;VerifiedReleaseInfoSHA256=$releaseInfoSHA256;VerifiedReleaseRuntimeSHA256=$releaseVerification.RuntimeAssemblySha256;
+    ProbeExecutableSHA256=''; ProbeRuntimeSHA256='';
     StartedUtc=[DateTime]::UtcNow.ToString('O'); CompletedUtc='';
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
     Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
@@ -248,6 +249,8 @@ try {
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -cne $info.executableSha256) { throw 'Isolated executable digest mismatch.' }
     $probeDll = Join-Path $root 'Player\GreedLastPersistenceProbe_Data\Managed\Assembly-CSharp.dll'
     if ((Get-FileHash -LiteralPath $probeDll -Algorithm SHA256).Hash -cne $info.runtimeSha256) { throw 'Isolated runtime digest mismatch.' }
+    $report.ProbeExecutableSHA256 = $info.executableSha256
+    $report.ProbeRuntimeSHA256 = $info.runtimeSha256
 
     Write-Verbose 'Checking isolated builder and player output-path rejection.'
     $buildInfoHash = (Get-FileHash -LiteralPath (Join-Path $root 'build.json') -Algorithm SHA256).Hash
@@ -448,6 +451,7 @@ try {
             }
         }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
+            QuitCallbackObserved=$result.quitCallbackObserved;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
             PracticeCompletedBeforeCourseEntry=$result.practiceCompletedBeforeCourseEntry;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;
