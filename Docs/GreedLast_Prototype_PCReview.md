@@ -12,7 +12,9 @@
 
 개발 브랜치의 후속 변경과 현재 체험본의 소스는 실행 파일 식별 정보로 구분한다. 11월 6일 안내 수정과 검증 대기 항목은 [PC 안내 후속](PC-Guidance-20261106.md)에 기록한다.
 
-11월 8일 후속 로컬 검토 후보는 개발 사본의 `Builds/GreedLastPCReviewCandidate-20261108-878b01c` 전체 폴더다. 같은 이름의 ZIP과 `PCReview-candidate-20261108-878b01c.json`이 입력·파일 검증·후속 검사 상태를 식별한다. 정지 배경·전진선 수정과 긴 메뉴 키보드 읽기를 포함하며 전체 스모크·Windows 빌드·메뉴 전용 및 전체 두 실행 조건을 통과했다. 실제 키·드래그 확인은 진행 중이므로 [키보드 검증 상태](PC-Menu-Keyboard-20261108.md)를 확인한다. 복사본과 ZIP의 154개 파일은 각각 원본과 전수 대조했다.
+11월 9일 종료 조작을 확인하려면 개발 사본의 `Builds/GreedLastPCReviewCandidate-20261109-901946d/GreedLastPrototype.exe`를 연다. 같은 이름의 ZIP과 `PCReview-candidate-20261109-901946d.json`에 파일 검증과 검사 범위를 기록했다. 로비 ESC, 정지 메뉴 복귀와 종료는 숨김 Windows 프로세스에서 통과했다. [종료 조작 검증 상태](PC-Exit-Controls-20261108.md)
+
+11월 8일 후보 `Builds/GreedLastPCReviewCandidate-20261108-878b01c`에서는 실제 프로필 키 이동, 저장 비교 드래그와 포커스 복귀, 정상 종료와 저장 재실행을 확인했다. [키보드 검증 기록](PC-Menu-Keyboard-20261108.md)
 
 앞선 `Builds/GreedLastPCReviewCandidate-20261108-1d8738e`와 해당 인계 JSON도 보존한다. [움직임 수정 기록](Motion-Clock-20261108.md)과 [정지 배경 후속](Pause-Scenery-20261108.md)은 소스별 결과를 구분한다. 기존 체험본의 진행을 옮기거나 지우지 않고 각 후보의 별도 저장 공간으로 시작한다.
 ## 조작
