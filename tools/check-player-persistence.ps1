@@ -316,7 +316,7 @@ try {
         $report.PlayerLogChecks += Assert-CleanPlayerLog $renderLog
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
-        $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-result',
+        $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-center','practice-right','practice-result',
             'normal-trap-far','normal-trap-near','normal-trap-contact',
             'normal-side-trap-far','normal-side-trap-near','normal-side-trap-contact',
             'normal-twist-trap-far','normal-twist-trap-near','normal-twist-trap-contact')

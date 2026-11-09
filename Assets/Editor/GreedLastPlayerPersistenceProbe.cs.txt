@@ -470,6 +470,16 @@ namespace GreedLast.PlayerChecks
                     "Resumed scenery must continue forward without catching up the inactive countdown time.");
                 result.pausedSceneryObserved = true;
                 yield return CaptureFrame("resumed-trap", frames);
+                yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Slide);
+                Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center
+                    && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Slide,
+                    "The second practice frame must show the actual center slide.");
+                yield return CaptureFrame("practice-center", frames);
+                yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
+                Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
+                    && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Twist,
+                    "The third practice frame must show the actual right twist.");
+                yield return CaptureFrame("practice-right", frames);
                 yield return DriveCourse();
                 Require(core.IsPracticeComplete && !backend.HasSaveLoadoutCandidate && EmptySlots()
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
