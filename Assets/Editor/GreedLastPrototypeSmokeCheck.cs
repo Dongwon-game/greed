@@ -11648,6 +11648,7 @@ namespace GreedLast.Editor
                 canvasRoot = GetRuntimeUiField<GameObject>(ui, "rootPanel").transform.root.gameObject;
                 Button invincibleButton = GetRuntimeUiField<Button>(ui, "devInvincibleButton");
                 Button pauseButton = GetRuntimeUiField<Button>(ui, "pauseButton");
+                Button quitButton = GetRuntimeUiField<Button>(ui, "pauseQuitButton");
                 Button[] lanes = GetRuntimeUiField<Button[]>(ui, "laneButtons");
                 Button[] volumeButtons = GetRuntimeUiField<Button[]>(ui, "sfxVolumeButtons");
                 Button[] timingButtons = GetRuntimeUiField<Button[]>(ui, "timingOffsetButtons");
@@ -11680,6 +11681,8 @@ namespace GreedLast.Editor
                     "Clean view must hide and disable test/settings surfaces without changing the run or hiding gameplay inputs.");
                 Require(!GetRuntimeUiField<Text>(ui, "detailText").enabled,
                     "Active gameplay must not cover the runner and judgement line with introductory paragraphs.");
+                Require(!quitButton.gameObject.activeInHierarchy,
+                    "Live gameplay must not show the pause menu's quit button.");
 
                 core.TogglePause(now + 3.1f);
                 ui.RenderRun(snapshot);
@@ -11691,13 +11694,15 @@ namespace GreedLast.Editor
                     "The pause menu must restore usable sensory settings while clean view keeps development controls hidden.");
 
                 VerifyPauseMenuGeometry(ui, volumeButtons, timingButtons);
+                Require(quitButton.gameObject.activeInHierarchy && quitButton.IsInteractable(),
+                    "A paused PC run must expose an actionable quit button.");
 
                 core.TogglePause(now + 3.2f);
                 ui.RenderRun(snapshot);
                 Require(snapshot.ResumeCountdownActive && !lanes[0].IsInteractable(), "Clean view must not bypass resume countdown input protection.");
-                Require(!GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable()
+                Require(!GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable() && !quitButton.IsInteractable()
                         && GetRuntimeUiField<Text>(ui, "pauseMenuTitleText").text.StartsWith("재개 ", StringComparison.Ordinal),
-                    "Resume countdown must show its count and disable repeated resume clicks.");
+                    "Resume countdown must show its count and disable resume and quit clicks.");
                 GreedLastRunRecord beforeResume = core.CreateRunRecord();
                 GreedLastPatternModel resumePattern = snapshot.Pattern;
                 void VerifyVisibleCount(string expected)
@@ -11708,6 +11713,7 @@ namespace GreedLast.Editor
                         "The foreground resume menu must display its real countdown: expected=" + expected
                         + ", actual=" + heading.text);
                     Require(!lanes[0].IsInteractable() && !GetRuntimeUiField<Button>(ui, "nextPatternButton").IsInteractable()
+                        && !quitButton.IsInteractable()
                         && snapshot.Pattern.Equals(resumePattern) && core.CreateRunRecord().Equals(beforeResume),
                         "Visible countdown changes must preserve the same trap, record and input locks.");
                 }
@@ -11729,8 +11735,8 @@ namespace GreedLast.Editor
                     !snapshot.Paused && snapshot.DevInvincible
                         && volumeGroup.alpha == 0f && !volumeGroup.blocksRaycasts
                         && timingGroup.alpha == 0f && !timingGroup.blocksRaycasts
-                        && lanes[0].IsInteractable(),
-                    "Resuming must hide settings again while preserving invincibility and restoring live lane input.");
+                        && lanes[0].IsInteractable() && !quitButton.gameObject.activeInHierarchy,
+                    "Resuming must hide settings and quit while preserving invincibility and restoring live lane input.");
 
                 Transform root = GetRuntimeUiField<GameObject>(ui, "rootPanel").transform;
                 Require(volumeButtons[0].transform.parent == root && timingButtons[0].transform.parent == root
@@ -11776,6 +11782,7 @@ namespace GreedLast.Editor
             controls.Add(GetRuntimeUiField<Button>(ui, "rotationTiltButton"));
             controls.Add(GetRuntimeUiField<Button>(ui, "hapticsButton"));
             controls.Add(comfort);
+            controls.Add(GetRuntimeUiField<Button>(ui, "pauseQuitButton"));
             Canvas.ForceUpdateCanvases();
             var corners = new Vector3[4];
             var bounds = new List<Rect>();
