@@ -678,6 +678,8 @@ namespace GreedLast.PlayerChecks
                     Require(Uses()[2] == 1 && !RunState().Stopped && core.CreateInfiniteRunRecord().IsValid,
                         "The first actual start must persist one use while the played run remains live.");
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
+                    yield return QuitFromLivePause();
+                    yield break;
                 }
             }
             else if (phase == "verify" || phase == "verify-again")
@@ -718,6 +720,8 @@ namespace GreedLast.PlayerChecks
                         && core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned).IsValid,
                         "The live-quit control must contain real played normal progress.");
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
+                    yield return QuitFromLivePause();
+                    yield break;
                 }
                 else
                 {
@@ -898,6 +902,20 @@ namespace GreedLast.PlayerChecks
                     "A second fresh blocked process must preserve the normally closed blocked-process baseline.");
             result.unreadableSavePreserved = result.unreadableRetryPreserved = true;
             result.scope = "Real fresh-player boot from intentionally unreadable private test data, four disabled UI/app commands, asynchronous retry, normal quit and repeated process preservation. No OS window input/capture, personal reset/recovery, forced kill, audio or phone testing.";
+        }
+
+        private IEnumerator QuitFromLivePause()
+        {
+            if (!RunState().Paused) Call(app, "RequestToggleRunPause");
+            yield return WaitFor(() => RunState().Paused && !RunState().ResumeCountdownActive);
+            Require(!RunState().Stopped, "The pause quit button must close a live run, not settle a result.");
+            Button quit = Read<Button>(Read<GreedLastRuntimeUi>(app, "runtimeUi"), "pauseQuitButton");
+            Require(quit.gameObject.activeInHierarchy && quit.IsInteractable(),
+                "The live pause menu must offer normal application exit.");
+            result.scope += " The real pause quit button callback closes this live run and the next process checks persistence. No desktop click injection.";
+            windowAwaitingClose = windowReady = true;
+            quit.onClick.Invoke();
+            yield return WaitFor(() => finished, settleFrame: false);
         }
 
         private IEnumerator VerifyBackgroundBoundary(bool clear = false, bool failure = false, bool infinite = false)
@@ -1704,7 +1722,8 @@ namespace GreedLast.PlayerChecks
             result.quitCallbackObserved = true;
             result.completedUtc = DateTime.UtcNow.ToString("O");
             result.error = windowReady ? string.Empty : "The interactive window closed before its required stages completed.";
-            if (phase != "practice-live" && phase != "practice-lobby-quit" && phase != "save")
+            if (phase != "practice-live" && phase != "practice-lobby-quit" && phase != "save"
+                && phase != "first-use" && phase != "live-normal")
                 result.scope = "Interactive isolated player OnApplicationQuit observed. The external UI evidence, not this callback, identifies the actual close trigger. Fresh processes verify persistence; not physical timing, audio or device performance.";
             try { WriteObservation(phase); }
             catch (Exception error) { Debug.LogException(error); }

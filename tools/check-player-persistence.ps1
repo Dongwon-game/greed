@@ -375,8 +375,8 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
-        if ($phase -eq 'save' -and !$result.quitCallbackObserved) {
-            throw 'Saving must be followed by normal exit through the lobby quit button.'
+        if ($phase -in @('save','first-use','live-normal') -and !$result.quitCallbackObserved) {
+            throw ('The real quit button did not complete normal application exit: ' + $phase)
         }
         if ($phase -eq 'window-menu' -and ($result.nativeMenuWaitSeconds -ne 60 * $MenuWaitMinutes -or
             [string]::IsNullOrWhiteSpace($result.nativeMenuReadyUtc))) {
