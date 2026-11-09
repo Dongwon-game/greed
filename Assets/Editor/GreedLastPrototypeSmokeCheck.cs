@@ -11694,6 +11694,7 @@ namespace GreedLast.Editor
                     "The pause menu must restore usable sensory settings while clean view keeps development controls hidden.");
 
                 VerifyPauseMenuGeometry(ui, volumeButtons, timingButtons);
+                VerifyPauseMenuViewportFits(ui);
                 Require(quitButton.gameObject.activeInHierarchy && quitButton.IsInteractable(),
                     "A paused PC run must expose an actionable quit button.");
 
@@ -11795,7 +11796,7 @@ namespace GreedLast.Editor
                 Vector3 max = panel.InverseTransformPoint(corners[2]);
                 Rect rect = Rect.MinMaxRect(min.x, min.y, max.x, max.y);
                 Require(panel.rect.Contains(rect.min) && panel.rect.Contains(rect.max),
-                    "Pause control must stay inside the panel at every aspect ratio: " + button.name);
+                    "Pause control must stay inside the panel: " + button.name);
                 foreach (Rect previous in bounds)
                     Require(!rect.Overlaps(previous), "Pause controls must not overlap: " + button.name);
                 bounds.Add(rect);
@@ -11803,6 +11804,44 @@ namespace GreedLast.Editor
             Require(comfort.gameObject.activeInHierarchy && comfort.IsInteractable()
                     && comfort.transform.GetSiblingIndex() > GetRuntimeUiField<Text>(ui, "pauseMenuBodyText").transform.GetSiblingIndex(),
                 "Motion comfort must be visible and clickable above the pause backdrop.");
+        }
+
+        private static void VerifyPauseMenuViewportFits(GreedLastRuntimeUi ui)
+        {
+            RectTransform root = GetRuntimeUiField<RectTransform>(ui, "rootPanelRect");
+            RectTransform panel = GetRuntimeUiField<Image>(ui, "pauseMenuPanel").rectTransform;
+            Canvas canvas = root.GetComponentInParent<Canvas>();
+            CanvasScaler scaler = canvas.GetComponent<CanvasScaler>();
+            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+            RenderMode originalMode = canvas.renderMode;
+            float originalScale = canvas.scaleFactor;
+            Vector2 originalSize = canvasRect.sizeDelta;
+            bool scalerWasEnabled = scaler.enabled;
+            try
+            {
+                scaler.enabled = false;
+                canvas.renderMode = RenderMode.WorldSpace;
+                foreach (Vector2Int size in new[] { new Vector2Int(640, 360), new Vector2Int(800, 600), new Vector2Int(1920, 800) })
+                {
+                    canvas.scaleFactor = size.y / 1920f;
+                    canvasRect.sizeDelta = new Vector2(1920f * size.x / size.y, 1920f);
+                    InvokeRuntimeUiInstance(ui, "ApplySafeAreaSample",
+                        new Rect(16f, 8f, size.x - 32f, size.y - 16f), size.x, size.y, true);
+                    Canvas.ForceUpdateCanvases();
+                    Rect bounds = BoundsInRoot(panel, root);
+                    Require(root.rect.Contains(bounds.min) && root.rect.Contains(bounds.max),
+                        "The pause panel and its controls must fit the Windows viewport at " + size);
+                }
+            }
+            finally
+            {
+                canvas.renderMode = originalMode;
+                canvas.scaleFactor = originalScale;
+                canvasRect.sizeDelta = originalSize;
+                scaler.enabled = scalerWasEnabled;
+                InvokeRuntimeUiInstance(ui, "ApplySafeAreaSample", Screen.safeArea, Screen.width, Screen.height, true);
+                Canvas.ForceUpdateCanvases();
+            }
         }
 
         private static T GetRuntimeUiField<T>(GreedLastRuntimeUi ui, string fieldName) where T : class
