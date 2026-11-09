@@ -350,14 +350,14 @@ namespace GreedLast.Editor
                 }
                 if (resultBackOnly)
                 {
-                    VerifyResultBackNavigation(app, backend, state, core, () => run);
+                    VerifyResultBackNavigation(app, ui, backend, state, core, () => run);
                     return;
                 }
                 VerifyMenuInputRippleCleanup(ui, backend, state);
                 VerifyCompoundMenuKeyboard(app, ui, backend, state, core);
                 VerifyGrowthCommandProtection(app, ui, backend, state);
                 if (growthCommandsOnly) return;
-                VerifyResultBackNavigation(app, backend, state, core, () => run);
+                VerifyResultBackNavigation(app, ui, backend, state, core, () => run);
                 VerifyHeldSaveConfirmations(app, ui, backend, state);
 
                 VerifyInfiniteRetryReview(app, ui, backend, state, core, () => run);
@@ -776,7 +776,7 @@ namespace GreedLast.Editor
             }
         }
 
-        private static void VerifyResultBackNavigation(GreedLastApp app, GreedLastMockBackend originalBackend,
+        private static void VerifyResultBackNavigation(GreedLastApp app, GreedLastRuntimeUi ui, GreedLastMockBackend originalBackend,
             GreedLastStateMachine state, GreedLastRunCore core, Func<GreedLastRunSnapshot> latest)
         {
             bool hadPractice = PlayerPrefs.HasKey(PracticeKey);
@@ -843,7 +843,8 @@ namespace GreedLast.Editor
                         Require(state.CurrentState == GreedLastScreenState.LobbyReady && !backend.HasSaveLoadoutCandidate
                             && saved.SaveSlotOccupied[1] && !saved.SaveSlotOccupied[0] && !saved.SaveSlotOccupied[2],
                             "The keyboard-opened clear candidate must save once into the explicitly chosen S2.");
-                        Require(!Back() && !backend.HasSaveLoadoutCandidate,
+                        VerifyQuitControl(app, ui, backend, lobby: true);
+                        Require(!backend.HasSaveLoadoutCandidate,
                             "Escape after saving must not reconstruct a consumed candidate.");
                     }
                     else
@@ -876,7 +877,8 @@ namespace GreedLast.Editor
                     && state.CurrentState == GreedLastScreenState.LobbyReady
                     && Read<int>(backend, "normalFailCount") == 1 && !backend.HasSaveLoadoutCandidate,
                     "Escape after a natural normal failure must register that failure once without a save candidate.");
-                Require(!Back() && Read<int>(backend, "normalFailCount") == 1,
+                VerifyQuitControl(app, ui, backend, lobby: true);
+                Require(Read<int>(backend, "normalFailCount") == 1,
                     "Repeated lobby back must not duplicate a failed normal record.");
 
                 state.SetInfiniteRun("Result back check");
@@ -886,7 +888,8 @@ namespace GreedLast.Editor
                     && state.CurrentState == GreedLastScreenState.LobbyReady
                     && Read<int>(backend, "infiniteRunCount") == 1,
                     "Escape after natural infinite failure must use the existing single record settlement.");
-                Require(!Back() && Read<int>(backend, "infiniteRunCount") == 1,
+                VerifyQuitControl(app, ui, backend, lobby: true);
+                Require(Read<int>(backend, "infiniteRunCount") == 1,
                     "A repeated Escape must not duplicate the infinite record.");
                 Debug.Log("Greed result back navigation passed: opening pause/P resume, completed/failed practice, clear-to-explicit-S2 single save, protected draft discard, natural normal/infinite failure and single settlement. Application routing callbacks and isolated in-memory progress only; no OS key injection.");
             }
