@@ -418,6 +418,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 ## 실제 Windows 창 옵션
 
+저장·재실행 보고서의 `VerifiedReleaseRuntimeSHA256`는 사전 대조한 기준 실행본의 DLL 해시다. `ProbeExecutableSHA256`과 `ProbeRuntimeSHA256`은 해당 검사에서 실제 실행한 격리 시험 플레이어의 해시다. 단계별 `QuitCallbackObserved`는 정상 종료 콜백을 받은 경우를 표시한다. 종료를 일으킨 입력은 단계 결과의 범위와 함께 확인한다.
+
 ### 최신 후보의 Esc와 방향키
 
 사용자 화면을 사용할 수 있을 때 `Builds/PCReview-candidate-20261109-7cb1d41.json`의 `Executable`에 적힌 격리 실행본에서 확인한다. 이 후보의 제품 저장 위치는 개인용 실행본과 분리돼 있다. 각 종료 동작은 다른 방법으로 대신 닫기 전에 해당 프로세스가 종료됐는지 확인한다.
