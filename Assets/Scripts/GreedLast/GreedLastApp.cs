@@ -48015,7 +48015,7 @@ namespace GreedLast
                 cachedCompactActionRotationTilt = rotationTiltAvailable;
                 cachedCompactActionCue = BuildCompactActiveActionCueTextWithInputHint(snapshot, exactScore,
                     BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, devToolsEnabled,
-                        rotationTiltAvailable, Application.isMobilePlatform));
+                        rotationTiltAvailable, Application.isMobilePlatform), showPcKey: !Application.isMobilePlatform);
             }
             return cachedCompactActionCue;
         }
@@ -48038,7 +48038,7 @@ namespace GreedLast
             int exactScore)
         {
             return BuildCompactActiveActionCueTextWithInputHint(snapshot, exactScore,
-                BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable));
+                BuildActiveActionCueInputHintForCapabilities(snapshot.Pattern, devToolsEnabled, rotationTiltAvailable), showPcKey: false);
         }
 
         private static string BuildCompactActiveActionCueTextForPlatform(
@@ -48048,19 +48048,22 @@ namespace GreedLast
                 return string.Empty;
             return BuildCompactActiveActionCueTextWithInputHint(snapshot, BuildActiveExactScorePreview(snapshot),
                 BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, devToolsEnabled,
-                    rotationTiltAvailable, isMobilePlatform));
+                    rotationTiltAvailable, isMobilePlatform), showPcKey: !isMobilePlatform);
         }
 
         private static string BuildCompactActiveActionCueTextWithInputHint(
-            GreedLastRunSnapshot snapshot, int exactScore, string inputHint)
+            GreedLastRunSnapshot snapshot, int exactScore, string inputHint, bool showPcKey)
         {
             if (!ShouldShowActiveActionCue(snapshot) || !snapshot.Pattern.IsValid)
                 return string.Empty;
 
-            string action = BuildTrapApproachLabel(snapshot.Pattern) + " → "
-                + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + BuildActiveActionResponseLabel(snapshot.Pattern);
-            if (GreedLastRunCore.IsRotationPattern(snapshot.Pattern))
-                action += " · " + inputHint;
+            string approach = BuildTrapApproachLabel(snapshot.Pattern);
+            string response = BuildActiveActionResponseLabel(snapshot.Pattern);
+            bool rotation = GreedLastRunCore.IsRotationPattern(snapshot.Pattern);
+            string action = showPcKey && !rotation
+                ? inputHint + " · " + approach + " " + response
+                : approach + " → " + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + response;
+            if (rotation) action += " · " + inputHint;
 
             return action + "\n정박 +" + exactScore
                 + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);
