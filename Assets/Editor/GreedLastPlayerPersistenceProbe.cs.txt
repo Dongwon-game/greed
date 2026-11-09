@@ -156,7 +156,7 @@ namespace GreedLast.PlayerChecks
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
                 "window-boards", "window-boards-verify", "window-boards-verify-again",
                 "unreadable-seed", "unreadable-blocked", "unreadable-verify",
-                "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again",
+                "practice-live", "practice-review", "practice-complete", "practice-verify", "practice-verify-again", "practice-lobby-quit",
                 "gift-history-seed", "gift-history-first", "gift-history-last", "gift-history-verify", "gift-history-verify-again" }, phase) >= 0,
                 "The output phase must be a fixed safe filename.");
             root = Path.GetFullPath(Argument("-greed-probe-root"));
@@ -230,6 +230,16 @@ namespace GreedLast.PlayerChecks
                     && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0 && Count("infiniteRunCount") == 0
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
                     "Practice-quit checks must retain an empty private product without gameplay records or rewards.");
+                if (phase == "practice-lobby-quit")
+                {
+                    Require(Previous("practice-verify-again").succeeded && PlayerPrefs.GetInt(practiceKey, 0) == 1,
+                        "Lobby exit must start with restored onboarding and no gameplay progression.");
+                    result.scope = "Real normal quit from the lobby Escape route in a hidden isolated Windows player. Synthetic route invocation, no desktop key injection.";
+                    windowAwaitingClose = windowReady = true;
+                    Require((bool)Call(app, "TryHandlePauseOrBackKeyboardInput", true, false), "Lobby Escape must request normal exit.");
+                    yield return WaitFor(() => finished, settleFrame: false);
+                    yield break;
+                }
                 if (phase == "practice-live" || phase == "practice-review" || phase == "practice-complete")
                 {
                     Require(PlayerPrefs.GetInt(practiceKey, 0) == 0, "Unfinished practice must not complete onboarding on quit.");
@@ -249,9 +259,35 @@ namespace GreedLast.PlayerChecks
                     Call(app, "RequestPracticeRun");
                     if (phase == "practice-live")
                     {
-                        yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
-                        Require(!core.IsPracticeComplete && !RunState().Stopped,
-                            "The incomplete control must quit before its first practice action.");
+                        var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                        for (int attempt = 0; attempt < 2; attempt++)
+                        {
+                            if (attempt == 1) Call(app, "RequestPracticeRun");
+                            yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
+                            Require(!core.IsPracticeComplete && !RunState().Stopped,
+                                "The incomplete control must leave before its first practice action.");
+                            if (attempt == 0)
+                            {
+                                Call(app, "RequestQuitGame");
+                                yield return null;
+                            }
+                            Require((bool)Call(app, "TryHandlePauseOrBackKeyboardInput", true, false), "In-run Escape must open pause.");
+                            yield return WaitFor(() => RunState().Paused && !RunState().ResumeCountdownActive);
+                            if (attempt == 0)
+                            {
+                                Button back = Read<Button>(ui, "returnLobbyButton");
+                                Require(back.gameObject.activeInHierarchy && back.IsInteractable(), "Pause must offer lobby return.");
+                                back.onClick.Invoke();
+                                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
+                            }
+                        }
+                        Button quit = Read<Button>(ui, "pauseQuitButton");
+                        Require(quit.gameObject.activeInHierarchy && quit.IsInteractable(), "Pause must offer a separate quit button.");
+                        result.scope = "Hidden isolated Windows player with real run pause and lobby return; the second pause quit button closes the actual process. Synthetic app commands, no desktop input.";
+                        windowAwaitingClose = windowReady = true;
+                        quit.onClick.Invoke();
+                        yield return WaitFor(() => finished, settleFrame: false);
+                        yield break;
                     }
                     else if (phase == "practice-review")
                     {
@@ -1658,7 +1694,8 @@ namespace GreedLast.PlayerChecks
             result.quitCallbackObserved = true;
             result.completedUtc = DateTime.UtcNow.ToString("O");
             result.error = windowReady ? string.Empty : "The interactive window closed before its required stages completed.";
-            result.scope = "Interactive isolated player OnApplicationQuit observed. The external UI evidence, not this callback, identifies the actual close trigger. Fresh processes verify persistence; not physical timing, audio or device performance.";
+            if (phase != "practice-live" && phase != "practice-lobby-quit")
+                result.scope = "Interactive isolated player OnApplicationQuit observed. The external UI evidence, not this callback, identifies the actual close trigger. Fresh processes verify persistence; not physical timing, audio or device performance.";
             try { WriteObservation(phase); }
             catch (Exception error) { Debug.LogException(error); }
         }

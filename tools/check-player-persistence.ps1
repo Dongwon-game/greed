@@ -137,7 +137,7 @@ if ($GiftHistory) {
     $report.Scope = 'Five fresh private Windows processes: three seeded authoritative gift-history records, metadata/two uses/automatic emptying and repeated third-use rejection across normal Application.Quit/relaunch. Transient public-core synthetic clocks verify prepared stacks/bonuses and six first judgements; not actual normal clears, real-time infinite runs, native input/capture, personal recovery, audible output or phone testing.'
 }
 if ($PracticeQuit) {
-    $report.Scope = 'Five fresh private players: incomplete practice quit, two-action review from a synthetic lobby notice, full first-practice completion before result action, normal quit and repeated completion/entry restoration. No desktop input/capture, personal preference reset/recovery, forced kill, audible output or phone testing.'
+    $report.Scope = 'Six fresh private players: pause menu lobby return and normal quit, two-action review, full first-practice completion before result action, repeated completion/entry restoration and actual lobby exit through the Escape route. Synthetic app commands without desktop input.'
 }
 if ($UnreadableSave) {
     $report.Scope = 'Intentionally unreadable data only in a fresh isolated product; real blocked boot, locked UI/app commands, retry and normal-exit/relaunch preservation. Not desktop input/capture, personal data reset/recovery, forced kill, audio or phone testing.'
@@ -343,7 +343,7 @@ try {
     }
 
     $phases = if ($GiftHistory) { @('gift-history-seed','gift-history-first','gift-history-last','gift-history-verify','gift-history-verify-again') }
-        elseif ($PracticeQuit) { @('practice-live','practice-review','practice-complete','practice-verify','practice-verify-again') }
+        elseif ($PracticeQuit) { @('practice-live','practice-review','practice-complete','practice-verify','practice-verify-again','practice-lobby-quit') }
         elseif ($UnreadableSave) { @('unreadable-seed','unreadable-blocked','unreadable-verify') }
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
@@ -400,7 +400,8 @@ try {
         if ($PracticeQuit -and ($result.clears -ne 0 -or $result.failures -ne 0 -or $result.abandons -ne 0 -or
             $result.infiniteRuns -ne 0 -or $result.growthPoints -ne 0 -or $result.candidate -or
             @($result.uses | Where-Object { $_ -ne 0 }).Count -or
-            ($phase -eq 'practice-live' -and ($result.onboardingComplete -or $result.terminalBeforeQuit)) -or
+            ($phase -eq 'practice-live' -and ($result.onboardingComplete -or $result.terminalBeforeQuit -or !$result.quitCallbackObserved)) -or
+            ($phase -eq 'practice-lobby-quit' -and (!$result.onboardingComplete -or !$result.quitCallbackObserved)) -or
             ($phase -eq 'practice-review' -and (!$result.practiceReviewCompleted -or !$result.terminalBeforeQuit -or $result.onboardingComplete)) -or
             ($phase -eq 'practice-complete' -and (!$result.practiceIncompletePreserved -or !$result.practiceCompletedBeforeQuit -or !$result.practiceForegroundActionPreserved)) -or
             ($phase -in @('practice-verify','practice-verify-again') -and (!$result.onboardingComplete -or !$result.practiceNormalEntryRestored)))) {
