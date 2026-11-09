@@ -28623,6 +28623,19 @@ namespace GreedLast
             timingGuideText.raycastTarget = false;
             SetAnchored(timingGuideText.rectTransform, 0.5f, 0.12f, 1100f, 64f);
             timingGuideText.color = new Color32(218, 226, 218, 220);
+
+            if (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                AddRunGuideShadow(activeActionCueText);
+                AddRunGuideShadow(timingGuideText);
+            }
+        }
+
+        private static void AddRunGuideShadow(Text guide)
+        {
+            Shadow shadow = guide.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color32(5, 12, 14, 200);
+            shadow.effectDistance = new Vector2(3f, -3f);
         }
 
         private void CreateSaveSlotUsePips(Transform parent, int laneIndex)
