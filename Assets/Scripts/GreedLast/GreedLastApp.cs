@@ -24389,7 +24389,7 @@ namespace GreedLast
                 titleText.text = snapshot.Stopped
                     ? snapshot.Phase == GreedLastRunPhase.ClearResolving
                         ? BuildPracticeCompletionTitle(snapshot) : "기초연습 중단"
-                    : BuildPracticeStepTitle(snapshot);
+                    : BuildPracticeStepTitle(snapshot, !Application.isMobilePlatform);
                 detailText.text = snapshot.Stopped
                     ? snapshot.JudgementText
                     : snapshot.ActivePattern && snapshot.Pattern.IsValid
@@ -24866,17 +24866,19 @@ namespace GreedLast
             return Mathf.Clamp(step, 0, 2);
         }
 
-        private static string BuildPracticeStepTitle(GreedLastRunSnapshot snapshot)
+        private static string BuildPracticeStepTitle(GreedLastRunSnapshot snapshot, bool keyboardHints)
         {
-            switch (BuildPracticePresentedStep(snapshot))
+            int step = BuildPracticePresentedStep(snapshot);
+            string lesson = step switch
             {
-                case 0:
-                    return "기초연습 1/3 · 정박 바닥→↑점프";
-                case 1:
-                    return "기초연습 2/3 · 클러치 상단→↓숙이기";
-                default:
-                    return "기초연습 3/3 · 엇박 측면→↔비틀기";
-            }
+                0 => keyboardHints ? "정박 바닥 점프" : "정박 바닥→↑점프",
+                1 => keyboardHints ? "클러치 상단 숙이기" : "클러치 상단→↓숙이기",
+                _ => keyboardHints ? "엇박 측면 비틀기" : "엇박 측면→↔비틀기"
+            };
+            string title = $"기초연습 {step + 1}/3 · ";
+            if (keyboardHints && snapshot.ActivePattern && snapshot.Pattern.IsValid)
+                title += BuildRunChannelInputHintForMode(snapshot.Pattern.Channel, true) + " · ";
+            return title + lesson;
         }
 
         private static string BuildPracticeObjectiveLine(GreedLastRunSnapshot snapshot)

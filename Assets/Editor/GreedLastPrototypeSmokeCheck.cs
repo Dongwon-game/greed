@@ -1935,7 +1935,12 @@ namespace GreedLast.Editor
                 Require(
                     practiceSnapshot.Pattern.AvoidanceType == expectedPracticeAvoidanceTypes[i],
                     "Practice must keep the jump, slide, twist avoidance learning order in structured pattern data.");
-                string practiceStepTitle = InvokeRuntimeUiLabel("BuildPracticeStepTitle", practiceSnapshot);
+                string practiceStepTitle = InvokeRuntimeUiLabel("BuildPracticeStepTitle", practiceSnapshot, false);
+                string keyboardTitle = InvokeRuntimeUiLabel("BuildPracticeStepTitle", practiceSnapshot, true);
+                Require(keyboardTitle.Contains(" · " + GreedLastPlayerInputPolicy.ChannelKeyHint(i) + " · ", StringComparison.Ordinal)
+                    && keyboardTitle.Contains(expectedPracticeResponses[i], StringComparison.Ordinal)
+                    && !keyboardTitle.Contains("→" + expectedPracticeSymbols[i], StringComparison.Ordinal),
+                    "The PC practice title must identify the actual lane key separately from the action.");
                 string practiceObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", practiceSnapshot);
                 string practiceProgress = InvokeRuntimeUiLabel(
                     "BuildPracticeProgressLabel",
