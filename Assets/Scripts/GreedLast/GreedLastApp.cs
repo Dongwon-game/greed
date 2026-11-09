@@ -17979,11 +17979,14 @@ namespace GreedLast
                 string unplayedExitLine = IsUnplayedInfiniteRun(snapshot) ? "\n기록 없음 · 사용권 차감 유지" : string.Empty;
                 if (!DevToolsEnabled || devCleanViewEnabled)
                 {
+                    string exitLine = snapshot.PracticeMode ? string.Empty
+                        : IsUnplayedInfiniteRun(snapshot) ? unplayedExitLine
+                        : snapshot.InfiniteMode ? "\n메뉴 복귀 시 무한 기록 정산" : "\n메뉴 복귀 시 중단 기록";
                     pauseMenuBodyText.text = "체력 " + snapshot.Health + "/" + snapshot.MaxHealth
                         + " · 집중 " + snapshot.Focus + "/" + snapshot.MaxFocus
                         + "\n" + snapshot.Score.ToString("N0") + "점 · " + snapshot.Distance.ToString("0.0") + "m"
                         + "\n보정 " + FormatTimingOffset(snapshot.InputTimingOffsetSeconds)
-                        + unplayedExitLine;
+                        + exitLine;
                     pauseMenuBodyText.fontSize = 36;
                     return;
                 }
@@ -18155,11 +18158,6 @@ namespace GreedLast
             if (snapshot.InfiniteMode)
             {
                 return IsUnplayedInfiniteRun(snapshot) ? "기록 없이 로비" : "정산 후 로비";
-            }
-
-            if (snapshot.Paused)
-            {
-                return snapshot.RefillRun ? "보충 중단" : "중단하고 로비";
             }
 
             return snapshot.RefillRun ? "보충 포기" : "탈출 포기";

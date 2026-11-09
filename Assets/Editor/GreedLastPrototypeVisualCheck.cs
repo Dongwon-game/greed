@@ -1425,7 +1425,8 @@ namespace GreedLast.Editor
                             {
                                 ui.RenderRun(capturedRun);
                                 if (phase == "start-pause")
-                                    Require(Read<Button>("returnLobbyButton").GetComponentInChildren<Text>().text == "기록 없이 로비"
+                                    Require(Read<Button>("returnLobbyButton").GetComponentInChildren<Text>().text == "메뉴로 돌아가기"
+                                        && Read<Text>("pauseMenuBodyText").text.Contains("기록 없음", StringComparison.Ordinal)
                                         && Read<Text>("pauseMenuBodyText").text.Contains("사용권 차감 유지", StringComparison.Ordinal),
                                         "An unplayed pause must describe no record and the already-spent use in both views.");
                             }

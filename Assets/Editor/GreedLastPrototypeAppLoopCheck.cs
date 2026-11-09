@@ -1219,7 +1219,8 @@ namespace GreedLast.Editor
                         Require(!core.CreateInfiniteRunRecord().IsValid,
                             "A stored-loadout starting score alone must not create an unplayed infinite record.");
                         Click(ui, "pauseButton");
-                        Require(Read<Button>(ui, "returnLobbyButton").GetComponentInChildren<Text>().text == "기록 없이 로비"
+                        Require(Read<Button>(ui, "returnLobbyButton").GetComponentInChildren<Text>().text == "메뉴로 돌아가기"
+                            && Read<Text>(ui, "pauseMenuBodyText").text.Contains("기록 없음", StringComparison.Ordinal)
                             && Read<Text>(ui, "pauseMenuBodyText").text.Contains("사용권 차감 유지", StringComparison.Ordinal),
                             "An unplayed infinite pause must not promise settlement or imply a refunded start.");
                         if (resumed)
