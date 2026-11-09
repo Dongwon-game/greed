@@ -12,7 +12,7 @@
 
 개발 브랜치의 후속 변경과 현재 체험본의 소스는 실행 파일 식별 정보로 구분한다. 11월 6일 안내 수정과 검증 대기 항목은 [PC 안내 후속](PC-Guidance-20261106.md)에 기록한다.
 
-11월 9일 종료 조작을 확인하려면 개발 사본의 `Builds/GreedLastPCReviewCandidate-20261109-901946d/GreedLastPrototype.exe`를 연다. 같은 이름의 ZIP과 `PCReview-candidate-20261109-901946d.json`에 파일 검증과 검사 범위를 기록했다. 로비 ESC, 정지 메뉴 복귀와 종료는 숨김 Windows 프로세스에서 통과했다. [종료 조작 검증 상태](PC-Exit-Controls-20261108.md)
+11월 9일 종료 조작과 새 함정 키 안내를 확인하려면 개발 사본의 `Builds/GreedLastPCReviewCandidate-20261109-7cb1d41/GreedLastPrototype.exe`를 연다. 같은 이름의 ZIP과 `PCReview-candidate-20261109-7cb1d41.json`에 파일 검증과 검사 범위를 기록했다. 종료 조작 버전은 숨김 Windows 프로세스에서 통과했고 최신 후보는 세 방향 함정의 키 표시와 저장 재실행을 확인했다. [종료 조작 검증 상태](PC-Exit-Controls-20261108.md)
 
 11월 8일 후보 `Builds/GreedLastPCReviewCandidate-20261108-878b01c`에서는 실제 프로필 키 이동, 저장 비교 드래그와 포커스 복귀, 정상 종료와 저장 재실행을 확인했다. [키보드 검증 기록](PC-Menu-Keyboard-20261108.md)
 
