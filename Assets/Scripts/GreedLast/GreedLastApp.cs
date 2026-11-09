@@ -24875,7 +24875,7 @@ namespace GreedLast
                 1 => keyboardHints ? "클러치 상단 숙이기" : "클러치 상단→↓숙이기",
                 _ => keyboardHints ? "엇박 측면 비틀기" : "엇박 측면→↔비틀기"
             };
-            string title = $"기초연습 {step + 1}/3 · ";
+            string title = (keyboardHints ? "연습 " : "기초연습 ") + $"{step + 1}/3 · ";
             if (keyboardHints && snapshot.ActivePattern && snapshot.Pattern.IsValid)
                 title += BuildRunChannelInputHintForMode(snapshot.Pattern.Channel, true) + " · ";
             return title + lesson;
