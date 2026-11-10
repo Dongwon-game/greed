@@ -20326,6 +20326,8 @@ namespace GreedLast
                 || stoppedPrecision;
             if (!snapshot.Stopped && (stageTransitionCuePending || Time.unscaledTime < stageTransitionUntil))
                 showBadge = false;
+            if (snapshot.ChoiceActive && !Application.isMobilePlatform)
+                showBadge = false;
             comboBadgeRoot.SetActive(showBadge);
             if (!showBadge)
             {

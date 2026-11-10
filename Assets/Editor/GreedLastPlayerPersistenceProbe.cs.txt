@@ -1542,7 +1542,12 @@ namespace GreedLast.PlayerChecks
                 {
                     // Capture once at each real boundary while preserving the ordinary course driver.
                     if (finishFrames.Count == 0 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Node)
+                    {
                         yield return CaptureFrame("finish-route-choice", finishFrames);
+                        var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                        Require(run.Combo > 0 && !Read<GameObject>(ui, "comboBadgeRoot").activeSelf,
+                            "The live combo badge must not cover a PC route choice card.");
+                    }
                     else if (finishFrames.Count == 1 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Relic)
                         yield return CaptureFrame("finish-relic-choice", finishFrames);
                     else if (finishFrames.Count == 2 && run.Phase == GreedLastRunPhase.EscapeRunning
