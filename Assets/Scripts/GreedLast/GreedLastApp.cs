@@ -27292,7 +27292,9 @@ namespace GreedLast
             SetAnchored(lobbyQuitButton.GetComponent<RectTransform>(), 0.5f, 0.09f, 420f, 72f);
             SetAnchored(saveSlotRenameButton.GetComponent<RectTransform>(), 0.895f, 0.407f, 250f, 66f);
             SetAnchored(saveSlotDeleteButton.GetComponent<RectTransform>(), 0.895f, 0.339f, 250f, 66f);
-            SetAnchored(pauseButton.GetComponent<RectTransform>(), 0.91f, 0.735f, 180f, 54f);
+            bool mobilePauseButton = Application.isMobilePlatform;
+            SetAnchored(pauseButton.GetComponent<RectTransform>(), 0.91f, 0.735f,
+                mobilePauseButton ? 180f : 220f, mobilePauseButton ? 54f : 64f);
             SetAnchored(devInvincibleButton.GetComponent<RectTransform>(), 0.91f, 0.69f, 180f, 54f);
             SetAnchored(infiniteTestStopButton.GetComponent<RectTransform>(), 0.91f, 0.645f, 180f, 54f);
             SetAnchored(focusMaxButton.GetComponent<RectTransform>(), 0.91f, 0.33f, 180f, 54f);
@@ -27321,7 +27323,7 @@ namespace GreedLast
             SetButtonFontSize(saveSlotDetailButton, 24);
             SetButtonFontSize(saveSlotRenameButton, 24);
             SetButtonFontSize(saveSlotDeleteButton, 24);
-            SetButtonFontSize(pauseButton, 24);
+            SetButtonFontSize(pauseButton, mobilePauseButton ? 24 : 36);
             SetButtonFontSize(devInvincibleButton, 24);
             SetButtonFontSize(infiniteTestStopButton, 24);
             SetButtonFontSize(focusMaxButton, 24);
