@@ -682,7 +682,7 @@ namespace GreedLast.Editor
                 }
 
                 core.Enter();
-                Draw("시작 기프트 선택");
+                Draw("← / ↓ / → 또는 클릭");
                 for (int choice = 0; run.ChoiceActive && choice < 3; choice++)
                     core.HandleInput(GreedLastRunChannel.Center, clock += 0.3f);
                 BeginLive();

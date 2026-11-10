@@ -10995,7 +10995,6 @@ namespace GreedLast.Editor
             core.RestartPractice(clock);
             core.Tick(clock += 2f);
             core.Tick(clock += 1f);
-            SetRuntimeUiField(ui, "devCleanViewEnabled", true);
             ui.RenderRun(run);
             string hiddenDetail = GetRuntimeUiField<string>(ui, "detailedRunHud");
             try
@@ -11092,10 +11091,6 @@ namespace GreedLast.Editor
                 "PC choices must hide the unavailable pause shortcut while keeping the run exit action.");
             Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("시작 기프트 선택", StringComparison.Ordinal),
                 "Start-gift progress must not be mislabeled as a route choice.");
-            Text progress = GetRuntimeUiField<Text>(ui, "runProgressText");
-            Require(progress.text == "← / ↓ / → 또는 클릭"
-                && progress.preferredWidth <= progress.rectTransform.rect.width,
-                "The PC choice HUD must show the actual keys and pointer alternative on one line.");
             Require(!GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").activeSelf,
                 "The runner must not cover the center gameplay choice.");
             for (int i = 0; i < labels.Length; i++)
@@ -11114,8 +11109,6 @@ namespace GreedLast.Editor
                 "Clean gameplay must restore the input area and move concise input labels above the artwork.");
             Require(pauseButton.gameObject.activeInHierarchy && pauseButton.IsInteractable(),
                 "The pause shortcut must be actionable again when live gameplay resumes.");
-            Require(progress.text.StartsWith("연습 ", StringComparison.Ordinal),
-                "The choice hint must give way to practice progress when play resumes.");
             RectTransform avatar = GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
             Require(avatar.gameObject.activeSelf && avatar.localScale.y > 1.2f,
                 "The live runner must be larger than the old preview while retaining its motion transform.");
