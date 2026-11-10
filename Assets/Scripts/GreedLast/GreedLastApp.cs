@@ -18437,7 +18437,8 @@ namespace GreedLast
         {
             bool showSideTools = !snapshot.Paused;
             bool showPauseSettings = snapshot.Paused;
-            pauseButton.gameObject.SetActive(showSideTools && !snapshot.Stopped);
+            pauseButton.gameObject.SetActive(showSideTools && !snapshot.Stopped
+                && (!snapshot.ChoiceActive || Application.isMobilePlatform));
             devInvincibleButton.gameObject.SetActive(showDevTools && showSideTools);
             infiniteTestStopButton.gameObject.SetActive(showDevTools && showSideTools && snapshot.InfiniteMode);
             focusMaxButton.gameObject.SetActive(showDevTools && showSideTools);

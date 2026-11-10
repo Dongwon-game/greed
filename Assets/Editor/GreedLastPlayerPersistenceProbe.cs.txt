@@ -489,6 +489,9 @@ namespace GreedLast.PlayerChecks
                 yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
                 Call(app, "RequestNormalRun");
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
+                Require(RunState().ChoiceActive && RunState().ChoiceKind == GreedLastChoiceKind.StartGift,
+                    "The normal render must show the start-gift choice before live gameplay.");
+                yield return CaptureFrame("normal-start-gift", frames);
                 yield return DriveCourse(untilFirstTrap: true);
                 yield return CaptureTrapApproach("normal-trap", frames);
                 string openingPattern = RunState().Pattern.PatternId;

@@ -11084,6 +11084,11 @@ namespace GreedLast.Editor
             Text[] labels = GetRuntimeUiField<Text[]>(ui, "laneLabelTexts");
             Require(run.ChoiceActive && lanes[0].rectTransform.sizeDelta.x == 440f && labels[0].fontSize == 38,
                 "Gameplay choices must use wider, readable selection areas.");
+            Button pauseButton = GetRuntimeUiField<Button>(ui, "pauseButton");
+            Button returnButton = GetRuntimeUiField<Button>(ui, "returnLobbyButton");
+            Require(!pauseButton.gameObject.activeSelf && returnButton.gameObject.activeInHierarchy
+                && returnButton.IsInteractable(),
+                "PC choices must hide the unavailable pause shortcut while keeping the run exit action.");
             Require(InvokeRuntimeUiLabel("BuildNormalProgressLabel", run, 3).StartsWith("시작 기프트 선택", StringComparison.Ordinal),
                 "Start-gift progress must not be mislabeled as a route choice.");
             Require(!GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").activeSelf,
@@ -11102,6 +11107,8 @@ namespace GreedLast.Editor
             Require(lanes[0].rectTransform.sizeDelta.x == 195f && labels[0].rectTransform.anchorMin.y > 1f
                 && labels[0].text.Split('\n').Length == 2 && !labels[0].text.Contains("충전", StringComparison.Ordinal),
                 "Clean gameplay must restore the input area and move concise input labels above the artwork.");
+            Require(pauseButton.gameObject.activeInHierarchy && pauseButton.IsInteractable(),
+                "The pause shortcut must be actionable again when live gameplay resumes.");
             RectTransform avatar = GetRuntimeUiField<GameObject>(ui, "runnerAvatarRoot").GetComponent<RectTransform>();
             Require(avatar.gameObject.activeSelf && avatar.localScale.y > 1.2f,
                 "The live runner must be larger than the old preview while retaining its motion transform.");
