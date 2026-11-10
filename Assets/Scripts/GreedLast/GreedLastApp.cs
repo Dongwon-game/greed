@@ -19257,7 +19257,9 @@ namespace GreedLast
 
             if (compact)
             {
-                label = BuildCompactRunProgressLabel(snapshot, target);
+                label = snapshot.ChoiceActive && !Application.isMobilePlatform
+                    ? "← / ↓ / → 또는 클릭"
+                    : BuildCompactRunProgressLabel(snapshot, target);
             }
             else if (snapshot.PracticeMode)
             {
