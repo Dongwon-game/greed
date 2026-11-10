@@ -4,8 +4,6 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [string]$VerifiedReleasePath,
     [switch]$CaptureFrames,
-    [ValidateSet('1280x720','960x540')]
-    [string]$FrameSize = '1280x720',
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
@@ -16,7 +14,9 @@ param(
     [switch]$UnreadableSave,
     [switch]$PracticeQuit,
     [switch]$ScopedGoals,
-    [switch]$GiftHistory
+    [switch]$GiftHistory,
+    [ValidateSet('1280x720','960x540')]
+    [string]$FrameSize = '1280x720'
 )
 
 $ErrorActionPreference = 'Stop'
