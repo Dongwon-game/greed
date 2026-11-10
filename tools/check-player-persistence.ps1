@@ -4,6 +4,8 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [string]$VerifiedReleasePath,
     [switch]$CaptureFrames,
+    [ValidateSet('1280x720','960x540')]
+    [string]$FrameSize = '1280x720',
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
@@ -22,6 +24,10 @@ Set-StrictMode -Version Latest
 if ($PSBoundParameters.ContainsKey('MenuWaitMinutes') -and !$InteractiveMenus) {
     throw 'MenuWaitMinutes requires InteractiveMenus.'
 }
+if ($PSBoundParameters.ContainsKey('FrameSize') -and !$CaptureFrames) {
+    throw 'FrameSize requires CaptureFrames.'
+}
+$frameWidth, $frameHeight = $FrameSize -split 'x'
 if ($InteractiveBoards -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
     throw 'Choose native profile/record inspection separately from every other mode.'
 }
@@ -310,7 +316,7 @@ try {
         Write-Verbose 'Capturing practice and normal trap offscreen renders in the isolated player.'
         $report.FailedPhase = 'render'
         $renderLog = Join-Path $root 'render.log'
-        Invoke-OwnedProcess $exe @('-batchmode','-screen-fullscreen','0','-screen-width','1280','-screen-height','720',
+        Invoke-OwnedProcess $exe @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight,
             '-logFile',('"'+$renderLog+'"'),'-greed-probe-id',$id,'-greed-probe-phase','render',
             '-greed-probe-root',('"'+$root+'"')) 180000 'render'
         $report.PlayerLogChecks += Assert-CleanPlayerLog $renderLog
@@ -333,6 +339,9 @@ try {
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
             $render.countdownMotion, $render.resumedMotion)
         $report.RenderedFrames = @($render.frames | ForEach-Object {
+            if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight) {
+                throw ('Unexpected dimensions for practice or normal trap frame: ' + $_.name)
+            }
             $imagePath = Join-Path $root ('frame-'+$_.name+'.png')
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
@@ -361,7 +370,7 @@ try {
         $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
         $captureClear = $CaptureFrames -and $phase -eq 'clear'
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
-            elseif ($captureClear) { @('-batchmode','-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
+            elseif ($captureClear) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
@@ -400,14 +409,14 @@ try {
                 throw 'The rendered ordinary course must show its real choices, escape and terminal result.'
             }
             $report.ClearRenderedFrames = @($result.frames | ForEach-Object {
-                if ($_.width -ne 1280 -or $_.height -ne 720 -or $_.misses -ne 0) {
+                if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or $_.misses -ne 0) {
                     throw ('Invalid ordinary-course frame: ' + $_.name)
                 }
                 if ($_.name -eq 'finish-relic-to-run' -and [string]::IsNullOrWhiteSpace($_.pattern)) {
                     throw 'The transition render must show an active trap after relic selection.'
                 }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
-                @{Name=$_.name; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
+                @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
