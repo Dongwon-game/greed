@@ -15951,6 +15951,7 @@ namespace GreedLast
         private Image[] healthDangerPips;
         private Image[] focusStateTimerPips;
         private GameObject runProgressRoot;
+        private GameObject runProgressTrack;
         private Image runProgressFill;
         private Text runProgressText;
         private Image[] escapeGatePips;
@@ -19247,6 +19248,8 @@ namespace GreedLast
             int target = Mathf.Max(1, snapshot.ChapterTarget);
             float ratio = Mathf.Clamp01(snapshot.ChapterProgress / (float)target);
             bool compact = (!DevToolsEnabled || devCleanViewEnabled) && !snapshot.Stopped;
+            bool showChoiceControls = compact && snapshot.ChoiceActive && !Application.isMobilePlatform;
+            runProgressTrack.SetActive(!showChoiceControls);
             string label;
             TrackRunProgressStageState(snapshot);
             TrackThreatProgressState(snapshot);
@@ -19261,7 +19264,7 @@ namespace GreedLast
 
             if (compact)
             {
-                label = snapshot.ChoiceActive && !Application.isMobilePlatform
+                label = showChoiceControls
                     ? "← / ↓ / → 또는 클릭"
                     : BuildCompactRunProgressLabel(snapshot, target);
             }
@@ -27453,6 +27456,7 @@ namespace GreedLast
             runProgressRoot.SetActive(false);
 
             Image back = CreateRect("RunProgressBack", runProgressRoot.transform, new Vector2(0f, 0.18f), new Vector2(1f, 0.58f), Vector2.zero, Vector2.zero).AddComponent<Image>();
+            runProgressTrack = back.gameObject;
             back.color = new Color32(19, 27, 30, 190);
             back.raycastTarget = false;
 
