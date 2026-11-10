@@ -30637,6 +30637,10 @@ namespace GreedLast
                         new Color32(255, 248, 210, 255),
                         BuildForwardMotionLineColorBlend(lineSurge, lineDrag, i));
                 }
+                if (UsePlayerRunControls && !Application.isMobilePlatform)
+                {
+                    alpha = Mathf.RoundToInt(alpha * 0.60f);
+                }
                 if (downbeatLift > 0f)
                 {
                     alpha += BuildForwardMotionLineDownbeatAlphaLift(downbeatLift);
