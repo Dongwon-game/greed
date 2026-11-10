@@ -10995,6 +10995,7 @@ namespace GreedLast.Editor
             core.RestartPractice(clock);
             core.Tick(clock += 2f);
             core.Tick(clock += 1f);
+            SetRuntimeUiField(ui, "devCleanViewEnabled", true);
             ui.RenderRun(run);
             string hiddenDetail = GetRuntimeUiField<string>(ui, "detailedRunHud");
             try
@@ -11076,7 +11077,6 @@ namespace GreedLast.Editor
             core.SnapshotChanged += value => run = value;
             core.Enter();
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.RunCoreTest, "기프트 선택", string.Empty, 0));
-            SetRuntimeUiField(ui, "devCleanViewEnabled", true);
             ui.RenderRun(run);
             MethodInfo update = typeof(GreedLastRuntimeUi).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic);
             update.Invoke(ui, null);
