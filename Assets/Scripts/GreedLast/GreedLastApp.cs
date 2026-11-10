@@ -16772,7 +16772,7 @@ namespace GreedLast
                         holdAmount,
                         judgementPulse,
                         laneBeatCueUrgency,
-                        runModeActive && (ShouldShowLaneInputRipple(latestRunSnapshot)
+                        runModeActive && showLaneInputFeedback && (ShouldShowLaneInputRipple(latestRunSnapshot)
                             || ShouldShowChoiceConfirmationRipple(choiceConfirmationPulse)));
                     UpdateLaneTargetGlow(
                         i,
