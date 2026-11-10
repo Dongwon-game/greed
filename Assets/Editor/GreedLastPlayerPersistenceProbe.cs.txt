@@ -540,12 +540,22 @@ namespace GreedLast.PlayerChecks
                 }
                 else Call(app, "RequestNextRunPattern");
                 yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
-                yield return DriveCourse(chapterTwoGood: scopedGoals && phase == "clear");
+                var finishFrames = phase == "clear"
+                    && Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-clear") >= 0
+                    ? new List<Frame>() : null;
+                yield return DriveCourse(chapterTwoGood: scopedGoals && phase == "clear", finishFrames: finishFrames);
                 bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
                 bool settledNativeClear = (phase == "window-loadout" || phase == "window-menu") && backend.HasSaveLoadoutCandidate
                     && Count("normalClearCount") == 1;
                 Require(core.CanExitAfterClear && (unsettledClear || settledNativeClear),
                     "The actual clear must be unsettled, or already settled once in a native menu mode only.");
+                if (finishFrames != null)
+                {
+                    Require(finishFrames.Count == 3 && RunState().EscapeSucceeded
+                        && RunState().CoreRetrieved && RunState().MissCount == 0,
+                        "The render must reach escape and clear without losing the earlier choice frames or taking a miss.");
+                    yield return CaptureFrame("finish-clear", finishFrames);
+                }
                 result.terminalBeforeQuit = true;
                 GreedLastRunRecord record = core.CreateRunRecord();
                 if (scopedGoals && phase == "clear")
@@ -1507,7 +1517,7 @@ namespace GreedLast.PlayerChecks
 
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
             bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null,
-            GreedLastAvoidanceType? untilAvoidance = null)
+            GreedLastAvoidanceType? untilAvoidance = null, List<Frame> finishFrames = null)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1528,6 +1538,19 @@ namespace GreedLast.PlayerChecks
                     continue;
                 }
                 float now = Time.realtimeSinceStartup;
+                if (finishFrames != null)
+                {
+                    // Capture once at each real boundary while preserving the ordinary course driver.
+                    if (finishFrames.Count == 0 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Node)
+                        yield return CaptureFrame("finish-route-choice", finishFrames);
+                    else if (finishFrames.Count == 1 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Relic)
+                        yield return CaptureFrame("finish-relic-choice", finishFrames);
+                    else if (finishFrames.Count == 2 && run.Phase == GreedLastRunPhase.EscapeRunning
+                        && run.ActivePattern && !run.Paused && !run.CountdownActive && run.CoreRetrieved)
+                        yield return CaptureFrame("finish-escape", finishFrames);
+                    now = Time.realtimeSinceStartup;
+                    run = RunState();
+                }
                 if (run.Paused)
                 {
                     if (run.ResumeCountdownActive) result.resumeCountdownWaitFrames++;

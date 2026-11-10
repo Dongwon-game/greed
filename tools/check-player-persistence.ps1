@@ -359,13 +359,16 @@ try {
         Write-Verbose ('Starting a fresh owned player process: ' + $phase)
         $log = Join-Path $root ($phase + '.log')
         $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
+        $captureClear = $CaptureFrames -and $phase -eq 'clear'
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
+            elseif ($captureClear) { @('-batchmode','-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
         if ($BackgroundResults) { $playerArguments += '-greed-probe-background-results' }
         if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
         if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
+        if ($captureClear) { $playerArguments += '-greed-probe-capture-clear' }
         if ($phase -eq 'window-menu') { $playerArguments += @('-greed-probe-menu-wait-minutes', [string]$MenuWaitMinutes) }
         # Native menu setup remains bounded at 600s. The operator then receives
         # a full, separate wait budget after the comparison observers are ready.
@@ -390,6 +393,23 @@ try {
         }
         if ($CaptureFrames -and $phase -eq 'clear' -and !$result.practiceCompletedBeforeCourseEntry) {
             throw 'The post-render course must preserve and explicitly handle prior practice completion.'
+        }
+        if ($captureClear) {
+            $expected = @('finish-route-choice','finish-relic-choice','finish-escape','finish-clear')
+            if (($result.frames.name -join ',') -cne ($expected -join ',') -or !$result.terminalBeforeQuit) {
+                throw 'The rendered ordinary course must show its real choices, escape and terminal result.'
+            }
+            $report.ClearRenderedFrames = @($result.frames | ForEach-Object {
+                if ($_.width -ne 1280 -or $_.height -ne 720 -or $_.misses -ne 0) {
+                    throw ('Invalid ordinary-course frame: ' + $_.name)
+                }
+                $framePath = Join-Path $root ('frame-' + $_.name + '.png')
+                @{Name=$_.name; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
+                    SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
+            })
+            if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
+                throw 'Each ordinary-course boundary must have its own render.'
+            }
         }
         if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
             $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60 -or $result.recordInvalidControls -ne 9) {
