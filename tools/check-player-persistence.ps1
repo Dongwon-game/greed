@@ -15,7 +15,7 @@ param(
     [switch]$PracticeQuit,
     [switch]$ScopedGoals,
     [switch]$GiftHistory,
-    [ValidateSet('1280x720','960x540')]
+    [ValidateSet('1280x720','960x540','1024x768')]
     [string]$FrameSize = '1280x720'
 )
 
