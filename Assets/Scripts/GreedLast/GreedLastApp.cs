@@ -16685,6 +16685,9 @@ namespace GreedLast
 
             if (!saveSlotModeActive)
             {
+                bool choiceVisible = hasRunSnapshot && latestRunSnapshot.ChoiceActive;
+                // An earlier choice or judgement must not wash out the next PC card.
+                bool showLaneInputFeedback = !choiceVisible || Application.isMobilePlatform;
                 int activeRunTargetIndex = hasRunSnapshot ? BuildActiveRunTargetLaneIndex(latestRunSnapshot) : -1;
                 float activeTargetReadinessGlow = activeRunTargetIndex >= 0 && hasRunSnapshot
                     ? BuildTargetLaneReadinessGlow(activeRunTargetIndex, latestRunSnapshot)
@@ -16694,7 +16697,7 @@ namespace GreedLast
                     float lanePulse = Mathf.Repeat(beatPhase + i * 0.2f, 1f);
                     Color32 baseColor = growthBoardModeActive
                         ? BuildGrowthLaneColumnColor(i, lanePulse)
-                        : hasRunSnapshot && latestRunSnapshot.ChoiceActive
+                        : choiceVisible
                             ? BuildChoiceLaneColumnColor(latestRunSnapshot, i, lanePulse)
                             : BuildRunLaneBaseColor(i, lanePulse);
                     GreedLastRunChannel laneChannel = (GreedLastRunChannel)(i + 1);
@@ -16716,10 +16719,10 @@ namespace GreedLast
                         }
                     }
 
-                    float choiceConfirmationPulse = BuildChoiceConfirmationPulse(
+                    float choiceConfirmationPulse = showLaneInputFeedback ? BuildChoiceConfirmationPulse(
                         i,
                         choiceConfirmationLaneIndex,
-                        choiceConfirmationUntil - Time.unscaledTime);
+                        choiceConfirmationUntil - Time.unscaledTime) : 0f;
                     if (choiceConfirmationPulse > 0f)
                     {
                         baseColor = Color32.Lerp(
@@ -16728,8 +16731,9 @@ namespace GreedLast
                             BuildChoiceConfirmationColorBlend(choiceConfirmationPulse));
                     }
 
-                    float pressPulse = Mathf.Max(BuildLanePressPulse(i), choiceConfirmationPulse * 0.82f);
-                    float holdAmount = BuildLaneHoldAmount(i);
+                    float pressPulse = showLaneInputFeedback
+                        ? Mathf.Max(BuildLanePressPulse(i), choiceConfirmationPulse * 0.82f) : 0f;
+                    float holdAmount = showLaneInputFeedback ? BuildLaneHoldAmount(i) : 0f;
                     if (holdAmount > 0f)
                     {
                         baseColor = Color32.Lerp(baseColor, new Color32(255, 238, 181, 255), BuildLaneHoldColorBlend(holdAmount));
@@ -16792,7 +16796,7 @@ namespace GreedLast
                         + BuildLaneWrongHoldScaleLift(wrongHoldWarning));
                     if (laneLabelTexts != null && i < laneLabelTexts.Length && laneLabelTexts[i] != null && runModeActive)
                     {
-                        Color32 labelColor = latestRunSnapshot.ChoiceActive
+                        Color32 labelColor = choiceVisible
                             ? BuildChoiceLaneTextColor(latestRunSnapshot, i)
                             : Color32.Lerp(
                                 BuildRunLaneLabelColor(i, activeRunTargetIndex, latestRunSnapshot),
