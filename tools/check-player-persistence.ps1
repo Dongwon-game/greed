@@ -395,13 +395,16 @@ try {
             throw 'The post-render course must preserve and explicitly handle prior practice completion.'
         }
         if ($captureClear) {
-            $expected = @('finish-route-choice','finish-relic-choice','finish-escape','finish-clear')
+            $expected = @('finish-route-choice','finish-relic-choice','finish-relic-to-run','finish-escape','finish-clear')
             if (($result.frames.name -join ',') -cne ($expected -join ',') -or !$result.terminalBeforeQuit) {
                 throw 'The rendered ordinary course must show its real choices, escape and terminal result.'
             }
             $report.ClearRenderedFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne 1280 -or $_.height -ne 720 -or $_.misses -ne 0) {
                     throw ('Invalid ordinary-course frame: ' + $_.name)
+                }
+                if ($_.name -eq 'finish-relic-to-run' -and [string]::IsNullOrWhiteSpace($_.pattern)) {
+                    throw 'The transition render must show an active trap after relic selection.'
                 }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
