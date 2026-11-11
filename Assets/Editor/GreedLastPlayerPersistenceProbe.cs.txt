@@ -700,6 +700,8 @@ namespace GreedLast.PlayerChecks
                     yield return WaitFor(() => RunState().ActivePattern && !RunState().CountdownActive);
                     Require(Uses()[2] == 1 && !RunState().Stopped && core.CreateInfiniteRunRecord().IsValid,
                         "The first actual start must persist one use while the played run remains live.");
+                    if (Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-first-use") >= 0)
+                        yield return CaptureFrame("infinite-first-trap", new List<Frame>(), settleSeconds: 0f);
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
                     yield return QuitFromLivePause();
                     yield break;

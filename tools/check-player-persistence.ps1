@@ -369,8 +369,9 @@ try {
         $log = Join-Path $root ($phase + '.log')
         $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
         $captureClear = $CaptureFrames -and $phase -eq 'clear'
+        $captureFirstUse = $CaptureFrames -and $phase -eq 'first-use'
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
-            elseif ($captureClear) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
+            elseif ($captureClear -or $captureFirstUse) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
@@ -378,6 +379,7 @@ try {
         if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
         if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
         if ($captureClear) { $playerArguments += '-greed-probe-capture-clear' }
+        if ($captureFirstUse) { $playerArguments += '-greed-probe-capture-first-use' }
         if ($phase -eq 'window-menu') { $playerArguments += @('-greed-probe-menu-wait-minutes', [string]$MenuWaitMinutes) }
         # Native menu setup remains bounded at 600s. The operator then receives
         # a full, separate wait budget after the comparison observers are ready.
@@ -422,6 +424,18 @@ try {
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
                 throw 'Each ordinary-course boundary must have its own render.'
             }
+        }
+        if ($captureFirstUse) {
+            $frames = @($result.frames)
+            $frame = $frames[0]
+            if ($frames.Count -ne 1 -or $frame.name -cne 'infinite-first-trap' -or
+                $frame.width -ne $frameWidth -or $frame.height -ne $frameHeight -or
+                [string]::IsNullOrWhiteSpace($frame.pattern) -or $frame.paused -or $frame.misses -ne 0) {
+                throw 'The first infinite start must render its first live trap.'
+            }
+            $report.InfiniteFirstFrame = @{Name=$frame.name; Width=$frame.width; Height=$frame.height;
+                Pattern=$frame.pattern; Channel=$frame.channel; CoreDeltaSeconds=$frame.coreDeltaSeconds;
+                SHA256=(Get-FileHash -LiteralPath (Join-Path $root 'frame-infinite-first-trap.png')).Hash}
         }
         if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
             $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60 -or $result.recordInvalidControls -ne 9) {
