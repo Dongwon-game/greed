@@ -19350,7 +19350,9 @@ namespace GreedLast
             {
                 runProgressText.text = label;
                 runProgressText.fontSize = compact ? 34 : BuildRunProgressFontSize(label);
-                SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, compact ? 0.69f : 0.715f, 760f, 64f);
+                float progressAnchorY = compact && snapshot.InfiniteMode && !Application.isMobilePlatform
+                    ? 0.80f : compact ? 0.69f : 0.715f;
+                SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, progressAnchorY, 760f, 64f);
                 SetAnchored(runProgressText.rectTransform, 0.5f, compact ? 1.3f : 1.1f, 720f, compact ? 56f : 40f);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);
                 float downbeatTextBlend = BuildRunProgressDownbeatColorBlend(progressDownbeatLift);
@@ -20337,6 +20339,11 @@ namespace GreedLast
                 HidePrecisionRewardPips();
                 return;
             }
+
+            bool compactPcInfinite = UsePlayerRunControls && snapshot.InfiniteMode
+                && !snapshot.Stopped && !Application.isMobilePlatform;
+            SetAnchored(comboBadgeRoot.GetComponent<RectTransform>(), 0.5f,
+                compactPcInfinite ? 0.225f : 0.672f, 430f, 58f);
 
             bool chainActive = snapshot.Combo >= 3;
             string text = snapshot.Stopped
