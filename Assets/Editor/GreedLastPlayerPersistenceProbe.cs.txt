@@ -701,7 +701,14 @@ namespace GreedLast.PlayerChecks
                     Require(Uses()[2] == 1 && !RunState().Stopped && core.CreateInfiniteRunRecord().IsValid,
                         "The first actual start must persist one use while the played run remains live.");
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-first-use") >= 0)
-                        yield return CaptureFrame("infinite-first-trap", new List<Frame>(), settleSeconds: 0f);
+                    {
+                        var infiniteFrames = new List<Frame>();
+                        yield return CaptureFrame("infinite-first-trap", infiniteFrames, settleSeconds: 0f);
+                        yield return DriveCourse(untilChannel: GreedLastRunChannel.Center);
+                        Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center,
+                            "A live central trap is required for the infinite progress overlay comparison.");
+                        yield return CaptureFrame("infinite-center-trap", infiniteFrames, settleSeconds: 0f);
+                    }
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
                     yield return QuitFromLivePause();
                     yield break;
@@ -1519,7 +1526,8 @@ namespace GreedLast.PlayerChecks
 
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
             bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null,
-            GreedLastAvoidanceType? untilAvoidance = null, List<Frame> finishFrames = null)
+            GreedLastAvoidanceType? untilAvoidance = null, List<Frame> finishFrames = null,
+            GreedLastRunChannel? untilChannel = null)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1531,7 +1539,8 @@ namespace GreedLast.PlayerChecks
                 if (run.ActivePattern && !run.CountdownActive && !run.Paused
                     && (untilFirstTrap || (untilSideTrapAfter != null && IsSideTrap(run)
                         && run.Pattern.PatternId != untilSideTrapAfter)
-                        || (untilAvoidance.HasValue && run.Pattern.AvoidanceType == untilAvoidance.Value))) break;
+                        || (untilAvoidance.HasValue && run.Pattern.AvoidanceType == untilAvoidance.Value)
+                        || (untilChannel.HasValue && run.Pattern.Channel == untilChannel.Value))) break;
                 // Foreground waits and an in-flight countdown are not new interruptions.
                 if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {

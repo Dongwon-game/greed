@@ -426,16 +426,20 @@ try {
             }
         }
         if ($captureFirstUse) {
-            $frames = @($result.frames)
-            $frame = $frames[0]
-            if ($frames.Count -ne 1 -or $frame.name -cne 'infinite-first-trap' -or
-                $frame.width -ne $frameWidth -or $frame.height -ne $frameHeight -or
-                [string]::IsNullOrWhiteSpace($frame.pattern) -or $frame.paused -or $frame.misses -ne 0) {
-                throw 'The first infinite start must render its first live trap.'
+            if (($result.frames.name -join ',') -cne 'infinite-first-trap,infinite-center-trap' -or
+                $result.frames[1].channel -cne 'Center') {
+                throw 'The first infinite start must render the opening and central live traps.'
             }
-            $report.InfiniteFirstFrame = @{Name=$frame.name; Width=$frame.width; Height=$frame.height;
-                Pattern=$frame.pattern; Channel=$frame.channel; CoreDeltaSeconds=$frame.coreDeltaSeconds;
-                SHA256=(Get-FileHash -LiteralPath (Join-Path $root 'frame-infinite-first-trap.png')).Hash}
+            $report.InfiniteFrames = @($result.frames | ForEach-Object {
+                if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
+                    [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0) {
+                    throw ('Invalid live infinite trap frame: ' + $_.name)
+                }
+                $framePath = Join-Path $root ('frame-' + $_.name + '.png')
+                @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern;
+                    Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
+                    SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
+            })
         }
         if ($result.recordSchemaVersion -ne 2 -or $result.recordFieldCount -ne 26 -or
             $result.recordComparatorControls -ne 78 -or $result.legacyRecordComparisonBlindSpots -ne 60 -or $result.recordInvalidControls -ne 9) {
