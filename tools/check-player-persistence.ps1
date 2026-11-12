@@ -431,15 +431,21 @@ try {
                 @($result.frames[1..3] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
                 throw 'The first infinite start must render the opening trap and the central trap through exact input.'
             }
+            if ($result.frames[0].channel -cne 'Left' -or $result.frames[0].actionCue -cnotmatch 'A/←' -or
+                @($result.frames[1..3] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0) {
+                throw 'The displayed PC action hint must change from the opening left trap to the central trap.'
+            }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
-                    [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0) {
+                    [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0 -or
+                    $_.timingGuide -cnotmatch '정확 ±' -or ![string]::IsNullOrEmpty($_.judgementFeedback)) {
                     throw ('Invalid live infinite trap frame: ' + $_.name)
                 }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern;
                     Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                     MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
+                    ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })
         }

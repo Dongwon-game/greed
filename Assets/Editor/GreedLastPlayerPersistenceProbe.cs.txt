@@ -86,6 +86,7 @@ namespace GreedLast.PlayerChecks
         {
             public string name, pattern, channel, graphicsDevice;
             public string utc;
+            public string actionCue, timingGuide, judgementFeedback;
             public int width, height, sampledColors, health, misses;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public bool paused, opening, resuming;
@@ -1453,11 +1454,16 @@ namespace GreedLast.PlayerChecks
                 camera.Render();
                 Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
                 float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
+                string actionCue = VisibleText(Read<Text>(ui, "activeActionCueText"));
+                string timingGuide = VisibleText(Read<Text>(ui, "timingGuideText"));
+                string judgementFeedback = VisibleText(Read<Text>(ui, "judgementFeedbackText"));
                 if (respondAfterRender)
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
                     Call(app, "HandleRunChannelInput", run.Pattern.Channel);
-                    Require(RunState().LastResult == GreedLastJudgementResult.Success,
+                    GreedLastRunSnapshot judged = RunState();
+                    Require(judged.LastResult == GreedLastJudgementResult.Success
+                        && judged.SuccessCount == run.SuccessCount + 1,
                         "The contact render must earn exact input before its image is saved.");
                 }
                 RenderTexture.active = target;
@@ -1479,6 +1485,7 @@ namespace GreedLast.PlayerChecks
                 frames.Add(new Frame { name = name, utc = DateTime.UtcNow.ToString("O"),
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
+                    actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
@@ -1502,6 +1509,9 @@ namespace GreedLast.PlayerChecks
             }
             yield return null;
         }
+
+        private static string VisibleText(Text label)
+            => label.isActiveAndEnabled && label.color.a > 0.01f ? label.text : string.Empty;
 
         private IEnumerator PrepareInfinite()
         {
