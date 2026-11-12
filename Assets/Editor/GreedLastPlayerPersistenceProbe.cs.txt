@@ -707,7 +707,7 @@ namespace GreedLast.PlayerChecks
                         yield return DriveCourse(untilChannel: GreedLastRunChannel.Center);
                         Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center,
                             "A live central trap is required for the infinite progress overlay comparison.");
-                        yield return CaptureFrame("infinite-center-trap", infiniteFrames, settleSeconds: 0f);
+                        yield return CaptureTrapApproach("infinite-center-trap", infiniteFrames);
                     }
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
                     yield return QuitFromLivePause();

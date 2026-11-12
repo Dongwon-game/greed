@@ -426,9 +426,10 @@ try {
             }
         }
         if ($captureFirstUse) {
-            if (($result.frames.name -join ',') -cne 'infinite-first-trap,infinite-center-trap' -or
-                $result.frames[1].channel -cne 'Center') {
-                throw 'The first infinite start must render the opening and central live traps.'
+            $expected = 'infinite-first-trap,infinite-center-trap-far,infinite-center-trap-near,infinite-center-trap-contact'
+            if (($result.frames.name -join ',') -cne $expected -or
+                @($result.frames[1..3] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
+                throw 'The first infinite start must render the opening trap and the central trap through exact input.'
             }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
@@ -438,6 +439,7 @@ try {
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern;
                     Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
+                    MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })
         }
