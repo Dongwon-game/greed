@@ -431,7 +431,7 @@ try {
                 @($result.frames[1..3] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
                 throw 'The first infinite start must render the opening trap and the central trap through exact input.'
             }
-            if ($result.frames[0].channel -cne 'Left' -or $result.frames[0].actionCue -cnotmatch 'A/←' -or
+            if ($result.frames[0].channel -cne 'Left' -or $result.frames[0].actionCue -cnotmatch '^A/← · .*좌회전' -or
                 @($result.frames[1..3] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0) {
                 throw 'The displayed PC action hint must change from the opening left trap to the central trap.'
             }

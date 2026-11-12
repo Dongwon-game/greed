@@ -48101,10 +48101,11 @@ namespace GreedLast
             string approach = BuildTrapApproachLabel(snapshot.Pattern);
             string response = BuildActiveActionResponseLabel(snapshot.Pattern);
             bool rotation = GreedLastRunCore.IsRotationPattern(snapshot.Pattern);
-            string action = showPcKey && !rotation
-                ? inputHint + " · " + approach + " " + response
-                : approach + " → " + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + response;
-            if (rotation) action += " · " + inputHint;
+            string action = rotation || !showPcKey
+                ? approach + " → " + BuildRunnerResponseSymbol(snapshot.Pattern) + " " + response
+                : approach + " " + response;
+            if (showPcKey) action = inputHint + " · " + action;
+            else if (rotation) action += " · " + inputHint;
 
             return action + "\n정박 +" + exactScore
                 + " · " + BuildActiveTimingActionCuePayoffTag(snapshot);

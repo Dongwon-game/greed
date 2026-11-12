@@ -11246,8 +11246,8 @@ namespace GreedLast.Editor
                     && !pcCue.Contains("기울임", StringComparison.Ordinal)
                     && !pcCue.Contains("Q/", StringComparison.Ordinal)
                     && !pcCue.Contains("E/", StringComparison.Ordinal)
-                    && (i >= 3 ? pcCue.Contains(pcHint, StringComparison.Ordinal)
-                        : pcCue.StartsWith(pcHint + " · ", StringComparison.Ordinal))
+                    && pcCue.StartsWith(pcHint + " · ", StringComparison.Ordinal)
+                    && pcCue.Contains(responses[i], StringComparison.Ordinal)
                     && (i != 1 || !pcCue.Contains("↓ 숙이기", StringComparison.Ordinal)),
                     "PC release action cues must advertise supported lane keys without tilt or development-only shortcuts.");
                 Require(InvokeRuntimeUiLabel("BuildCompactActiveActionCueTextForPlatform", run, false, true, true)
