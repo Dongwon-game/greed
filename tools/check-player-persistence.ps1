@@ -322,7 +322,8 @@ try {
         $report.PlayerLogChecks += Assert-CleanPlayerLog $renderLog
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
-        $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-center','practice-right','practice-result',
+        $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-good-feedback',
+            'practice-center','practice-exact-feedback','practice-right','practice-result',
             'normal-start-gift','normal-trap-far','normal-trap-near','normal-trap-contact',
             'normal-side-trap-far','normal-side-trap-near','normal-side-trap-contact',
             'normal-twist-trap-far','normal-twist-trap-near','normal-twist-trap-contact')
@@ -335,6 +336,14 @@ try {
             throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
         }
         $report.LiveMotionSamples = $render.liveMotionSamples
+        $goodFeedback = $render.frames | Where-Object name -CEQ 'practice-good-feedback'
+        $exactFeedback = $render.frames | Where-Object name -CEQ 'practice-exact-feedback'
+        if ($goodFeedback.judgementFeedback -cnotmatch '^Good · .*점' -or
+            $exactFeedback.judgementFeedback -cnotmatch '^정확 · .*점' -or
+            $goodFeedback.actionCue -or $exactFeedback.actionCue -or
+            $goodFeedback.misses -ne 0 -or $exactFeedback.misses -ne 0) {
+            throw 'The player must render distinct Good and exact feedback without a competing action prompt.'
+        }
         if (!$render.pausedSceneryObserved) { throw 'Pause, hold, resume countdown and resumed scenery evidence is required.' }
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
             $render.countdownMotion, $render.resumedMotion)
@@ -346,6 +355,7 @@ try {
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
+                JudgementFeedback=$_.judgementFeedback;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash

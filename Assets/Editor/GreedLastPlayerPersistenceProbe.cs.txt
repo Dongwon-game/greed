@@ -471,11 +471,28 @@ namespace GreedLast.PlayerChecks
                     "Resumed scenery must continue forward without catching up the inactive countdown time.");
                 result.pausedSceneryObserved = true;
                 yield return CaptureFrame("resumed-trap", frames);
+                GreedLastRunSnapshot firstTrap = RunState();
+                float goodDelay = (firstTrap.Pattern.SuccessWindowSeconds + firstTrap.Pattern.GoodWindowSeconds) * 0.5f;
+                yield return WaitFor(() => RunState().CoreDeltaSeconds + core.InputTimingOffsetSeconds >= goodDelay,
+                    settleFrame: false);
+                Call(app, "HandleRunChannelInput", firstTrap.Pattern.Channel);
+                Require(RunState().GoodCount == firstTrap.GoodCount + 1 && RunState().Health == firstTrap.Health
+                    && RunState().LastResult == GreedLastJudgementResult.Good,
+                    "The first practice response must earn a late Good without losing health.");
+                yield return CaptureFrame("practice-good-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Slide);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center
                     && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Slide,
                     "The second practice frame must show the actual center slide.");
                 yield return CaptureFrame("practice-center", frames, singleLineTitle: true);
+                GreedLastRunSnapshot secondTrap = RunState();
+                yield return WaitFor(() => RunState().CoreDeltaSeconds + core.InputTimingOffsetSeconds >= 0f,
+                    settleFrame: false);
+                Call(app, "HandleRunChannelInput", secondTrap.Pattern.Channel);
+                Require(RunState().SuccessCount == secondTrap.SuccessCount + 1 && RunState().Health == secondTrap.Health
+                    && RunState().LastResult == GreedLastJudgementResult.Success,
+                    "The second practice response must earn an exact result without losing health.");
+                yield return CaptureFrame("practice-exact-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
                     && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Twist,
