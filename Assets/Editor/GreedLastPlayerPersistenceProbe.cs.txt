@@ -495,9 +495,22 @@ namespace GreedLast.PlayerChecks
                 var practiceUi = Read<GreedLastRuntimeUi>(app, "runtimeUi");
                 var badge = (RectTransform)Read<GameObject>(practiceUi, "comboBadgeRoot").transform;
                 RectTransform progress = Read<Image>(practiceUi, "runProgressFill").rectTransform;
+                Text score = Read<Text>(practiceUi, "runHudText");
+                Button pause = Read<Button>(practiceUi, "nextPatternButton");
+                var pauseRect = (RectTransform)pause.transform;
+                Canvas.ForceUpdateCanvases();
+                float badgeTop = badge.TransformPoint(0f, badge.rect.yMax, 0f).y;
+                float badgeBottom = badge.TransformPoint(0f, badge.rect.yMin, 0f).y;
+                // The score uses upper alignment and its text fills only part of its rectangle.
+                float scoreBottom = score.rectTransform.TransformPoint(
+                    0f, score.rectTransform.rect.yMax - score.preferredHeight, 0f).y;
                 Require(badge.gameObject.activeInHierarchy
-                    && badge.TransformPoint(0f, badge.rect.yMax, 0f).y < progress.TransformPoint(0f, progress.rect.yMin, 0f).y,
-                    "The practice combo badge must sit clear of the progress strip after exact input.");
+                    && score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text)
+                    && pause.isActiveAndEnabled && pause.IsInteractable()
+                    && badgeTop < progress.TransformPoint(0f, progress.rect.yMin, 0f).y
+                    && badgeTop < scoreBottom
+                    && badgeBottom > pauseRect.TransformPoint(0f, pauseRect.rect.yMax, 0f).y,
+                    "The practice combo badge must fit below the score and above the pause button after exact input.");
                 yield return CaptureFrame("practice-exact-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
