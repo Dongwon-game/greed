@@ -4,6 +4,7 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [string]$VerifiedReleasePath,
     [switch]$CaptureFrames,
+    [switch]$MotionComfortOff,
     [switch]$InteractiveWindow,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
@@ -26,6 +27,9 @@ if ($PSBoundParameters.ContainsKey('MenuWaitMinutes') -and !$InteractiveMenus) {
 }
 if ($PSBoundParameters.ContainsKey('FrameSize') -and !$CaptureFrames) {
     throw 'FrameSize requires CaptureFrames.'
+}
+if ($MotionComfortOff -and !$CaptureFrames) {
+    throw 'MotionComfortOff requires CaptureFrames.'
 }
 $frameWidth, $frameHeight = $FrameSize -split 'x'
 if ($InteractiveBoards -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
@@ -127,7 +131,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     Succeeded=$false; Error=''; FailedPhase=''; PersonalPreferencesUnchanged=$false; ProjectSettingsUnchanged=$false;
     Scope='Isolated copied-source Windows player. Actual Application.Quit and fresh processes, real frames and app commands; not OS window-close input, forced-kill recovery, audible output, physical touch or device performance.';
     RegistryPath=$registryPath; Processes=$processes; Phases=@(); Inputs=@(); SafetyControls=@();
-    OffscreenCaptureRequested=[bool]$CaptureFrames; InteractiveWindowRequested=[bool]$InteractiveWindow;
+    OffscreenCaptureRequested=[bool]$CaptureFrames; MotionComfortOffRequested=[bool]$MotionComfortOff; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
@@ -403,6 +407,7 @@ try {
         if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
         if ($captureClear) { $playerArguments += '-greed-probe-capture-clear' }
         if ($captureFirstUse) { $playerArguments += '-greed-probe-capture-first-use' }
+        if ($captureFirstUse -and $MotionComfortOff) { $playerArguments += '-greed-probe-motion-comfort-off' }
         if ($phase -eq 'window-menu') { $playerArguments += @('-greed-probe-menu-wait-minutes', [string]$MenuWaitMinutes) }
         # Native menu setup remains bounded at 600s. The operator then receives
         # a full, separate wait budget after the comparison observers are ready.
@@ -464,6 +469,13 @@ try {
                 @($result.frames[3..5] | Where-Object { [Math]::Abs($_.corridorRoll) -gt 0.01 }).Count -ne 0) {
                 throw 'The corridor must lean briefly towards the rotation input and level out at the central trap.'
             }
+            $contactRoll = [Math]::Abs($result.frames[2].corridorRoll)
+            $comfortExpected = !$MotionComfortOff
+            if (($comfortExpected -and ($contactRoll -lt 0.85 -or $contactRoll -gt 1.0)) -or
+                (!$comfortExpected -and $contactRoll -lt 1.4) -or
+                @($result.frames | Where-Object { $_.motionComfortEnabled -ne $comfortExpected }).Count -ne 0) {
+                throw 'The rotation angle must match the requested motion comfort setting.'
+            }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
                     [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0 -or
@@ -480,6 +492,7 @@ try {
                     MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                     CorridorRoll=$_.corridorRoll; ProgressRoll=$_.progressRoll;
                     JudgementRoll=$_.judgementRoll; PauseRoll=$_.pauseRoll;
+                    MotionComfortEnabled=$_.motionComfortEnabled;
                     ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })

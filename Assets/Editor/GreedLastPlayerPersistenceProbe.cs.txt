@@ -90,7 +90,7 @@ namespace GreedLast.PlayerChecks
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
-            public bool paused, opening, resuming;
+            public bool paused, opening, resuming, motionComfortEnabled;
         }
 
         [Serializable]
@@ -691,6 +691,13 @@ namespace GreedLast.PlayerChecks
                     && backend.LoadSelectedSaveSlotView().GrowthPoints == 3, "Real starts and prior live quit must preserve their exact consumption boundary.");
                 VerifySavedSlotRecord();
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), Previous("clear").record);
+                if (phase == "first-use" && Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-motion-comfort-off") >= 0)
+                {
+                    var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                    Require(Read<bool>(ui, "motionComfortEnabled"), "The isolated player must start with the default comfort setting.");
+                    Call(ui, "ToggleMotionComfortPreference");
+                    Require(!Read<bool>(ui, "motionComfortEnabled"), "The existing comfort option must turn off before the rotation test.");
+                }
                 if (scopedGoals && phase == "last-use") state.ShowLocalNotice("무한 복기 재도전\n목표: " + InfiniteReviewGoal);
                 yield return PrepareInfinite();
                 if (phase == "first-use")
@@ -1510,6 +1517,7 @@ namespace GreedLast.PlayerChecks
                 float progressRoll = SignedRoll(Read<Text>(ui, "runProgressText").rectTransform);
                 float judgementRoll = SignedRoll(judgement);
                 float pauseRoll = SignedRoll(Read<Button>(ui, "pauseButton").transform);
+                bool motionComfortEnabled = Read<bool>(ui, "motionComfortEnabled");
                 string actionCue = VisibleText(Read<Text>(ui, "activeActionCueText"));
                 string timingGuide = VisibleText(Read<Text>(ui, "timingGuideText"));
                 string judgementFeedback = VisibleText(Read<Text>(ui, "judgementFeedbackText"));
@@ -1549,6 +1557,7 @@ namespace GreedLast.PlayerChecks
                     coreDeltaSeconds = run.CoreDeltaSeconds,
                     markerX = markerAnchor.x, markerY = markerAnchor.y, judgementY = judgementY,
                     corridorRoll = corridorRoll, progressRoll = progressRoll, judgementRoll = judgementRoll, pauseRoll = pauseRoll,
+                    motionComfortEnabled = motionComfortEnabled,
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
                 result.frames = frames.ToArray();
