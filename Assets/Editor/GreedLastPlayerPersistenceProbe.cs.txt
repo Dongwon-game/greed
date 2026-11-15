@@ -530,7 +530,7 @@ namespace GreedLast.PlayerChecks
                     "The normal render must show the start-gift choice before live gameplay.");
                 yield return CaptureFrame("normal-start-gift", frames);
                 yield return DriveCourse(untilFirstTrap: true);
-                yield return CaptureTrapApproach("normal-trap", frames);
+                yield return CaptureTrapApproach("normal-trap", frames, approachSamples: 5);
                 string openingPattern = RunState().Pattern.PatternId;
                 yield return DriveCourse(untilSideTrapAfter: openingPattern);
                 Require(RunState().ActivePattern && IsSideTrap(RunState())
@@ -1407,7 +1407,7 @@ namespace GreedLast.PlayerChecks
             result.sustainedRunMotionObserved = true;
         }
 
-        private IEnumerator CaptureTrapApproach(string name, List<Frame> frames)
+        private IEnumerator CaptureTrapApproach(string name, List<Frame> frames, int approachSamples = 0)
         {
             yield return CaptureFrame(name + "-far", frames);
             Frame far = frames[frames.Count - 1];
@@ -1415,6 +1415,16 @@ namespace GreedLast.PlayerChecks
             Require(!string.IsNullOrEmpty(far.pattern) && far.coreDeltaSeconds < 0f,
                 "The far frame must contain a live trap before its judgement point.");
             float nearDelta = far.coreDeltaSeconds * 0.35f;
+            for (int sample = 1; sample <= approachSamples; sample++)
+            {
+                float sampleDelta = Mathf.Lerp(far.coreDeltaSeconds, nearDelta, sample / (approachSamples + 1f));
+                yield return WaitFor(() => RunState().CoreDeltaSeconds >= sampleDelta, settleFrame: false);
+                yield return CaptureFrame(name + "-approach-" + sample, frames, settleSeconds: 0f);
+                Frame approach = frames[frames.Count - 1];
+                Require(approach.pattern == far.pattern && approach.channel == far.channel
+                    && approach.misses == far.misses && !approach.paused && approach.coreDeltaSeconds < 0f,
+                    "The motion comparison must sample the same live approach before judgement.");
+            }
             yield return WaitFor(() =>
             {
                 GreedLastRunSnapshot run = RunState();
@@ -1488,6 +1498,7 @@ namespace GreedLast.PlayerChecks
                         "The PC practice title must render on one line: " + title.text);
                 }
                 camera.Render();
+                string capturedUtc = DateTime.UtcNow.ToString("O");
                 Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
                 float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
                 string actionCue = VisibleText(Read<Text>(ui, "activeActionCueText"));
@@ -1519,7 +1530,7 @@ namespace GreedLast.PlayerChecks
                         colors.Add(((c.r >> 3) << 10) | ((c.g >> 3) << 5) | (c.b >> 3));
                     }
                 Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
-                frames.Add(new Frame { name = name, utc = DateTime.UtcNow.ToString("O"),
+                frames.Add(new Frame { name = name, utc = capturedUtc,
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,

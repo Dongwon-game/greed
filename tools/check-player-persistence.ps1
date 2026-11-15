@@ -324,7 +324,8 @@ try {
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
         $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-good-feedback',
             'practice-center','practice-exact-feedback','practice-right','practice-result',
-            'normal-start-gift','normal-trap-far','normal-trap-near','normal-trap-contact',
+            'normal-start-gift','normal-trap-far','normal-trap-approach-1','normal-trap-approach-2','normal-trap-approach-3',
+            'normal-trap-approach-4','normal-trap-approach-5','normal-trap-near','normal-trap-contact',
             'normal-side-trap-far','normal-side-trap-near','normal-side-trap-contact',
             'normal-twist-trap-far','normal-twist-trap-near','normal-twist-trap-contact')
         if (!$render.succeeded -or $render.phase -cne 'render' -or $render.product -cne $info.product -or
@@ -349,6 +350,15 @@ try {
         if (!$render.pausedSceneryObserved) { throw 'Pause, hold, resume countdown and resumed scenery evidence is required.' }
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
             $render.countdownMotion, $render.resumedMotion)
+        $approach = @($render.frames | Where-Object name -CLike 'normal-trap-*')
+        for ($i = 1; $i -lt $approach.Count; $i++) {
+            $previous = $approach[$i - 1]
+            $current = $approach[$i]
+            if ($current.pattern -cne $previous.pattern -or $current.coreDeltaSeconds -le $previous.coreDeltaSeconds -or
+                $current.markerY -ge $previous.markerY -or $current.distance -le $previous.distance) {
+                throw ('The live approach must advance towards the judgement line in each image: ' + $current.name)
+            }
+        }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight) {
                 throw ('Unexpected dimensions for practice or normal trap frame: ' + $_.name)
