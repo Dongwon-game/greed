@@ -449,14 +449,20 @@ try {
             }
         }
         if ($captureFirstUse) {
-            $expected = 'infinite-first-trap,infinite-center-trap-far,infinite-center-trap-near,infinite-center-trap-contact'
+            $expected = 'infinite-first-trap-far,infinite-first-trap-near,infinite-first-trap-contact,infinite-center-trap-far,infinite-center-trap-near,infinite-center-trap-contact'
             if (($result.frames.name -join ',') -cne $expected -or
-                @($result.frames[1..3] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
+                @($result.frames[0..2] | Where-Object { $_.channel -cne 'Left' }).Count -ne 0 -or
+                @($result.frames[3..5] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
                 throw 'The first infinite start must render the opening trap and the central trap through exact input.'
             }
-            if ($result.frames[0].channel -cne 'Left' -or $result.frames[0].actionCue -cnotmatch '^A/← · .*좌회전' -or
-                @($result.frames[1..3] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0) {
+            if (@($result.frames[0..2] | Where-Object { $_.actionCue -cnotmatch '^A/← · .*좌회전' }).Count -ne 0 -or
+                @($result.frames[3..5] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0) {
                 throw 'The displayed PC action hint must change from the opening left trap to the central trap.'
+            }
+            if ($result.frames[1].corridorRoll -ge -0.05 -or $result.frames[2].corridorRoll -ge -0.05 -or
+                @($result.frames[0..2] | Where-Object { $_.corridorRoll -lt -1.61 -or $_.corridorRoll -gt 0.01 }).Count -ne 0 -or
+                @($result.frames[3..5] | Where-Object { [Math]::Abs($_.corridorRoll) -gt 0.01 }).Count -ne 0) {
+                throw 'The corridor must lean briefly towards the rotation input and level out at the central trap.'
             }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
@@ -464,10 +470,16 @@ try {
                     $_.timingGuide -cnotmatch '정확 ±' -or ![string]::IsNullOrEmpty($_.judgementFeedback)) {
                     throw ('Invalid live infinite trap frame: ' + $_.name)
                 }
+                if ([Math]::Abs($_.progressRoll) -gt 0.01 -or [Math]::Abs($_.judgementRoll) -gt 0.01 -or
+                    [Math]::Abs($_.pauseRoll) -gt 0.01) {
+                    throw ('The PC HUD and judgement line must stay level: ' + $_.name)
+                }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern;
                     Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                     MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
+                    CorridorRoll=$_.corridorRoll; ProgressRoll=$_.progressRoll;
+                    JudgementRoll=$_.judgementRoll; PauseRoll=$_.pauseRoll;
                     ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })

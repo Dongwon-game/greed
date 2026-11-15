@@ -89,6 +89,7 @@ namespace GreedLast.PlayerChecks
             public string actionCue, timingGuide, judgementFeedback;
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
+            public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
             public bool paused, opening, resuming;
         }
 
@@ -740,7 +741,9 @@ namespace GreedLast.PlayerChecks
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-first-use") >= 0)
                     {
                         var infiniteFrames = new List<Frame>();
-                        yield return CaptureFrame("infinite-first-trap", infiniteFrames, settleSeconds: 0f);
+                        Require(GreedLastRunCore.IsRotationPattern(RunState().Pattern),
+                            "The first infinite trap must be a rotation approach.");
+                        yield return CaptureTrapApproach("infinite-first-trap", infiniteFrames, farSettleSeconds: 0f);
                         yield return DriveCourse(untilChannel: GreedLastRunChannel.Center);
                         Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center,
                             "A live central trap is required for the infinite progress overlay comparison.");
@@ -1407,9 +1410,10 @@ namespace GreedLast.PlayerChecks
             result.sustainedRunMotionObserved = true;
         }
 
-        private IEnumerator CaptureTrapApproach(string name, List<Frame> frames, int approachSamples = 0)
+        private IEnumerator CaptureTrapApproach(string name, List<Frame> frames, int approachSamples = 0,
+            float farSettleSeconds = 0.12f)
         {
-            yield return CaptureFrame(name + "-far", frames);
+            yield return CaptureFrame(name + "-far", frames, settleSeconds: farSettleSeconds);
             Frame far = frames[frames.Count - 1];
             float exactWindow = RunState().Pattern.SuccessWindowSeconds;
             Require(!string.IsNullOrEmpty(far.pattern) && far.coreDeltaSeconds < 0f,
@@ -1500,7 +1504,12 @@ namespace GreedLast.PlayerChecks
                 camera.Render();
                 string capturedUtc = DateTime.UtcNow.ToString("O");
                 Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
-                float judgementY = Read<Image>(ui, "judgementLine").rectTransform.anchorMin.y;
+                RectTransform judgement = Read<Image>(ui, "judgementLine").rectTransform;
+                float judgementY = judgement.anchorMin.y;
+                float corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform);
+                float progressRoll = SignedRoll(Read<Text>(ui, "runProgressText").rectTransform);
+                float judgementRoll = SignedRoll(judgement);
+                float pauseRoll = SignedRoll(Read<Button>(ui, "pauseButton").transform);
                 string actionCue = VisibleText(Read<Text>(ui, "activeActionCueText"));
                 string timingGuide = VisibleText(Read<Text>(ui, "timingGuideText"));
                 string judgementFeedback = VisibleText(Read<Text>(ui, "judgementFeedbackText"));
@@ -1539,6 +1548,7 @@ namespace GreedLast.PlayerChecks
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
                     markerX = markerAnchor.x, markerY = markerAnchor.y, judgementY = judgementY,
+                    corridorRoll = corridorRoll, progressRoll = progressRoll, judgementRoll = judgementRoll, pauseRoll = pauseRoll,
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
                 result.frames = frames.ToArray();
@@ -1561,6 +1571,8 @@ namespace GreedLast.PlayerChecks
 
         private static string VisibleText(Text label)
             => label.isActiveAndEnabled && label.color.a > 0.01f ? label.text : string.Empty;
+
+        private static float SignedRoll(Transform element) => Mathf.DeltaAngle(0f, element.eulerAngles.z);
 
         private IEnumerator PrepareInfinite()
         {
