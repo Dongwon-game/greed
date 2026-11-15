@@ -37580,6 +37580,7 @@ namespace GreedLast
                 0,
                 255);
             cueAlpha = Mathf.Clamp(cueAlpha + BuildBeatCueUrgencyAlphaLift(beatCueUrgency), 0, 255);
+            if (compact && !Application.isMobilePlatform) cueAlpha = Mathf.Max(cueAlpha, 205);
             activeActionCueText.color = WithAlpha(color, cueAlpha);
             activeActionCueText.rectTransform.localScale = Vector3.one * (
                 BuildActiveActionCueScale(coreNear, exactPulse, readinessPulse)

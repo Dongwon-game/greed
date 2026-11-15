@@ -11277,6 +11277,8 @@ namespace GreedLast.Editor
                     "Clean runtime rendering must select the compact cue without changing the input platform: " + action.text);
                 Require(action.preferredHeight <= action.rectTransform.rect.height + 1f,
                     "Both compact action lines must fit without vertical clipping.");
+                Require(Application.isMobilePlatform || ((Color32)action.color).a >= 205,
+                    "The PC action cue must stay readable as the trap approaches.");
                 GreedLastRunSnapshot active = run;
                 core.TogglePause(clock + 0.1f);
                 Require(string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false)),
