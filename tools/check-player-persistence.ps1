@@ -342,6 +342,7 @@ try {
             $exactFeedback.judgementFeedback -cnotmatch '^정확 · .*점' -or
             $goodFeedback.actionCue -or $exactFeedback.actionCue -or
             $goodFeedback.timingGuide -or $exactFeedback.timingGuide -or
+            $goodFeedback.feedbackFlashAlpha -notin 1..60 -or $exactFeedback.feedbackFlashAlpha -notin 1..96 -or
             $goodFeedback.misses -ne 0 -or $exactFeedback.misses -ne 0) {
             throw 'The player must render distinct Good and exact feedback without a competing action prompt.'
         }
@@ -357,6 +358,7 @@ try {
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 JudgementFeedback=$_.judgementFeedback;
+                FeedbackFlashAlpha=$_.feedbackFlashAlpha;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash

@@ -47041,11 +47041,11 @@ namespace GreedLast
             }
             else
             {
-                feedbackFlash.color = BuildFeedbackFlashFadedColor(
+                feedbackFlash.color = ResolveDisplayedFeedbackFlash(BuildFeedbackFlashFadedColor(
                     feedbackFlashBaseColor,
                     feedbackFlashStartedAt,
                     feedbackFlashUntil,
-                    Time.unscaledTime);
+                    Time.unscaledTime));
             }
 
             UpdateJudgementFeedbackText();
@@ -47062,7 +47062,7 @@ namespace GreedLast
             feedbackFlashBaseColor = color;
             feedbackFlashStartedAt = Time.unscaledTime;
             feedbackFlashUntil = feedbackFlashStartedAt + safeDuration;
-            feedbackFlash.color = color;
+            feedbackFlash.color = ResolveDisplayedFeedbackFlash(color);
         }
 
         private void ExtendFeedbackFlash(Color32 color, float duration)
@@ -47081,11 +47081,18 @@ namespace GreedLast
             }
 
             feedbackFlashBaseColor = color;
-            feedbackFlash.color = BuildFeedbackFlashFadedColor(
+            feedbackFlash.color = ResolveDisplayedFeedbackFlash(BuildFeedbackFlashFadedColor(
                 feedbackFlashBaseColor,
                 feedbackFlashStartedAt,
                 feedbackFlashUntil,
-                Time.unscaledTime);
+                Time.unscaledTime));
+        }
+
+        private Color32 ResolveDisplayedFeedbackFlash(Color32 color)
+        {
+            if (UsePlayerRunControls && !Application.isMobilePlatform)
+                color.a = (byte)Mathf.RoundToInt(color.a * 0.6f);
+            return color;
         }
 
         private void ClearFeedbackFlash()

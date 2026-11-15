@@ -87,7 +87,7 @@ namespace GreedLast.PlayerChecks
             public string name, pattern, channel, graphicsDevice;
             public string utc;
             public string actionCue, timingGuide, judgementFeedback;
-            public int width, height, sampledColors, health, misses;
+            public int width, height, sampledColors, health, misses, feedbackFlashAlpha;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public bool paused, opening, resuming;
         }
@@ -1493,6 +1493,7 @@ namespace GreedLast.PlayerChecks
                 string actionCue = VisibleText(Read<Text>(ui, "activeActionCueText"));
                 string timingGuide = VisibleText(Read<Text>(ui, "timingGuideText"));
                 string judgementFeedback = VisibleText(Read<Text>(ui, "judgementFeedbackText"));
+                int feedbackFlashAlpha = ((Color32)Read<Image>(ui, "feedbackFlash").color).a;
                 if (respondAfterRender)
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
@@ -1522,6 +1523,7 @@ namespace GreedLast.PlayerChecks
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
+                    feedbackFlashAlpha = feedbackFlashAlpha,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
