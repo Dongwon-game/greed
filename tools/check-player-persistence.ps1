@@ -341,6 +341,7 @@ try {
         if ($goodFeedback.judgementFeedback -cnotmatch '^Good · .*점' -or
             $exactFeedback.judgementFeedback -cnotmatch '^정확 · .*점' -or
             $goodFeedback.actionCue -or $exactFeedback.actionCue -or
+            $goodFeedback.timingGuide -or $exactFeedback.timingGuide -or
             $goodFeedback.misses -ne 0 -or $exactFeedback.misses -ne 0) {
             throw 'The player must render distinct Good and exact feedback without a competing action prompt.'
         }

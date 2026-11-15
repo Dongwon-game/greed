@@ -45523,6 +45523,8 @@ namespace GreedLast
 
             lastPresentedJudgementSnapshot = snapshot;
             lastPresentedJudgementRecommendationReady = timingRecommendationJustReady;
+            HideActiveActionCue();
+            if (timingGuideText != null) timingGuideText.text = string.Empty;
             SetJudgementFeedbackText(snapshot);
             judgementFeedbackOffsetX = BuildJudgementFeedbackLaneOffsetX(
                 snapshot.Pattern.Channel,
