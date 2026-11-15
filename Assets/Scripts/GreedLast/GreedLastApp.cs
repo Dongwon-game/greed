@@ -20340,10 +20340,10 @@ namespace GreedLast
                 return;
             }
 
-            bool compactPcInfinite = UsePlayerRunControls && snapshot.InfiniteMode
+            bool showBadgeBelowScore = UsePlayerRunControls && (snapshot.InfiniteMode || snapshot.PracticeMode)
                 && !snapshot.Stopped && !Application.isMobilePlatform;
             SetAnchored(comboBadgeRoot.GetComponent<RectTransform>(), 0.5f,
-                compactPcInfinite ? 0.225f : 0.672f, 430f, 58f);
+                showBadgeBelowScore ? 0.225f : 0.672f, 430f, 58f);
 
             bool chainActive = snapshot.Combo >= 3;
             string text = snapshot.Stopped

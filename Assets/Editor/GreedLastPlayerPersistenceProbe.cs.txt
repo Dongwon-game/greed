@@ -492,6 +492,12 @@ namespace GreedLast.PlayerChecks
                 Require(RunState().SuccessCount == secondTrap.SuccessCount + 1 && RunState().Health == secondTrap.Health
                     && RunState().LastResult == GreedLastJudgementResult.Success,
                     "The second practice response must earn an exact result without losing health.");
+                var practiceUi = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                var badge = (RectTransform)Read<GameObject>(practiceUi, "comboBadgeRoot").transform;
+                RectTransform progress = Read<Image>(practiceUi, "runProgressFill").rectTransform;
+                Require(badge.gameObject.activeInHierarchy
+                    && badge.TransformPoint(0f, badge.rect.yMax, 0f).y < progress.TransformPoint(0f, progress.rect.yMin, 0f).y,
+                    "The practice combo badge must sit clear of the progress strip after exact input.");
                 yield return CaptureFrame("practice-exact-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
