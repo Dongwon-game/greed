@@ -2002,29 +2002,31 @@ namespace GreedLast.Editor
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
                     var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
+                    var liveCommand = detailedControls ? primary
+                        : (GreedLastCommandButton)Read<Button>(ui, "pauseButton");
                     var secondary = detailedControls
-                        ? (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton") : primary;
-                    Require(latest().ActivePattern && !latest().CountdownActive && primary.IsInteractable(),
+                        ? (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton") : liveCommand;
+                    Require(latest().ActivePattern && !latest().CountdownActive && liveCommand.IsInteractable(),
                         "Held pause checks require live controls before the pause menu. Mode " + mode
                             + ", active=" + latest().ActivePattern + ", countdown=" + latest().CountdownActive
-                            + ", stopped=" + latest().Stopped + ", primary=" + primary.IsInteractable());
+                            + ", stopped=" + latest().Stopped + ", live=" + liveCommand.IsInteractable());
                     var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 101, eligibleForClick = true };
                     var secondaryPointer = new PointerEventData(EventSystem.current) { pointerId = 102, eligibleForClick = true };
-                    primary.OnPointerDown(primaryPointer);
+                    liveCommand.OnPointerDown(primaryPointer);
                     secondary.OnPointerDown(secondaryPointer);
                     if (detailedControls)
                     {
-                        RequireRegisteredPresses(primary, primaryPointer);
+                        RequireRegisteredPresses(liveCommand, primaryPointer);
                         RequireRegisteredPresses(secondary, secondaryPointer);
                     }
-                    else RequireRegisteredPresses(primary, primaryPointer, secondaryPointer);
+                    else RequireRegisteredPresses(liveCommand, primaryPointer, secondaryPointer);
                     Method(app, "RequestToggleRunPause").Invoke(app, null);
                     GreedLastRunSnapshot paused = latest();
                     Require(paused.Paused && !paused.ResumeCountdownActive, "The actual pause callback must open only the pause menu.");
                     VerifyQuitControl(app, ui, backend, lobby: false);
-                    RequireCanceledPresses(primary, primaryPointer, secondaryPointer);
+                    RequireCanceledPresses(liveCommand, primaryPointer, secondaryPointer);
                     if (detailedControls) RequireCanceledPresses(secondary, secondaryPointer);
-                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
+                    foreach (var pair in new[] { (Button: liveCommand, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
                     {
                         pair.Button.OnPointerUp(pair.Pointer);
                         if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
@@ -2043,7 +2045,7 @@ namespace GreedLast.Editor
                         "A fresh pause-menu resume must start the existing frozen countdown.");
                     core.Exit();
                 }
-                Debug.Log("Greed held pause commands passed: three live modes in clean primary/primary and detailed primary/back views, actual registration/cancellation checked before releases, fresh resume retains the original countdown. Isolated data and pointer callbacks only.");
+                Debug.Log("Greed held pause commands passed: three live modes in clean pause/pause and detailed primary/back views, actual registration/cancellation checked before releases, fresh resume retains the original countdown. Isolated data and pointer callbacks only.");
             }
             finally
             {
@@ -3521,42 +3523,44 @@ namespace GreedLast.Editor
             bool previousCleanView = ui.UsePlayerRunControls;
             string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
             Button primary = Read<Button>(ui, "nextPatternButton");
+            Button pause = Read<Button>(ui, "pauseButton");
             string Label() => primary.GetComponentInChildren<Text>().text;
             void VerifyHeldModeChange()
             {
                 GreedLastRunSnapshot before = latest();
                 bool wasPlayerMode = ui.UsePlayerRunControls;
+                Button held = primary.gameObject.activeInHierarchy ? primary : pause;
                 int calls = 0;
                 UnityEngine.Events.UnityAction countClick = () => calls++;
-                primary.onClick.AddListener(countClick);
+                held.onClick.AddListener(countClick);
                 void SwitchMode()
                 {
                     ui.ToggleDevCleanView();
-                    if (usePointerModule) RefreshPointerViewport(primary);
+                    if (usePointerModule) RefreshPointerViewport(held);
                 }
                 try
                 {
                     if (usePointerModule)
                     {
-                        RefreshPointerViewport(primary);
+                        RefreshPointerViewport(held);
                         GreedLastPrototypeKeyboardCheck.ClickOnce(UnityEngine.Object.FindAnyObjectByType<EventSystem>(),
-                            primary, useTouch, whileHeld: SwitchMode);
+                            held, useTouch, whileHeld: SwitchMode);
                         canceledCommandPresses++;
                     }
                     else
                     {
                         var pointer = new PointerEventData(EventSystem.current)
                             { button = PointerEventData.InputButton.Left, eligibleForClick = true };
-                        ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerDownHandler);
+                        ExecuteEvents.Execute(held.gameObject, pointer, ExecuteEvents.pointerDownHandler);
                         SwitchMode();
-                        ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerUpHandler);
+                        ExecuteEvents.Execute(held.gameObject, pointer, ExecuteEvents.pointerUpHandler);
                         if (pointer.eligibleForClick)
-                            ExecuteEvents.Execute(primary.gameObject, pointer, ExecuteEvents.pointerClickHandler);
+                            ExecuteEvents.Execute(held.gameObject, pointer, ExecuteEvents.pointerClickHandler);
                     }
                     Require(calls == 0 && latest().Equals(before) && ui.UsePlayerRunControls != wasPlayerMode,
                         "A held primary press must be canceled when F11 changes its meaning, without pausing or toggling flow.");
                 }
-                finally { primary.onClick.RemoveListener(countClick); }
+                finally { held.onClick.RemoveListener(countClick); }
             }
             try
             {
@@ -3570,16 +3574,17 @@ namespace GreedLast.Editor
                     "Enter must not bypass or pause the opening countdown through a disabled clean action.");
                 core.Tick(Time.realtimeSinceStartup + 2f);
                 core.RequestNextPattern(Time.realtimeSinceStartup);
-                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)",
-                    "Live clean play must offer a real pause while automatic traps remain enabled.");
+                Require(latest().ActivePattern && latest().AutoFlow && !primary.gameObject.activeInHierarchy
+                    && pause.GetComponentInChildren<Text>().text == "ESC/P 메뉴",
+                    "Live clean PC play must offer one visible pause while automatic traps remain enabled.");
                 GreedLastRunSnapshot before = latest();
                 Require(!Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "Clean gameplay must keep abandonment inside the pause menu, not next to the live action.");
-                Click(primary);
+                Click(pause);
                 Require(latest().Paused && !latest().AutoFlow && Read<bool>(core, "autoFlowBeforePause")
                     && Label() == "재개 (ESC/P)"
                     && Read<GameObject>(ui, "pauseMenuOverlay").activeInHierarchy,
-                    "The app-bound clean primary press must open the separate pause menu, not disable trap spawning.");
+                    "The side pause must open the separate pause menu, not disable trap spawning.");
                 Require(Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "The clean pause menu must still offer an explicit exit.");
                 core.Tick(Time.realtimeSinceStartup + 60f);
@@ -3600,7 +3605,8 @@ namespace GreedLast.Editor
                 Require(Read<float>(core, "resumeCountdownEndsAt") == resumeEnd,
                     "Repeated Enter during resume preparation must not alter its deadline.");
                 core.Tick(resumeEnd + 0.01f);
-                Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)"
+                Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow
+                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
                     && !Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "Resuming must restore the same trap and automatic flow, with pause as the clean action.");
                 VerifyHeldModeChange();
@@ -3616,7 +3622,8 @@ namespace GreedLast.Editor
                     && !latest().Paused && !latest().AutoFlow,
                     "Clean view must expose a way to resume development-stopped traps without silently changing run state.");
                 Click(primary);
-                Require(latest().AutoFlow && !latest().Paused && Label() == "일시정지 (ESC/P)"
+                Require(latest().AutoFlow && !latest().Paused
+                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
                     && latest().ActivePattern == beforeFlowRestart.ActivePattern
                     && latest().Pattern.PatternId == beforeFlowRestart.Pattern.PatternId
                     && latest().Health == beforeFlowRestart.Health && latest().Score == beforeFlowRestart.Score

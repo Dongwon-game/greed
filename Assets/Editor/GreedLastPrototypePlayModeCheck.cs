@@ -2665,15 +2665,16 @@ namespace GreedLast.Editor
                 Button primary = Read<Button>(ui, "nextPatternButton");
                 Button back = Read<Button>(ui, "returnLobbyButton");
                 Button pause = Read<Button>(ui, "pauseButton");
-                Vector2 primaryPoint = ScreenPoint(primary, detailedControls ? 0f : -0.25f);
-                Vector2 backPoint = ScreenPoint(detailedControls ? back : primary, detailedControls ? 0f : 0.25f);
+                Button liveCommand = detailedControls ? primary : pause;
+                Vector2 primaryPoint = ScreenPoint(liveCommand, detailedControls ? 0f : -0.25f);
+                Vector2 backPoint = ScreenPoint(detailedControls ? back : liveCommand, detailedControls ? 0f : 0.25f);
                 Vector2 pausePoint = ScreenPoint(pause);
-                Require(!run.Paused && primary.isActiveAndEnabled && primary.IsInteractable()
+                Require(!run.Paused && liveCommand.isActiveAndEnabled && liveCommand.IsInteractable()
                     && pause.isActiveAndEnabled && pause.IsInteractable(),
                     "Held pause commands must begin at real live controls.");
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Began), TouchAt(102, backPoint, TouchPhase.Began));
                 PointerEventData[] primaryPresses = detailedControls
-                    ? RequireRegisteredCommandPresses(primary, 101) : RequireRegisteredCommandPresses(primary, 101, 102);
+                    ? RequireRegisteredCommandPresses(liveCommand, 101) : RequireRegisteredCommandPresses(liveCommand, 101, 102);
                 PointerEventData[] backPresses = detailedControls
                     ? RequireRegisteredCommandPresses(back, 102) : Array.Empty<PointerEventData>();
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
@@ -2681,7 +2682,7 @@ namespace GreedLast.Editor
                 yield return TouchFrame(TouchAt(101, primaryPoint, TouchPhase.Stationary), TouchAt(102, backPoint, TouchPhase.Stationary),
                     TouchAt(103, pausePoint, TouchPhase.Ended));
                 Require(run.Paused && !run.ResumeCountdownActive, "A fresh third-finger pause must open only the pause menu.");
-                RequireCanceledCommandPresses(primary, primaryPresses);
+                RequireCanceledCommandPresses(liveCommand, primaryPresses);
                 if (detailedControls) RequireCanceledCommandPresses(back, backPresses);
                 GreedLastRunSnapshot frozen = run;
                 primaryPoint = ScreenPoint(primary);
@@ -2709,7 +2710,7 @@ namespace GreedLast.Editor
                 report.heldPauseCommandsPreservedRun = report.heldPauseCommandCases == 2;
                 if (!ui.UsePlayerRunControls) ui.ToggleDevCleanView();
                 Debug.Log("Greed engine held pause commands passed: two registered visible command fingers in "
-                    + (detailedControls ? "detailed primary/back" : "clean primary/primary")
+                    + (detailedControls ? "detailed primary/back" : "clean pause/pause")
                     + ", third-finger pause, old press eligibility cleared before moved releases, fresh resume/countdown recovered without changing run values.");
             }
 
@@ -4169,6 +4170,7 @@ namespace GreedLast.Editor
                 bool heldForClear = false;
                 Vector2 heldPrimaryPoint = default, heldBackPoint = default;
                 PointerEventData[] heldClearPrimary = null, heldClearBack = null;
+                Button heldClearCommand = null;
                 int clearsBefore = Read<int>(backend, "normalClearCount");
                 while (!run.Stopped)
                 {
@@ -4178,15 +4180,16 @@ namespace GreedLast.Editor
                     {
                         report.heldClearDetailedControls = report.domainReloadDisabled;
                         if (ui.UsePlayerRunControls == report.heldClearDetailedControls) ui.ToggleDevCleanView();
-                        Button primary = Read<Button>(ui, "nextPatternButton"), back = Read<Button>(ui, "returnLobbyButton");
-                        Require(primary.isActiveAndEnabled && primary.IsInteractable(), "Clear fingers must be held on a visible command while the last trap is still live.");
-                        heldPrimaryPoint = ScreenPoint(primary, report.heldClearDetailedControls ? 0f : -0.25f);
-                        heldBackPoint = ScreenPoint(report.heldClearDetailedControls ? back : primary,
+                        Button back = Read<Button>(ui, "returnLobbyButton");
+                        heldClearCommand = Read<Button>(ui, report.heldClearDetailedControls ? "nextPatternButton" : "pauseButton");
+                        Require(heldClearCommand.isActiveAndEnabled && heldClearCommand.IsInteractable(), "Clear fingers must be held on a visible command while the last trap is still live.");
+                        heldPrimaryPoint = ScreenPoint(heldClearCommand, report.heldClearDetailedControls ? 0f : -0.25f);
+                        heldBackPoint = ScreenPoint(report.heldClearDetailedControls ? back : heldClearCommand,
                             report.heldClearDetailedControls ? 0f : 0.25f);
                         yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Began), TouchAt(119, heldBackPoint, TouchPhase.Began));
                         yield return TouchFrame(TouchAt(118, heldPrimaryPoint, TouchPhase.Stationary), TouchAt(119, heldBackPoint, TouchPhase.Stationary));
                         heldClearPrimary = report.heldClearDetailedControls
-                            ? RequireRegisteredCommandPresses(primary, 118) : RequireRegisteredCommandPresses(primary, 118, 119);
+                            ? RequireRegisteredCommandPresses(heldClearCommand, 118) : RequireRegisteredCommandPresses(heldClearCommand, 118, 119);
                         heldClearBack = report.heldClearDetailedControls
                             ? RequireRegisteredCommandPresses(back, 119) : Array.Empty<PointerEventData>();
                         heldForClear = true;
@@ -4239,7 +4242,7 @@ namespace GreedLast.Editor
                     "The real-time normal loop must recover the core, pass the exit and retain one saveable result.");
                 Require(heldForClear, "The full clear must include commands held across its final trap.");
                 GreedLastRunSnapshot cleared = run;
-                RequireCanceledCommandPresses(Read<Button>(ui, "nextPatternButton"), heldClearPrimary);
+                RequireCanceledCommandPresses(heldClearCommand, heldClearPrimary);
                 if (report.heldClearDetailedControls)
                     RequireCanceledCommandPresses(Read<Button>(ui, "returnLobbyButton"), heldClearBack);
                 heldPrimaryPoint = ScreenPoint(Read<Button>(ui, "nextPatternButton"));
