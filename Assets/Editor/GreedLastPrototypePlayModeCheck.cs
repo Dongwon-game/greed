@@ -2999,7 +2999,7 @@ namespace GreedLast.Editor
                                 Require(Time.realtimeSinceStartup < deadline, "Visibility checks need a live actual-engine trap.");
                                 yield return null;
                             }
-                            yield return PressMouse(Read<Button>(ui, "nextPatternButton"));
+                            yield return PressMouse(Read<Button>(ui, "pauseButton"));
                             GreedLastRunSnapshot before = run;
                             Hide(kind, true);
                             Require(!ui.AcceptsPlayerInput, "Hidden engine presentation must reject input in the same frame.");

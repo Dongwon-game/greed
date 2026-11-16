@@ -20345,8 +20345,7 @@ namespace GreedLast
                 return;
             }
 
-            bool showBadgeBelowScore = UsePlayerRunControls && (snapshot.InfiniteMode || snapshot.PracticeMode)
-                && !snapshot.Stopped && !Application.isMobilePlatform;
+            bool showBadgeBelowScore = UsePlayerRunControls && !snapshot.Stopped && !Application.isMobilePlatform;
             SetAnchored(comboBadgeRoot.GetComponent<RectTransform>(), 0.5f,
                 showBadgeBelowScore ? 0.225f : 0.672f, showBadgeBelowScore ? 620f : 430f, 58f);
 

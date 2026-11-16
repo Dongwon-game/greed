@@ -452,12 +452,17 @@ try {
                 if ($_.name -eq 'finish-relic-to-run' -and [string]::IsNullOrWhiteSpace($_.pattern)) {
                     throw 'The transition render must show an active trap after relic selection.'
                 }
-                if ($_.name -eq 'finish-escape' -and $_.exitSlotAlpha -le 0) {
-                    throw 'The normal escape stage must retain its visible exit marker.'
+                if ($_.name -eq 'finish-escape') {
+                    if ($_.exitSlotAlpha -le 0) { throw 'The normal escape stage must retain its visible exit marker.' }
+                    if ($_.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $_.comboBadgeLines -ne 1 -or
+                        $_.comboToPausePixels -le 0 -or $_.comboTextToPipsPixels -le 0) {
+                        throw 'The normal escape combo must fit on one line above its pips and clear of the pause button.'
+                    }
                 }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
-                    ExitSlotAlpha=$_.exitSlotAlpha;
+                    ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
+                    ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {

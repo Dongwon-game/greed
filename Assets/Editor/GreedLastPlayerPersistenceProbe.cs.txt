@@ -1543,7 +1543,7 @@ namespace GreedLast.PlayerChecks
                 float comboToPausePixels = 0f;
                 float comboTextToPipsPixels = 0f;
                 int exitSlotAlpha = ((Color32)Read<Image[]>(ui, "straightRunExitSlotPieces")[0].color).a;
-                if (name == "infinite-right-rotation-contact")
+                if (name == "finish-escape" || name == "infinite-right-rotation-contact")
                 {
                     var badge = (RectTransform)Read<GameObject>(ui, "comboBadgeRoot").transform;
                     var pauseButton = Read<Button>(ui, "pauseButton");
@@ -1551,7 +1551,12 @@ namespace GreedLast.PlayerChecks
                     Require(pauseButton.isActiveAndEnabled && pauseButton.IsInteractable()
                         && !Read<Button>(ui, "nextPatternButton").gameObject.activeInHierarchy,
                         "The running PC player must have exactly one visible pause button.");
-                    comboToPausePixels = ScreenY(camera, pause, pause.rect.yMin) - ScreenY(camera, badge, badge.rect.yMax);
+                    float badgeTop = ScreenY(camera, badge, badge.rect.yMax);
+                    comboToPausePixels = ScreenY(camera, pause, pause.rect.yMin) - badgeTop;
+                    Text score = Read<Text>(ui, "runHudText");
+                    float scoreBottom = ScreenY(camera, score.rectTransform, score.rectTransform.rect.yMax - score.preferredHeight);
+                    Require(score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text) && scoreBottom > badgeTop,
+                        "The PC combo badge must fit below the visible score.");
                     RectTransform label = comboBadge.rectTransform;
                     float textBottom = ScreenY(camera, label, label.rect.center.y - comboBadge.preferredHeight * 0.5f);
                     float pipTop = float.NegativeInfinity;
