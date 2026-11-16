@@ -3524,12 +3524,13 @@ namespace GreedLast.Editor
             string[] savedLabels = backend.LoadLobby().SaveSlotLabels;
             Button primary = Read<Button>(ui, "nextPatternButton");
             Button pause = Read<Button>(ui, "pauseButton");
+            CanvasGroup primaryVisibility = primary.GetComponent<CanvasGroup>();
             string Label() => primary.GetComponentInChildren<Text>().text;
             void VerifyHeldModeChange()
             {
                 GreedLastRunSnapshot before = latest();
                 bool wasPlayerMode = ui.UsePlayerRunControls;
-                Button held = primary.gameObject.activeInHierarchy ? primary : pause;
+                Button held = primary.IsInteractable() ? primary : pause;
                 int calls = 0;
                 UnityEngine.Events.UnityAction countClick = () => calls++;
                 held.onClick.AddListener(countClick);
@@ -3574,7 +3575,7 @@ namespace GreedLast.Editor
                     "Enter must not bypass or pause the opening countdown through a disabled clean action.");
                 core.Tick(Time.realtimeSinceStartup + 2f);
                 core.RequestNextPattern(Time.realtimeSinceStartup);
-                Require(latest().ActivePattern && latest().AutoFlow && !primary.gameObject.activeInHierarchy
+                Require(latest().ActivePattern && latest().AutoFlow && !primary.IsInteractable() && primaryVisibility.alpha == 0f
                     && pause.GetComponentInChildren<Text>().text == "ESC/P 메뉴",
                     "Live clean PC play must offer one visible pause while automatic traps remain enabled.");
                 GreedLastRunSnapshot before = latest();
@@ -3606,7 +3607,7 @@ namespace GreedLast.Editor
                     "Repeated Enter during resume preparation must not alter its deadline.");
                 core.Tick(resumeEnd + 0.01f);
                 Require(!latest().Paused && latest().ActivePattern && latest().AutoFlow
-                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
+                    && !primary.IsInteractable() && pause.gameObject.activeInHierarchy
                     && !Read<Button>(ui, "returnLobbyButton").gameObject.activeInHierarchy,
                     "Resuming must restore the same trap and automatic flow, with pause as the clean action.");
                 VerifyHeldModeChange();
@@ -3623,7 +3624,7 @@ namespace GreedLast.Editor
                     "Clean view must expose a way to resume development-stopped traps without silently changing run state.");
                 Click(primary);
                 Require(latest().AutoFlow && !latest().Paused
-                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
+                    && !primary.IsInteractable() && pause.gameObject.activeInHierarchy
                     && latest().ActivePattern == beforeFlowRestart.ActivePattern
                     && latest().Pattern.PatternId == beforeFlowRestart.Pattern.PatternId
                     && latest().Health == beforeFlowRestart.Health && latest().Score == beforeFlowRestart.Score
@@ -3635,7 +3636,7 @@ namespace GreedLast.Editor
                 Require(!latest().Paused && latest().AutoFlow && Label() == "자동 정지",
                     "The development command must still re-enable automatic trap generation.");
                 VerifyHeldModeChange();
-                Require(ui.UsePlayerRunControls && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy,
+                Require(ui.UsePlayerRunControls && !primary.IsInteractable() && pause.gameObject.activeInHierarchy,
                     "Returning to clean play must immediately restore the sole side pause control.");
                 GreedLastRunSnapshot active = latest();
                 core.HandleInput(active.Pattern.Channel, Read<float>(core, "patternStartedAt")
@@ -3655,7 +3656,7 @@ namespace GreedLast.Editor
                     "Resuming a gap must preserve totals and schedule the next trap instead of starting a pause countdown.");
                 core.Tick(Read<float>(core, "nextPatternAt") + 0.01f);
                 Require(latest().ActivePattern && latest().AutoFlow
-                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
+                    && !primary.IsInteractable() && pause.gameObject.activeInHierarchy
                     && latest().Pattern.PatternId != active.Pattern.PatternId,
                     "After the real automatic delay, gap recovery must generate the next practice trap and restore pause.");
                 Method(app, "RequestNextRunPattern").Invoke(app, null);

@@ -509,6 +509,7 @@ namespace GreedLast.PlayerChecks
                 Text score = Read<Text>(practiceUi, "runHudText");
                 Button pause = Read<Button>(practiceUi, "pauseButton");
                 Button primary = Read<Button>(practiceUi, "nextPatternButton");
+                CanvasGroup primaryVisibility = primary.GetComponent<CanvasGroup>();
                 var pauseRect = (RectTransform)pause.transform;
                 Canvas.ForceUpdateCanvases();
                 float badgeTop = badge.TransformPoint(0f, badge.rect.yMax, 0f).y;
@@ -517,7 +518,8 @@ namespace GreedLast.PlayerChecks
                     0f, score.rectTransform.rect.yMax - score.preferredHeight, 0f).y;
                 Require(badge.gameObject.activeInHierarchy
                     && score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text)
-                    && pause.isActiveAndEnabled && pause.IsInteractable() && !primary.gameObject.activeInHierarchy
+                    && pause.isActiveAndEnabled && pause.IsInteractable() && !primary.IsInteractable()
+                    && primaryVisibility.alpha == 0f && !primaryVisibility.blocksRaycasts
                     && badgeTop < progress.TransformPoint(0f, progress.rect.yMin, 0f).y
                     && badgeTop < scoreBottom
                     && badgeTop < pauseRect.TransformPoint(0f, pauseRect.rect.yMin, 0f).y,
@@ -1547,9 +1549,11 @@ namespace GreedLast.PlayerChecks
                 {
                     var badge = (RectTransform)Read<GameObject>(ui, "comboBadgeRoot").transform;
                     var pauseButton = Read<Button>(ui, "pauseButton");
+                    var primary = Read<Button>(ui, "nextPatternButton");
+                    CanvasGroup primaryVisibility = primary.GetComponent<CanvasGroup>();
                     var pause = (RectTransform)pauseButton.transform;
-                    Require(pauseButton.isActiveAndEnabled && pauseButton.IsInteractable()
-                        && !Read<Button>(ui, "nextPatternButton").gameObject.activeInHierarchy,
+                    Require(pauseButton.isActiveAndEnabled && pauseButton.IsInteractable() && !primary.IsInteractable()
+                        && primaryVisibility.alpha == 0f && !primaryVisibility.blocksRaycasts,
                         "The running PC player must have exactly one visible pause button.");
                     float badgeTop = ScreenY(camera, badge, badge.rect.yMax);
                     comboToPausePixels = ScreenY(camera, pause, pause.rect.yMin) - badgeTop;

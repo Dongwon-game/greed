@@ -15990,6 +15990,7 @@ namespace GreedLast
         private Button saveSlotRenameButton;
         private Button saveSlotDeleteButton;
         private Button pauseButton;
+        private CanvasGroup primaryRunButtonVisibility;
         private Button devInvincibleButton;
         private Button infiniteTestStopButton;
         private Button focusMaxButton;
@@ -16488,14 +16489,14 @@ namespace GreedLast
                 && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode
                 ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
+            // Keep the shared resume command registered while its live duplicate is hidden.
+            bool showPrimary = !cleanView || !liveHeader || !latestRunSnapshot.AutoFlow || Application.isMobilePlatform;
+            primaryRunButtonVisibility.alpha = showPrimary ? 1f : 0f;
+            primaryRunButtonVisibility.interactable = showPrimary;
+            primaryRunButtonVisibility.blocksRaycasts = showPrimary;
             if (runModeActive && hasRunSnapshot)
-            {
-                bool showOnlySidePause = cleanView && liveHeader && latestRunSnapshot.AutoFlow
-                    && !Application.isMobilePlatform;
-                nextPatternButton.gameObject.SetActive(!showOnlySidePause);
                 returnLobbyButton.gameObject.SetActive(!cleanView || latestRunSnapshot.Stopped
                     || latestRunSnapshot.Paused || latestRunSnapshot.ChoiceActive);
-            }
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);
@@ -17436,6 +17437,11 @@ namespace GreedLast
             }
 
             ApplyRunButtonTones(snapshot, normalClearReady);
+            if (snapshot.Paused)
+            {
+                BringPauseControlsToFront();
+            }
+
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
@@ -17457,11 +17463,6 @@ namespace GreedLast
             }
             ApplyStoppedRunPresentation(snapshot);
             ApplyDevCleanView();
-            // The resume command is activated by the clean view update.
-            if (snapshot.Paused)
-            {
-                BringPauseControlsToFront();
-            }
         }
 
         private void UpdateRunDebugButtonLabels(GreedLastRunSnapshot snapshot)
@@ -27254,6 +27255,7 @@ namespace GreedLast
             retryButton = CreateButton(rootPanel.transform, "RetryButton", "동기화 재시도");
             debugConnectionButton = CreateButton(rootPanel.transform, "DebugConnectionButton", "연결 전환");
             nextPatternButton = CreateButton(rootPanel.transform, "NextPatternButton", "자동 시작");
+            primaryRunButtonVisibility = nextPatternButton.gameObject.AddComponent<CanvasGroup>();
             returnLobbyButton = CreateButton(rootPanel.transform, "ReturnLobbyButton", "로비로");
             lobbyQuitButton = CreateButton(rootPanel.transform, "LobbyQuitButton", "게임 종료 (ESC)");
             lobbyQuitButton.gameObject.SetActive(false);

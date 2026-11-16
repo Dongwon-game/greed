@@ -11663,6 +11663,7 @@ namespace GreedLast.Editor
                 Button invincibleButton = GetRuntimeUiField<Button>(ui, "devInvincibleButton");
                 Button pauseButton = GetRuntimeUiField<Button>(ui, "pauseButton");
                 Button primaryButton = GetRuntimeUiField<Button>(ui, "nextPatternButton");
+                CanvasGroup primaryVisibility = primaryButton.GetComponent<CanvasGroup>();
                 Button quitButton = GetRuntimeUiField<Button>(ui, "pauseQuitButton");
                 Button[] lanes = GetRuntimeUiField<Button[]>(ui, "laneButtons");
                 Button[] volumeButtons = GetRuntimeUiField<Button[]>(ui, "sfxVolumeButtons");
@@ -11692,7 +11693,7 @@ namespace GreedLast.Editor
                         && volumeGroup.alpha == 0f && !volumeGroup.blocksRaycasts
                         && timingGroup.alpha == 0f && !timingGroup.blocksRaycasts
                         && pauseButton.gameObject.activeSelf && pauseButton.IsInteractable()
-                        && !primaryButton.gameObject.activeInHierarchy
+                        && !primaryButton.IsInteractable() && primaryVisibility.alpha == 0f && !primaryVisibility.blocksRaycasts
                         && lanes[0].IsInteractable() && lanes[1].IsInteractable() && lanes[2].IsInteractable()
                         && rendered.DevInvincible && rendered.Score == snapshot.Score
                         && rendered.Distance == snapshot.Distance,
@@ -11715,6 +11716,7 @@ namespace GreedLast.Editor
                 VerifyPauseMenuViewportFits(ui);
                 Require(quitButton.gameObject.activeInHierarchy && quitButton.IsInteractable()
                     && primaryButton.gameObject.activeInHierarchy && primaryButton.IsInteractable()
+                    && primaryVisibility.alpha == 1f && primaryVisibility.blocksRaycasts
                     && !pauseButton.gameObject.activeInHierarchy,
                     "A paused PC run must replace the side pause button with resume and quit.");
 
