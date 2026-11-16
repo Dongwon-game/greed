@@ -461,25 +461,32 @@ try {
             }
         }
         if ($captureFirstUse) {
-            $expected = 'infinite-first-trap-far,infinite-first-trap-near,infinite-first-trap-contact,infinite-center-trap-far,infinite-center-trap-near,infinite-center-trap-contact'
+            $expected = 'infinite-first-trap-far,infinite-first-trap-near,infinite-first-trap-contact,' +
+                'infinite-center-trap-far,infinite-center-trap-near,infinite-center-trap-contact,' +
+                'infinite-right-rotation-far,infinite-right-rotation-near,infinite-right-rotation-contact'
             if (($result.frames.name -join ',') -cne $expected -or
                 @($result.frames[0..2] | Where-Object { $_.channel -cne 'Left' }).Count -ne 0 -or
-                @($result.frames[3..5] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0) {
-                throw 'The first infinite start must render the opening trap and the central trap through exact input.'
+                @($result.frames[3..5] | Where-Object { $_.channel -cne 'Center' }).Count -ne 0 -or
+                @($result.frames[6..8] | Where-Object { $_.channel -cne 'Right' }).Count -ne 0) {
+                throw 'The infinite start must render left rotation, center and right rotation through exact input.'
             }
             if (@($result.frames[0..2] | Where-Object { $_.actionCue -cnotmatch '^A/← · .*좌회전' }).Count -ne 0 -or
-                @($result.frames[3..5] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0) {
-                throw 'The displayed PC action hint must change from the opening left trap to the central trap.'
+                @($result.frames[3..5] | Where-Object { $_.actionCue -cnotmatch '^S/↓' }).Count -ne 0 -or
+                @($result.frames[6..8] | Where-Object { $_.actionCue -cnotmatch '^D/→ · .*우회전' }).Count -ne 0) {
+                throw 'The displayed PC action hint must match each of the three approaches.'
             }
             if ($result.frames[1].corridorRoll -ge -0.05 -or $result.frames[2].corridorRoll -ge -0.05 -or
                 @($result.frames[0..2] | Where-Object { $_.corridorRoll -lt -1.61 -or $_.corridorRoll -gt 0.01 }).Count -ne 0 -or
-                @($result.frames[3..5] | Where-Object { [Math]::Abs($_.corridorRoll) -gt 0.01 }).Count -ne 0) {
-                throw 'The corridor must lean briefly towards the rotation input and level out at the central trap.'
+                @($result.frames[3..5] | Where-Object { [Math]::Abs($_.corridorRoll) -gt 0.01 }).Count -ne 0 -or
+                $result.frames[7].corridorRoll -le 0.05 -or $result.frames[8].corridorRoll -le 0.05 -or
+                @($result.frames[6..8] | Where-Object { $_.corridorRoll -gt 1.61 -or $_.corridorRoll -lt -0.01 }).Count -ne 0) {
+                throw 'The corridor must lean towards either rotation input and level out at the central trap.'
             }
-            $contactRoll = [Math]::Abs($result.frames[2].corridorRoll)
+            $contactRolls = @([Math]::Abs($result.frames[2].corridorRoll), $result.frames[8].corridorRoll)
             $comfortExpected = !$MotionComfortOff
-            if (($comfortExpected -and ($contactRoll -lt 0.85 -or $contactRoll -gt 1.0)) -or
-                (!$comfortExpected -and $contactRoll -lt 1.4) -or
+            if (@($contactRolls | Where-Object {
+                    ($comfortExpected -and ($_ -lt 0.85 -or $_ -gt 1.0)) -or (!$comfortExpected -and $_ -lt 1.4)
+                }).Count -ne 0 -or
                 @($result.frames | Where-Object { $_.motionComfortEnabled -ne $comfortExpected }).Count -ne 0) {
                 throw 'The rotation angle must match the requested motion comfort setting.'
             }

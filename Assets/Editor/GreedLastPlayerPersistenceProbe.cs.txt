@@ -763,6 +763,11 @@ namespace GreedLast.PlayerChecks
                         Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center,
                             "A live central trap is required for the infinite progress overlay comparison.");
                         yield return CaptureTrapApproach("infinite-center-trap", infiniteFrames);
+                        yield return DriveCourse(untilChannel: GreedLastRunChannel.Right, requireRotation: true);
+                        Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
+                            && GreedLastRunCore.IsRotationPattern(RunState().Pattern),
+                            "The live infinite run must reach a right rotation without a development shortcut.");
+                        yield return CaptureTrapApproach("infinite-right-rotation", infiniteFrames, farSettleSeconds: 0f);
                     }
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
                     yield return QuitFromLivePause();
@@ -1615,7 +1620,7 @@ namespace GreedLast.PlayerChecks
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
             bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null,
             GreedLastAvoidanceType? untilAvoidance = null, List<Frame> finishFrames = null,
-            GreedLastRunChannel? untilChannel = null)
+            GreedLastRunChannel? untilChannel = null, bool requireRotation = false)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -1629,7 +1634,8 @@ namespace GreedLast.PlayerChecks
                     && (untilFirstTrap || (untilSideTrapAfter != null && IsSideTrap(run)
                         && run.Pattern.PatternId != untilSideTrapAfter)
                         || (untilAvoidance.HasValue && run.Pattern.AvoidanceType == untilAvoidance.Value)
-                        || (untilChannel.HasValue && run.Pattern.Channel == untilChannel.Value))) break;
+                        || (untilChannel.HasValue && run.Pattern.Channel == untilChannel.Value
+                            && (!requireRotation || GreedLastRunCore.IsRotationPattern(run.Pattern))))) break;
                 // Foreground waits and an in-flight countdown are not new interruptions.
                 if (!(bool)Call(app, "CanAcceptPlayerInput"))
                 {
