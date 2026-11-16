@@ -640,8 +640,8 @@ namespace GreedLast.Editor
                         run.InfiniteMode ? GreedLastScreenState.InfiniteRun : GreedLastScreenState.RunCoreTest,
                         "Progress check", string.Empty, 0));
                     ui.RenderRun(run);
-                    Require(progress.text == expected && progress.fontSize == 34
-                        && progress.rectTransform.rect.height == 56f
+                    Require(progress.text == expected && progress.fontSize == (run.ChoiceActive ? 44 : 34)
+                        && progress.rectTransform.rect.height == (run.ChoiceActive ? 64f : 56f)
                         && progress.preferredHeight <= progress.rectTransform.rect.height
                         && !progress.raycastTarget,
                         "Clean progress must show a readable single-line stage/count/threat without taking input: " + expected);

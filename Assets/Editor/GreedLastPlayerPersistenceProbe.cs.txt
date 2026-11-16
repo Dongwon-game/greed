@@ -100,6 +100,7 @@ namespace GreedLast.PlayerChecks
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
             public float comboToPausePixels, comboTextToPipsPixels;
             public float progressToTitlePixels, progressToLanePixels;
+            public float choicePromptHeightPixels, choicePromptToCardPixels;
             public int exitSlotAlpha;
             public bool paused, opening, resuming, motionComfortEnabled;
         }
@@ -1536,6 +1537,18 @@ namespace GreedLast.PlayerChecks
                 float progressRoll = SignedRoll(progress.rectTransform);
                 float progressToTitlePixels = 0f;
                 float progressToLanePixels = 0f;
+                float choicePromptHeightPixels = 0f;
+                float choicePromptToCardPixels = 0f;
+                if (name == "finish-route-choice" || name == "finish-relic-choice")
+                {
+                    Require(progress.cachedTextGenerator.lineCount == 1, "The PC choice prompt must stay on one line.");
+                    RectTransform card = Read<Image[]>(ui, "laneImages")[1].rectTransform;
+                    float center = progress.rectTransform.rect.center.y;
+                    float halfHeight = progress.preferredHeight * 0.5f;
+                    float bottom = ScreenY(camera, progress.rectTransform, center - halfHeight);
+                    choicePromptHeightPixels = ScreenY(camera, progress.rectTransform, center + halfHeight) - bottom;
+                    choicePromptToCardPixels = bottom - ScreenY(camera, card, card.rect.yMax);
+                }
                 if (name == "finish-relic-to-run" || name == "finish-escape")
                 {
                     Text title = Read<Text>(ui, "titleText");
@@ -1620,6 +1633,7 @@ namespace GreedLast.PlayerChecks
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
                     progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
                     progressToLanePixels = progressToLanePixels,
+                    choicePromptHeightPixels = choicePromptHeightPixels, choicePromptToCardPixels = choicePromptToCardPixels,
                     feedbackFlashAlpha = feedbackFlashAlpha,
                     comboBadge = comboText, comboBadgeLines = comboLines,
                     comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,

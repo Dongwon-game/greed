@@ -456,6 +456,10 @@ try {
                     ([string]::IsNullOrWhiteSpace($_.progressText) -or $_.progressToTitlePixels -le 0 -or $_.progressToLanePixels -le 0)) {
                     throw 'The normal run progress must read below the title and above the lane instructions.'
                 }
+                if ($_.name -in @('finish-route-choice','finish-relic-choice') -and
+                    ($_.progressText -cne '← / ↓ / → 또는 클릭' -or $_.choicePromptHeightPixels -lt 11 -or $_.choicePromptToCardPixels -le 0)) {
+                    throw 'The PC choice prompt must remain readable above the choice cards.'
+                }
                 if ($_.name -eq 'finish-escape') {
                     if ($_.exitSlotAlpha -le 0) { throw 'The normal escape stage must retain its visible exit marker.' }
                     if ($_.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $_.comboBadgeLines -ne 1 -or
@@ -468,6 +472,7 @@ try {
                     ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
                     ProgressText=$_.progressText; ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
+                    ChoicePromptHeightPixels=$_.choicePromptHeightPixels; ChoicePromptToCardPixels=$_.choicePromptToCardPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
