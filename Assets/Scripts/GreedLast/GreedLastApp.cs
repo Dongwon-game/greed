@@ -17436,11 +17436,6 @@ namespace GreedLast
             }
 
             ApplyRunButtonTones(snapshot, normalClearReady);
-            if (snapshot.Paused)
-            {
-                BringPauseControlsToFront();
-            }
-
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
@@ -17462,6 +17457,11 @@ namespace GreedLast
             }
             ApplyStoppedRunPresentation(snapshot);
             ApplyDevCleanView();
+            // The resume command is activated by the clean view update.
+            if (snapshot.Paused)
+            {
+                BringPauseControlsToFront();
+            }
         }
 
         private void UpdateRunDebugButtonLabels(GreedLastRunSnapshot snapshot)
