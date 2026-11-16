@@ -1648,8 +1648,6 @@ namespace GreedLast.PlayerChecks
                         Require(run.Combo > 0 && !Read<GameObject>(ui, "comboBadgeRoot").activeSelf,
                             "The live combo badge must not cover a PC route choice card.");
                     }
-                    else if (finishFrames.Count == 1 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Relic)
-                        yield return CaptureFrame("finish-relic-choice", finishFrames);
                     else if (finishFrames.Count == 2 && run.Phase == GreedLastRunPhase.RunPlaying
                         && run.ActivePattern && !run.Paused && !run.CountdownActive)
                     {
@@ -1684,7 +1682,7 @@ namespace GreedLast.PlayerChecks
                     if (choiceBoundaries != null && run.ChapterIndex == 1 && run.ChoiceKind == GreedLastChoiceKind.Node)
                         yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Gift, choiceBoundaries);
                     else if (choiceBoundaries != null && run.ChapterIndex == 2 && run.ChoiceKind == GreedLastChoiceKind.Gift)
-                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries);
+                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries, finishFrames);
                 }
                 else if (respond && responses < maxResponses && run.ActivePattern && !run.CountdownActive && !run.Paused
                     && run.LastResult == GreedLastJudgementResult.None)
@@ -1715,7 +1713,7 @@ namespace GreedLast.PlayerChecks
         }
 
         private IEnumerator VerifyChoiceBoundary(GreedLastChoiceKind from, GreedLastChoiceKind to,
-            List<ChoiceBoundary> boundaries)
+            List<ChoiceBoundary> boundaries, List<Frame> relicFrame = null)
         {
             float openedAt = Time.realtimeSinceStartup;
             float unlockAt = Read<float>(app, "runChoiceInputBlockUntil");
@@ -1728,6 +1726,8 @@ namespace GreedLast.PlayerChecks
             Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
             Require(RunState().ChoiceActive && RunState().ChoiceKind == to,
                 "The rapid input must leave the new card available: " + to);
+            if (relicFrame != null)
+                yield return CaptureFrame("finish-relic-choice", relicFrame, settleSeconds: 0f);
             yield return WaitFor(() => Time.realtimeSinceStartup >= unlockAt + 0.02f, settleFrame: false);
             float freshAt = Time.realtimeSinceStartup;
             Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
