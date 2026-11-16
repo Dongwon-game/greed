@@ -452,8 +452,12 @@ try {
                 if ($_.name -eq 'finish-relic-to-run' -and [string]::IsNullOrWhiteSpace($_.pattern)) {
                     throw 'The transition render must show an active trap after relic selection.'
                 }
+                if ($_.name -eq 'finish-escape' -and $_.exitSlotAlpha -le 0) {
+                    throw 'The normal escape stage must retain its visible exit marker.'
+                }
                 $framePath = Join-Path $root ('frame-' + $_.name + '.png')
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
+                    ExitSlotAlpha=$_.exitSlotAlpha;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
@@ -498,7 +502,7 @@ try {
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
                     [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0 -or
-                    $_.timingGuide -cnotmatch '정확 ±' -or ![string]::IsNullOrEmpty($_.judgementFeedback)) {
+                    $_.timingGuide -cnotmatch '정확 ±' -or ![string]::IsNullOrEmpty($_.judgementFeedback) -or $_.exitSlotAlpha -ne 0) {
                     throw ('Invalid live infinite trap frame: ' + $_.name)
                 }
                 if ([Math]::Abs($_.progressRoll) -gt 0.01 -or [Math]::Abs($_.judgementRoll) -gt 0.01 -or
@@ -515,6 +519,7 @@ try {
                     ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
                     ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
+                    ExitSlotAlpha=$_.exitSlotAlpha;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })
         }

@@ -34116,6 +34116,8 @@ namespace GreedLast
                 return;
             }
 
+            if (UsePlayerRunControls && latestRunSnapshot.InfiniteMode && !Application.isMobilePlatform)
+                visible = false;
             float escapeStrength = visible ? BuildStraightRunExitSlotEscapeStrength(latestRunSnapshot) : 0f;
             float pulse = BuildStraightRunExitSlotPulse(
                 running,
