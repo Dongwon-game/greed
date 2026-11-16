@@ -20343,7 +20343,7 @@ namespace GreedLast
             bool showBadgeBelowScore = UsePlayerRunControls && (snapshot.InfiniteMode || snapshot.PracticeMode)
                 && !snapshot.Stopped && !Application.isMobilePlatform;
             SetAnchored(comboBadgeRoot.GetComponent<RectTransform>(), 0.5f,
-                showBadgeBelowScore ? 0.225f : 0.672f, 430f, 58f);
+                showBadgeBelowScore ? 0.225f : 0.672f, showBadgeBelowScore ? 620f : 430f, 58f);
 
             bool chainActive = snapshot.Combo >= 3;
             string text = snapshot.Stopped
@@ -20373,6 +20373,14 @@ namespace GreedLast
                     text += " / 조합 " + snapshot.ActiveChoiceProfile;
                 }
 
+                comboBadgeText.resizeTextForBestFit = showBadgeBelowScore;
+                if (showBadgeBelowScore)
+                {
+                    comboBadgeText.resizeTextMinSize = 22;
+                    comboBadgeText.resizeTextMaxSize = 29;
+                }
+                comboBadgeText.rectTransform.offsetMin = showBadgeBelowScore ? new Vector2(12f, 10f) : Vector2.zero;
+                comboBadgeText.rectTransform.offsetMax = showBadgeBelowScore ? new Vector2(-12f, 0f) : Vector2.zero;
                 comboBadgeText.text = text;
             }
 
