@@ -3635,8 +3635,8 @@ namespace GreedLast.Editor
                 Require(!latest().Paused && latest().AutoFlow && Label() == "자동 정지",
                     "The development command must still re-enable automatic trap generation.");
                 VerifyHeldModeChange();
-                Require(ui.UsePlayerRunControls && Label() == "일시정지 (ESC/P)",
-                    "Returning to clean play must immediately restore the matching primary label.");
+                Require(ui.UsePlayerRunControls && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy,
+                    "Returning to clean play must immediately restore the sole side pause control.");
                 GreedLastRunSnapshot active = latest();
                 core.HandleInput(active.Pattern.Channel, Read<float>(core, "patternStartedAt")
                     + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
@@ -3654,7 +3654,8 @@ namespace GreedLast.Editor
                     && Mathf.Approximately(latest().Distance, gap.Distance),
                     "Resuming a gap must preserve totals and schedule the next trap instead of starting a pause countdown.");
                 core.Tick(Read<float>(core, "nextPatternAt") + 0.01f);
-                Require(latest().ActivePattern && latest().AutoFlow && Label() == "일시정지 (ESC/P)"
+                Require(latest().ActivePattern && latest().AutoFlow
+                    && !primary.gameObject.activeInHierarchy && pause.gameObject.activeInHierarchy
                     && latest().Pattern.PatternId != active.Pattern.PatternId,
                     "After the real automatic delay, gap recovery must generate the next practice trap and restore pause.");
                 Method(app, "RequestNextRunPattern").Invoke(app, null);
@@ -4461,7 +4462,7 @@ namespace GreedLast.Editor
                 core.Tick(clock += latest().Pattern.HitSeconds + 0.2f - latest().ElapsedSeconds);
                 Require(!latest().Stopped && latest().MissCount == 1,
                     "An abandoned refill must have a real attempt while retaining health.");
-                Click(ui, "nextPatternButton");
+                Click(ui, "pauseButton");
                 Require(latest().Paused, "Abandonment must first open the real clean pause menu.");
                 Click(ui, "returnLobbyButton");
                 Require(state.CurrentDetail.StartsWith("보충 런 중단", StringComparison.Ordinal),
