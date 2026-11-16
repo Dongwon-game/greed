@@ -490,6 +490,10 @@ try {
                 @($result.frames | Where-Object { $_.motionComfortEnabled -ne $comfortExpected }).Count -ne 0) {
                 throw 'The rotation angle must match the requested motion comfort setting.'
             }
+            $rightContact = $result.frames[8]
+            if ($rightContact.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $rightContact.comboBadgeLines -ne 1) {
+                throw 'The high-combo label must fit on one line at the right rotation.'
+            }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
                     [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0 -or
@@ -508,6 +512,7 @@ try {
                     JudgementRoll=$_.judgementRoll; PauseRoll=$_.pauseRoll;
                     MotionComfortEnabled=$_.motionComfortEnabled;
                     ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
+                    ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })
         }
