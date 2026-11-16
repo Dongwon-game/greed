@@ -19356,8 +19356,11 @@ namespace GreedLast
             {
                 runProgressText.text = label;
                 runProgressText.fontSize = compact ? 34 : BuildRunProgressFontSize(label);
-                float progressAnchorY = compact && snapshot.InfiniteMode && !Application.isMobilePlatform
-                    ? 0.82f : compact ? 0.69f : 0.715f;
+                bool normalCourseLive = !snapshot.PracticeMode && !snapshot.ChoiceActive
+                    && !snapshot.Paused && !snapshot.CountdownActive;
+                bool useUpperPcProgress = compact && !Application.isMobilePlatform
+                    && (snapshot.InfiniteMode || normalCourseLive);
+                float progressAnchorY = useUpperPcProgress ? 0.82f : compact ? 0.69f : 0.715f;
                 SetAnchored(runProgressRoot.GetComponent<RectTransform>(), 0.5f, progressAnchorY, 760f, 64f);
                 SetAnchored(runProgressText.rectTransform, 0.5f, compact ? 1.3f : 1.1f, 720f, compact ? 56f : 40f);
                 Color32 baseTextColor = new Color32(218, 226, 218, 230);

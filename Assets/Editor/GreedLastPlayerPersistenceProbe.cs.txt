@@ -94,11 +94,12 @@ namespace GreedLast.PlayerChecks
         {
             public string name, pattern, channel, graphicsDevice;
             public string utc;
-            public string actionCue, timingGuide, judgementFeedback, comboBadge;
+            public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText;
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
             public float comboToPausePixels, comboTextToPipsPixels;
+            public float progressToTitlePixels, progressToLanePixels;
             public int exitSlotAlpha;
             public bool paused, opening, resuming, motionComfortEnabled;
         }
@@ -1531,7 +1532,23 @@ namespace GreedLast.PlayerChecks
                 RectTransform judgement = Read<Image>(ui, "judgementLine").rectTransform;
                 float judgementY = judgement.anchorMin.y;
                 float corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform);
-                float progressRoll = SignedRoll(Read<Text>(ui, "runProgressText").rectTransform);
+                Text progress = Read<Text>(ui, "runProgressText");
+                float progressRoll = SignedRoll(progress.rectTransform);
+                float progressToTitlePixels = 0f;
+                float progressToLanePixels = 0f;
+                if (name == "finish-relic-to-run" || name == "finish-escape")
+                {
+                    Text title = Read<Text>(ui, "titleText");
+                    Text centerLane = Read<Text[]>(ui, "laneLabelTexts")[1];
+                    float progressCenter = progress.rectTransform.rect.center.y;
+                    float progressHalfHeight = progress.preferredHeight * 0.5f;
+                    progressToTitlePixels = ScreenY(camera, title.rectTransform,
+                        title.rectTransform.rect.center.y - title.preferredHeight * 0.5f)
+                        - ScreenY(camera, progress.rectTransform, progressCenter + progressHalfHeight);
+                    progressToLanePixels = ScreenY(camera, progress.rectTransform, progressCenter - progressHalfHeight)
+                        - ScreenY(camera, centerLane.rectTransform,
+                            centerLane.rectTransform.rect.center.y + centerLane.preferredHeight * 0.5f);
+                }
                 float judgementRoll = SignedRoll(judgement);
                 float pauseRoll = SignedRoll(Read<Button>(ui, "pauseButton").transform);
                 bool motionComfortEnabled = Read<bool>(ui, "motionComfortEnabled");
@@ -1601,6 +1618,8 @@ namespace GreedLast.PlayerChecks
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
+                    progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
+                    progressToLanePixels = progressToLanePixels,
                     feedbackFlashAlpha = feedbackFlashAlpha,
                     comboBadge = comboText, comboBadgeLines = comboLines,
                     comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,

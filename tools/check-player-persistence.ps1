@@ -452,6 +452,10 @@ try {
                 if ($_.name -eq 'finish-relic-to-run' -and [string]::IsNullOrWhiteSpace($_.pattern)) {
                     throw 'The transition render must show an active trap after relic selection.'
                 }
+                if ($_.name -in @('finish-relic-to-run','finish-escape') -and
+                    ([string]::IsNullOrWhiteSpace($_.progressText) -or $_.progressToTitlePixels -le 0 -or $_.progressToLanePixels -le 0)) {
+                    throw 'The normal run progress must read below the title and above the lane instructions.'
+                }
                 if ($_.name -eq 'finish-escape') {
                     if ($_.exitSlotAlpha -le 0) { throw 'The normal escape stage must retain its visible exit marker.' }
                     if ($_.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $_.comboBadgeLines -ne 1 -or
@@ -463,6 +467,7 @@ try {
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
                     ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
+                    ProgressText=$_.progressText; ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })
             if (@($report.ClearRenderedFrames.SHA256 | Select-Object -Unique).Count -ne $expected.Count) {
