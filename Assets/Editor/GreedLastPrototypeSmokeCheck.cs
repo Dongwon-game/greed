@@ -11662,6 +11662,7 @@ namespace GreedLast.Editor
                 canvasRoot = GetRuntimeUiField<GameObject>(ui, "rootPanel").transform.root.gameObject;
                 Button invincibleButton = GetRuntimeUiField<Button>(ui, "devInvincibleButton");
                 Button pauseButton = GetRuntimeUiField<Button>(ui, "pauseButton");
+                Button primaryButton = GetRuntimeUiField<Button>(ui, "nextPatternButton");
                 Button quitButton = GetRuntimeUiField<Button>(ui, "pauseQuitButton");
                 Button[] lanes = GetRuntimeUiField<Button[]>(ui, "laneButtons");
                 Button[] volumeButtons = GetRuntimeUiField<Button[]>(ui, "sfxVolumeButtons");
@@ -11679,7 +11680,9 @@ namespace GreedLast.Editor
                 core.ToggleDevInvincible();
                 Require(!snapshot.CountdownActive && snapshot.DevInvincible, "Clean view smoke must start from a live invincible run.");
                 ui.RenderRun(snapshot);
-                Require(invincibleButton.gameObject.activeSelf && invincibleButton.IsInteractable(), "Development tools must be available before enabling clean view.");
+                Require(invincibleButton.gameObject.activeSelf && invincibleButton.IsInteractable()
+                    && primaryButton.gameObject.activeInHierarchy,
+                    "Development tools and the manual auto-flow command must be available in detailed view.");
 
                 ui.ToggleDevCleanView();
                 ui.RenderRun(snapshot);
@@ -11689,6 +11692,7 @@ namespace GreedLast.Editor
                         && volumeGroup.alpha == 0f && !volumeGroup.blocksRaycasts
                         && timingGroup.alpha == 0f && !timingGroup.blocksRaycasts
                         && pauseButton.gameObject.activeSelf && pauseButton.IsInteractable()
+                        && !primaryButton.gameObject.activeInHierarchy
                         && lanes[0].IsInteractable() && lanes[1].IsInteractable() && lanes[2].IsInteractable()
                         && rendered.DevInvincible && rendered.Score == snapshot.Score
                         && rendered.Distance == snapshot.Distance,
@@ -11709,8 +11713,10 @@ namespace GreedLast.Editor
 
                 VerifyPauseMenuGeometry(ui, volumeButtons, timingButtons);
                 VerifyPauseMenuViewportFits(ui);
-                Require(quitButton.gameObject.activeInHierarchy && quitButton.IsInteractable(),
-                    "A paused PC run must expose an actionable quit button.");
+                Require(quitButton.gameObject.activeInHierarchy && quitButton.IsInteractable()
+                    && primaryButton.gameObject.activeInHierarchy && primaryButton.IsInteractable()
+                    && !pauseButton.gameObject.activeInHierarchy,
+                    "A paused PC run must replace the side pause button with resume and quit.");
 
                 core.TogglePause(now + 3.2f);
                 ui.RenderRun(snapshot);

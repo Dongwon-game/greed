@@ -16489,8 +16489,13 @@ namespace GreedLast
                 ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
             if (runModeActive && hasRunSnapshot)
+            {
+                bool showOnlySidePause = cleanView && liveHeader && latestRunSnapshot.AutoFlow
+                    && !Application.isMobilePlatform;
+                nextPatternButton.gameObject.SetActive(!showOnlySidePause);
                 returnLobbyButton.gameObject.SetActive(!cleanView || latestRunSnapshot.Stopped
                     || latestRunSnapshot.Paused || latestRunSnapshot.ChoiceActive);
+            }
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);

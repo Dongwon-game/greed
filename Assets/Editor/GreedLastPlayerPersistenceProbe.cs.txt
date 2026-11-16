@@ -507,21 +507,21 @@ namespace GreedLast.PlayerChecks
                 var badge = (RectTransform)Read<GameObject>(practiceUi, "comboBadgeRoot").transform;
                 RectTransform progress = Read<Image>(practiceUi, "runProgressFill").rectTransform;
                 Text score = Read<Text>(practiceUi, "runHudText");
-                Button pause = Read<Button>(practiceUi, "nextPatternButton");
+                Button pause = Read<Button>(practiceUi, "pauseButton");
+                Button primary = Read<Button>(practiceUi, "nextPatternButton");
                 var pauseRect = (RectTransform)pause.transform;
                 Canvas.ForceUpdateCanvases();
                 float badgeTop = badge.TransformPoint(0f, badge.rect.yMax, 0f).y;
-                float badgeBottom = badge.TransformPoint(0f, badge.rect.yMin, 0f).y;
                 // The score uses upper alignment and its text fills only part of its rectangle.
                 float scoreBottom = score.rectTransform.TransformPoint(
                     0f, score.rectTransform.rect.yMax - score.preferredHeight, 0f).y;
                 Require(badge.gameObject.activeInHierarchy
                     && score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text)
-                    && pause.isActiveAndEnabled && pause.IsInteractable()
+                    && pause.isActiveAndEnabled && pause.IsInteractable() && !primary.gameObject.activeInHierarchy
                     && badgeTop < progress.TransformPoint(0f, progress.rect.yMin, 0f).y
                     && badgeTop < scoreBottom
-                    && badgeBottom > pauseRect.TransformPoint(0f, pauseRect.rect.yMax, 0f).y,
-                    "The practice combo badge must fit below the score and above the pause button after exact input.");
+                    && badgeTop < pauseRect.TransformPoint(0f, pauseRect.rect.yMin, 0f).y,
+                    "The practice combo badge must fit below the score and the sole pause button after exact input.");
                 yield return CaptureFrame("practice-exact-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
@@ -1546,8 +1546,12 @@ namespace GreedLast.PlayerChecks
                 if (name == "infinite-right-rotation-contact")
                 {
                     var badge = (RectTransform)Read<GameObject>(ui, "comboBadgeRoot").transform;
-                    var pause = (RectTransform)Read<Button>(ui, "nextPatternButton").transform;
-                    comboToPausePixels = ScreenY(camera, badge, badge.rect.yMin) - ScreenY(camera, pause, pause.rect.yMax);
+                    var pauseButton = Read<Button>(ui, "pauseButton");
+                    var pause = (RectTransform)pauseButton.transform;
+                    Require(pauseButton.isActiveAndEnabled && pauseButton.IsInteractable()
+                        && !Read<Button>(ui, "nextPatternButton").gameObject.activeInHierarchy,
+                        "The running PC player must have exactly one visible pause button.");
+                    comboToPausePixels = ScreenY(camera, pause, pause.rect.yMin) - ScreenY(camera, badge, badge.rect.yMax);
                     RectTransform label = comboBadge.rectTransform;
                     float textBottom = ScreenY(camera, label, label.rect.center.y - comboBadge.preferredHeight * 0.5f);
                     float pipTop = float.NegativeInfinity;
