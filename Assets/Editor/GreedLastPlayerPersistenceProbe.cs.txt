@@ -99,6 +99,7 @@ namespace GreedLast.PlayerChecks
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
             public float comboToPausePixels, comboTextToPipsPixels;
+            public string[] centralOverlayLayers;
             public bool paused, opening, resuming, motionComfortEnabled;
         }
 
@@ -1541,6 +1542,7 @@ namespace GreedLast.PlayerChecks
                 int comboLines = comboText.Length > 0 ? comboBadge.cachedTextGenerator.lineCount : 0;
                 float comboToPausePixels = 0f;
                 float comboTextToPipsPixels = 0f;
+                string[] centralOverlayLayers = null;
                 if (name == "infinite-right-rotation-contact")
                 {
                     var badge = (RectTransform)Read<GameObject>(ui, "comboBadgeRoot").transform;
@@ -1556,6 +1558,15 @@ namespace GreedLast.PlayerChecks
                     }
                     Require(!float.IsNegativeInfinity(pipTop), "The high-combo comparison must show the reward pips.");
                     comboTextToPipsPixels = textBottom - pipTop;
+                    var layers = new List<string>();
+                    Vector2 centerGuide = new Vector2(texture.width * 0.512f, texture.height * 0.69f);
+                    foreach (Graphic graphic in canvas.GetComponentsInChildren<Graphic>(includeInactive: false))
+                    {
+                        if (graphic.isActiveAndEnabled && graphic.color.a > 0.02f
+                            && RectTransformUtility.RectangleContainsScreenPoint(graphic.rectTransform, centerGuide, camera))
+                            layers.Add(graphic.name + " (" + ((Color32)graphic.color).a + ")");
+                    }
+                    centralOverlayLayers = layers.ToArray();
                 }
                 if (respondAfterRender)
                 {
@@ -1589,6 +1600,7 @@ namespace GreedLast.PlayerChecks
                     feedbackFlashAlpha = feedbackFlashAlpha,
                     comboBadge = comboText, comboBadgeLines = comboLines,
                     comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,
+                    centralOverlayLayers = centralOverlayLayers,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
