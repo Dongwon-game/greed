@@ -98,6 +98,7 @@ namespace GreedLast.PlayerChecks
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
+            public float comboToPausePixels, comboTextToPipsPixels;
             public bool paused, opening, resuming, motionComfortEnabled;
         }
 
@@ -1538,6 +1539,24 @@ namespace GreedLast.PlayerChecks
                 Text comboBadge = Read<Text>(ui, "comboBadgeText");
                 string comboText = VisibleText(comboBadge);
                 int comboLines = comboText.Length > 0 ? comboBadge.cachedTextGenerator.lineCount : 0;
+                float comboToPausePixels = 0f;
+                float comboTextToPipsPixels = 0f;
+                if (name == "infinite-right-rotation-contact")
+                {
+                    var badge = (RectTransform)Read<GameObject>(ui, "comboBadgeRoot").transform;
+                    var pause = (RectTransform)Read<Button>(ui, "nextPatternButton").transform;
+                    comboToPausePixels = ScreenY(camera, badge, badge.rect.yMin) - ScreenY(camera, pause, pause.rect.yMax);
+                    RectTransform label = comboBadge.rectTransform;
+                    float textBottom = ScreenY(camera, label, label.rect.center.y - comboBadge.preferredHeight * 0.5f);
+                    float pipTop = float.NegativeInfinity;
+                    foreach (Image pip in Read<Image[]>(ui, "precisionRewardPips"))
+                    {
+                        if (pip.isActiveAndEnabled && pip.color.a > 0.01f)
+                            pipTop = Mathf.Max(pipTop, ScreenY(camera, pip.rectTransform, pip.rectTransform.rect.yMax));
+                    }
+                    Require(!float.IsNegativeInfinity(pipTop), "The high-combo comparison must show the reward pips.");
+                    comboTextToPipsPixels = textBottom - pipTop;
+                }
                 if (respondAfterRender)
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
@@ -1569,6 +1588,7 @@ namespace GreedLast.PlayerChecks
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
                     feedbackFlashAlpha = feedbackFlashAlpha,
                     comboBadge = comboText, comboBadgeLines = comboLines,
+                    comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
@@ -1599,6 +1619,9 @@ namespace GreedLast.PlayerChecks
             => label.isActiveAndEnabled && label.color.a > 0.01f ? label.text : string.Empty;
 
         private static float SignedRoll(Transform element) => Mathf.DeltaAngle(0f, element.eulerAngles.z);
+
+        private static float ScreenY(Camera camera, RectTransform element, float localY)
+            => RectTransformUtility.WorldToScreenPoint(camera, element.TransformPoint(0f, localY, 0f)).y;
 
         private IEnumerator PrepareInfinite()
         {

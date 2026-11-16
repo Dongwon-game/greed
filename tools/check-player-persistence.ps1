@@ -491,8 +491,9 @@ try {
                 throw 'The rotation angle must match the requested motion comfort setting.'
             }
             $rightContact = $result.frames[8]
-            if ($rightContact.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $rightContact.comboBadgeLines -ne 1) {
-                throw 'The high-combo label must fit on one line at the right rotation.'
+            if ($rightContact.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $rightContact.comboBadgeLines -ne 1 -or
+                $rightContact.comboToPausePixels -le 0 -or $rightContact.comboTextToPipsPixels -le 0) {
+                throw 'The high-combo label must fit on one line with room for the reward pips and pause button.'
             }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
@@ -513,6 +514,7 @@ try {
                     MotionComfortEnabled=$_.motionComfortEnabled;
                     ActionCue=$_.actionCue; TimingGuide=$_.timingGuide;
                     ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
+                    ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath).Hash}
             })
         }
