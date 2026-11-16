@@ -35,6 +35,7 @@ namespace GreedLast.PlayerChecks
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool practiceCompletedBeforeCourseEntry;
             public bool quitCallbackObserved;
+            public ChoiceBoundary[] choiceBoundaries;
             public bool backgroundResultsRequested;
             public bool scopedGoalsRequested, normalReviewGoalEarned, normalReviewGoalPersisted;
             public bool normalReviewGoalFailed, normalReviewGoalFailurePersisted;
@@ -79,6 +80,13 @@ namespace GreedLast.PlayerChecks
         {
             public int frame;
             public float clock, floorY, pillarY, lineY;
+        }
+
+        [Serializable]
+        private sealed class ChoiceBoundary
+        {
+            public string from, to;
+            public float rapidSeconds, freshSeconds;
         }
 
         [Serializable]
@@ -1612,6 +1620,7 @@ namespace GreedLast.PlayerChecks
             float nextChoice = 0f;
             bool injectedGood = false;
             int responses = 0;
+            var choiceBoundaries = finishFrames == null ? null : new List<ChoiceBoundary>();
             while (!RunState().Stopped)
             {
                 CheckDeadline();
@@ -1672,6 +1681,10 @@ namespace GreedLast.PlayerChecks
                 {
                     Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
                     nextChoice = now + 0.25f;
+                    if (choiceBoundaries != null && run.ChapterIndex == 1 && run.ChoiceKind == GreedLastChoiceKind.Node)
+                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Gift, choiceBoundaries);
+                    else if (choiceBoundaries != null && run.ChapterIndex == 2 && run.ChoiceKind == GreedLastChoiceKind.Gift)
+                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries);
                 }
                 else if (respond && responses < maxResponses && run.ActivePattern && !run.CountdownActive && !run.Paused
                     && run.LastResult == GreedLastJudgementResult.None)
@@ -1697,7 +1710,34 @@ namespace GreedLast.PlayerChecks
                 yield return null;
             }
             if (chapterTwoGood) Require(injectedGood, "The full process course must include the off-scope Good control.");
+            if (choiceBoundaries != null) result.choiceBoundaries = choiceBoundaries.ToArray();
             yield return null;
+        }
+
+        private IEnumerator VerifyChoiceBoundary(GreedLastChoiceKind from, GreedLastChoiceKind to,
+            List<ChoiceBoundary> boundaries)
+        {
+            float openedAt = Time.realtimeSinceStartup;
+            float unlockAt = Read<float>(app, "runChoiceInputBlockUntil");
+            Require(RunState().ChoiceKind == to && unlockAt > openedAt,
+                "A consecutive card must open with its own input guard: " + from + " to " + to);
+            yield return WaitFor(() => Time.realtimeSinceStartup >= openedAt + 0.05f, settleFrame: false);
+            float rapidAt = Time.realtimeSinceStartup;
+            Require(rapidAt < unlockAt && RunState().ChoiceKind == to,
+                "Send the extra input after the general repeat window and before the card guard expires.");
+            Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
+            Require(RunState().ChoiceActive && RunState().ChoiceKind == to,
+                "The rapid input must leave the new card available: " + to);
+            yield return WaitFor(() => Time.realtimeSinceStartup >= unlockAt + 0.02f, settleFrame: false);
+            float freshAt = Time.realtimeSinceStartup;
+            Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+            Require(!RunState().ChoiceActive,
+                "A fresh deliberate input after the guard must choose the visible card: " + to);
+            boundaries.Add(new ChoiceBoundary
+            {
+                from = from.ToString(), to = to.ToString(),
+                rapidSeconds = rapidAt - openedAt, freshSeconds = freshAt - openedAt
+            });
         }
 
         private IEnumerator WaitFor(Func<bool> condition, bool settleFrame = true)

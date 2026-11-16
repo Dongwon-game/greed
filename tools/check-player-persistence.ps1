@@ -438,6 +438,13 @@ try {
             if (($result.frames.name -join ',') -cne ($expected -join ',') -or !$result.terminalBeforeQuit) {
                 throw 'The rendered ordinary course must show its real choices, escape and terminal result.'
             }
+            $choiceBoundaries = @($result.choiceBoundaries)
+            if (($choiceBoundaries.from -join ',') -cne 'Node,Gift' -or ($choiceBoundaries.to -join ',') -cne 'Gift,Relic' -or
+                @($choiceBoundaries | Where-Object { $_.rapidSeconds -lt 0.05 -or $_.rapidSeconds -ge 0.18 -or
+                    $_.freshSeconds -lt 0.18 }).Count -ne 0) {
+                throw 'The course must reject rapid input at both guarded card transitions and accept a fresh choice.'
+            }
+            $report.ChoiceBoundaries = $choiceBoundaries
             $report.ClearRenderedFrames = @($result.frames | ForEach-Object {
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or $_.misses -ne 0) {
                     throw ('Invalid ordinary-course frame: ' + $_.name)
