@@ -2751,13 +2751,14 @@ namespace GreedLast.Editor
                         }
                         Button primary = Read<Button>(ui, "nextPatternButton");
                         Button back = Read<Button>(ui, "returnLobbyButton");
-                        Require(primary.isActiveAndEnabled && primary.IsInteractable(), "Held result fingers must begin on the visible live command.");
-                        Vector2 primaryPoint = ScreenPoint(primary, detailedControls ? 0f : -0.25f);
-                        Vector2 backPoint = ScreenPoint(detailedControls ? back : primary, detailedControls ? 0f : 0.25f);
+                        Button liveCommand = detailedControls ? primary : Read<Button>(ui, "pauseButton");
+                        Require(liveCommand.isActiveAndEnabled && liveCommand.IsInteractable(), "Held result fingers must begin on the visible live command.");
+                        Vector2 primaryPoint = ScreenPoint(liveCommand, detailedControls ? 0f : -0.25f);
+                        Vector2 backPoint = ScreenPoint(detailedControls ? back : liveCommand, detailedControls ? 0f : 0.25f);
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Began), TouchAt(96, backPoint, TouchPhase.Began));
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Stationary), TouchAt(96, backPoint, TouchPhase.Stationary));
                         PointerEventData[] primaryPresses = detailedControls
-                            ? RequireRegisteredCommandPresses(primary, 95) : RequireRegisteredCommandPresses(primary, 95, 96);
+                            ? RequireRegisteredCommandPresses(liveCommand, 95) : RequireRegisteredCommandPresses(liveCommand, 95, 96);
                         PointerEventData[] backPresses = detailedControls
                             ? RequireRegisteredCommandPresses(back, 96) : Array.Empty<PointerEventData>();
                         while (!run.Stopped)
@@ -2766,7 +2767,7 @@ namespace GreedLast.Editor
                             yield return null;
                         }
                         GreedLastRunSnapshot terminal = run;
-                        RequireCanceledCommandPresses(primary, primaryPresses);
+                        RequireCanceledCommandPresses(liveCommand, primaryPresses);
                         if (detailedControls) RequireCanceledCommandPresses(back, backPresses);
                         yield return WaitSeconds(0.45f);
                         yield return TouchFrame(TouchAt(95, primaryPoint, TouchPhase.Ended), TouchAt(96, backPoint, TouchPhase.Ended));
@@ -2806,7 +2807,7 @@ namespace GreedLast.Editor
                     }
                     report.heldRunResultsPreservedData = report.heldRunResultCases == 6;
                     report.heldRunResultFreshTapRecovered = report.heldRunResultsPreservedData;
-                    Debug.Log("Greed engine held run results passed: three natural failures in clean primary/primary and detailed primary/back views; both pointer identities registered, old press eligibility cleared before delayed releases, fresh back or infinite preparation/cancel settlement recovered. In-memory progress only.");
+                    Debug.Log("Greed engine held run results passed: three natural failures in clean pause/pause and detailed primary/back views; both pointer identities registered, old press eligibility cleared before delayed releases, fresh back or infinite preparation/cancel settlement recovered. In-memory progress only.");
                 }
                 finally
                 {

@@ -2147,20 +2147,22 @@ namespace GreedLast.Editor
                     }
                     var primary = (GreedLastCommandButton)Read<Button>(ui, "nextPatternButton");
                     var back = (GreedLastCommandButton)Read<Button>(ui, "returnLobbyButton");
-                    GreedLastCommandButton secondary = detailedControls ? back : primary;
+                    GreedLastCommandButton liveCommand = detailedControls ? primary
+                        : (GreedLastCommandButton)Read<Button>(ui, "pauseButton");
+                    GreedLastCommandButton secondary = detailedControls ? back : liveCommand;
                     var primaryPointer = new PointerEventData(EventSystem.current) { pointerId = 95, eligibleForClick = true };
                     var secondaryPointer = new PointerEventData(EventSystem.current) { pointerId = 96, eligibleForClick = true };
                     bool pressed = false;
                     Action pressLiveCommands = () =>
                     {
-                        primary.OnPointerDown(primaryPointer);
+                        liveCommand.OnPointerDown(primaryPointer);
                         secondary.OnPointerDown(secondaryPointer);
                         if (detailedControls)
                         {
-                            RequireRegisteredPresses(primary, primaryPointer);
+                            RequireRegisteredPresses(liveCommand, primaryPointer);
                             RequireRegisteredPresses(secondary, secondaryPointer);
                         }
-                        else RequireRegisteredPresses(primary, primaryPointer, secondaryPointer);
+                        else RequireRegisteredPresses(liveCommand, primaryPointer, secondaryPointer);
                         pressed = true;
                     };
                     if (mode < 3) RunToFailure(core, latest, pressLiveCommands);
@@ -2168,9 +2170,9 @@ namespace GreedLast.Editor
                     Require(pressed && latest().Stopped && !latest().Paused,
                         "Held result checks require an actual terminal result after the pointer press.");
                     GreedLastRunSnapshot terminal = latest();
-                    RequireCanceledPresses(primary, primaryPointer, secondaryPointer);
+                    RequireCanceledPresses(liveCommand, primaryPointer, secondaryPointer);
                     if (detailedControls) RequireCanceledPresses(secondary, secondaryPointer);
-                    foreach (var pair in new[] { (Button: primary, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
+                    foreach (var pair in new[] { (Button: liveCommand, Pointer: primaryPointer), (Button: secondary, Pointer: secondaryPointer) })
                     {
                         pair.Button.OnPointerUp(pair.Pointer);
                         if (pair.Pointer.eligibleForClick) pair.Button.OnPointerClick(pair.Pointer);
@@ -2199,7 +2201,7 @@ namespace GreedLast.Editor
                             && Read<int>(backend, "infiniteRunCount") == (mode == 2 ? 1 : 0),
                             "A fresh result command must settle exactly once and return normally. Mode " + mode);
                 }
-                Debug.Log("Greed held run results passed: five terminal paths in clean primary/primary and detailed primary/back views; actual registration/cancellation checked before releases, fresh settlement/onboarding/explicit save recovered. Isolated progress and synthetic pointer callbacks only.");
+                Debug.Log("Greed held run results passed: five terminal paths in clean pause/pause and detailed primary/back views; actual registration/cancellation checked before releases, fresh settlement/onboarding/explicit save recovered. Isolated progress and synthetic pointer callbacks only.");
             }
             finally
             {
