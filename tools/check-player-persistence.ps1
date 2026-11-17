@@ -327,7 +327,7 @@ try {
         $renderPath = Join-Path $root 'render.json'
         $render = Get-Content -LiteralPath $renderPath -Raw | ConvertFrom-Json
         $expectedFrames = @('lobby','opening','trap','paused','resume-countdown','resumed-trap','practice-good-feedback',
-            'practice-center','practice-exact-feedback','practice-right','practice-result',
+            'practice-between-traps','practice-center','practice-exact-feedback','practice-right','practice-result',
             'normal-start-gift','normal-trap-far','normal-trap-approach-1','normal-trap-approach-2','normal-trap-approach-3',
             'normal-trap-approach-4','normal-trap-approach-5','normal-trap-near','normal-trap-contact',
             'normal-side-trap-far','normal-side-trap-near','normal-side-trap-contact',
@@ -351,6 +351,13 @@ try {
             $goodFeedback.misses -ne 0 -or $exactFeedback.misses -ne 0) {
             throw 'The player must render distinct Good and exact feedback without a competing action prompt.'
         }
+        $waitingFrame = $render.frames | Where-Object name -CEQ 'practice-between-traps'
+        $nextTrapFrame = $render.frames | Where-Object name -CEQ 'practice-center'
+        if ($waitingFrame.pattern -or $waitingFrame.actionCue -or $waitingFrame.timingGuide -cne '다음 함정 대기' -or
+            $waitingFrame.judgementAlpha -le 0 -or $waitingFrame.judgementAlpha -ge $nextTrapFrame.judgementAlpha -or
+            [Math]::Abs($waitingFrame.judgementY - 0.22) -gt 0.001 -or $nextTrapFrame.channel -cne 'Center') {
+            throw 'A neutral line between practice traps must remain visible and dimmer than the next active line.'
+        }
         if (!$render.pausedSceneryObserved) { throw 'Pause, hold, resume countdown and resumed scenery evidence is required.' }
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
             $render.countdownMotion, $render.resumedMotion)
@@ -371,7 +378,7 @@ try {
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
-                JudgementFeedback=$_.judgementFeedback;
+                JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
                 FeedbackFlashAlpha=$_.feedbackFlashAlpha;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })

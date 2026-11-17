@@ -101,7 +101,7 @@ namespace GreedLast.PlayerChecks
             public float comboToPausePixels, comboTextToPipsPixels;
             public float progressToTitlePixels, progressToLanePixels;
             public float choicePromptHeightPixels, choicePromptToCardPixels;
-            public int exitSlotAlpha;
+            public int exitSlotAlpha, judgementAlpha;
             public bool paused, opening, resuming, motionComfortEnabled;
         }
 
@@ -493,6 +493,11 @@ namespace GreedLast.PlayerChecks
                     && RunState().LastResult == GreedLastJudgementResult.Good,
                     "The first practice response must earn a late Good without losing health.");
                 yield return CaptureFrame("practice-good-feedback", frames, settleSeconds: 0f);
+                GreedLastRuntimeUi waitingUi = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+                Text waitingGuide = Read<Text>(waitingUi, "timingGuideText");
+                yield return WaitFor(() => !RunState().ActivePattern && VisibleText(waitingGuide) == "다음 함정 대기",
+                    settleFrame: false);
+                yield return CaptureFrame("practice-between-traps", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Slide);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center
                     && RunState().Pattern.AvoidanceType == GreedLastAvoidanceType.Slide,
@@ -1530,7 +1535,8 @@ namespace GreedLast.PlayerChecks
                 camera.Render();
                 string capturedUtc = DateTime.UtcNow.ToString("O");
                 Vector2 markerAnchor = Read<Image>(ui, "trapMarker").rectTransform.anchorMin;
-                RectTransform judgement = Read<Image>(ui, "judgementLine").rectTransform;
+                Image judgementImage = Read<Image>(ui, "judgementLine");
+                RectTransform judgement = judgementImage.rectTransform;
                 float judgementY = judgement.anchorMin.y;
                 float corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform);
                 Text progress = Read<Text>(ui, "runProgressText");
@@ -1648,6 +1654,7 @@ namespace GreedLast.PlayerChecks
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
                     markerX = markerAnchor.x, markerY = markerAnchor.y, judgementY = judgementY,
+                    judgementAlpha = ((Color32)judgementImage.color).a,
                     corridorRoll = corridorRoll, progressRoll = progressRoll, judgementRoll = judgementRoll, pauseRoll = pauseRoll,
                     motionComfortEnabled = motionComfortEnabled,
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
