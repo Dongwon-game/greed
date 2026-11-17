@@ -17,7 +17,8 @@ param(
     [switch]$ScopedGoals,
     [switch]$GiftHistory,
     [ValidateSet('1280x720','960x540','1024x768')]
-    [string]$FrameSize = '1280x720'
+    [string]$FrameSize = '1280x720',
+    [string]$ArtifactsDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,8 +113,13 @@ $releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1')
 $releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
 $before = Read-PersonalPreferences
 $id = [Guid]::NewGuid().ToString('N')
-$root = [IO.Path]::GetFullPath((Join-Path $project ('Logs\PlayerPersistenceChecks\' + $id)))
-$expectedParent = [IO.Path]::GetFullPath((Join-Path $project 'Logs\PlayerPersistenceChecks'))
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
+$expectedParent = [IO.Path]::GetFullPath((Join-Path $artifactBase 'Logs\PlayerPersistenceChecks'))
+$root = [IO.Path]::GetFullPath((Join-Path $expectedParent $id))
 if ([IO.Path]::GetDirectoryName($root) -cne $expectedParent -or (Test-Path -LiteralPath $root)) {
     throw 'A new isolated directory inside the probe root is required.'
 }

@@ -3,12 +3,18 @@ param(
     [Parameter(Mandatory)]
     [ValidatePattern('^[0-9a-f]{32}$')]
     [string]$CheckId,
-    [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+    [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
+    [string]$ArtifactsDirectory
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
-$root = Join-Path $project ('Logs/PlayerPersistenceChecks/' + $CheckId)
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
+$root = Join-Path $artifactBase ('Logs/PlayerPersistenceChecks/' + $CheckId)
 $preparedPath = Join-Path $root 'prepared.json'
 if (!(Test-Path -LiteralPath $preparedPath -PathType Leaf)) { throw 'The requested isolated check has not been prepared.' }
 $prepared = Get-Content -LiteralPath $preparedPath -Raw | ConvertFrom-Json

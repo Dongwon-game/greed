@@ -342,6 +342,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 명시 실행본은 누출 시험 코드가 사용자 제품에 들어가면 거부되는지 확인하는 읽기 전용 baseline이다. 파일 해시/Unity 버전/비개발·스모크 메타데이터/IL을 시작 전에 검증한다. 이 과거 실행본으로 새 소스의 성공을 대신하지 않는다. `-VerifiedReleasePath`는 다른 저장 검사 옵션과 함께 쓸 수 있다. 폴더가 없으면 export/Unity 실행 전에 멈춘다. 읽기 전용 실행본 확인은 `verify-prototype-build.ps1 -BuildPath '<폴더>'`로도 가능하다.
 
+작업 드라이브의 공간이 부족하면 이미 있는 다른 드라이브 폴더를 `-ArtifactsDirectory`로 지정한다. 예를 들어 `./tools/check-player-persistence.ps1 -ArtifactsDirectory 'D:\CodexGreedChecks' -VerifiedReleasePath '<후보 폴더>'`는 현재 저장소의 커밋을 사용하고 격리 사본·빌드·보고서를 지정 폴더 아래 `Logs/PlayerPersistenceChecks/<ID>`에 둔다. `get-native-menu-status.ps1`로 같은 검사 ID를 볼 때도 같은 옵션을 사용한다.
+
 ## 열 번의 새 프로세스
 
 | 단계 | 실제 확인 |
