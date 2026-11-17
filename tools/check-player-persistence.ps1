@@ -337,6 +337,7 @@ try {
             $render.candidate -or $render.clears -ne 0 -or $render.infiniteRuns -ne 0 -or $render.growthPoints -ne 0) {
             throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
+        if (!$render.audioOutputMuted) { throw 'The offscreen persistence player must keep its audio output muted.' }
         if (!$render.sustainedRunMotionObserved -or @($render.liveMotionSamples).Count -ne 8) {
             throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
         }
@@ -428,6 +429,7 @@ try {
         if (!$result.succeeded -or $result.phase -cne $phase -or $result.product -cne $info.product) {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
+        if (!$result.audioOutputMuted) { throw ('The persistence player must keep its audio output muted: ' + $phase) }
         if ($phase -in @('save','first-use','live-normal') -and !$result.quitCallbackObserved) {
             throw ('The real quit button did not complete normal application exit: ' + $phase)
         }
@@ -608,7 +610,7 @@ try {
             }
         }
         $report.Phases += @{Phase=$phase; SHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash;
-            QuitCallbackObserved=$result.quitCallbackObserved;
+            QuitCallbackObserved=$result.quitCallbackObserved; AudioOutputMuted=$result.audioOutputMuted;
             Clears=$result.clears; InfiniteRuns=$result.infiniteRuns; Growth=$result.growthPoints;
             PracticeCompletedBeforeCourseEntry=$result.practiceCompletedBeforeCourseEntry;
             Uses=$result.uses; AutomaticResumes=$result.automaticResumes; BackgroundChecks=$result.backgroundChecks;

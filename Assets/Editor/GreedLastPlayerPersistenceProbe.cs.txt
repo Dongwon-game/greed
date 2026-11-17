@@ -12,6 +12,8 @@ namespace GreedLast.PlayerChecks
     public sealed class GreedLastPlayerPersistenceProbe : MonoBehaviour
     {
         private const BindingFlags Fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        private const string ProbeCompany = "GreedLastPrototypeChecks";
+        private const string ProbeProductPrefix = "Persistence-";
         private const string UnreadableFixtureValue = "not-json-private-save-guard-fixture";
         private const string NormalReviewGoal = "1장 보정 0회";
         private const string InfiniteReviewGoal = "다음 구간 무실수";
@@ -35,6 +37,7 @@ namespace GreedLast.PlayerChecks
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool practiceCompletedBeforeCourseEntry;
             public bool quitCallbackObserved;
+            public bool audioOutputMuted;
             public ChoiceBoundary[] choiceBoundaries;
             public bool backgroundResultsRequested;
             public bool scopedGoalsRequested, normalReviewGoalEarned, normalReviewGoalPersisted;
@@ -119,10 +122,25 @@ namespace GreedLast.PlayerChecks
             public bool coreRetrieved;
         }
 
+        private static bool IsPersistencePlayer()
+        {
+            string product = Application.productName;
+            return !Application.isEditor && Application.companyName == ProbeCompany
+                && product.StartsWith(ProbeProductPrefix, StringComparison.Ordinal)
+                && Guid.TryParseExact(product.Substring(ProbeProductPrefix.Length), "N", out _);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void MuteProbeOutput()
+        {
+            // Preserve clip playback and game settings. Only the isolated player's final mix is muted.
+            if (IsPersistencePlayer()) AudioListener.volume = 0f;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Create()
         {
-            if (Application.isEditor || Application.companyName != "GreedLastPrototypeChecks") return;
+            if (!IsPersistencePlayer()) return;
             new GameObject(nameof(GreedLastPlayerPersistenceProbe)).AddComponent<GreedLastPlayerPersistenceProbe>();
         }
 
@@ -178,9 +196,10 @@ namespace GreedLast.PlayerChecks
             Require(string.Equals(root, expected, StringComparison.OrdinalIgnoreCase)
                 && new DirectoryInfo(root).Name == id
                 && new DirectoryInfo(root).Parent.Name == "PlayerPersistenceChecks"
-                && Application.productName == "Persistence-" + id,
+                && Application.productName == ProbeProductPrefix + id,
                 "The probe must run inside its own build and isolated product, never the personal product.");
             outputValidated = true;
+            Require(AudioListener.volume == 0f, "The persistence player must start with its output muted.");
             menuWaitSeconds = ParseMenuWaitSeconds(Environment.GetCommandLineArgs(), phase);
             Require(giftHistory == phase.StartsWith("gift-history-", StringComparison.Ordinal)
                 && (!giftHistory || (!backgroundResults && !scopedGoals)), "Gift history checks require their dedicated noninteractive mode.");
@@ -1983,6 +2002,7 @@ namespace GreedLast.PlayerChecks
         private void WriteObservation(string name)
         {
             result.screen = state == null ? "unavailable" : state.CurrentState.ToString();
+            result.audioOutputMuted = AudioListener.volume == 0f;
             if (backend != null)
             {
                 result.clears = Count("normalClearCount");
