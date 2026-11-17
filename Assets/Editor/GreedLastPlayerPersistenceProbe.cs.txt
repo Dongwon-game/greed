@@ -495,8 +495,9 @@ namespace GreedLast.PlayerChecks
                 yield return CaptureFrame("practice-good-feedback", frames, settleSeconds: 0f);
                 GreedLastRuntimeUi waitingUi = Read<GreedLastRuntimeUi>(app, "runtimeUi");
                 Text waitingGuide = Read<Text>(waitingUi, "timingGuideText");
-                yield return WaitFor(() => !RunState().ActivePattern && VisibleText(waitingGuide) == "다음 함정 대기",
-                    settleFrame: false);
+                float feedbackLineEndsAt = Read<float>(waitingUi, "judgementLinePulseUntil");
+                yield return WaitFor(() => Time.unscaledTime >= feedbackLineEndsAt && !RunState().ActivePattern
+                    && VisibleText(waitingGuide) == "다음 함정 대기");
                 yield return CaptureFrame("practice-between-traps", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Slide);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center

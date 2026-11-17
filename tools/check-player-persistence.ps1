@@ -355,6 +355,7 @@ try {
         $nextTrapFrame = $render.frames | Where-Object name -CEQ 'practice-center'
         if ($waitingFrame.pattern -or $waitingFrame.actionCue -or $waitingFrame.timingGuide -cne '다음 함정 대기' -or
             $waitingFrame.judgementAlpha -le 0 -or $waitingFrame.judgementAlpha -ge $nextTrapFrame.judgementAlpha -or
+            $waitingFrame.judgementAlpha -ge $goodFeedback.judgementAlpha -or
             [Math]::Abs($waitingFrame.judgementY - 0.22) -gt 0.001 -or $nextTrapFrame.channel -cne 'Center') {
             throw 'A neutral line between practice traps must remain visible and dimmer than the next active line.'
         }
