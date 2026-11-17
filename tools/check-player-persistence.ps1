@@ -462,6 +462,7 @@ try {
                 }
                 if ($_.name -eq 'finish-escape') {
                     if ($_.exitSlotAlpha -le 0) { throw 'The normal escape stage must retain its visible exit marker.' }
+                    if ($_.titleText -cne '마지막 관문') { throw 'The PC escape title must identify the final gate.' }
                     if ($_.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $_.comboBadgeLines -ne 1 -or
                         $_.comboToPausePixels -le 0 -or $_.comboTextToPipsPixels -le 0) {
                         throw 'The normal escape combo must fit on one line above its pips and clear of the pause button.'
@@ -471,7 +472,8 @@ try {
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
                     ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
-                    ProgressText=$_.progressText; ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
+                    TitleText=$_.titleText; ProgressText=$_.progressText;
+                    ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
                     ChoicePromptHeightPixels=$_.choicePromptHeightPixels; ChoicePromptToCardPixels=$_.choicePromptToCardPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
             })

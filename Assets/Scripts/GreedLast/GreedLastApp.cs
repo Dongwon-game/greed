@@ -16489,8 +16489,12 @@ namespace GreedLast
                 && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode
                 ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
-            // Keep the shared resume command registered while its live duplicate is hidden.
-            bool showPrimary = !cleanView || !liveHeader || !latestRunSnapshot.AutoFlow || Application.isMobilePlatform;
+            // Keep the shared resume command registered when the current screen has no primary action.
+            bool choosing = runModeActive && hasRunSnapshot && latestRunSnapshot.ChoiceActive
+                && !latestRunSnapshot.Paused && !latestRunSnapshot.Stopped;
+            bool hidePrimary = cleanView && !Application.isMobilePlatform
+                && (choosing || liveHeader && latestRunSnapshot.AutoFlow);
+            bool showPrimary = !hidePrimary;
             primaryRunButtonVisibility.alpha = showPrimary ? 1f : 0f;
             primaryRunButtonVisibility.interactable = showPrimary;
             primaryRunButtonVisibility.blocksRaycasts = showPrimary;
@@ -24478,7 +24482,10 @@ namespace GreedLast
 
             if (snapshot.Phase == GreedLastRunPhase.EscapeRunning)
             {
-                titleText.text = snapshot.RefillRun ? "보충 탈출 검증" : "탈출 검증";
+                if (Application.isMobilePlatform)
+                    titleText.text = snapshot.RefillRun ? "보충 탈출 검증" : "탈출 검증";
+                else
+                    titleText.text = snapshot.RefillRun ? "보충 · 마지막 관문" : "마지막 관문";
                 detailText.text = snapshot.RefillRun
                     ? "새 저장 조합을 만들기 위해 마지막 함정 구간을 빠져나갑니다."
                     : "공명핵을 들고 마지막 함정 구간을 빠져나갑니다.";

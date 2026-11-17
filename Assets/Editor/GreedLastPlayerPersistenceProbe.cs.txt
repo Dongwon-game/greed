@@ -94,7 +94,7 @@ namespace GreedLast.PlayerChecks
         {
             public string name, pattern, channel, graphicsDevice;
             public string utc;
-            public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText;
+            public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText, titleText;
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
@@ -1534,6 +1534,7 @@ namespace GreedLast.PlayerChecks
                 float judgementY = judgement.anchorMin.y;
                 float corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform);
                 Text progress = Read<Text>(ui, "runProgressText");
+                Text title = Read<Text>(ui, "titleText");
                 float progressRoll = SignedRoll(progress.rectTransform);
                 float progressToTitlePixels = 0f;
                 float progressToLanePixels = 0f;
@@ -1542,6 +1543,12 @@ namespace GreedLast.PlayerChecks
                 if (name == "finish-route-choice" || name == "finish-relic-choice")
                 {
                     Require(progress.cachedTextGenerator.lineCount == 1, "The PC choice prompt must stay on one line.");
+                    Button primary = Read<Button>(ui, "nextPatternButton");
+                    CanvasGroup primaryVisibility = primary.GetComponent<CanvasGroup>();
+                    Button exit = Read<Button>(ui, "returnLobbyButton");
+                    Require(!primary.IsInteractable() && primaryVisibility.alpha == 0f && !primaryVisibility.blocksRaycasts
+                        && exit.isActiveAndEnabled && exit.IsInteractable(),
+                        "The choice cards must keep their exit and hide the disabled primary command.");
                     RectTransform card = Read<Image[]>(ui, "laneImages")[1].rectTransform;
                     float center = progress.rectTransform.rect.center.y;
                     float halfHeight = progress.preferredHeight * 0.5f;
@@ -1551,7 +1558,6 @@ namespace GreedLast.PlayerChecks
                 }
                 if (name == "finish-relic-to-run" || name == "finish-escape")
                 {
-                    Text title = Read<Text>(ui, "titleText");
                     Text centerLane = Read<Text[]>(ui, "laneLabelTexts")[1];
                     float progressCenter = progress.rectTransform.rect.center.y;
                     float progressHalfHeight = progress.preferredHeight * 0.5f;
@@ -1631,7 +1637,7 @@ namespace GreedLast.PlayerChecks
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
-                    progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
+                    titleText = VisibleText(title), progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
                     progressToLanePixels = progressToLanePixels,
                     choicePromptHeightPixels = choicePromptHeightPixels, choicePromptToCardPixels = choicePromptToCardPixels,
                     feedbackFlashAlpha = feedbackFlashAlpha,
