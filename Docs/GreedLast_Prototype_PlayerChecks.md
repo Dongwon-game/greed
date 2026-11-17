@@ -446,7 +446,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 사용자 화면을 사용할 수 있을 때 `Builds/PCReview-candidate-20261117-4ed5f2c.json`의 `Executable`에 적힌 격리 실행본에서 확인한다. 이 후보의 제품 저장 위치는 개인용 실행본과 분리돼 있다. 각 종료 동작은 다른 방법으로 대신 닫기 전에 해당 프로세스가 종료됐는지 확인한다.
 
-창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261117-4ed5f2c.json' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 이 절차에서는 게임이 실행되지 않는다. 11월 17일 이 사전 확인과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다. 이 후보 이후 Assets·Packages·ProjectSettings의 변경은 자동 저장 검사에 쓰는 에디터용 파일 한 개에 한정된다.
+창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261117-4ed5f2c.json' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 이 절차에서는 게임이 실행되지 않는다. 실제로 열 로컬 복사본도 검증하려면 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달한다. 11월 17일 이 복사본의 154개 파일이 ZIP과 일치했고, `Executable`이 그 폴더의 `GreedLastPrototype.exe`를 가리키는 것을 확인했다. 11월 17일 이 사전 확인과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다. 이 후보 이후 Assets·Packages·ProjectSettings의 변경은 자동 저장 검사에 쓰는 에디터용 파일 한 개에 한정된다.
 
 | 순서 | 실제 입력 | 통과 기준 |
 | --- | --- | --- |
