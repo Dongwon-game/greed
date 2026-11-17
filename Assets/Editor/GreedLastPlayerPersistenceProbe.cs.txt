@@ -90,6 +90,7 @@ namespace GreedLast.PlayerChecks
         {
             public string from, to;
             public float rapidSeconds, freshSeconds;
+            public bool primaryDeferredToLane;
         }
 
         [Serializable]
@@ -1845,13 +1846,17 @@ namespace GreedLast.PlayerChecks
                 yield return CaptureFrame("finish-relic-choice", relicFrame, settleSeconds: 0f);
             yield return WaitFor(() => Time.realtimeSinceStartup >= unlockAt + 0.02f, settleFrame: false);
             float freshAt = Time.realtimeSinceStartup;
+            bool primaryDeferred = !(bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, true);
+            Require(primaryDeferred && RunState().ChoiceActive && RunState().ChoiceKind == to,
+                "Enter must leave the visible choice available to the direction from the same frame: " + to);
             Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
             Require(!RunState().ChoiceActive,
                 "A fresh deliberate input after the guard must choose the visible card: " + to);
             boundaries.Add(new ChoiceBoundary
             {
                 from = from.ToString(), to = to.ToString(),
-                rapidSeconds = rapidAt - openedAt, freshSeconds = freshAt - openedAt
+                rapidSeconds = rapidAt - openedAt, freshSeconds = freshAt - openedAt,
+                primaryDeferredToLane = primaryDeferred
             });
         }
 
