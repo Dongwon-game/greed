@@ -1534,7 +1534,7 @@ namespace GreedLast.PlayerChecks
                 float judgementY = judgement.anchorMin.y;
                 float corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform);
                 Text progress = Read<Text>(ui, "runProgressText");
-                Text title = Read<Text>(ui, "titleText");
+                Text stageTitle = Read<Text>(ui, "titleText");
                 float progressRoll = SignedRoll(progress.rectTransform);
                 float progressToTitlePixels = 0f;
                 float progressToLanePixels = 0f;
@@ -1561,8 +1561,8 @@ namespace GreedLast.PlayerChecks
                     Text centerLane = Read<Text[]>(ui, "laneLabelTexts")[1];
                     float progressCenter = progress.rectTransform.rect.center.y;
                     float progressHalfHeight = progress.preferredHeight * 0.5f;
-                    progressToTitlePixels = ScreenY(camera, title.rectTransform,
-                        title.rectTransform.rect.center.y - title.preferredHeight * 0.5f)
+                    progressToTitlePixels = ScreenY(camera, stageTitle.rectTransform,
+                        stageTitle.rectTransform.rect.center.y - stageTitle.preferredHeight * 0.5f)
                         - ScreenY(camera, progress.rectTransform, progressCenter + progressHalfHeight);
                     progressToLanePixels = ScreenY(camera, progress.rectTransform, progressCenter - progressHalfHeight)
                         - ScreenY(camera, centerLane.rectTransform,
@@ -1637,7 +1637,7 @@ namespace GreedLast.PlayerChecks
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
-                    titleText = VisibleText(title), progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
+                    titleText = VisibleText(stageTitle), progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
                     progressToLanePixels = progressToLanePixels,
                     choicePromptHeightPixels = choicePromptHeightPixels, choicePromptToCardPixels = choicePromptToCardPixels,
                     feedbackFlashAlpha = feedbackFlashAlpha,
