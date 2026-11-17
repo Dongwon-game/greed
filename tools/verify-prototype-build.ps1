@@ -107,12 +107,23 @@ function Assert-SnapshotToolGuard {
 }
 
 function Assert-AppToolGuard {
-    param($Method)
+    param($Method, [switch]$ReturnsHandled)
     $instructions = @($Method.Body.Instructions)
     if ($instructions[0].OpCode.Code.ToString() -ne 'Call' -or !$instructions[0].Operand.FullName.Contains('GreedLastApp::get_DevToolsEnabled()')) {
         throw ('App development tool must check its mode before state access: ' + $Method.Name)
     }
     $branch = $instructions[1]
+    if ($ReturnsHandled) {
+        if ($Method.ReturnType.FullName -cne 'System.Boolean' -or
+            $branch.OpCode.Code.ToString() -notin @('Brtrue', 'Brtrue_S') -or
+            $instructions[2].OpCode.Code.ToString() -cne 'Ldc_I4_0' -or
+            $instructions[3].OpCode.Code.ToString() -cne 'Ret' -or
+            $branch.Operand.Offset -ne $instructions[4].Offset) {
+            throw ('Nondevelopment app tool must return false before handling input: ' + $Method.Name)
+        }
+        return
+    }
+    if ($Method.ReturnType.FullName -cne 'System.Void') { throw ('Unexpected app development command return type: ' + $Method.Name) }
     if ($branch.OpCode.Code.ToString() -in @('Brfalse', 'Brfalse_S')) {
         if ($branch.Operand.OpCode.Code.ToString() -ne 'Ret') { throw 'App tool false branch does not return.' }
     }
@@ -361,11 +372,13 @@ try {
     foreach ($method in $connectionMethods) { Assert-ConnectionGuard $method }
     $snapshotNames = @('AddSampleSaveLoadoutForTest', 'AddSampleClearCandidateForTest', 'ConsumeSelectedSaveLoadoutUseForTest', 'AddGrowthPointsForTest', 'MaxGrowthForTest', 'ResetGrowthForTest')
     $snapshotTools = @($types.Methods | Where-Object { $_.DeclaringType.Name -eq 'GreedLastMockBackend' -and $_.Name -in $snapshotNames })
-    $appNames = @('ToggleRunInvincible', 'RequestInfiniteTestStop', 'RequestFocusMaxForTest', 'RequestThreatUpForTest', 'RequestThreatDownForTest', 'RequestRunDevShortcut')
+    $appNames = @('ToggleRunInvincible', 'RequestInfiniteTestStop', 'RequestFocusMaxForTest', 'RequestThreatUpForTest', 'RequestThreatDownForTest', 'RequestRunDevShortcut', 'TryHandleRotationKeyboardInput')
     $appTools = @($types.Methods | Where-Object { $_.DeclaringType.Name -eq 'GreedLastApp' -and $_.Name -in $appNames })
-    if ($snapshotTools.Count -ne 6 -or $appTools.Count -ne 6) { throw 'Development tool surface changed; update its explicit verification contract.' }
+    if ($snapshotTools.Count -ne 6 -or $appTools.Count -ne $appNames.Count) { throw 'Development tool surface changed; update its explicit verification contract.' }
     foreach ($method in $snapshotTools) { Assert-SnapshotToolGuard $method }
-    foreach ($method in $appTools) { Assert-AppToolGuard $method }
+    foreach ($method in $appTools) {
+        Assert-AppToolGuard $method -ReturnsHandled:($method.Name -ceq 'TryHandleRotationKeyboardInput')
+    }
     $saveResolutions = @($types.Methods | Where-Object {
         $_.DeclaringType.FullName -eq 'GreedLast.GreedLastApp' -and $_.Name -in @('RequestRenameSaveLoadoutSlot', 'RequestDeleteSaveLoadoutSlot')
     })
