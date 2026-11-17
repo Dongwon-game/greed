@@ -5,7 +5,8 @@ param(
     [switch]$CueOnly,
     [switch]$MenuOnly,
     [switch]$SmokeOnly,
-    [switch]$BuildCandidate
+    [switch]$BuildCandidate,
+    [string]$ArtifactsDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,7 +27,12 @@ $existing = @(Get-CimInstance Win32_Process | Where-Object {
     $_.Name -eq 'GreedLastPrototype.exe' -or ($_.Name -eq 'Unity.exe' -and $_.CommandLine -and $_.CommandLine.Replace('\','/') -match $projectArgument)
 })
 if ($existing.Count) { throw 'Leave an existing personal Greed editor/player untouched.' }
-if ((Get-PSDrive -Name ([IO.Path]::GetPathRoot($project).Substring(0,1))).Free -lt 2GB) { throw 'Keep at least 2 GB free for the isolated editor.' }
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
+if ((Get-PSDrive -Name ([IO.Path]::GetPathRoot($artifactBase).Substring(0,1))).Free -lt 2GB) { throw 'Keep at least 2 GB free for the isolated editor.' }
 
 function Read-PersonalPreferences {
     $snapshot = [ordered]@{}
@@ -52,7 +58,7 @@ $before = Read-PersonalPreferences
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
 $id = [Guid]::NewGuid().ToString('N')
-$parent = [IO.Path]::GetFullPath((Join-Path $project 'Logs\EngineLoopChecks'))
+$parent = [IO.Path]::GetFullPath((Join-Path $artifactBase 'Logs\EngineLoopChecks'))
 $root = [IO.Path]::GetFullPath((Join-Path $parent $id))
 if ([IO.Path]::GetDirectoryName($root) -cne $parent -or (Test-Path -LiteralPath $root)) { throw 'A fresh owned engine export is required.' }
 $product = 'EngineLoop-' + $id

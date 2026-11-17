@@ -1,13 +1,19 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path,
-    [string]$CandidateManifest
+    [string]$CandidateManifest,
+    [string]$ArtifactsDirectory
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This startup check supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
 $build = Join-Path $project 'Builds\GreedLastPrototype'
 $candidate = $null
 if ($CandidateManifest) {
@@ -18,7 +24,7 @@ if ($CandidateManifest) {
         throw 'The manifest must identify an isolated engine candidate.'
     }
     $id = $Matches[1]
-    $candidateRoot = Join-Path $project ('Logs/EngineLoopChecks/' + $id)
+    $candidateRoot = Join-Path $artifactBase ('Logs/EngineLoopChecks/' + $id)
     $engineReportPath = Join-Path $candidateRoot 'report.json'
     if ((Get-FileHash -LiteralPath $engineReportPath).Hash -cne $candidate.BuildReportSHA256) {
         throw 'The original engine report differs from the candidate manifest.'
@@ -91,7 +97,7 @@ if (($null -eq $candidate -and $before.Count -gt 0) -or $running.Count -gt 0) {
 }
 if (!$PSCmdlet.ShouldProcess($(if ($candidate) { $archive } else { $exe }), 'Start a hidden 20-second check and stop only its own process')) { return }
 
-$directory = Join-Path $project 'Logs\StandaloneChecks'
+$directory = Join-Path $artifactBase 'Logs\StandaloneChecks'
 [void][System.IO.Directory]::CreateDirectory($directory)
 $stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fffffff', [Globalization.CultureInfo]::InvariantCulture)
 $log = Join-Path $directory ('startup-' + $stamp + '.log')

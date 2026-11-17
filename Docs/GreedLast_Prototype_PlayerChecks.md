@@ -396,6 +396,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 도구는 커밋을 `Logs/EngineLoopChecks/<새 GUID>/Project`에 내보내고 기본 Assets 인덱스 정의를 직접 만든다. 개인 `Search.settings`·검색 기록·계정 파일을 복사하지 않는다. SDK로 시험 회사/제품을 준비하는 편집기를 먼저 종료한 뒤, 해당 고유 제품으로 새 편집기를 시작한다. 열린 개인 편집기/플레이어는 종료시키지 않고 도구가 중단한다. 개인 Greed 저장값과 원본 PlayerSettings는 전후 읽기 전용 비교다.
 
+`check-engine-loop.ps1`에도 `-ArtifactsDirectory`를 지정할 수 있다. 별도 드라이브에서 만든 후보를 검사할 때는 `check-prototype-startup.ps1 -CandidateManifest '<후보 매니페스트>'`에 같은 `-ArtifactsDirectory`를 전달한다.
+
 최종 `report.json`은 당시 도구/소스 ZIP 해시, 소유 프로세스 종료, 실제 엔진의 보존 아카이브 경로/해시와 설정 불변을 포함한다. 엔진이 실패 보고서를 남겼다면 외부 실행 실패에도 그 원인/경로를 함께 보존한다. 잘못된 ID·비동기 검사에 `-quit` 혼용·인덱스 누락은 시작 전에 거부한다. 로그/실패 자료/시험 제품은 유지하며 초기화·알림·예약·PC 종료를 설치하지 않는다.
 
 10월 21일 기본 전체 모드와 짧은 모드, 실제 시작 보호 세 가지, 보고서 읽기 일곱 조건이 통과했다. 별도 사본의 비개발 Windows 전체 스모크/빌드와 시험 코드 배포 제외도 통과했다. 게임 입력 15파일은 두 사본 모두 `1084cdf`와 동일한 Git 경로 필터로 대조했다. 새 렌더/실제 창 입력·가청 소리·휴대폰 성능 검사는 아니며 개인용 실행본/ZIP은 14:15/background-results 그대로다. 근거는 [확인 이력](GreedLast_Prototype_CheckHistory.md)의 전용 엔진 도구 완료 절을 따른다.
