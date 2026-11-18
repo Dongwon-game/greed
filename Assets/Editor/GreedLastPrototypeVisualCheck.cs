@@ -711,7 +711,7 @@ namespace GreedLast.Editor
                     {
                         if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                         ShowRun(snapshot);
-                        Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "정산 후 재준비",
+                        Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "정산 후 재준비 (Enter)",
                             "Every natural infinite result frame must retain its actual preparation button.");
                     }
                     string name = "107-infinite-terminal-" + phase + (detailed ? "-detail" : "-brief");
@@ -1527,7 +1527,7 @@ namespace GreedLast.Editor
                                 if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                                 ui.Render(captured);
                                 if (live) ui.RenderRun(capturedRun);
-                                Require(!live || Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "저장 후보 확인",
+                                Require(!live || Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "저장 후보 확인 (Enter)",
                                     "The first-practice result must visibly name the pending candidate handoff.");
                                 Require(phase != "draft" || !Read<Button>("nextPatternButton").IsInteractable(),
                                     "A captured practice handoff must not accept the recommended slot without a choice.");
@@ -2089,7 +2089,7 @@ namespace GreedLast.Editor
                         ShowRun(phase.Run);
                         if (phase.Name == "result")
                         {
-                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인",
+                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인 (Enter)",
                                 "Focused completion must expose the matching focused restart action.");
                             Require(Read<Text>("titleText").text == "복기 연습 완료",
                                 "Focused exact completion must display its actual partial-course title.");
@@ -2198,7 +2198,7 @@ namespace GreedLast.Editor
                             if (ui.UsePlayerRunControls == detailed) ui.ToggleDevCleanView();
                             ShowRun(result);
                             string expected = outcome == "good" ? "정확권 다시" : "실수 구간 다시";
-                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == expected,
+                            Require(Read<Button>("nextPatternButton").GetComponentInChildren<Text>().text == expected + " (Enter)",
                                 "Focused result action must match its real Good or Miss result.");
                             Require(Read<Text>("titleText").text == "복기 연습 완료",
                                 "Focused Good and Miss outcomes must not claim full-course completion.");

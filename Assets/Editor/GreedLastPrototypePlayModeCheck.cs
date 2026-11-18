@@ -3099,7 +3099,7 @@ namespace GreedLast.Editor
                                 yield return null;
                             }
                             Require(run.PracticeMode && run.SuccessCount == 3 && run.GoodCount == 0 && run.MissCount == 0
-                                && Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "저장 후보 확인",
+                                && Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "저장 후보 확인 (Enter)",
                                 "A real first-perfect practice must name the retained candidate instead of promising a new run.");
                             yield return TapTouch(Read<Button>(ui, "nextPatternButton"));
                             Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft

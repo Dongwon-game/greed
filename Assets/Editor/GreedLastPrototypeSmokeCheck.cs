@@ -320,7 +320,7 @@ namespace GreedLast.Editor
                         && body.text == InvokeRuntimeUiLabel("BuildStoppedRunSummary", run)
                         && body.text.Contains("저장 기회 1회", StringComparison.Ordinal)
                         && !body.text.Contains("저장하기", StringComparison.Ordinal)
-                        && GetButtonLabel(primary) == "저장 슬롯 선택" && primary.IsInteractable()
+                        && GetButtonLabel(primary) == "저장 슬롯 선택 (Enter)" && primary.IsInteractable()
                         && GetButtonLabel(back) == "저장 없이 로비" && back.IsInteractable(),
                         "The final result render must use its compact summary and actual clickable save/lobby labels, not the intermediate header.");
                     Text[] labels = { GetRuntimeUiField<Text>(ui, "titleText"), body,

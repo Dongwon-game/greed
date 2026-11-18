@@ -388,8 +388,8 @@ namespace GreedLast.Editor
                     "A perfect practice must complete three axes without creating a save candidate.");
                 Require(Read<Text>(ui, "titleText").text == "기초연습 완료",
                     "The complete basic course must retain its original completion title.");
-                Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "일반 런으로",
-                    "The first perfect practice result must offer direct normal-run entry.");
+                Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "일반 런으로 (Enter)",
+                    "The first perfect practice result must show the keyboard shortcut for direct normal-run entry.");
                 Click(ui, "nextPatternButton");
                 Require(!run.PracticeMode && run.ChoiceActive && PlayerPrefs.GetInt(PracticeKey) == 1,
                     "The practice result callback must mark onboarding and open normal starting choices.");
@@ -1426,7 +1426,7 @@ namespace GreedLast.Editor
                                 Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
                                     && backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice"),
                                     "First-practice completion must resolve the recovered candidate before entering a new normal run.");
-                                Require(label == "저장 후보 확인" && PlayerPrefs.GetInt(PracticeKey) == 1
+                                Require(label == "저장 후보 확인 (Enter)" && PlayerPrefs.GetInt(PracticeKey) == 1
                                     && PlayerPrefs.GetString(key) == before
                                     && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
                                     "Practice must mark onboarding, preserve exact progress and require an explicit candidate slot.");
@@ -3321,7 +3321,7 @@ namespace GreedLast.Editor
                         && !latest().JudgementText.Contains("바닥→↑점프", StringComparison.Ordinal)
                         && (scenario.Step < 2 || !latest().JudgementText.Contains("상단→↓숙이기", StringComparison.Ordinal))
                         && latest().JudgementText.Contains("측면→↔비틀기 정확", StringComparison.Ordinal)
-                        && Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인",
+                        && Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "복기 다시 확인 (Enter)",
                         "Partial review must not claim full three-axis mastery or offer a misleading full-course restart.");
                 Click(ui, "nextPatternButton");
                 Require(latest().ChapterProgress == scenario.Step && latest().StartCountdownActive
@@ -3363,7 +3363,7 @@ namespace GreedLast.Editor
                         CompleteLesson(outcome, step);
                         string expected = outcome == "exact" ? "복기 다시 확인"
                             : outcome == "good" ? "정확권 다시" : "실수 구간 다시";
-                        Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == expected,
+                        Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == expected + " (Enter)",
                             "Focused practice must offer the action matching its actual outcome: " + outcome);
                         Require(Read<Text>(ui, "titleText").text == "복기 연습 완료",
                             "Partial outcomes must not claim the complete basic course in their visible title.");

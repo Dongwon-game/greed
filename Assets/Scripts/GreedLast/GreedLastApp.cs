@@ -17411,9 +17411,12 @@ namespace GreedLast
             bool practiceCandidateHandoff = pendingSaveCandidate
                 && GreedLastApp.ShouldContinuePracticeToFirstNormal(snapshot,
                     PlayerPrefs.GetInt(GreedLastApp.PracticeCompletedPrefsKey, 0) == 1);
-            SetButtonLabel(nextPatternButton, practiceCandidateHandoff ? "저장 후보 확인"
+            string primaryLabel = practiceCandidateHandoff ? "저장 후보 확인"
                 : BuildRunPrimaryButtonLabelForPlatform(snapshot, normalClearReady, UsePlayerRunControls,
-                    DevToolsEnabled, Application.isMobilePlatform));
+                    DevToolsEnabled, Application.isMobilePlatform);
+            if (snapshot.Stopped && !snapshot.CountdownActive && !Application.isMobilePlatform)
+                primaryLabel += " (Enter)";
+            SetButtonLabel(nextPatternButton, primaryLabel);
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForPlatform(
                 snapshot, DevToolsEnabled, Application.isMobilePlatform));
