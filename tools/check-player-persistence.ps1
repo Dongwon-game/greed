@@ -549,6 +549,13 @@ try {
                     $lastRecoverySeconds -lt 0.20) {
                     throw 'Rotation telemetry must sample the first post-hit frame and continue for 200 ms.'
                 }
+                $firstRoll = [Math]::Abs($firstRecovery.corridorRoll)
+                $contactSign = [Math]::Sign($contact.corridorRoll)
+                if ($firstRoll -le 0.05 -or $firstRoll -ge [Math]::Abs($contact.corridorRoll) -or
+                    [Math]::Abs($rotation.recovery[-1].corridorRoll) -ge $firstRoll -or
+                    @($rotation.recovery | Where-Object { $_.corridorRoll * $contactSign -lt -0.01 }).Count -gt 0) {
+                    throw 'The illustrated corridor must still lean in the correct direction immediately after contact and then settle without reversing.'
+                }
                 $samples = @($rotation.approach) + @($contact) + @($rotation.recovery)
                 for ($sampleIndex = 0; $sampleIndex -lt $samples.Count; $sampleIndex++) {
                     $sample = $samples[$sampleIndex]

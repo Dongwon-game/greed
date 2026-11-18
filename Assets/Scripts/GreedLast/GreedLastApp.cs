@@ -31694,12 +31694,20 @@ namespace GreedLast
                 0f,
                 BuildPrototypeRunCorridorBackdropOffsetY(visible, advancing, pulse, motionComfortEnabled));
 
-            float rotationDirection = visible && latestRunSnapshot.ActivePattern
+            float activeDirection = visible && latestRunSnapshot.ActivePattern
                 ? BuildRotationPatternDirection(latestRunSnapshot.Pattern)
                 : 0f;
-            float rotationReadiness = visible && latestRunSnapshot.ActivePattern
+            float activeReadiness = activeDirection != 0f
                 ? BuildStraightRunRotationReadiness(latestRunSnapshot)
                 : 0f;
+            // A wrong-channel miss can point the response in the opposite direction.
+            float responsePulse = runnerResponseResult == GreedLastJudgementResult.Miss
+                ? 0f
+                : GetVisibleRotationResponsePulse(visible);
+            float responseDirection = responsePulse > 0f ? BuildRotationResponseDirection(runnerResponseChannel) : 0f;
+            float rotationDirection = BuildStraightRunRotationCorridorSettleDirection(
+                activeDirection, activeReadiness, responseDirection, responsePulse);
+            float rotationReadiness = BuildStraightRunRotationCorridorSettleReadiness(activeReadiness, responsePulse);
             rect.localEulerAngles = new Vector3(
                 0f,
                 0f,
@@ -33269,19 +33277,7 @@ namespace GreedLast
                 && GreedLastRunCore.IsRotationPattern(pattern)
                     ? BuildStraightRunRotationReadiness(latestRunSnapshot)
                     : 0f;
-            bool showRotationResponse = ShouldShowStraightRunRotationResponsePips(
-                visible,
-                latestRunSnapshot.Stopped,
-                latestRunSnapshot.Paused,
-                latestRunSnapshot.ChoiceActive,
-                latestRunSnapshot.CountdownActive);
-            float rotationResponsePulse = showRotationResponse
-                ? BuildStraightRunRotationResponsePulse(
-                    runnerResponseWasRotationPattern,
-                    runnerResponseResult,
-                    runnerResponseUntil - Time.unscaledTime,
-                    runnerResponseUntil - runnerResponseStartedAt)
-                : 0f;
+            float rotationResponsePulse = GetVisibleRotationResponsePulse(visible);
             float rotationResponseDirection = BuildRotationResponseDirection(runnerResponseChannel);
             float rotationDirection = BuildStraightRunRotationCorridorSettleDirection(
                 activeRotationDirection,
@@ -43108,6 +43104,15 @@ namespace GreedLast
             float wave = Mathf.Lerp(0.78f, 1.08f, Mathf.Clamp01(sequence));
             float pulseLift = Mathf.Clamp01(downbeatPulse) * 42f;
             return Mathf.RoundToInt(readiness * (58f * wave + pulseLift));
+        }
+
+        private float GetVisibleRotationResponsePulse(bool visible)
+        {
+            return ShouldShowStraightRunRotationResponsePips(visible, latestRunSnapshot.Stopped,
+                    latestRunSnapshot.Paused, latestRunSnapshot.ChoiceActive, latestRunSnapshot.CountdownActive)
+                ? BuildStraightRunRotationResponsePulse(runnerResponseWasRotationPattern, runnerResponseResult,
+                    runnerResponseUntil - Time.unscaledTime, runnerResponseUntil - runnerResponseStartedAt)
+                : 0f;
         }
 
         private static bool ShouldShowStraightRunRotationResponsePips(
