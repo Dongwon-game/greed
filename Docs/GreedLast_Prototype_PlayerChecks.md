@@ -460,6 +460,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 `d044bff`의 전체 스모크와 Windows 후보 `aebc3ea3db7d42ea98f9e5ef649eed6d`, 복사본·ZIP 154개 파일 대조, 압축 해제 후 숨김 시작 `report-startup-20261118-112005-4082134.json`이 통과했다. 시험 실행본은 종료됐고 개인 설정을 보존했다.
 
+이 최신 후보와 같은 게임 입력의 전체 Unity Play Mode `1f8e6c1130e04ce1b4cb0477249a5899`도 두 재로딩 설정에서 통과했다. 각각 일반 런 15판정·8선택과 클리어 후 저장, 무한 실제 두 번 시작·자연 종료, 정지 전환 여섯 번을 확인했다. 진행 기록의 PID·종료 코드가 최종 보고서와 일치했고 개인 및 원본 설정을 보존했다. 보고서 SHA256은 `4F255C8B4ABAB57695C1131DC885D7EF27EBBD8DA7E283CF5847A41F67BA6EB6`다.
+
 창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261118-d044bff.json' -ArtifactsDirectory 'D:\CodexGreedChecks' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
 
 | 순서 | 실제 입력 | 통과 기준 |
