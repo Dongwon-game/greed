@@ -344,6 +344,10 @@ try {
             throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
         if (!$render.audioOutputMuted) { throw 'The offscreen persistence player must keep its audio output muted.' }
+        $practiceResult = $render.frames | Where-Object name -CEQ 'practice-result'
+        if ($practiceResult.primaryResultLabel -cne '정확권 다시 (Enter)') {
+            throw 'The PC practice result must identify Enter as the shortcut for exact-window review.'
+        }
         if (!$render.sustainedRunMotionObserved -or @($render.liveMotionSamples).Count -ne 8) {
             throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
         }
@@ -387,7 +391,7 @@ try {
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
-                FeedbackFlashAlpha=$_.feedbackFlashAlpha;
+                FeedbackFlashAlpha=$_.feedbackFlashAlpha; PrimaryResultLabel=$_.primaryResultLabel;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash
@@ -454,6 +458,10 @@ try {
             if (($result.frames.name -join ',') -cne ($expected -join ',') -or !$result.terminalBeforeQuit) {
                 throw 'The rendered ordinary course must show its real choices, escape and terminal result.'
             }
+            $clearResult = $result.frames | Where-Object name -CEQ 'finish-clear'
+            if ($clearResult.primaryResultLabel -cne '저장 슬롯 선택 (Enter)') {
+                throw 'The PC clear result must identify Enter as the shortcut for save slot selection.'
+            }
             $choiceBoundaries = @($result.choiceBoundaries)
             if (($choiceBoundaries.from -join ',') -cne 'Node,Gift' -or ($choiceBoundaries.to -join ',') -cne 'Gift,Relic' -or
                 @($choiceBoundaries | Where-Object { $_.rapidSeconds -lt 0.05 -or $_.rapidSeconds -ge 0.18 -or
@@ -488,7 +496,7 @@ try {
                 @{Name=$_.name; Width=$_.width; Height=$_.height; Pattern=$_.pattern; Channel=$_.channel; Distance=$_.distance;
                     ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
-                    TitleText=$_.titleText; ProgressText=$_.progressText;
+                    TitleText=$_.titleText; ProgressText=$_.progressText; PrimaryResultLabel=$_.primaryResultLabel;
                     ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
                     ChoicePromptHeightPixels=$_.choicePromptHeightPixels; ChoicePromptToCardPixels=$_.choicePromptToCardPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}

@@ -117,7 +117,7 @@ namespace GreedLast.PlayerChecks
         {
             public string name, pattern, channel, graphicsDevice;
             public string utc;
-            public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText, titleText;
+            public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText, titleText, primaryResultLabel;
             public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
@@ -1600,6 +1600,16 @@ namespace GreedLast.PlayerChecks
                 float progressToLanePixels = 0f;
                 float choicePromptHeightPixels = 0f;
                 float choicePromptToCardPixels = 0f;
+                string primaryResultLabel = string.Empty;
+                if (name == "practice-result" || name == "finish-clear")
+                {
+                    Button primary = Read<Button>(ui, "nextPatternButton");
+                    Text label = primary.GetComponentInChildren<Text>();
+                    Require(run.Stopped && primary.isActiveAndEnabled && primary.IsInteractable()
+                        && primary.GetComponent<CanvasGroup>().alpha > 0.01f && label.cachedTextGenerator.lineCount == 1,
+                        "The PC result must show an active primary action on one line: " + name);
+                    primaryResultLabel = VisibleText(label);
+                }
                 if (name == "finish-route-choice" || name == "finish-relic-choice")
                 {
                     Require(progress.cachedTextGenerator.lineCount == 1, "The PC choice prompt must stay on one line.");
@@ -1694,7 +1704,8 @@ namespace GreedLast.PlayerChecks
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
-                    titleText = VisibleText(stageTitle), progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
+                    titleText = VisibleText(stageTitle), primaryResultLabel = primaryResultLabel,
+                    progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
                     progressToLanePixels = progressToLanePixels,
                     choicePromptHeightPixels = choicePromptHeightPixels, choicePromptToCardPixels = choicePromptToCardPixels,
                     feedbackFlashAlpha = feedbackFlashAlpha,
