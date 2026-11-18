@@ -17414,9 +17414,9 @@ namespace GreedLast
             string primaryLabel = practiceCandidateHandoff ? "저장 후보 확인"
                 : BuildRunPrimaryButtonLabelForPlatform(snapshot, normalClearReady, UsePlayerRunControls,
                     DevToolsEnabled, Application.isMobilePlatform);
-            if (snapshot.Stopped && !snapshot.CountdownActive && !Application.isMobilePlatform)
-                primaryLabel += " (Enter)";
-            SetButtonLabel(nextPatternButton, primaryLabel);
+            string primaryShortcut = snapshot.Stopped && !snapshot.CountdownActive && !Application.isMobilePlatform
+                ? " (Enter)" : string.Empty;
+            SetButtonLabel(nextPatternButton, primaryLabel, primaryShortcut);
             SetButtonLabel(returnLobbyButton, BuildRunReturnButtonLabel(snapshot, normalClearReady));
             SetButtonLabel(pauseButton, BuildRunPauseButtonLabelForPlatform(
                 snapshot, DevToolsEnabled, Application.isMobilePlatform));
@@ -50597,13 +50597,13 @@ namespace GreedLast
             }
         }
 
-        private static void SetButtonLabel(Button button, string label)
+        private static void SetButtonLabel(Button button, string label, string keyboardHint = "")
         {
             Text text = button.GetComponentInChildren<Text>();
             if (text != null)
             {
                 string normalizedLabel = NormalizeButtonLabel(label);
-                text.text = normalizedLabel;
+                text.text = normalizedLabel + keyboardHint;
                 int baseMaxSize = Mathf.Max(text.fontSize, text.resizeTextMaxSize);
                 int maxSize = BuildButtonLabelMaxFontSize(normalizedLabel, baseMaxSize);
                 text.resizeTextForBestFit = true;

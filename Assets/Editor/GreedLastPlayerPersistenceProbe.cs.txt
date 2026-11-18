@@ -118,7 +118,7 @@ namespace GreedLast.PlayerChecks
             public string name, pattern, channel, graphicsDevice;
             public string utc;
             public string actionCue, timingGuide, judgementFeedback, comboBadge, progressText, titleText, primaryResultLabel;
-            public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines;
+            public int width, height, sampledColors, health, misses, feedbackFlashAlpha, comboBadgeLines, primaryResultFontSize;
             public float distance, elapsed, coreDeltaSeconds, markerX, markerY, judgementY;
             public float corridorRoll, progressRoll, judgementRoll, pauseRoll;
             public float comboToPausePixels, comboTextToPipsPixels;
@@ -1601,6 +1601,7 @@ namespace GreedLast.PlayerChecks
                 float choicePromptHeightPixels = 0f;
                 float choicePromptToCardPixels = 0f;
                 string primaryResultLabel = string.Empty;
+                int primaryResultFontSize = 0;
                 if (name == "practice-result" || name == "finish-clear")
                 {
                     Button primary = Read<Button>(ui, "nextPatternButton");
@@ -1608,6 +1609,9 @@ namespace GreedLast.PlayerChecks
                     Require(run.Stopped && primary.isActiveAndEnabled && primary.IsInteractable()
                         && primary.GetComponent<CanvasGroup>().alpha > 0.01f && label.cachedTextGenerator.lineCount == 1,
                         "The PC result must show an active primary action on one line: " + name);
+                    primaryResultFontSize = label.cachedTextGenerator.fontSizeUsedForBestFit;
+                    Require(primaryResultFontSize >= label.fontSize,
+                        "The result keyboard hint must fit without shrinking the primary action: " + name);
                     primaryResultLabel = VisibleText(label);
                 }
                 if (name == "finish-route-choice" || name == "finish-relic-choice")
@@ -1705,6 +1709,7 @@ namespace GreedLast.PlayerChecks
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
                     actionCue = actionCue, timingGuide = timingGuide, judgementFeedback = judgementFeedback,
                     titleText = VisibleText(stageTitle), primaryResultLabel = primaryResultLabel,
+                    primaryResultFontSize = primaryResultFontSize,
                     progressText = VisibleText(progress), progressToTitlePixels = progressToTitlePixels,
                     progressToLanePixels = progressToLanePixels,
                     choicePromptHeightPixels = choicePromptHeightPixels, choicePromptToCardPixels = choicePromptToCardPixels,

@@ -392,6 +392,7 @@ try {
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
                 FeedbackFlashAlpha=$_.feedbackFlashAlpha; PrimaryResultLabel=$_.primaryResultLabel;
+                PrimaryResultFontSize=$_.primaryResultFontSize;
                 SHA256=(Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash}
         })
         $report.RenderReportSHA256 = (Get-FileHash -LiteralPath $renderPath -Algorithm SHA256).Hash
@@ -497,6 +498,7 @@ try {
                     ExitSlotAlpha=$_.exitSlotAlpha; ComboBadge=$_.comboBadge; ComboBadgeLines=$_.comboBadgeLines;
                     ComboToPausePixels=$_.comboToPausePixels; ComboTextToPipsPixels=$_.comboTextToPipsPixels;
                     TitleText=$_.titleText; ProgressText=$_.progressText; PrimaryResultLabel=$_.primaryResultLabel;
+                    PrimaryResultFontSize=$_.primaryResultFontSize;
                     ProgressToTitlePixels=$_.progressToTitlePixels; ProgressToLanePixels=$_.progressToLanePixels;
                     ChoicePromptHeightPixels=$_.choicePromptHeightPixels; ChoicePromptToCardPixels=$_.choicePromptToCardPixels;
                     SHA256=(Get-FileHash -LiteralPath $framePath -Algorithm SHA256).Hash}
