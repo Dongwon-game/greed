@@ -446,7 +446,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 ### 최신 후보의 Esc와 방향키
 
-사용자 화면을 사용할 수 있을 때 `Builds/PCReview-candidate-20261118-36223bb.json`의 `Executable`에 적힌 격리 실행본에서 확인한다. 이 후보의 제품 저장 위치는 개인용 실행본과 분리돼 있다. 각 종료 동작은 다른 방법으로 대신 닫기 전에 해당 프로세스가 종료됐는지 확인한다.
+사용자 화면을 사용할 수 있을 때 `Builds/PCReview-candidate-20261118-d044bff.json`의 `Executable`에 적힌 격리 실행본에서 확인한다. 이 후보의 제품 저장 위치는 개인용 실행본과 분리돼 있다. 각 종료 동작은 다른 방법으로 대신 닫기 전에 해당 프로세스가 종료됐는지 확인한다.
 
 `af569df`의 화면 입력 검사에서는 기록 페이지의 좌우 방향과 Enter 조합, 중앙 대응과 Enter 조합, Enter 단독을 기본·상세 보기에서 확인했다. 전체 스모크와 Windows 후보 빌드(`54893542619842f291ae2478f0b2f0c5`)가 통과했고, 복사한 154개 파일을 ZIP과 대조했다. 실제 Windows 동시 입력은 직접 확인 항목에 남아 있다.
 
@@ -458,7 +458,9 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 `3457f7b`는 단축키를 붙이기 전 문구로 글자 크기 상한을 정한다. 첫 검사 `1fc21f97daec49c0be2a1ff525dc872b`는 렌더 글자 크기와 설정 상한을 직접 비교하는 조건에서 멈췄다. `d044bff`가 두 값을 따로 기록하는 `27aa0b8c4abe4e698673f72330eb0c56`에서는 같은 960×540의 연습·클리어 문구가 모두 한 줄에 들어갔다. 같은 버튼 영역의 어두운 글자 픽셀 높이는 연습 7→10px, 클리어 5→8px였다. 저장 재실행 10단계와 안전 대조 4개가 통과했다.
 
-창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261118-36223bb.json' -ArtifactsDirectory 'D:\CodexGreedChecks' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
+`d044bff`의 전체 스모크와 Windows 후보 `aebc3ea3db7d42ea98f9e5ef649eed6d`, 복사본·ZIP 154개 파일 대조, 압축 해제 후 숨김 시작 `report-startup-20261118-112005-4082134.json`이 통과했다. 시험 실행본은 종료됐고 개인 설정을 보존했다.
+
+창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261118-d044bff.json' -ArtifactsDirectory 'D:\CodexGreedChecks' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
 
 | 순서 | 실제 입력 | 통과 기준 |
 | --- | --- | --- |
