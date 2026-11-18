@@ -452,6 +452,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 `36223bb`는 기록 입력과 회전 뒤 배경 복귀를 모두 포함한다. 전체 스모크와 Windows 후보 빌드 `462b57294da14a90986046d124df80e6`, 복사본·ZIP 154개 파일 대조, 압축 해제 후 숨김 시작 `report-startup-20261118-041829-9641915.json`이 통과했다. 시작 검사는 엔진 초기화, 20초 유지, 해당 프로세스 종료 및 개인 설정 보존을 확인했다. [회전 결과](PC-Exit-Controls-20261108.md#11월-18일-pc-회전-뒤-배경-복귀)
 
+같은 게임 입력의 전체 Unity Play Mode `ce81cac045dd4c35b2b31c9afc69a7e1`도 통과했다. 도메인 재로딩 켬·끔에서 각각 일반 런 15판정·8선택, 완주 후 저장, 무한 실제 두 번 시작·자연 종료, 정지 전환 여섯 번을 확인했다. 개인 설정과 원본 설정을 보존했고 시험 프로세스가 종료됐다. 보고서 SHA256은 `22200105F4B5DF621C3D2A42EF980A8E82638BBA7EE17D35C15E476B50933D94`다. 앞선 `4523db8bdd394671a8af04bf9e7847af`는 최종 보고서 없이 중단됐다.
+
 창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261118-36223bb.json' -ArtifactsDirectory 'D:\CodexGreedChecks' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
 
 | 순서 | 실제 입력 | 통과 기준 |
