@@ -527,6 +527,50 @@ try {
                 @($result.frames | Where-Object { $_.motionComfortEnabled -ne $comfortExpected }).Count -ne 0) {
                 throw 'The rotation angle must match the requested motion comfort setting.'
             }
+            if (@($result.rotationRecoveries).Count -ne 2) {
+                throw 'Both real rotation hits must include approach and recovery telemetry.'
+            }
+            $report.RotationRecoveries = @(for ($index = 0; $index -lt 2; $index++) {
+                $rotation = $result.rotationRecoveries[$index]
+                $contactFrame = $result.frames[2 + 6 * $index]
+                $contact = $rotation.contact
+                if ($rotation.channel -cne $contactFrame.channel -or $rotation.pattern -cne $contactFrame.pattern -or
+                    !$contact.activePattern -or [Math]::Abs($contact.corridorRoll - $contactFrame.corridorRoll) -gt 0.01 -or
+                    [Math]::Sign($contact.gateRoll) -ne [Math]::Sign($contact.corridorRoll) -or
+                    @($rotation.approach).Count -lt 2 -or @($rotation.recovery).Count -lt 2 -or
+                    @($rotation.approach | Where-Object { !$_.activePattern }).Count -gt 0 -or
+                    @($rotation.recovery | Where-Object { $_.activePattern }).Count -gt 0) {
+                    throw 'Rotation telemetry must describe the same live trap and its quiet recovery window.'
+                }
+                $firstRecovery = $rotation.recovery[0]
+                $firstRecoverySeconds = $firstRecovery.realtime - $contact.realtime
+                $lastRecoverySeconds = $rotation.recovery[-1].realtime - $contact.realtime
+                if ($firstRecovery.frame -ne $contact.frame + 1 -or $firstRecoverySeconds -ge 0.20 -or
+                    $lastRecoverySeconds -lt 0.20) {
+                    throw 'Rotation telemetry must sample the first post-hit frame and continue for 200 ms.'
+                }
+                $samples = @($rotation.approach) + @($contact) + @($rotation.recovery)
+                for ($sampleIndex = 0; $sampleIndex -lt $samples.Count; $sampleIndex++) {
+                    $sample = $samples[$sampleIndex]
+                    if (($sampleIndex -gt 0 -and ($sample.frame -le $samples[$sampleIndex - 1].frame -or
+                            $sample.realtime -le $samples[$sampleIndex - 1].realtime)) -or
+                        [Math]::Abs($sample.progressRoll) -gt 0.01 -or [Math]::Abs($sample.judgementRoll) -gt 0.01 -or
+                        [Math]::Abs($sample.pauseRoll) -gt 0.01) {
+                        throw 'Rotation telemetry must advance frame-by-frame while the HUD stays level.'
+                    }
+                }
+                @{
+                    Pattern=$rotation.pattern; Channel=$rotation.channel; ContactFrame=$contact.frame
+                    FirstRecoveryMilliseconds=[Math]::Round(1000 * $firstRecoverySeconds, 2)
+                    FirstCorridorStep=[Math]::Round($firstRecovery.corridorRoll - $contact.corridorRoll, 3)
+                    FirstGateStep=[Math]::Round($firstRecovery.gateRoll - $contact.gateRoll, 3)
+                    Samples=@($samples | ForEach-Object {
+                        @{Frame=$_.frame; Milliseconds=[Math]::Round(1000 * ($_.realtime - $contact.realtime), 2)
+                            CorridorRoll=$_.corridorRoll; GateRoll=$_.gateRoll; ActivePattern=$_.activePattern
+                            ProgressRoll=$_.progressRoll; JudgementRoll=$_.judgementRoll; PauseRoll=$_.pauseRoll}
+                    })
+                }
+            })
             $rightContact = $result.frames[8]
             if ($rightContact.comboBadge -cnotmatch '^콤보 \d+\s+연쇄' -or $rightContact.comboBadgeLines -ne 1 -or
                 $rightContact.comboToPausePixels -le 0 -or $rightContact.comboTextToPipsPixels -le 0) {

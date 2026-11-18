@@ -72,6 +72,7 @@ namespace GreedLast.PlayerChecks
             public Record nativeLastInfiniteRecord;
             public Record nativeMenuSavedSlot;
             public Frame[] frames;
+            public RotationRecovery[] rotationRecoveries;
             public bool sustainedRunMotionObserved;
             public MotionSample[] liveMotionSamples;
             public bool pausedSceneryObserved;
@@ -83,6 +84,24 @@ namespace GreedLast.PlayerChecks
         {
             public int frame;
             public float clock, floorY, pillarY, lineY;
+        }
+
+        [Serializable]
+        private sealed class RotationRecovery
+        {
+            public string pattern, channel;
+            public RotationSample contact;
+            public List<RotationSample> approach = new List<RotationSample>();
+            public List<RotationSample> recovery = new List<RotationSample>();
+        }
+
+        [Serializable]
+        private sealed class RotationSample
+        {
+            public int frame;
+            public double realtime;
+            public float corridorRoll, gateRoll, progressRoll, judgementRoll, pauseRoll;
+            public bool activePattern;
         }
 
         [Serializable]
@@ -788,9 +807,11 @@ namespace GreedLast.PlayerChecks
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-first-use") >= 0)
                     {
                         var infiniteFrames = new List<Frame>();
+                        var rotations = new List<RotationRecovery>();
                         Require(GreedLastRunCore.IsRotationPattern(RunState().Pattern),
                             "The first infinite trap must be a rotation approach.");
-                        yield return CaptureTrapApproach("infinite-first-trap", infiniteFrames, farSettleSeconds: 0f);
+                        yield return CaptureTrapApproach("infinite-first-trap", infiniteFrames, farSettleSeconds: 0f,
+                            rotations: rotations);
                         yield return DriveCourse(untilChannel: GreedLastRunChannel.Center);
                         Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Center,
                             "A live central trap is required for the infinite progress overlay comparison.");
@@ -799,7 +820,9 @@ namespace GreedLast.PlayerChecks
                         Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right
                             && GreedLastRunCore.IsRotationPattern(RunState().Pattern),
                             "The live infinite run must reach a right rotation without a development shortcut.");
-                        yield return CaptureTrapApproach("infinite-right-rotation", infiniteFrames, farSettleSeconds: 0f);
+                        yield return CaptureTrapApproach("infinite-right-rotation", infiniteFrames, farSettleSeconds: 0f,
+                            rotations: rotations);
+                        result.rotationRecoveries = rotations.ToArray();
                     }
                     if (backgroundResults) yield return VerifyBackgroundBoundary();
                     yield return QuitFromLivePause();
@@ -1463,7 +1486,7 @@ namespace GreedLast.PlayerChecks
         }
 
         private IEnumerator CaptureTrapApproach(string name, List<Frame> frames, int approachSamples = 0,
-            float farSettleSeconds = 0.12f)
+            float farSettleSeconds = 0.12f, List<RotationRecovery> rotations = null)
         {
             yield return CaptureFrame(name + "-far", frames, settleSeconds: farSettleSeconds);
             Frame far = frames[frames.Count - 1];
@@ -1494,14 +1517,22 @@ namespace GreedLast.PlayerChecks
                 && near.coreDeltaSeconds > far.coreDeltaSeconds && near.misses == far.misses
                 && far.markerY > near.markerY && Mathf.Approximately(far.judgementY, near.judgementY),
                 "The two renders must show the same live trap without a miss between frames.");
+            RotationRecovery rotation = rotations == null ? null : new RotationRecovery
+            {
+                pattern = far.pattern, channel = far.channel
+            };
+            var ui = rotation == null ? null : Read<GreedLastRuntimeUi>(app, "runtimeUi");
             yield return WaitFor(() =>
             {
                 GreedLastRunSnapshot run = RunState();
                 Require(run.ActivePattern && !run.Paused && run.Pattern.PatternId == far.pattern,
                     "The approach ended or paused before its judgement frame.");
+                if (rotation != null && run.CoreDeltaSeconds >= -0.16f && run.CoreDeltaSeconds < 0f)
+                    rotation.approach.Add(ReadRotationSample(ui, run.ActivePattern));
                 return run.CoreDeltaSeconds >= 0f;
             }, settleFrame: false);
-            yield return CaptureFrame(name + "-contact", frames, settleSeconds: 0f, respondAfterRender: true);
+            yield return CaptureFrame(name + "-contact", frames, settleSeconds: 0f, respondAfterRender: true,
+                rotation: rotation);
             Frame contact = frames[frames.Count - 1];
             Require(contact.pattern == far.pattern && contact.channel == far.channel
                 && contact.coreDeltaSeconds >= 0f
@@ -1511,10 +1542,11 @@ namespace GreedLast.PlayerChecks
                 "The rendered trap must meet its judgement line inside the actual exact window: "
                     + contact.name + ", delta=" + contact.coreDeltaSeconds
                     + ", markerY=" + contact.markerY + ", judgementY=" + contact.judgementY);
+            if (rotation != null) rotations.Add(rotation);
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f,
-            bool respondAfterRender = false, bool singleLineTitle = false)
+            bool respondAfterRender = false, bool singleLineTitle = false, RotationRecovery rotation = null)
         {
             if (settleSeconds > 0f)
             {
@@ -1537,6 +1569,7 @@ namespace GreedLast.PlayerChecks
             camera.backgroundColor = Color.black;
             var target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
             var texture = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+            bool deferRotationPng = false;
             try
             {
                 Require(texture.width >= 640 && texture.height >= 360, "The offscreen player render must have usable dimensions.");
@@ -1638,6 +1671,7 @@ namespace GreedLast.PlayerChecks
                 if (respondAfterRender)
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
+                    if (rotation != null) rotation.contact = ReadRotationSample(ui, run.ActivePattern);
                     Call(app, "HandleRunChannelInput", run.Pattern.Channel);
                     GreedLastRunSnapshot judged = RunState();
                     Require(judged.LastResult == GreedLastJudgementResult.Success
@@ -1647,11 +1681,6 @@ namespace GreedLast.PlayerChecks
                 RenderTexture.active = target;
                 texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 texture.Apply();
-                using (var file = new FileStream(path, FileMode.CreateNew))
-                {
-                    byte[] png = texture.EncodeToPNG();
-                    file.Write(png, 0, png.Length);
-                }
                 var colors = new HashSet<int>();
                 for (int y = 0; y < texture.height; y += Mathf.Max(1, texture.height / 48))
                     for (int x = 0; x < texture.width; x += Mathf.Max(1, texture.width / 64))
@@ -1681,6 +1710,8 @@ namespace GreedLast.PlayerChecks
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
                 result.frames = frames.ToArray();
+                if (rotation == null) SaveFrameTexture(path, texture);
+                else deferRotationPng = true;
             }
             finally
             {
@@ -1690,12 +1721,55 @@ namespace GreedLast.PlayerChecks
                 camera.targetTexture = null;
                 RenderTexture.active = oldActive;
                 target.Release();
-                Destroy(texture);
+                if (!deferRotationPng) Destroy(texture);
                 Destroy(target);
                 Destroy(cameraObject);
                 Canvas.ForceUpdateCanvases();
             }
+            if (deferRotationPng)
+            {
+                try
+                {
+                    // Sample the real UI after restoring the live canvas. Encode the earlier
+                    // contact image only after the recovery frames so disk I/O cannot skip them.
+                    do
+                    {
+                        yield return null;
+                        rotation.recovery.Add(ReadRotationSample(ui, RunState().ActivePattern));
+                    }
+                    while (rotation.recovery[rotation.recovery.Count - 1].realtime - rotation.contact.realtime < 0.20);
+                    SaveFrameTexture(path, texture);
+                }
+                finally
+                {
+                    Destroy(texture);
+                }
+            }
             yield return null;
+        }
+
+        private static void SaveFrameTexture(string path, Texture2D texture)
+        {
+            using (var file = new FileStream(path, FileMode.CreateNew))
+            {
+                byte[] png = texture.EncodeToPNG();
+                file.Write(png, 0, png.Length);
+            }
+        }
+
+        private static RotationSample ReadRotationSample(GreedLastRuntimeUi ui, bool activePattern)
+        {
+            return new RotationSample
+            {
+                frame = Time.frameCount,
+                realtime = Time.realtimeSinceStartupAsDouble,
+                activePattern = activePattern,
+                corridorRoll = SignedRoll(Read<RawImage>(ui, "prototypeRunCorridorBackdrop").rectTransform),
+                gateRoll = SignedRoll(Read<Image[]>(ui, "straightRunCorridorGates")[0].rectTransform),
+                progressRoll = SignedRoll(Read<Text>(ui, "runProgressText").rectTransform),
+                judgementRoll = SignedRoll(Read<Image>(ui, "judgementLine").rectTransform),
+                pauseRoll = SignedRoll(Read<Button>(ui, "pauseButton").transform)
+            };
         }
 
         private static string VisibleText(Text label)
