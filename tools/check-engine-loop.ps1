@@ -79,11 +79,37 @@ if ($BuildCandidate) {
     $report.Scope = 'Fresh private editor product, headless smoke and nondevelopment Windows candidate build with static artifact/IL verification. Does not replace the user release or verify native input, screen layout, sound or Play-mode engine cycles.'
 }
 
+function Write-EngineProgress([string]$Phase, [string]$Event, [Diagnostics.Process]$Child = $null, [bool]$TimedOut = $false) {
+    $pending = $null
+    try {
+        $path = Join-Path $root 'progress.json'
+        $pending = $path + '.pending'
+        $owned = if ($null -ne $Child) {
+            $startedUtc = $null
+            try { $startedUtc = $Child.StartTime.ToUniversalTime().ToString('O') } catch { }
+            $exited = $Child.HasExited
+            [ordered]@{PID=$Child.Id; StartedUtc=$startedUtc; ExitObserved=$exited;
+                ExitCode=$(if ($exited) { $Child.ExitCode }); TimedOut=$TimedOut}
+        }
+        $snapshot = [ordered]@{Id=$id; SourceHead=$head; Kind=$mode; Phase=$Phase; Event=$Event;
+            ObservedUtc=[DateTime]::UtcNow.ToString('O'); OwnedEditor=$owned}
+        [IO.File]::WriteAllText($pending,($snapshot|ConvertTo-Json -Depth 4))
+        if ([IO.File]::Exists($path)) { [IO.File]::Replace($pending,$path,[NullString]::Value) }
+        else { [IO.File]::Move($pending,$path) }
+    }
+    catch {
+        # Diagnostics must not interrupt the owned editor's wait or cleanup.
+        if ($pending) { try { [IO.File]::Delete($pending) } catch { } }
+    }
+}
+
 function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) {
+    Write-EngineProgress $Kind 'launching'
     $p = Start-Process -FilePath $unity -ArgumentList $Arguments -WindowStyle Hidden -PassThru
     $entry = [pscustomobject]@{Kind=$Kind;PID=$p.Id;ExitCode=$null;Stopped=$false;TimedOut=$false}
     $processes.Add($entry)
     try {
+        Write-EngineProgress $Kind 'started' $p
         if (!$p.WaitForExit($Timeout)) {
             $entry.TimedOut=$true; $p.Kill(); [void]$p.WaitForExit(10000)
             throw ($Kind+' timed out; only its owned editor was stopped.')
@@ -91,7 +117,13 @@ function Invoke-OwnedEditor([string[]]$Arguments, [int]$Timeout, [string]$Kind) 
         $p.Refresh(); $entry.ExitCode=$p.ExitCode
         if ($p.ExitCode -ne 0) { throw ($Kind+' failed; inspect its preserved log/report.') }
     }
-    finally { $p.Refresh(); $entry.Stopped=$p.HasExited; $p.Dispose() }
+    finally {
+        try {
+            $p.Refresh(); $entry.Stopped=$p.HasExited
+            Write-EngineProgress $Kind 'exit-check' $p $entry.TimedOut
+        }
+        finally { $p.Dispose() }
+    }
 }
 
 function Read-OwnedEngineReport([string]$Copy) {
@@ -119,6 +151,7 @@ function Read-OwnedEngineReport([string]$Copy) {
 try {
     [IO.File]::Copy($PSCommandPath,(Join-Path $root 'runner.ps1'),$false)
     [IO.File]::WriteAllText((Join-Path $root 'prepared.json'),($report|ConvertTo-Json -Depth 8))
+    Write-EngineProgress 'source-export' 'starting'
     $archive = Join-Path $root 'source.zip'
     git -C $project archive --format=zip ('--output='+$archive) $head
     if ($LASTEXITCODE -ne 0) { throw 'Source export failed.' }
