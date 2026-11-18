@@ -1681,6 +1681,7 @@ namespace GreedLast.PlayerChecks
                 RenderTexture.active = target;
                 texture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 texture.Apply();
+                if (rotation == null) SaveFrameTexture(path, texture);
                 var colors = new HashSet<int>();
                 for (int y = 0; y < texture.height; y += Mathf.Max(1, texture.height / 48))
                     for (int x = 0; x < texture.width; x += Mathf.Max(1, texture.width / 64))
@@ -1710,8 +1711,7 @@ namespace GreedLast.PlayerChecks
                     misses = run.MissCount, distance = run.Distance, elapsed = run.ElapsedSeconds,
                     paused = run.Paused, opening = run.StartCountdownActive, resuming = run.ResumeCountdownActive });
                 result.frames = frames.ToArray();
-                if (rotation == null) SaveFrameTexture(path, texture);
-                else deferRotationPng = true;
+                deferRotationPng = rotation != null;
             }
             finally
             {
