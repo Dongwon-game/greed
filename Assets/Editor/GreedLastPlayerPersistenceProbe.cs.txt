@@ -55,6 +55,8 @@ namespace GreedLast.PlayerChecks
             public string nativeMenuReadyUtc;
             public int nativeProfilePagesMask;
             public bool nativeRecordBoardObserved, nativeBoardsCompleted;
+            public string nativeRecordChordStatus;
+            public NativeRecordChord[] nativeRecordChords;
             public int nativeGestureObserverControls;
             public int[] uses;
             public int expectedInfiniteGrowthReward;
@@ -110,6 +112,17 @@ namespace GreedLast.PlayerChecks
             public string from, to;
             public float rapidSeconds, freshSeconds;
             public bool primaryDeferredToLane;
+        }
+
+        [Serializable]
+        private sealed class NativeRecordChord
+        {
+            public string direction;
+            public int beforeFrame, afterFrame, fromPage, toPage;
+            public bool laneApplied;
+
+            public bool Passed => beforeFrame == afterFrame && laneApplied
+                && (direction == "Left" ? fromPage == 0 && toPage == 3 : fromPage == 3 && toPage == 0);
         }
 
         [Serializable]
@@ -241,6 +254,7 @@ namespace GreedLast.PlayerChecks
             backend = Read<GreedLastMockBackend>(app, "backend");
             state = Read<GreedLastStateMachine>(app, "stateMachine");
             VerifyNativeGestureObserverControls();
+            if (phase == "window-boards" || phase == "render") VerifyNativeRecordChordClassifier();
             bool unreadablePhase = phase.StartsWith("unreadable-", StringComparison.Ordinal);
             bool practiceQuitPhase = phase.StartsWith("practice-", StringComparison.Ordinal);
             bool standardPhase = Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
@@ -1128,6 +1142,9 @@ namespace GreedLast.PlayerChecks
             RequireBoardProgressPreserved(result.record);
             GreedLastRunRecord original = Read<GreedLastRunRecord>(backend, "lastRunRecord");
             windowAwaitingClose = true;
+            result.nativeRecordChordStatus = "Unobserved";
+            result.nativeRecordChords = Array.Empty<NativeRecordChord>();
+            gameObject.AddComponent<GreedLastNativeRecordChordTrace>().Configure(this);
             WriteObservation("window-boards-ready");
             int seen = 0;
             bool recordSeen = false;
@@ -1159,6 +1176,77 @@ namespace GreedLast.PlayerChecks
                 }
                 yield return null;
             }
+        }
+
+        internal bool CanSampleNativeRecordChord => !finished && outputValidated && Application.isFocused
+            && state.CurrentState == GreedLastScreenState.InfiniteRecordBoard;
+
+        internal bool TryBeginNativeRecordChord(GreedLastRunChannel direction, out int page, out float lanePulse)
+        {
+            page = Read<int>(app, "recordBoardPageIndex");
+            lanePulse = 0f;
+            if (page != (direction == GreedLastRunChannel.Left ? 0 : 3)
+                || Read<int>(app, "screenInputTransitionFrame") == Time.frameCount
+                || !(bool)Call(app, "CanAcceptPlayerInput") || !GreedLastApp.CanUsePrototypeKeyboardInput()) return false;
+
+            // The app may resolve a simultaneous third key to a different lane.
+            MethodInfo readChannel = typeof(GreedLastApp).GetMethod("ReadPressedLaneKeyboardChannel",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            if ((GreedLastRunChannel)readChannel.Invoke(null, null) != direction) return false;
+            lanePulse = ReadNativeRecordLanePulse(direction);
+            return true;
+        }
+
+        internal void CompleteNativeRecordChord(int beforeFrame, GreedLastRunChannel direction, int fromPage, float previousPulse)
+        {
+            if (finished || !Application.isFocused || !(bool)Call(app, "CanAcceptPlayerInput")) return;
+            var chord = new NativeRecordChord
+            {
+                direction = direction.ToString(), beforeFrame = beforeFrame, afterFrame = Time.frameCount,
+                fromPage = fromPage, toPage = state.CurrentState == GreedLastScreenState.InfiniteRecordBoard
+                    ? Read<int>(app, "recordBoardPageIndex") : -1,
+                // Both Right and Enter turn the page forward. Only the lane route updates this pulse.
+                laneApplied = ReadNativeRecordLanePulse(direction) > previousPulse
+            };
+            var recorded = new List<NativeRecordChord>(result.nativeRecordChords);
+            int index = recorded.FindIndex(entry => entry.direction == chord.direction);
+            if (index < 0) recorded.Add(chord);
+            else if (recorded[index].Passed && !chord.Passed) recorded[index] = chord;
+            else return;
+            result.nativeRecordChords = recorded.ToArray();
+            result.nativeRecordChordStatus = ClassifyNativeRecordChords(result.nativeRecordChords);
+        }
+
+        private float ReadNativeRecordLanePulse(GreedLastRunChannel direction)
+            => Read<float[]>(Read<GreedLastRuntimeUi>(app, "runtimeUi"), "lanePressPulseUntil")[(int)direction - 1];
+
+        private static string ClassifyNativeRecordChords(NativeRecordChord[] chords)
+        {
+            if (Array.Exists(chords, chord => !chord.Passed)) return "ObservedWrongTransition";
+            return Array.Exists(chords, chord => chord.direction == "Left")
+                && Array.Exists(chords, chord => chord.direction == "Right") ? "Verified" : "Unobserved";
+        }
+
+        private static void VerifyNativeRecordChordClassifier()
+        {
+            var left = new NativeRecordChord { direction = "Left", beforeFrame = 3, afterFrame = 3,
+                fromPage = 0, toPage = 3, laneApplied = true };
+            var right = new NativeRecordChord { direction = "Right", beforeFrame = 4, afterFrame = 4,
+                fromPage = 3, toPage = 0, laneApplied = true };
+            Require(ClassifyNativeRecordChords(Array.Empty<NativeRecordChord>()) == "Unobserved"
+                && ClassifyNativeRecordChords(new[] { left }) == "Unobserved"
+                && ClassifyNativeRecordChords(new[] { left, right }) == "Verified",
+                "Both same-frame directional receipts are required to verify record chords.");
+            right.laneApplied = false;
+            Require(ClassifyNativeRecordChords(new[] { left, right }) == "ObservedWrongTransition",
+                "A right chord that followed only the Enter route must remain a failed observation.");
+            left.afterFrame++;
+            Require(ClassifyNativeRecordChords(new[] { left }) == "ObservedWrongTransition",
+                "A page change on a different frame cannot verify a chord.");
+            left.afterFrame = left.beforeFrame;
+            left.toPage = 1;
+            Require(ClassifyNativeRecordChords(new[] { left }) == "ObservedWrongTransition",
+                "A left chord that moved forward must remain a failed observation.");
         }
 
         private IEnumerator ObserveWindowCommands()
@@ -2151,6 +2239,35 @@ namespace GreedLast.PlayerChecks
             }
         }
     }
+    [DefaultExecutionOrder(-1000)]
+    public sealed class GreedLastNativeRecordChordTrace : MonoBehaviour
+    {
+        private GreedLastPlayerPersistenceProbe probe;
+        private int beforeFrame = -1, fromPage;
+        private float previousPulse;
+        private GreedLastRunChannel direction;
+
+        public void Configure(GreedLastPlayerPersistenceProbe owner) => probe = owner;
+
+        private void Update()
+        {
+            beforeFrame = -1;
+            if (probe == null || !probe.CanSampleNativeRecordChord) return;
+            bool left = Input.GetKeyDown(KeyCode.LeftArrow);
+            bool right = Input.GetKeyDown(KeyCode.RightArrow);
+            if (left == right || (!Input.GetKeyDown(KeyCode.Return) && !Input.GetKeyDown(KeyCode.KeypadEnter))
+                || Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0)
+                || Input.touchCount != 0) return;
+            direction = left ? GreedLastRunChannel.Left : GreedLastRunChannel.Right;
+            if (probe.TryBeginNativeRecordChord(direction, out fromPage, out previousPulse)) beforeFrame = Time.frameCount;
+        }
+
+        private void LateUpdate()
+        {
+            if (beforeFrame == Time.frameCount) probe.CompleteNativeRecordChord(beforeFrame, direction, fromPage, previousPulse);
+        }
+    }
+
     public sealed class GreedLastNativeGestureTrace : MonoBehaviour,
         IPointerDownHandler, IPointerUpHandler, IInitializePotentialDragHandler,
         IBeginDragHandler, IDragHandler, IEndDragHandler

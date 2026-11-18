@@ -173,7 +173,7 @@ if ($InteractiveMenus) {
     $report.Scope = 'Private SDK practice/two normal courses and one S3 save, then native comparison body/handle drags and post-focus fresh handle recovery without overwriting; original slot and new candidate remain across normal close and fresh processes. External input evidence required. Not physical rhythm, audio or phone testing.'
 }
 if ($InteractiveBoards) {
-    $report.Scope = 'Private SDK practice/normal clear in a headless process, then external native profile pages/record board and normal close. Two fresh processes verify the untouched candidate/record. No personal state reset, audible output or physical rhythm assessment.'
+    $report.Scope = 'Private SDK practice/normal clear in a headless process, then external native profile pages/record board and normal close. Optional focused record chord receipts identify input edges in the same Unity frame. Two fresh processes verify the untouched candidate/record. No personal state reset, audible output or physical rhythm assessment.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
@@ -660,6 +660,30 @@ try {
             (!$result.nativeBoardsCompleted -or $result.nativeProfilePagesMask -ne 15 -or !$result.nativeRecordBoardObserved)) {
             throw ('Required native profile/record coverage did not complete: ' + $phase)
         }
+        if ($phase -eq 'window-boards') {
+            $chords = @($result.nativeRecordChords)
+            $directions = @{}
+            $wrongTransition = $false
+            foreach ($chord in $chords) {
+                if ($chord.direction -cnotin @('Left','Right') -or $directions.ContainsKey($chord.direction) -or
+                    $chord.beforeFrame -lt 0 -or $chord.beforeFrame -ne $chord.afterFrame -or
+                    $chord.toPage -lt -1 -or $chord.toPage -gt 3 -or $chord.laneApplied -isnot [bool]) {
+                    throw 'Native record chord evidence must identify a distinct direction and one Unity frame.'
+                }
+                $expectedFrom = if ($chord.direction -ceq 'Left') { 0 } else { 3 }
+                if ($chord.fromPage -ne $expectedFrom) { throw 'A native record chord must start on its wraparound page.' }
+                $directions[$chord.direction] = $true
+                $wrongTransition = $wrongTransition -or !$chord.laneApplied -or $chord.toPage -ne (3 - $expectedFrom)
+            }
+            $chordStatus = if ($wrongTransition) { 'ObservedWrongTransition' }
+                elseif ($directions.Count -eq 2) { 'Verified' }
+                else { 'Unobserved' }
+            if ($result.nativeRecordChordStatus -cne $chordStatus) {
+                throw 'The reported native record chord status does not match the observed frames.'
+            }
+            $report.NativeRecordChords = $chords
+            $report.NativeRecordChordStatus = $chordStatus
+        }
         $expectedGiftStarts = if ($GiftHistory -and $phase -in @('gift-history-first','gift-history-last')) { 3 } else { 0 }
         if ($result.giftHistoryRequested -ne [bool]$GiftHistory -or $result.giftHistoryStarts -ne $expectedGiftStarts) {
             throw ('Gift history mode/start coverage differs: ' + $phase)
@@ -707,6 +731,9 @@ try {
         $report.Phases[-1].GiftHistoryThirdUseRejected = $result.giftHistoryThirdUseRejected
     }
     $report.FailedPhase = ''
+    if ($InteractiveBoards -and $report.NativeRecordChordStatus -ceq 'ObservedWrongTransition') {
+        throw 'The board and relaunch checks completed, but a same-frame record chord took the wrong route.'
+    }
     $report.Succeeded = $true
 }
 catch {
