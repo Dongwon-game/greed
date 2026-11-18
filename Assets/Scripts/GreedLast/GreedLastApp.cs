@@ -11432,8 +11432,22 @@ namespace GreedLast
         private bool TryHandlePrimaryKeyboardInput()
         {
             bool primaryPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
-            return TryHandlePrimaryKeyboardFrame(primaryPressed,
-                primaryPressed && ReadPressedLaneKeyboardChannel() != GreedLastRunChannel.None);
+            GreedLastRunChannel channel = primaryPressed
+                ? ReadPressedLaneKeyboardChannel()
+                : GreedLastRunChannel.None;
+            return TryHandlePrimaryKeyboardChannelFrame(primaryPressed, channel);
+        }
+
+        private bool TryHandlePrimaryKeyboardChannelFrame(bool primaryPressed, GreedLastRunChannel channel)
+        {
+            // Only the left and right record-board channels change pages.
+            if (primaryPressed && stateMachine.CurrentState == GreedLastScreenState.InfiniteRecordBoard
+                && (channel == GreedLastRunChannel.Left || channel == GreedLastRunChannel.Right))
+            {
+                return false;
+            }
+
+            return TryHandlePrimaryKeyboardFrame(primaryPressed, channel != GreedLastRunChannel.None);
         }
 
         private bool TryHandlePrimaryKeyboardFrame(bool primaryPressed, bool lanePressed)

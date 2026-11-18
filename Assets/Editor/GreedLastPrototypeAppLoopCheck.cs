@@ -591,6 +591,8 @@ namespace GreedLast.Editor
             int originalPreferredRecordPage = Read<int>(app, "preferredRecordBoardPageIndex");
             bool Frame(bool primary, bool lane) => (bool)Method(app, "TryHandlePrimaryKeyboardFrame")
                 .Invoke(app, new object[] { primary, lane });
+            bool ChannelFrame(GreedLastRunChannel channel) => (bool)Method(app, "TryHandlePrimaryKeyboardChannelFrame")
+                .Invoke(app, new object[] { true, channel });
             void Lane(GreedLastRunChannel channel) => Method(app, "HandleRunChannelInput")
                 .Invoke(app, new object[] { channel });
             int cases = 0;
@@ -666,10 +668,30 @@ namespace GreedLast.Editor
                     Require(state.CurrentState == GreedLastScreenState.InfiniteRecordBoard,
                         "The compound frame's center command must open records from the profile board.");
                     cases++;
+                    Method(app, "OpenRecordBoard").Invoke(app, new object[] { 0, false });
+                    Require(!ChannelFrame(GreedLastRunChannel.Left) && Read<int>(app, "recordBoardPageIndex") == 0,
+                        "Left+Enter on records must defer Enter before the previous-page command.");
+                    Lane(GreedLastRunChannel.Left);
+                    Require(Read<int>(app, "recordBoardPageIndex") == backend.RecordBoardPages - 1,
+                        "The compound record frame's left direction must wrap to the last page.");
+                    cases++;
+                    Require(!ChannelFrame(GreedLastRunChannel.Right)
+                        && Read<int>(app, "recordBoardPageIndex") == backend.RecordBoardPages - 1,
+                        "Right+Enter on records must defer Enter before the next-page command.");
+                    Lane(GreedLastRunChannel.Right);
+                    Require(Read<int>(app, "recordBoardPageIndex") == 0,
+                        "The compound record frame's right direction must wrap to the first page.");
+                    cases++;
+                    Require(ChannelFrame(GreedLastRunChannel.Center) && Read<int>(app, "recordBoardPageIndex") == 1,
+                        "Center+Enter on records must preserve Enter's next-page action.");
+                    cases++;
+                    Require(ChannelFrame(GreedLastRunChannel.None) && Read<int>(app, "recordBoardPageIndex") == 2,
+                        "Enter alone on records must still open the next page once.");
+                    cases++;
                     state.SetLobbyReady(backend.LoadLobby());
                 }
-                Require(cases == 14, "All clean/detailed compound keyboard paths must complete.");
-                Debug.Log("Greed compound menu keyboard passed: save, slot, preparation, opening gift and profile paths in both views. Synthetic router booleans and isolated backend, not OS keyboard/frame input.");
+                Require(cases == 22, "All clean/detailed compound keyboard paths must complete.");
+                Debug.Log("Greed compound menu keyboard passed: save, slot, preparation, opening gift, profile and record paths in both views. Synthetic router commands and isolated backend, not OS keyboard/frame input.");
             }
             finally
             {
