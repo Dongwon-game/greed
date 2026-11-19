@@ -348,6 +348,10 @@ try {
         if ($practiceResult.primaryResultLabel -cne '정확권 다시 (Enter)') {
             throw 'The PC practice result must identify Enter as the shortcut for exact-window review.'
         }
+        if (!$render.practiceResultEnterActionsVerified) {
+            throw 'The PC practice Enter command must retry after Good and enter the normal course after three exact responses.'
+        }
+        $report.PracticeResultEnterActionsVerified = $true
         if (!$render.sustainedRunMotionObserved -or @($render.liveMotionSamples).Count -ne 8) {
             throw 'Render evidence must include sustained live floor/pillar motion after the first accumulated beat.'
         }

@@ -37,6 +37,7 @@ namespace GreedLast.PlayerChecks
             public string scope = "Pre-exit assertions in an isolated Windows player. Later processes verify actual persistence. Real frames and app commands; not physical input, OS window close, process-kill recovery, audio or device performance.";
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool practiceCompletedBeforeCourseEntry;
+            public bool practiceResultEnterActionsVerified;
             public bool quitCallbackObserved;
             public bool audioOutputMuted;
             public ChoiceBoundary[] choiceBoundaries;
@@ -597,10 +598,17 @@ namespace GreedLast.PlayerChecks
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
                     "Actual rendered practice must not create normal/infinite progression.");
                 yield return CaptureFrame("practice-result", frames);
-                Call(app, "RequestReturnToLobby");
-                yield return WaitFor(() => state.CurrentState == GreedLastScreenState.LobbyReady);
-                Call(app, "RequestNormalRun");
-                yield return WaitFor(() => !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest);
+                Require((bool)Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None)
+                    && core.IsPracticeRun && !RunState().Stopped && RunState().StartCountdownActive,
+                    "The result Enter command must restart practice after a Good response.");
+                yield return DriveCourse();
+                Require(core.IsPracticeComplete && RunState().SuccessCount == 3 && RunState().GoodCount == 0
+                    && RunState().MissCount == 0 && VisibleText(primary.GetComponentInChildren<Text>()) == "일반 런으로 (Enter)",
+                    "The first exact practice result must offer normal entry on Enter.");
+                Require((bool)Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None)
+                    && !core.IsPracticeRun && state.CurrentState == GreedLastScreenState.RunCoreTest,
+                    "The result Enter command must enter the normal course after first exact practice.");
+                result.practiceResultEnterActionsVerified = true;
                 Require(RunState().ChoiceActive && RunState().ChoiceKind == GreedLastChoiceKind.StartGift,
                     "The normal render must show the start-gift choice before live gameplay.");
                 yield return CaptureFrame("normal-start-gift", frames);

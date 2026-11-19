@@ -456,7 +456,8 @@ namespace GreedLast.Editor
                         && cycle.liveBackPauseResume && cycle.heldPauseCommandCases == 2
                         && cycle.heldPauseCommandsPreservedRun && cycle.heldNormalClearPreservedResult
                         && cycle.heldClearDetailedControls == cycle.domainReloadDisabled
-                        && cycle.clearBackSaveProtected && cycle.terminalBackSettlements == 1
+                        && cycle.clearBackSaveProtected == cycle.domainReloadDisabled
+                        && cycle.clearEnterSaveProtected != cycle.domainReloadDisabled && cycle.terminalBackSettlements == 1
                         && cycle.directInfiniteRetryPrepared && cycle.directInfiniteRetryGoalStarted
                         && cycle.engineFirstReviewSectionCompleted && cycle.engineScopedReviewGoalPreserved
                         && cycle.directInfiniteResultRetainedAfterChoices && cycle.infiniteCountdownRecordBoundaryCases == 4
@@ -588,6 +589,7 @@ namespace GreedLast.Editor
             public bool removedCanvasBlockedCommands;
             public int directInfinitePreparationCancelCases;
             public bool heldSaveConfirmationsPreservedData, heldSaveConfirmationFreshTapRecovered, clearBackSaveProtected;
+            public bool clearEnterSaveProtected;
             public int heldConfirmationResolutionCases;
             public bool heldConfirmationResolutionsPreservedData, heldConfirmationResolutionFreshTapRecovered;
             public bool heldConfirmationOccupiedNeighborPreserved;
@@ -4266,12 +4268,21 @@ namespace GreedLast.Editor
                 report.fullNormalClear = true;
                 report.fullNormalJudgements = report.judgements;
                 VerifyQuitCandidateFromEngineClear();
-                Call(app, "TryHandlePauseOrBackKeyboardInput", true, false);
+                Require(Read<Button>(ui, "nextPatternButton").GetComponentInChildren<Text>().text == "저장 슬롯 선택 (Enter)",
+                    "The real normal clear must show Enter for opening slot selection.");
+                // Exercise both keyboard routes over the two full-course engine cycles.
+                bool clearHandled = report.domainReloadDisabled
+                    ? (bool)Call(app, "TryHandlePauseOrBackKeyboardInput", true, false)
+                    : (bool)Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None);
                 yield return null;
-                Require(state.CurrentState == GreedLastScreenState.SaveLoadoutDraft && backend.HasSaveLoadoutCandidate
+                Require(clearHandled && state.CurrentState == GreedLastScreenState.SaveLoadoutDraft
+                    && backend.HasSaveLoadoutCandidate && Read<bool>(app, "saveDraftRequiresExplicitSlotChoice")
+                    && Read<int>(backend, "normalClearCount") == clearsBefore + 1
+                    && Array.TrueForAll(backend.LoadSelectedSaveSlotView().SaveSlotOccupied, occupied => !occupied)
                     && !Read<Button>(ui, "nextPatternButton").IsInteractable(),
-                    "The clear action must open a save window locked until explicit slot selection.");
-                report.clearBackSaveProtected = true;
+                    "The clear key must settle once and open slot selection without saving to any slot.");
+                report.clearBackSaveProtected = report.domainReloadDisabled;
+                report.clearEnterSaveProtected = !report.domainReloadDisabled;
                 report.savedSlotIndex = report.domainReloadDisabled ? 2 : 1;
                 yield return TapTouch(Read<Button[]>(ui, "laneButtons")[report.savedSlotIndex]);
                 yield return WaitSeconds(0.4f);
