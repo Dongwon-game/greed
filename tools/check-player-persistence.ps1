@@ -6,6 +6,7 @@ param(
     [switch]$CaptureFrames,
     [switch]$MotionComfortOff,
     [switch]$InteractiveWindow,
+    [switch]$InteractiveChoiceKeys,
     [switch]$InteractiveLoadout,
     [switch]$InteractiveMenus,
     [ValidateRange(1, 60)]
@@ -33,6 +34,10 @@ if ($MotionComfortOff -and !$CaptureFrames) {
     throw 'MotionComfortOff requires CaptureFrames.'
 }
 $frameWidth, $frameHeight = $FrameSize -split 'x'
+if ($InteractiveChoiceKeys -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or
+    $InteractiveBoards -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
+    throw 'Choose native consecutive choice keys separately from every other mode.'
+}
 if ($InteractiveBoards -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or $BackgroundResults -or $UnreadableSave -or $PracticeQuit -or $ScopedGoals -or $GiftHistory)) {
     throw 'Choose native profile/record inspection separately from every other mode.'
 }
@@ -99,6 +104,7 @@ $operation = if ($GiftHistory) { 'Seed three synthetic gift histories in a uniqu
     elseif ($InteractiveLoadout) { 'Build a private native S3 save/cancel/two-start/auto-empty loop; await external menu input and closure, then verify fresh processes' }
     elseif ($InteractiveMenus) { 'Prepare two private normal courses and one S3 save; await native comparison gestures without overwriting, then verify the slot and candidate in fresh processes' }
     elseif ($InteractiveBoards) { 'Prepare one private normal clear, await external profile/record inspection without saving or consuming, then verify two fresh processes' }
+    elseif ($InteractiveChoiceKeys) { 'Open one private run for two native hold/release/fresh-arrow choice transitions, then verify the clear across two fresh processes' }
     elseif ($InteractiveWindow) { 'Build an isolated interactive test player; await external practice/pause/resume and window closure, then verify fresh-process persistence' }
     else { 'Export an isolated test project, build its unique product and run ten normal-exit/relaunch phases' }
 if (!$PSCmdlet.ShouldProcess($project, $operation)) { return }
@@ -144,6 +150,7 @@ $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.MenuWaitMinutes = if ($InteractiveMenus) { $MenuWaitMinutes } else { 0 }
 $report.InteractiveBoardsRequested = [bool]$InteractiveBoards
+$report.InteractiveChoiceKeysRequested = [bool]$InteractiveChoiceKeys
 $report.UnreadableSaveRequested = [bool]$UnreadableSave
 $report.PracticeQuitRequested = [bool]$PracticeQuit
 $report.ScopedGoalsRequested = [bool]$ScopedGoals
@@ -174,6 +181,9 @@ if ($InteractiveMenus) {
 }
 if ($InteractiveBoards) {
     $report.Scope = 'Private SDK practice/normal clear in a headless process, then external native profile pages/record board and normal close. Optional focused record chord receipts identify input edges in the same Unity frame. Two fresh processes verify the untouched candidate/record. No personal state reset, audible output or physical rhythm assessment.'
+}
+if ($InteractiveChoiceKeys) {
+    $report.Scope = 'Private native window with SDK-driven traps and two observed arrow-key holds/releases/fresh presses on consecutive cards. Normal closure and two fresh processes verify the unsaved clear candidate.'
 }
 
 function Assert-CleanPlayerLog([string]$path) {
@@ -411,6 +421,7 @@ try {
         elseif ($InteractiveLoadout) { @('window-loadout','window-loadout-verify','window-loadout-verify-again') }
         elseif ($InteractiveMenus) { @('window-menu','window-menu-verify','window-menu-verify-again') }
         elseif ($InteractiveBoards) { @('clear','window-boards','window-boards-verify','window-boards-verify-again') }
+        elseif ($InteractiveChoiceKeys) { @('window-clear','window-verify','window-verify-again') }
         elseif ($InteractiveWindow) { @('window-play','window-clear','window-verify','window-verify-again') }
         else { @('clear','save','first-use','last-use','verify','verify-again',
             'live-normal','normal-fail','verify-failure','verify-failure-again') }
@@ -421,6 +432,7 @@ try {
         $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
         $captureClear = $CaptureFrames -and $phase -eq 'clear'
         $captureFirstUse = $CaptureFrames -and $phase -eq 'first-use'
+        $observeChoiceKeys = $InteractiveChoiceKeys -and $phase -eq 'window-clear'
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
             elseif ($captureClear -or $captureFirstUse) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
             else { @('-batchmode','-nographics') }
@@ -432,11 +444,13 @@ try {
         if ($captureClear) { $playerArguments += '-greed-probe-capture-clear' }
         if ($captureFirstUse) { $playerArguments += '-greed-probe-capture-first-use' }
         if ($captureFirstUse -and $MotionComfortOff) { $playerArguments += '-greed-probe-motion-comfort-off' }
+        if ($observeChoiceKeys) { $playerArguments += '-greed-probe-native-choice-keys' }
         if ($phase -eq 'window-menu') { $playerArguments += @('-greed-probe-menu-wait-minutes', [string]$MenuWaitMinutes) }
         # Native menu setup remains bounded at 600s. The operator then receives
         # a full, separate wait budget after the comparison observers are ready.
         $timeout = if ($phase -eq 'window-menu') { (600 + 60 * $MenuWaitMinutes + 30) * 1000 }
-            elseif ($phase -eq 'window-loadout') { 630000 } elseif ($interactive) { 360000 } else { 180000 }
+            elseif ($phase -eq 'window-loadout') { 630000 } elseif ($observeChoiceKeys) { 570000 }
+            elseif ($interactive) { 360000 } else { 180000 }
         Invoke-OwnedProcess $exe $playerArguments $timeout $phase 0 $interactive
         $report.PlayerLogChecks += Assert-CleanPlayerLog $log
         $path = Join-Path $root ($phase + '.json')
@@ -454,6 +468,16 @@ try {
         }
         if ($result.nativeGestureObserverControls -ne 4) {
             throw ('Native drag observer click/begin/travel/release controls are incomplete: ' + $phase)
+        }
+        if ($observeChoiceKeys) {
+            $choiceKeys = @($result.nativeChoiceBoundaries)
+            if (($choiceKeys.from -join ',') -cne 'Node,Gift' -or ($choiceKeys.to -join ',') -cne 'Gift,Relic' -or
+                ($choiceKeys.heldKey -join ',') -cne 'LeftArrow,DownArrow' -or ($choiceKeys.freshKey -join ',') -cne 'LeftArrow,RightArrow' -or
+                @($choiceKeys | Where-Object { $_.heldSeconds -lt 1 -or $_.pressFrame -ge $_.releaseFrame -or $_.releaseFrame -ge $_.freshFrame }).Count -or
+                !$result.quitCallbackObserved -or !$result.terminalBeforeQuit) {
+                throw 'Both native choice keys must keep the next card open through hold and release, then select it with a fresh arrow press.'
+            }
+            $report.NativeChoiceBoundaries = $choiceKeys
         }
         if ($CaptureFrames -and $phase -eq 'clear' -and !$result.practiceCompletedBeforeCourseEntry) {
             throw 'The post-render course must preserve and explicitly handle prior practice completion.'

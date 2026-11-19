@@ -26,6 +26,7 @@ namespace GreedLast.PlayerChecks
         private int menuWaitSeconds;
         private bool finished, outputValidated;
         private bool backgroundResults, scopedGoals, giftHistory;
+        private bool nativeChoiceKeys;
         private bool windowAwaitingClose, windowReady;
         private int nativeRecordChordObservationCount;
         private readonly Result result = new Result();
@@ -38,6 +39,8 @@ namespace GreedLast.PlayerChecks
             public bool succeeded, candidate, terminalBeforeQuit, secondRunAliveAfterSlotClear, onboardingComplete;
             public bool practiceCompletedBeforeCourseEntry;
             public bool practiceResultEnterActionsVerified;
+            public string nativeChoicePrompt;
+            public NativeChoiceBoundary[] nativeChoiceBoundaries;
             public bool quitCallbackObserved;
             public bool audioOutputMuted;
             public ChoiceBoundary[] choiceBoundaries;
@@ -114,6 +117,14 @@ namespace GreedLast.PlayerChecks
             public string from, to;
             public float rapidSeconds, freshSeconds;
             public bool primaryDeferredToLane;
+        }
+
+        [Serializable]
+        private sealed class NativeChoiceBoundary
+        {
+            public string from, to, heldKey, freshKey;
+            public int pressFrame, releaseFrame, freshFrame;
+            public float heldSeconds;
         }
 
         [Serializable]
@@ -212,6 +223,9 @@ namespace GreedLast.PlayerChecks
             backgroundResults = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-background-results") >= 0;
             scopedGoals = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-scoped-goals") >= 0;
             giftHistory = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-gift-history") >= 0;
+            nativeChoiceKeys = Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-native-choice-keys") >= 0;
+            Require(!nativeChoiceKeys || (phase == "window-clear" && !Application.isBatchMode),
+                "Native choice key observations require the focused interactive clear window.");
             result.giftHistoryRequested = giftHistory;
             result.backgroundResultsRequested = backgroundResults;
             Require(!backgroundResults || !phase.StartsWith("window-", StringComparison.Ordinal),
@@ -240,6 +254,7 @@ namespace GreedLast.PlayerChecks
                 && (!giftHistory || (!backgroundResults && !scopedGoals)), "Gift history checks require their dedicated noninteractive mode.");
             Require(!File.Exists(Path.Combine(root, phase + ".json")), "Never overwrite an earlier phase result.");
             deadline = Time.realtimeSinceStartup + (phase == "window-loadout" || phase == "window-menu" ? 600f
+                : nativeChoiceKeys ? 540f
                 : phase == "window-play" || phase == "window-clear" || phase == "window-boards" ? 330f : 150f);
             result.phase = phase;
             result.startedUtc = DateTime.UtcNow.ToString("O");
@@ -633,7 +648,7 @@ namespace GreedLast.PlayerChecks
             {
                 Require(Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
                     && !backend.HasSaveLoadoutCandidate && EmptySlots(), "The isolated product must start empty.");
-                if (phase == "window-clear")
+                if (phase == "window-clear" && !nativeChoiceKeys)
                     Require(Previous("window-play").succeeded && Previous("window-play").quitCallbackObserved
                         && Count("normalFailCount") == 0 && Count("normalAbandonCount") == 0
                         && backend.LoadSelectedSaveSlotView().GrowthPoints == 0,
@@ -663,7 +678,14 @@ namespace GreedLast.PlayerChecks
                 var finishFrames = phase == "clear"
                     && Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-capture-clear") >= 0
                     ? new List<Frame>() : null;
+                if (nativeChoiceKeys)
+                {
+                    windowAwaitingClose = true;
+                    result.nativeChoiceBoundaries = Array.Empty<NativeChoiceBoundary>();
+                }
                 yield return DriveCourse(chapterTwoGood: scopedGoals && phase == "clear", finishFrames: finishFrames);
+                if (nativeChoiceKeys)
+                    Require(result.nativeChoiceBoundaries.Length == 2, "Both native choice key transitions must finish before clear.");
                 bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
                 bool settledNativeClear = (phase == "window-loadout" || phase == "window-menu") && backend.HasSaveLoadoutCandidate
                     && Count("normalClearCount") == 1;
@@ -1199,9 +1221,7 @@ namespace GreedLast.PlayerChecks
                 || !(bool)Call(app, "CanAcceptPlayerInput") || !GreedLastApp.CanUsePrototypeKeyboardInput()) return false;
 
             // The app may resolve a simultaneous third key to a different lane.
-            MethodInfo readChannel = typeof(GreedLastApp).GetMethod("ReadPressedLaneKeyboardChannel",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            if ((GreedLastRunChannel)readChannel.Invoke(null, null) != direction) return false;
+            if (ReadPressedNativeLane() != direction) return false;
             lanePulse = ReadNativeRecordLanePulse(direction);
             return true;
         }
@@ -1983,11 +2003,17 @@ namespace GreedLast.PlayerChecks
                 }
                 else if (run.ChoiceActive && now >= nextChoice)
                 {
-                    Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                    bool routeToGift = run.ChapterIndex == 1 && run.ChoiceKind == GreedLastChoiceKind.Node;
+                    bool giftToRelic = run.ChapterIndex == 2 && run.ChoiceKind == GreedLastChoiceKind.Gift;
+                    if (nativeChoiceKeys && routeToGift)
+                        yield return ObserveNativeChoiceKeys(run.ChoiceKind, GreedLastChoiceKind.Gift, KeyCode.LeftArrow, KeyCode.LeftArrow);
+                    else if (nativeChoiceKeys && giftToRelic)
+                        yield return ObserveNativeChoiceKeys(run.ChoiceKind, GreedLastChoiceKind.Relic, KeyCode.DownArrow, KeyCode.RightArrow);
+                    else Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
                     nextChoice = now + 0.25f;
-                    if (choiceBoundaries != null && run.ChapterIndex == 1 && run.ChoiceKind == GreedLastChoiceKind.Node)
+                    if (choiceBoundaries != null && routeToGift)
                         yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Gift, choiceBoundaries);
-                    else if (choiceBoundaries != null && run.ChapterIndex == 2 && run.ChoiceKind == GreedLastChoiceKind.Gift)
+                    else if (choiceBoundaries != null && giftToRelic)
                         yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries, finishFrames);
                 }
                 else if (respond && responses < maxResponses && run.ActivePattern && !run.CountdownActive && !run.Paused
@@ -2016,6 +2042,76 @@ namespace GreedLast.PlayerChecks
             if (chapterTwoGood) Require(injectedGood, "The full process course must include the off-scope Good control.");
             if (choiceBoundaries != null) result.choiceBoundaries = choiceBoundaries.ToArray();
             yield return null;
+        }
+
+        private IEnumerator ObserveNativeChoiceKeys(GreedLastChoiceKind from, GreedLastChoiceKind to,
+            KeyCode heldKey, KeyCode freshKey)
+        {
+            string observation = "window-clear-choice-" + from.ToString().ToLowerInvariant();
+            result.nativeChoicePrompt = $"Hold {heldKey} until the next card has been open for at least one second, release, then press {freshKey}.";
+            WriteObservation(observation + "-ready", atomic: true);
+            while (!Input.GetKeyDown(heldKey))
+            {
+                CheckDeadline();
+                Require(RunState().ChoiceActive && RunState().ChoiceKind == from,
+                    "The first card changed before its expected native key press: " + from);
+                yield return null;
+            }
+
+            RequireNativeChoiceKeyPress(heldKey);
+            var receipt = new NativeChoiceBoundary
+            {
+                from = from.ToString(), to = to.ToString(), heldKey = heldKey.ToString(), freshKey = freshKey.ToString(),
+                pressFrame = Time.frameCount
+            };
+            float pressedAt = Time.realtimeSinceStartup;
+            while (Input.GetKey(heldKey))
+            {
+                CheckDeadline();
+                Require(Application.isFocused && RunState().ChoiceActive && RunState().ChoiceKind == to,
+                    "The next card must stay open while the original native key is held: " + to);
+                yield return null;
+            }
+            receipt.heldSeconds = Time.realtimeSinceStartup - pressedAt;
+            receipt.releaseFrame = Time.frameCount;
+            Require(Input.GetKeyUp(heldKey) && receipt.heldSeconds >= 1f && Application.isFocused
+                && RunState().ChoiceActive && RunState().ChoiceKind == to,
+                "The original native key must be released after a one-second hold without selecting the next card: " + to);
+
+            do
+            {
+                CheckDeadline();
+                Require(Application.isFocused && RunState().ChoiceActive && RunState().ChoiceKind == to,
+                    "The next card changed before its fresh native key press: " + to);
+                yield return null;
+            } while (!Input.GetKeyDown(freshKey));
+            RequireNativeChoiceKeyPress(freshKey);
+            Require(!RunState().ChoiceActive, "A fresh native key press must select the next card exactly once: " + to);
+            receipt.freshFrame = Time.frameCount;
+            var receipts = new List<NativeChoiceBoundary>(result.nativeChoiceBoundaries) { receipt };
+            result.nativeChoiceBoundaries = receipts.ToArray();
+            result.nativeChoicePrompt = string.Empty;
+            WriteObservation(observation + "-completed", atomic: true);
+        }
+
+        private void RequireNativeChoiceKeyPress(KeyCode key)
+        {
+            GreedLastRunChannel expectedLane = key == KeyCode.LeftArrow ? GreedLastRunChannel.Left
+                : key == KeyCode.DownArrow ? GreedLastRunChannel.Center : GreedLastRunChannel.Right;
+            Require(Application.isFocused && Input.GetKeyDown(key) && Input.GetKey(key)
+                && GreedLastApp.CanUsePrototypeKeyboardInput() && (bool)Call(app, "CanAcceptPlayerInput")
+                && ReadPressedNativeLane() == expectedLane
+                && !Input.GetKeyDown(KeyCode.Return) && !Input.GetKeyDown(KeyCode.KeypadEnter)
+                && !Input.GetKeyDown(KeyCode.Escape) && !Input.GetKeyDown(KeyCode.P)
+                && !Input.GetMouseButtonDown(0) && !Input.GetMouseButtonUp(0) && Input.touchCount == 0,
+                "Keep the isolated game focused and use only the requested arrow key: " + key);
+        }
+
+        private static GreedLastRunChannel ReadPressedNativeLane()
+        {
+            MethodInfo readChannel = typeof(GreedLastApp).GetMethod("ReadPressedLaneKeyboardChannel",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            return (GreedLastRunChannel)readChannel.Invoke(null, null);
         }
 
         private IEnumerator VerifyChoiceBoundary(GreedLastChoiceKind from, GreedLastChoiceKind to,
