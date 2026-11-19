@@ -40482,18 +40482,25 @@ namespace GreedLast
         }
 
         private static float BuildTrapApproachDepth(float visualProgress, float coreProgress)
-            => Mathf.Clamp01(visualProgress / Mathf.Max(0.01f, coreProgress));
+        {
+            float depth = Mathf.Clamp01(visualProgress / Mathf.Max(0.01f, coreProgress));
+            float remaining = 1f - depth;
+            // Compress distant motion and return to the original pace at the judgement line.
+            return depth * (1f - 0.65f * remaining * remaining);
+        }
 
         private static float BuildTrapApproachLaneX(float channelX, float visualProgress, float coreProgress)
             => Mathf.Lerp(0.5f, channelX, Mathf.Lerp(0.48f, 1f, BuildTrapApproachDepth(visualProgress, coreProgress)));
 
         private static float BuildTrapApproachY(GreedLastPatternModel pattern, float visualProgress, float coreProgress)
         {
-            float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, visualProgress);
+            float depth = BuildTrapApproachDepth(visualProgress, coreProgress);
+            float projectedProgress = visualProgress < coreProgress ? coreProgress * depth : visualProgress;
+            float y = Mathf.Lerp(BuildTrapApproachStartY(pattern), 0.18f, projectedProgress);
             if (BuildRunnerResponseType(pattern) == RunnerResponseType.Jump)
             {
                 // Keep distant floor traps visible ahead of the runner's silhouette.
-                y += 0.16f * (1f - BuildTrapApproachDepth(visualProgress, coreProgress));
+                y += 0.16f * (1f - depth);
             }
 
             return y;

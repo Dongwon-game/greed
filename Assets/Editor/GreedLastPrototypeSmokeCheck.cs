@@ -14372,6 +14372,13 @@ namespace GreedLast.Editor
                     && Mathf.Approximately(InvokeRuntimeUiFloat("BuildTrapApproachLaneX", 0.8f, 1f, ghostCoreProgress), 0.8f),
                     "Trap approach perspective must converge distant lanes and preserve the original lanes at judgement and beyond.");
                 float originalStartY = InvokeRuntimeUiFloat("BuildTrapApproachStartY", snapshot.Pattern);
+                float projectedStartY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, 0f, ghostCoreProgress);
+                float farStepY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress * 0.25f, ghostCoreProgress);
+                float middleStepY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress * 0.50f, ghostCoreProgress);
+                float nearStepY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress * 0.75f, ghostCoreProgress);
+                Require(projectedStartY > farStepY && farStepY > middleStepY && middleStepY > nearStepY
+                    && middleStepY - nearStepY > (projectedStartY - farStepY) * 1.3f,
+                    "The same time step must move a visible trap farther near the runner than at a distance.");
                 float projectedCoreY = InvokeRuntimeUiFloat(
                     "BuildTrapApproachY", snapshot.Pattern, ghostCoreProgress, ghostCoreProgress);
                 Require(Mathf.Approximately(projectedCoreY, Mathf.Lerp(originalStartY, 0.18f, ghostCoreProgress)),
@@ -14387,7 +14394,6 @@ namespace GreedLast.Editor
                     "Timing bands and input traces must follow the trap through the judgement line in order.");
                 if (snapshot.Pattern.AvoidanceType == GreedLastAvoidanceType.Jump)
                 {
-                    float projectedStartY = InvokeRuntimeUiFloat("BuildTrapApproachY", snapshot.Pattern, 0f, ghostCoreProgress);
                     Require(projectedStartY > originalStartY && projectedStartY < 1f,
                         "A distant floor trap must rise above its former start without leaving the lane panel.");
                 }
