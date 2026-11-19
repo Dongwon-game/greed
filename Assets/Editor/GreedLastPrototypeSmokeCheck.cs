@@ -11210,8 +11210,8 @@ namespace GreedLast.Editor
                         : InvokeRuntimeUiLabel("BuildActivePatternBeatCue", run) + window;
                     Require(label == expected && !label.Contains("\n", StringComparison.Ordinal),
                         "Compact timing must reflect the actual beat and success/Good boundaries in one line: " + label);
-                    Color32 standardColor = InvokeRuntimeUiColor("GetTimingGuideColor", run, false);
-                    Color32 pcGuideColor = InvokeRuntimeUiColor("GetTimingGuideColor", run, true);
+                    Color32 standardColor = InvokeRuntimeUiSnapshotColor("GetTimingGuideColor", run);
+                    Color32 pcGuideColor = InvokeRuntimeUiColor("BuildTimingGuideColor", run, true);
                     bool goodGuide = Mathf.Abs(delta) > success && Mathf.Abs(delta) < good;
                     Require(goodGuide
                         ? pcGuideColor.r > standardColor.r && pcGuideColor.g > standardColor.g

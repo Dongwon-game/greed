@@ -499,6 +499,10 @@ namespace GreedLast.Editor
                     BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { run });
                 Require(color.Equals(waiting ? new Color32(105, 168, 190, 245) : new Color32(207, 87, 65, 235)),
                     "Pending calibrated input must use a waiting color, not the missed-window red.");
+                Color32 windowsGuide = (Color32)typeof(GreedLastRuntimeUi).GetMethod("BuildTimingGuideColor",
+                    BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { run, true });
+                Require(waiting ? windowsGuide.r > color.r && windowsGuide.g > color.g && windowsGuide.b > windowsGuide.g
+                    : windowsGuide.Equals(color), "The compact Windows guide must brighten only the calibrated waiting color.");
                 int historyCount = Read<int>(ui, "judgementHistoryCount");
                 string compact = Label("BuildCompactTimingGuideLabel", run);
                 string detail = Label("BuildTimingGuideLabel", run);
