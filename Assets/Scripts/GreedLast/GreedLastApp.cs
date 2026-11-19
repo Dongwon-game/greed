@@ -28691,12 +28691,15 @@ namespace GreedLast
             SetAnchored(timingGuideText.rectTransform, 0.5f, 0.12f, 1100f, 64f);
             timingGuideText.color = new Color32(218, 226, 218, 220);
 
-            if (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsEditor)
+            if (IsWindowsDesktop)
             {
                 AddRunGuideShadow(activeActionCueText);
                 AddRunGuideShadow(timingGuideText);
             }
         }
+
+        private static bool IsWindowsDesktop => Application.platform == RuntimePlatform.WindowsPlayer
+            || Application.platform == RuntimePlatform.WindowsEditor;
 
         private static void AddRunGuideShadow(Text guide)
         {
@@ -37520,7 +37523,7 @@ namespace GreedLast
                 timingGuideText.fontSize = compactGuide ? 36 : 28;
                 timingGuideText.text = compactGuide
                     ? GetCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
-                Color32 guideColor = GetTimingGuideColor(latestRunSnapshot);
+                Color32 guideColor = GetTimingGuideColor(latestRunSnapshot, compactGuide && IsWindowsDesktop);
                 if (exactPulse > 0f)
                 {
                     guideColor = Color32.Lerp(
@@ -37596,7 +37599,7 @@ namespace GreedLast
             float downbeatPulse = ShouldShowDownbeatPulse(snapshot)
                 ? BuildDownbeatPulse(downbeatPulseUntil - Time.unscaledTime)
                 : 0f;
-            Color32 color = GetTimingGuideColor(snapshot);
+            Color32 color = GetTimingGuideColor(snapshot, compact && IsWindowsDesktop);
             if (exactPulse > 0f)
             {
                 color = Color32.Lerp(color, new Color32(255, 248, 210, 255), exactPulse * 0.64f);
@@ -48765,7 +48768,7 @@ namespace GreedLast
             return Mathf.Max(0.018f, pattern.SuccessWindowSeconds * CenterHitWindowScale);
         }
 
-        private static Color32 GetTimingGuideColor(GreedLastRunSnapshot snapshot)
+        private static Color32 GetTimingGuideColor(GreedLastRunSnapshot snapshot, bool brighterGoodGuide = false)
         {
             if (snapshot.ResumeCountdownActive || (snapshot.StartCountdownActive && !snapshot.Paused))
             {
@@ -48782,9 +48785,10 @@ namespace GreedLast
                 return new Color32(125, 139, 143, 180);
             }
 
+            Color32 goodGuide = brighterGoodGuide ? new Color32(158, 205, 222, 245) : new Color32(105, 168, 190, 245);
             if (ShouldWaitForCalibratedInput(snapshot))
             {
-                return new Color32(105, 168, 190, 245);
+                return goodGuide;
             }
 
             float absoluteDelta = Mathf.Abs(snapshot.CoreDeltaSeconds);
@@ -48800,7 +48804,7 @@ namespace GreedLast
 
             if (absoluteDelta <= snapshot.Pattern.GoodWindowSeconds)
             {
-                return new Color32(105, 168, 190, 245);
+                return goodGuide;
             }
 
             if (snapshot.CoreDeltaSeconds > snapshot.Pattern.GoodWindowSeconds)
