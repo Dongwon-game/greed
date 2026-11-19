@@ -548,6 +548,8 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 최종 `report.json`의 `NativeRecordChordStatus`가 `Verified`이면 두 방향을 확인한 것이다. `Unobserved`이면 기록 화면 기본 검사가 통과하더라도 동시 입력 확인은 남아 있다. `ObservedWrongTransition`이면 기록된 방향·전후 페이지·Unity 프레임을 `NativeRecordChords`에서 확인한다.
 
+창을 열어 둔 상태에서도 `./tools/get-native-menu-status.ps1 -CheckId '<시험 ID>' -ArtifactsDirectory 'D:\CodexGreedChecks'`의 `RecordChordStatus`와 `RecordChords`를 확인할 수 있다. 시험 창이 활성 상태에서 관찰된 입력만 기록하며, 상태 조회는 화면 캡처나 입력 없이 실행한다. 종료 후 재실행 확인은 최종 보고서의 `Passed`로 확인한다.
+
 `28ae367`의 `-InteractiveBoards -WhatIf`로 실행 조건을 확인했다. 창을 쓰지 않는 960×540 격리 검사 `7a66db58a4014b6ca245caba78a34425`에서 동시 입력 분류 대조와 저장 재실행 10단계·안전 대조 4개가 통과했다. 실제 키 입력은 격리 창에서 확인한다.
 
 기본 `Application.Quit` 검사와 위 실제 X/Alt+F4 관찰은 구분한다. 강제 종료·정전 복구, 스피커 소리·사람의 입력 지연·휴대폰 성능은 아직 별도 확인이다. 게임 화면의 직접 순서는 [빠른 확인](GreedLast_Prototype_QuickCheck.md)을 따른다. 검증 수치를 늘리려고 개인 조합이나 진행도를 초기화·소모하지 않는다.

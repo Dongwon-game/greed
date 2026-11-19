@@ -27,6 +27,7 @@ namespace GreedLast.PlayerChecks
         private bool finished, outputValidated;
         private bool backgroundResults, scopedGoals, giftHistory;
         private bool windowAwaitingClose, windowReady;
+        private int nativeRecordChordObservationCount;
         private readonly Result result = new Result();
 
         [Serializable]
@@ -1215,6 +1216,7 @@ namespace GreedLast.PlayerChecks
             else return;
             result.nativeRecordChords = recorded.ToArray();
             result.nativeRecordChordStatus = ClassifyNativeRecordChords(result.nativeRecordChords);
+            WriteObservation("window-boards-chords-" + ++nativeRecordChordObservationCount, atomic: true);
         }
 
         private float ReadNativeRecordLanePulse(GreedLastRunChannel direction)
@@ -2184,7 +2186,7 @@ namespace GreedLast.PlayerChecks
         {
             if (!condition) throw new InvalidOperationException(message);
         }
-        private void WriteObservation(string name)
+        private void WriteObservation(string name, bool atomic = false)
         {
             result.screen = state == null ? "unavailable" : state.CurrentState.ToString();
             result.audioOutputMuted = AudioListener.volume == 0f;
@@ -2199,9 +2201,12 @@ namespace GreedLast.PlayerChecks
                 result.uses = Uses();
                 result.onboardingComplete = PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1;
             }
-            if (outputValidated)
-                using (var file = new FileStream(Path.Combine(root, name + ".json"), FileMode.CreateNew))
-                using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(result, true));
+            if (!outputValidated) return;
+            string path = Path.Combine(root, name + ".json");
+            string output = atomic ? path + ".pending" : path;
+            using (var file = new FileStream(output, FileMode.CreateNew))
+            using (var writer = new StreamWriter(file)) writer.Write(JsonUtility.ToJson(result, true));
+            if (atomic) File.Move(output, path);
         }
 
         private void OnApplicationQuit()
