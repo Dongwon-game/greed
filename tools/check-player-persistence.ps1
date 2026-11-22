@@ -6,6 +6,7 @@ param(
     [switch]$CaptureFrames,
     [switch]$CaptureStraightRunClip,
     [switch]$CaptureCorridorCourseClip,
+    [switch]$CaptureNormalRunClip,
     [switch]$MotionComfortOff,
     [switch]$InteractiveWindow,
     [switch]$InteractiveChoiceKeys,
@@ -29,14 +30,19 @@ Set-StrictMode -Version Latest
 if ($PSBoundParameters.ContainsKey('MenuWaitMinutes') -and !$InteractiveMenus) {
     throw 'MenuWaitMinutes requires InteractiveMenus.'
 }
-if ($PSBoundParameters.ContainsKey('FrameSize') -and !$CaptureFrames) {
-    throw 'FrameSize requires CaptureFrames.'
+if ($PSBoundParameters.ContainsKey('FrameSize') -and !$CaptureFrames -and !$CaptureNormalRunClip) {
+    throw 'FrameSize requires CaptureFrames or CaptureNormalRunClip.'
 }
 if ($MotionComfortOff -and !$CaptureFrames) {
     throw 'MotionComfortOff requires CaptureFrames.'
 }
 if (($CaptureStraightRunClip -or $CaptureCorridorCourseClip) -and (!$CaptureFrames -or $MotionComfortOff -or $FrameSize -ne '960x540')) {
     throw 'Run clips require CaptureFrames, FrameSize 960x540 and the default motion settings.'
+}
+if ($CaptureNormalRunClip -and ($FrameSize -ne '960x540' -or $MotionComfortOff -or $InteractiveWindow -or
+    $InteractiveChoiceKeys -or $InteractiveLoadout -or $InteractiveMenus -or $InteractiveBoards -or
+    $ScopedGoals -or $GiftHistory -or $UnreadableSave -or $PracticeQuit -or $BackgroundResults)) {
+    throw 'The complete normal-run clip requires FrameSize 960x540 and the standard offscreen sequence.'
 }
 $frameWidth, $frameHeight = $FrameSize -split 'x'
 if ($InteractiveChoiceKeys -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or
@@ -153,6 +159,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
 $report.StraightRunClipRequested = [bool]$CaptureStraightRunClip
 $report.CorridorCourseClipRequested = [bool]$CaptureCorridorCourseClip
+$report.NormalRunClipRequested = [bool]$CaptureNormalRunClip
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.MenuWaitMinutes = if ($InteractiveMenus) { $MenuWaitMinutes } else { 0 }
@@ -482,9 +489,10 @@ try {
         $interactive = $phase -in @('window-play','window-clear','window-loadout','window-menu','window-boards')
         $captureClear = $CaptureFrames -and $phase -eq 'clear'
         $captureFirstUse = $CaptureFrames -and $phase -eq 'first-use'
+        $filmNormal = $CaptureNormalRunClip -and $phase -eq 'clear'
         $observeChoiceKeys = $InteractiveChoiceKeys -and $phase -eq 'window-clear'
         $modeArguments = if ($interactive) { @('-screen-fullscreen','0','-screen-width','1280','-screen-height','720') }
-            elseif ($captureClear -or $captureFirstUse) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
+            elseif ($captureClear -or $captureFirstUse -or $filmNormal) { @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight) }
             else { @('-batchmode','-nographics') }
         $playerArguments = $modeArguments + @('-logFile',('"'+$log+'"'),
             '-greed-probe-id',$id,'-greed-probe-phase',$phase,'-greed-probe-root',('"'+$root+'"'))
@@ -492,6 +500,7 @@ try {
         if ($ScopedGoals) { $playerArguments += '-greed-probe-scoped-goals' }
         if ($GiftHistory) { $playerArguments += '-greed-probe-gift-history' }
         if ($captureClear) { $playerArguments += '-greed-probe-capture-clear' }
+        if ($filmNormal) { $playerArguments += '-greed-probe-film-normal' }
         if ($captureFirstUse) { $playerArguments += '-greed-probe-capture-first-use' }
         if ($captureFirstUse -and $MotionComfortOff) { $playerArguments += '-greed-probe-motion-comfort-off' }
         if ($observeChoiceKeys) { $playerArguments += '-greed-probe-native-choice-keys' }
@@ -509,6 +518,21 @@ try {
             throw ('Phase result identity or assertions failed: ' + $phase)
         }
         if (!$result.audioOutputMuted) { throw ('The persistence player must keep its audio output muted: ' + $phase) }
+        if ($filmNormal) {
+            $samples = @($result.normalRunFrames)
+            $clipFile = Join-Path $root 'normal-run.avi'
+            if ($samples.Count -lt 240 -or !$result.terminalBeforeQuit -or !$result.record.valid -or
+                $result.record.successes -ne 15 -or $result.record.misses -ne 0 -or
+                $samples[0].choice -cne 'StartGift' -or $samples[-1].runPhase -cne 'ClearResolving' -or
+                $samples[-1].successes -ne 15) { throw 'The complete film must begin at the opening gift and end on the real 15-exact clear.' }
+            $choices = @($samples | Where-Object choice -CNE 'None' | Select-Object -ExpandProperty choice -Unique)
+            $chapters = @($samples | Where-Object runPhase -CEQ 'RunPlaying' | Select-Object -ExpandProperty chapter -Unique)
+            if (($choices -join ',') -cne 'StartGift,Node,Gift,Relic' -or ($chapters -join ',') -cne '1,2,3,4' -or
+                !($samples.runPhase -ccontains 'EscapeRunning')) { throw 'Missing original choice, chapter or escape footage.' }
+            $report.NormalRunClip = @{Path=$clipFile; SHA256=(Get-FileHash -LiteralPath $clipFile -Algorithm SHA256).Hash;
+                Frames=$samples.Count; FrameRate=12; Seconds=$samples[-1].seconds; Choices=$choices; Chapters=$chapters;
+                SamplesSHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
+        }
         if ($phase -in @('save','first-use','live-normal') -and !$result.quitCallbackObserved) {
             throw ('The real quit button did not complete normal application exit: ' + $phase)
         }

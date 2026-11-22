@@ -85,6 +85,7 @@ namespace GreedLast.PlayerChecks
             public bool pausedSceneryObserved;
             public MotionSample beforePauseMotion, pausedMotion, heldPauseMotion, countdownMotion, resumedMotion;
             public RunClipFrame[] straightRunFrames, corridorCourseFrames;
+            public RunClipFrame[] normalRunFrames;
             public string[] corridorCourseResponses;
         }
 
@@ -92,9 +93,11 @@ namespace GreedLast.PlayerChecks
         private sealed class RunClipFrame
         {
             public double seconds;
-            public float distance, cameraDistance, footViewportY, heading;
+            public float distance, cameraDistance, footViewportY, heading, cameraHeading, coreDeltaSeconds;
+            public Vector3 cameraPosition;
+            public int chapter, successes, misses;
             public bool paused, resumeCountdown;
-            public string pattern;
+            public string pattern, runPhase, choice, avoidance, channel;
         }
 
         [Serializable]
@@ -710,7 +713,12 @@ namespace GreedLast.PlayerChecks
                     windowAwaitingClose = true;
                     result.nativeChoiceBoundaries = Array.Empty<NativeChoiceBoundary>();
                 }
-                yield return DriveCourse(chapterTwoGood: scopedGoals && phase == "clear", finishFrames: finishFrames);
+                bool filmNormal = phase == "clear"
+                    && Array.IndexOf(Environment.GetCommandLineArgs(), "-greed-probe-film-normal") >= 0;
+                if (filmNormal)
+                    yield return RecordNormalRun(finishFrames);
+                else
+                    yield return DriveCourse(chapterTwoGood: scopedGoals && phase == "clear", finishFrames: finishFrames);
                 if (nativeChoiceKeys)
                     Require(result.nativeChoiceBoundaries.Length == 2, "Both native choice key transitions must finish before clear.");
                 bool unsettledClear = !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0;
@@ -1846,8 +1854,9 @@ namespace GreedLast.PlayerChecks
                 camera.targetTexture = target;
             }
 
-            internal RunClipFrame Sample(GreedLastRunSnapshot run, double start)
+            internal RunClipFrame Sample(GreedLastRunSnapshot run, double start, bool requireGround = true)
             {
+                Camera chase = Read<Camera>(corridor, "camera");
                 var frame = new RunClipFrame
                 {
                     seconds = Time.realtimeSinceStartupAsDouble - start,
@@ -1857,10 +1866,20 @@ namespace GreedLast.PlayerChecks
                     paused = run.Paused,
                     resumeCountdown = run.ResumeCountdownActive,
                     heading = corridor.RunnerHeading,
-                    pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty
+                    cameraPosition = chase.transform.localPosition,
+                    cameraHeading = Mathf.DeltaAngle(0f, chase.transform.localEulerAngles.y),
+                    pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty,
+                    coreDeltaSeconds = run.CoreDeltaSeconds,
+                    runPhase = run.Phase.ToString(),
+                    choice = run.ChoiceKind.ToString(),
+                    chapter = run.ChapterIndex,
+                    successes = run.SuccessCount,
+                    misses = run.MissCount,
+                    avoidance = run.ActivePattern ? run.Pattern.AvoidanceType.ToString() : string.Empty,
+                    channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty
                 };
-                Require(Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
-                    && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f,
+                Require(!requireGround || (Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
+                    && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f),
                     "The camera must follow the same live distance and keep the runner's ground point visible.");
                 return frame;
             }
@@ -1900,6 +1919,59 @@ namespace GreedLast.PlayerChecks
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);
                 UnityEngine.Object.Destroy(camera.gameObject);
+            }
+        }
+
+        private IEnumerator RecordNormalRun(List<Frame> finishFrames)
+        {
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            yield return WaitFor(() => Read<GreedLastRunCorridor>(ui, "runCorridor") != null
+                && Read<RawImage>(ui, "runCorridorImage").isActiveAndEnabled, settleFrame: false);
+            Require(Application.isBatchMode && RunState().ChoiceKind == GreedLastChoiceKind.StartGift,
+                "The complete normal-run film must start at the original gift choice in the offscreen player.");
+            using (var clip = new OffscreenRunClip(ui, root))
+            {
+                var film = new NormalRunFilm(clip);
+                yield return DriveCourse(finishFrames: finishFrames, film: film);
+                Require(RunState().CoreRetrieved && RunState().EscapeSucceeded && RunState().SuccessCount == 15
+                    && RunState().MissCount == 0, "The original course must actually clear after all fifteen exact responses.");
+                double endHold = Time.realtimeSinceStartupAsDouble + 1.5;
+                while (Time.realtimeSinceStartupAsDouble < endHold)
+                {
+                    film.Tick(RunState());
+                    yield return null;
+                }
+                clip.Save("normal-run");
+                result.normalRunFrames = film.Frames.ToArray();
+            }
+        }
+
+        private sealed class NormalRunFilm
+        {
+            private readonly OffscreenRunClip clip;
+            private readonly double start = Time.realtimeSinceStartupAsDouble;
+            private readonly HashSet<string> photographed = new HashSet<string>();
+            private GreedLastChoiceKind choice;
+            private double choiceReadyAt;
+
+            internal readonly List<RunClipFrame> Frames = new List<RunClipFrame>();
+            internal bool CanChoose => Time.realtimeSinceStartupAsDouble >= choiceReadyAt;
+
+            internal NormalRunFilm(OffscreenRunClip clip) => this.clip = clip;
+
+            internal void Tick(GreedLastRunSnapshot run)
+            {
+                GreedLastChoiceKind nextChoice = run.ChoiceActive ? run.ChoiceKind : GreedLastChoiceKind.None;
+                if (nextChoice != choice)
+                {
+                    choice = nextChoice;
+                    choiceReadyAt = Time.realtimeSinceStartupAsDouble + 0.8;
+                }
+                if (Time.realtimeSinceStartupAsDouble < start + (double)Frames.Count / OffscreenRunClip.FrameRate) return;
+                RunClipFrame frame = clip.Sample(run, start, requireGround: false);
+                string boundary = run.ChoiceActive ? frame.choice : frame.runPhase + "-" + frame.chapter;
+                clip.Capture(photographed.Add(boundary) ? "normal-run-" + boundary : null);
+                Frames.Add(frame);
             }
         }
 
@@ -2260,7 +2332,7 @@ namespace GreedLast.PlayerChecks
         private IEnumerator DriveCourse(bool respond = true, bool untilFirstTrap = false,
             bool chapterTwoGood = false, int maxResponses = int.MaxValue, string untilSideTrapAfter = null,
             GreedLastAvoidanceType? untilAvoidance = null, List<Frame> finishFrames = null,
-            GreedLastRunChannel? untilChannel = null, bool requireRotation = false)
+            GreedLastRunChannel? untilChannel = null, bool requireRotation = false, NormalRunFilm film = null)
         {
             float nextChoice = 0f;
             bool injectedGood = false;
@@ -2270,6 +2342,7 @@ namespace GreedLast.PlayerChecks
             {
                 CheckDeadline();
                 GreedLastRunSnapshot run = RunState();
+                film?.Tick(run);
                 if (run.ActivePattern && !run.CountdownActive && !run.Paused
                     && (untilFirstTrap || (untilSideTrapAfter != null && IsSideTrap(run)
                         && run.Pattern.PatternId != untilSideTrapAfter)
@@ -2321,7 +2394,7 @@ namespace GreedLast.PlayerChecks
                         nextChoice = now + 0.3f;
                     }
                 }
-                else if (run.ChoiceActive && now >= nextChoice)
+                else if (run.ChoiceActive && now >= nextChoice && (film == null || film.CanChoose))
                 {
                     bool routeToGift = run.ChapterIndex == 1 && run.ChoiceKind == GreedLastChoiceKind.Node;
                     bool giftToRelic = run.ChapterIndex == 2 && run.ChoiceKind == GreedLastChoiceKind.Gift;
