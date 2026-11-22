@@ -619,14 +619,16 @@ namespace GreedLast.PlayerChecks
                 // The score uses upper alignment and its text fills only part of its rectangle.
                 float scoreBottom = score.rectTransform.TransformPoint(
                     0f, score.rectTransform.rect.yMax - score.preferredHeight, 0f).y;
+                float pauseBottom = pauseRect.TransformPoint(0f, pauseRect.rect.yMin, 0f).y;
                 Require(badge.gameObject.activeInHierarchy
                     && score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text)
                     && pause.isActiveAndEnabled && pause.IsInteractable() && !primary.IsInteractable()
                     && primaryVisibility.alpha == 0f && !primaryVisibility.blocksRaycasts
                     && badgeClearsProgress
                     && badgeTop < scoreBottom
-                    && badgeTop < pauseRect.TransformPoint(0f, pauseRect.rect.yMin, 0f).y,
-                    "The practice combo badge must clear progress and fit below the score and sole pause button after exact input.");
+                    && badgeTop < pauseBottom,
+                    "The practice combo badge must clear progress and fit below the score and sole pause button after exact input."
+                    + $" Badge top {badgeTop:F2}, score bottom {scoreBottom:F2}, pause bottom {pauseBottom:F2}, progress clear {badgeClearsProgress}.");
                 yield return CaptureFrame("practice-exact-feedback", frames, settleSeconds: 0f);
                 yield return DriveCourse(untilAvoidance: GreedLastAvoidanceType.Twist);
                 Require(RunState().ActivePattern && RunState().Pattern.Channel == GreedLastRunChannel.Right

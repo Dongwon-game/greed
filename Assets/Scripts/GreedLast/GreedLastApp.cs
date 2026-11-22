@@ -22029,32 +22029,36 @@ namespace GreedLast
                 return;
             }
 
+            bool corridorVisible = runCorridorImage != null && runCorridorImage.enabled;
+            float x = corridorVisible ? 0.15f : 0.5f;
+            float lift = corridorVisible ? 0.50f : 0f;
+            RectTransform rect = runHudText.rectTransform;
             int lineCount = CountTextLines(hudText);
             if (lineCount >= 8)
             {
-                SetAnchored(runHudText.rectTransform, 0.5f, 0.292f, 930f, 330f);
+                SetAnchored(rect, x, 0.292f + lift, 930f, 330f);
                 return;
             }
 
             if (lineCount >= 7)
             {
-                SetAnchored(runHudText.rectTransform, 0.5f, 0.282f, 930f, 305f);
+                SetAnchored(rect, x, 0.282f + lift, 930f, 305f);
                 return;
             }
 
             if (lineCount >= 6)
             {
-                SetAnchored(runHudText.rectTransform, 0.5f, 0.268f, 910f, 275f);
+                SetAnchored(rect, x, 0.268f + lift, 910f, 275f);
                 return;
             }
 
             if (lineCount <= 4)
             {
-                SetAnchored(runHudText.rectTransform, 0.5f, 0.252f, 920f, 220f);
+                SetAnchored(rect, x, 0.252f + lift, 920f, 220f);
                 return;
             }
 
-            SetAnchored(runHudText.rectTransform, 0.5f, 0.255f, 900f, 245f);
+            SetAnchored(rect, x, 0.255f + lift, 900f, 245f);
         }
 
         private static string BuildRunObjectiveLine(GreedLastRunSnapshot snapshot)
@@ -31772,8 +31776,10 @@ namespace GreedLast
 
         private void SetRunCorridorVisible(bool visible)
         {
+            bool visibilityChanged = runCorridorImage.enabled != visible;
             runCorridorImage.enabled = visible;
             prototypeRunCorridorBackdrop.enabled = !visible;
+            if (visibilityChanged && runHudText != null) UpdateRunHudLayout(runHudText.text);
             if (runnerPresentationRoot == null) return;
             runDepthDecoration.alpha = visible ? 0.20f : 1f;
             runSceneryDecoration.alpha = visible ? 0.20f : 1f;
@@ -31804,8 +31810,6 @@ namespace GreedLast
             }
 
             Vector2 size = runCorridorImage.rectTransform.rect.size;
-            if (runHudText != null)
-                runHudText.rectTransform.anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.35f, 0.50f)) : Vector2.zero;
             if (runGaugeRoot != null)
                 ((RectTransform)runGaugeRoot.transform).anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.35f, 0.365f)) : Vector2.zero;
         }
