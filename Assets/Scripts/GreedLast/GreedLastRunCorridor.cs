@@ -16,13 +16,20 @@ namespace GreedLast
         private readonly Camera camera;
         private readonly Material stone;
         private readonly Mesh moduleMesh;
+        private readonly Mesh sandTrapMesh;
+        private readonly Transform sandTrap;
+        private readonly Texture2D contactShadowTexture;
         private readonly Transform[] modules = new Transform[9];
         private RenderTexture target;
         private int firstModule = int.MinValue;
         private float renderedDistance = -1f;
         private float renderedRoll;
+        private bool trackingSandTrap;
+        private float sandTrapElapsed;
+        private float sandTrapDistance;
 
         internal Texture Texture => target;
+        internal Sprite ContactShadow { get; }
         internal Vector3 RunnerGroundViewport { get; private set; }
 
         internal static GreedLastRunCorridor Create()
@@ -55,19 +62,16 @@ namespace GreedLast
             stone = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             moduleMesh = BuildModule();
             for (int i = 0; i < modules.Length; i++)
-            {
-                var segment = new GameObject("Stone corridor module") { hideFlags = HideFlags.HideAndDontSave, layer = CorridorLayer };
-                segment.transform.SetParent(stage.transform, false);
-                segment.AddComponent<MeshFilter>().sharedMesh = moduleMesh;
-                MeshRenderer renderer = segment.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = stone;
-                renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-                modules[i] = segment.transform;
-            }
+                modules[i] = CreateStoneMesh("Stone corridor module", moduleMesh);
+            sandTrapMesh = BuildSandTrap();
+            sandTrap = CreateStoneMesh("Collapsing sand bed", sandTrapMesh);
+            sandTrap.gameObject.SetActive(false);
+            contactShadowTexture = BuildContactShadow();
+            ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
+            ContactShadow.hideFlags = HideFlags.HideAndDontSave;
         }
 
-        internal void Render(float distance, float roll, int width, int height)
+        internal void Render(GreedLastRunSnapshot run, float roll, int width, int height)
         {
             width = Mathf.Max(1, width);
             height = Mathf.Max(1, height);
@@ -87,8 +91,9 @@ namespace GreedLast
                 renderedDistance = -1f;
             }
 
-            distance = Mathf.Max(0f, distance);
-            if (distance == renderedDistance && roll == renderedRoll) return;
+            float distance = Mathf.Max(0f, run.Distance);
+            bool trapChanged = RefreshSandTrap(run, distance);
+            if (distance == renderedDistance && roll == renderedRoll && !trapChanged) return;
             int newFirst = Mathf.FloorToInt((distance - CameraFollowDistance) / ModuleLength) - 1;
             if (newFirst != firstModule)
             {
@@ -105,12 +110,52 @@ namespace GreedLast
             renderedRoll = roll;
         }
 
+        private bool RefreshSandTrap(GreedLastRunSnapshot run, float distance)
+        {
+            bool wasVisible = sandTrap.gameObject.activeSelf;
+            if (distance < renderedDistance)
+            {
+                sandTrap.gameObject.SetActive(false);
+                trackingSandTrap = false;
+            }
+            bool isSandTrap = run.ActivePattern && run.Pattern.Channel == GreedLastRunChannel.Center
+                && run.Pattern.PatternId.StartsWith("center_sand_perfect", StringComparison.Ordinal);
+            bool moved = isSandTrap && (!trackingSandTrap || run.ElapsedSeconds + 0.05f < sandTrapElapsed);
+            if (moved)
+            {
+                // Anchor it at the existing judgement point. The camera travels to it as the run advances.
+                sandTrapDistance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
+                sandTrap.localPosition = Vector3.forward * sandTrapDistance;
+                sandTrap.gameObject.SetActive(true);
+            }
+            trackingSandTrap = isSandTrap;
+            sandTrapElapsed = run.ElapsedSeconds;
+            if (distance - sandTrapDistance > CameraFollowDistance + 1f)
+                sandTrap.gameObject.SetActive(false);
+            return moved || wasVisible != sandTrap.gameObject.activeSelf;
+        }
+
+        private Transform CreateStoneMesh(string name, Mesh mesh)
+        {
+            var piece = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave, layer = CorridorLayer };
+            piece.transform.SetParent(stage.transform, false);
+            piece.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = piece.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = stone;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return piece.transform;
+        }
+
         public void Dispose()
         {
             ReleaseTarget();
             UnityEngine.Object.Destroy(stage);
             UnityEngine.Object.Destroy(stone);
             UnityEngine.Object.Destroy(moduleMesh);
+            UnityEngine.Object.Destroy(sandTrapMesh);
+            UnityEngine.Object.Destroy(ContactShadow);
+            UnityEngine.Object.Destroy(contactShadowTexture);
         }
 
         private void ReleaseTarget()
@@ -133,11 +178,15 @@ namespace GreedLast
             mesh.Box(new Vector3(0f, 5.25f, 4f), new Vector3(8f, 0.34f, 8f), new Color32(59, 74, 68, 255));
             for (int row = 0; row < 8; row++)
             {
-                for (int tile = 0; tile < 6; tile++)
+                float rowOffset = row % 2 == 0 ? 0f : 0.625f;
+                for (int tile = -1; tile < 6; tile++)
                 {
-                    float x = (tile - 2.5f) * 1.25f;
-                    Color32 color = tile == 0 || tile == 5 ? Mix(slate, bronze, 0.26f) : sandstone;
-                    mesh.Box(new Vector3(x, -0.045f, row + 0.5f), new Vector3(1.215f, 0.09f, 0.965f),
+                    float left = Mathf.Max(-3.75f, -3.75f + tile * 1.25f + rowOffset);
+                    float right = Mathf.Min(3.75f, -2.5f + tile * 1.25f + rowOffset);
+                    if (right <= left) continue;
+                    float x = (left + right) * 0.5f;
+                    Color32 color = Mathf.Abs(x) > 2.65f ? Mix(slate, bronze, 0.26f) : sandstone;
+                    mesh.Box(new Vector3(x, -0.045f, row + 0.5f), new Vector3(right - left - 0.027f, 0.09f, 0.977f),
                         Shade(color, 0.76f + (float)random.NextDouble() * 0.25f));
                 }
             }
@@ -169,6 +218,47 @@ namespace GreedLast
             foreach (float z in new[] { 1f, 5f })
                 mesh.Box(new Vector3(0f, 4.87f, z), new Vector3(7.8f, 0.48f, 0.84f), Shade(slate, 0.82f));
             return mesh.Finish();
+        }
+
+        private static Mesh BuildSandTrap()
+        {
+            var mesh = new StoneGeometry();
+            var rim = new Color32(143, 104, 61, 255);
+            var sand = new Color32(110, 73, 41, 255);
+            mesh.Box(new Vector3(0f, 0.025f, 0f), new Vector3(4.55f, 0.05f, 1.18f), new Color32(47, 33, 24, 255));
+            for (int side = -1; side <= 1; side += 2)
+            {
+                mesh.Box(new Vector3(side * 2.22f, 0.08f, 0f), new Vector3(0.21f, 0.15f, 1.30f), rim);
+                mesh.Box(new Vector3(0f, 0.055f, side * 0.59f), new Vector3(4.46f, 0.10f, 0.13f), rim);
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                float x = (i - 4) * 0.47f;
+                float height = i % 3 == 1 ? 0.14f : 0.085f;
+                mesh.Box(new Vector3(x, height * 0.5f + 0.05f, i % 2 == 0 ? 0.24f : -0.24f),
+                    new Vector3(0.43f, height, 0.44f), Shade(sand, 0.79f + (i % 4) * 0.08f));
+            }
+            return mesh.Finish();
+        }
+
+        private static Texture2D BuildContactShadow()
+        {
+            const int size = 32;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 center = new Vector2((x + 0.5f) / size, (y + 0.5f) / size) * 2f - Vector2.one;
+                float opacity = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.18f, 0.99f, center.sqrMagnitude));
+                pixels[y * size + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(opacity * 255f));
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            return texture;
         }
 
         private static Color32 Shade(Color32 color, float scale) => (Color32)((Color)color * scale);

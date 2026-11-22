@@ -31752,7 +31752,7 @@ namespace GreedLast
             }
             if (visible && runCorridor != null)
             {
-                runCorridor.Render(latestRunSnapshot.Distance, rect.localEulerAngles.z, Screen.width, Screen.height);
+                runCorridor.Render(latestRunSnapshot, rect.localEulerAngles.z, Screen.width, Screen.height);
                 runCorridorImage.texture = runCorridor.Texture;
                 float brightness = latestRunSnapshot.Paused || latestRunSnapshot.Stopped ? 0.62f
                     : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
@@ -31790,6 +31790,15 @@ namespace GreedLast
             }
             runnerPresentationRoot.anchoredPosition = runnerOffset;
             runnerPresentationRoot.localScale = Vector3.one * (visible ? 1.32f : 1f);
+            Sprite shadow = visible ? runCorridor.ContactShadow : null;
+            if (runnerShadow.sprite != shadow)
+            {
+                runnerShadow.sprite = shadow;
+                var shadowAnchor = new Vector2(0.5f, visible ? 0.147f : 0.125f);
+                runnerShadow.rectTransform.anchorMin = shadowAnchor;
+                runnerShadow.rectTransform.anchorMax = shadowAnchor;
+                runnerShadow.rectTransform.sizeDelta = new Vector2(visible ? 130f : 150f, visible ? 30f : 24f);
+            }
 
             Vector2 size = runCorridorImage.rectTransform.rect.size;
             if (runHudText != null)

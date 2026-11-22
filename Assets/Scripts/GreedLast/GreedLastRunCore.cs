@@ -776,7 +776,7 @@ namespace GreedLast
         private const float EscapeGapSeconds = 0.44f;
         private const float InfiniteBaseGapSeconds = 0.68f;
         private const float InfiniteThreatRiseBreatherSeconds = 0.45f;
-        private const float RunSpeedMetersPerSecond = 4.2f;
+        internal const float RunSpeedMetersPerSecond = 4.2f;
         private const float MinInputTimingOffsetSeconds = -0.2f;
         private const float MaxInputTimingOffsetSeconds = 0.2f;
         private const int ChapterTargetPatterns = 3;

@@ -159,8 +159,9 @@ namespace GreedLast.PlayerChecks
             public float comboToPausePixels, comboTextToPipsPixels;
             public float progressToTitlePixels, progressToLanePixels;
             public float choicePromptHeightPixels, choicePromptToCardPixels;
+            public float sandTrapDistance, sandTrapViewportY;
             public int exitSlotAlpha, judgementAlpha;
-            public bool paused, opening, resuming, motionComfortEnabled;
+            public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible;
         }
 
         [Serializable]
@@ -2006,6 +2007,11 @@ namespace GreedLast.PlayerChecks
                         colors.Add(((c.r >> 3) << 10) | ((c.g >> 3) << 5) | (c.b >> 3));
                     }
                 Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
+                var corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
+                Transform sandTrap = corridor == null ? null : Read<Transform>(corridor, "sandTrap");
+                bool sandTrapVisible = sandTrap != null && sandTrap.gameObject.activeSelf;
+                float sandTrapViewportY = sandTrapVisible
+                    ? Read<Camera>(corridor, "camera").WorldToViewportPoint(sandTrap.position).y : 0f;
                 frames.Add(new Frame { name = name, utc = capturedUtc,
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
@@ -2019,6 +2025,8 @@ namespace GreedLast.PlayerChecks
                     comboBadge = comboText, comboBadgeLines = comboLines,
                     comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,
                     exitSlotAlpha = exitSlotAlpha,
+                    sandTrapVisible = sandTrapVisible, sandTrapViewportY = sandTrapViewportY,
+                    sandTrapDistance = sandTrapVisible ? Read<float>(corridor, "sandTrapDistance") : 0f,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,

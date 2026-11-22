@@ -413,6 +413,9 @@ try {
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
             $render.countdownMotion, $render.resumedMotion)
         $approach = @($render.frames | Where-Object name -CLike 'normal-trap-*')
+        if (!$approach[0].sandTrapVisible -or $approach[0].sandTrapDistance -le $approach[0].distance) {
+            throw 'The ordinary course must start with a visible sand trap ahead on the 3D floor.'
+        }
         for ($i = 1; $i -lt $approach.Count; $i++) {
             $previous = $approach[$i - 1]
             $current = $approach[$i]
@@ -420,6 +423,13 @@ try {
                 $current.markerY -ge $previous.markerY -or $current.distance -le $previous.distance) {
                 throw ('The live approach must advance towards the judgement line in each image: ' + $current.name)
             }
+            if (!$current.sandTrapVisible -or [Math]::Abs($current.sandTrapDistance - $approach[0].sandTrapDistance) -gt 0.001 -or
+                $current.sandTrapViewportY -ge $previous.sandTrapViewportY) {
+                throw ('The floor trap must remain anchored as the camera approaches: ' + $current.name)
+            }
+        }
+        if ([Math]::Abs($approach[-1].sandTrapDistance - $approach[-1].distance) -gt 0.30) {
+            throw 'The runner must reach the world-space floor trap at the existing judgement point.'
         }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight) {
@@ -429,6 +439,7 @@ try {
             @{Name=$_.name; CapturedUtc=$_.utc; Width=$_.width; Height=$_.height; SampledColors=$_.sampledColors;
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
+                SandTrapVisible=$_.sandTrapVisible; SandTrapDistance=$_.sandTrapDistance; SandTrapViewportY=$_.sandTrapViewportY;
                 JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
                 FeedbackFlashAlpha=$_.feedbackFlashAlpha; PrimaryResultLabel=$_.primaryResultLabel;
                 PrimaryResultFontSize=$_.primaryResultFontSize; PrimaryResultFontCap=$_.primaryResultFontCap;
