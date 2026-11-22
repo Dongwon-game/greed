@@ -84,6 +84,15 @@ namespace GreedLast.PlayerChecks
             public MotionSample[] liveMotionSamples;
             public bool pausedSceneryObserved;
             public MotionSample beforePauseMotion, pausedMotion, heldPauseMotion, countdownMotion, resumedMotion;
+            public StraightRunFrame[] straightRunFrames;
+        }
+
+        [Serializable]
+        private sealed class StraightRunFrame
+        {
+            public double seconds;
+            public float distance, cameraDistance, footViewportY;
+            public bool paused, resumeCountdown;
         }
 
         [Serializable]
@@ -231,7 +240,7 @@ namespace GreedLast.PlayerChecks
             Require(!backgroundResults || !phase.StartsWith("window-", StringComparison.Ordinal),
                 "Background callback checks cannot replace interactive window input.");
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
-                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render",
+                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render", "straight-run",
                 "window-play", "window-clear", "window-verify", "window-verify-again",
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
@@ -505,6 +514,10 @@ namespace GreedLast.PlayerChecks
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
                 result.record = closed.record;
                 result.nativeMenuCandidatePreserved = true;
+            }
+            else if (phase == "straight-run")
+            {
+                yield return CaptureStraightRun();
             }
             else if (phase == "render")
             {
@@ -1661,6 +1674,174 @@ namespace GreedLast.PlayerChecks
                     + contact.name + ", delta=" + contact.coreDeltaSeconds
                     + ", markerY=" + contact.markerY + ", judgementY=" + contact.judgementY);
             if (rotation != null) rotations.Add(rotation);
+        }
+
+        private IEnumerator CaptureStraightRun()
+        {
+            Require(Application.isBatchMode && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
+                "The straight run clip requires a real graphics device in the isolated offscreen player.");
+            Require(EmptySlots() && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0
+                && !backend.HasSaveLoadoutCandidate, "The straight run must begin in an empty test product.");
+            result.scope = "Offscreen clip of the actual practice runner. The fixture delays trap scheduling to observe unobstructed motion; app commands pause and resume on the real clock.";
+            Call(app, "RequestPracticeRun");
+            yield return WaitFor(() => core.IsPracticeRun && RunState().StartCountdownActive);
+            yield return WaitFor(() => !RunState().StartCountdownActive, settleFrame: false);
+            // Leave the actual practice update and pause logic running while delaying its first obstacle.
+            typeof(GreedLastRunCore).GetField("nextPatternAt", Fields).SetValue(core, Time.realtimeSinceStartup + 30f);
+            yield return null;
+
+            const int width = 960, height = 540, rate = 12, seconds = 12;
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            var corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
+            var corridorImage = Read<RawImage>(ui, "runCorridorImage");
+            Canvas canvas = Read<Canvas>(ui, "ownedCanvasSurface");
+            Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
+                && corridor != null && corridorImage.isActiveAndEnabled, "The distance-driven corridor must be visible in the Windows player.");
+            Camera oldCamera = canvas.worldCamera;
+            float oldPlane = canvas.planeDistance;
+            var cameraObject = new GameObject("Greed offscreen clip camera");
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            var target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+            var pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
+            var images = new List<byte[]>(rate * seconds);
+            var frames = new StraightRunFrame[rate * seconds];
+            try
+            {
+                Require(target.Create(), "The offscreen clip target could not be created.");
+                camera.targetTexture = target;
+                double start = Time.realtimeSinceStartupAsDouble;
+                for (int i = 0; i < frames.Length; i++)
+                {
+                    if (i == 4 * rate) Call(app, "RequestToggleRunPause");
+                    if (i == 6 * rate) Call(app, "RequestToggleRunPause");
+                    yield return WaitFor(() => Time.realtimeSinceStartupAsDouble >= start + (double)i / rate, settleFrame: false);
+
+                    GreedLastRunSnapshot run = RunState();
+                    Require(!run.ActivePattern && !run.Stopped, "The straight run clip must remain in live practice without traps.");
+                    var frame = new StraightRunFrame
+                    {
+                        seconds = Time.realtimeSinceStartupAsDouble - start,
+                        distance = run.Distance,
+                        cameraDistance = Read<float>(corridor, "renderedDistance"),
+                        footViewportY = corridor.RunnerGroundViewport.y,
+                        paused = run.Paused,
+                        resumeCountdown = run.ResumeCountdownActive
+                    };
+                    frames[i] = frame;
+                    Require(Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
+                        && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f,
+                        "The camera must follow the same live distance and keep the runner's ground point visible.");
+                    if (i > 0 && frame.paused && frames[i - 1].paused)
+                        Require(frame.distance == frames[i - 1].distance, "The floor must stay still while paused and during the resume countdown.");
+
+                    RenderTexture oldActive = RenderTexture.active;
+                    try
+                    {
+                        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                        canvas.worldCamera = camera;
+                        canvas.planeDistance = 1f;
+                        Canvas.ForceUpdateCanvases();
+                        camera.Render();
+                        RenderTexture.active = target;
+                        pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
+                    }
+                    finally
+                    {
+                        RenderTexture.active = oldActive;
+                        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                        canvas.worldCamera = oldCamera;
+                        canvas.planeDistance = oldPlane;
+                    }
+                    images.Add(pixels.EncodeToJPG(87));
+                    if (i == rate || i == 5 * rate || i == 11 * rate)
+                        File.WriteAllBytes(Path.Combine(root, "straight-run-" + i / rate + "s.png"), pixels.EncodeToPNG());
+                }
+                Require(frames[3 * rate].distance > frames[0].distance + 1f && frames[5 * rate].paused
+                    && Array.Exists(frames, frame => frame.resumeCountdown)
+                    && !frames[frames.Length - 1].paused
+                    && frames[frames.Length - 1].distance > frames[5 * rate].distance + 1f
+                    && frames[frames.Length - 1].seconds < seconds + 0.35,
+                    "The clip must demonstrate distance advance, pause, resume countdown and continued advance at the recorded speed.");
+                WriteSilentMotionJpeg(Path.Combine(root, "straight-run.avi"), width, height, rate, images);
+                result.straightRunFrames = frames;
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                target.Release();
+                Destroy(target);
+                Destroy(pixels);
+                Destroy(cameraObject);
+            }
+        }
+
+        private static void WriteSilentMotionJpeg(string path, int width, int height, int rate, List<byte[]> images)
+        {
+            // AVI with one MJPEG video stream and no audio stream. Every frame is a keyframe.
+            int largestImage = 0, movieLength = 0;
+            foreach (byte[] jpeg in images)
+            {
+                largestImage = Math.Max(largestImage, jpeg.Length);
+                movieLength += 8 + jpeg.Length + (jpeg.Length & 1);
+            }
+            const int streamListLength = 4 + 8 + 56 + 8 + 40;
+            const int headerListLength = 4 + 8 + 56 + 8 + streamListLength;
+            int indexLength = 16 * images.Count;
+            using (var file = new FileStream(path, FileMode.CreateNew))
+            using (var writer = new BinaryWriter(file))
+            {
+                void FourCC(string value) => writer.Write(System.Text.Encoding.ASCII.GetBytes(value));
+                void Chunk(string id, int size) { FourCC(id); writer.Write(size); }
+
+                Chunk("RIFF", 4 + 8 + headerListLength + 8 + 4 + movieLength + 8 + indexLength);
+                FourCC("AVI ");
+                Chunk("LIST", headerListLength);
+                FourCC("hdrl");
+                Chunk("avih", 56);
+                foreach (int value in new[] { 1000000 / rate, largestImage * rate, 0, 0x10, images.Count,
+                    0, 1, largestImage, width, height, 0, 0, 0, 0 }) writer.Write(value);
+                Chunk("LIST", streamListLength);
+                FourCC("strl");
+                Chunk("strh", 56);
+                FourCC("vids");
+                FourCC("MJPG");
+                foreach (int value in new[] { 0, 0, 0, 1, rate, 0, images.Count, largestImage, -1, 0 }) writer.Write(value);
+                writer.Write((short)0);
+                writer.Write((short)0);
+                writer.Write((short)width);
+                writer.Write((short)height);
+                Chunk("strf", 40);
+                writer.Write(40);
+                writer.Write(width);
+                writer.Write(height);
+                writer.Write((short)1);
+                writer.Write((short)24);
+                FourCC("MJPG");
+                writer.Write(largestImage);
+                for (int i = 0; i < 4; i++) writer.Write(0);
+
+                Chunk("LIST", 4 + movieLength);
+                FourCC("movi");
+                foreach (byte[] jpeg in images)
+                {
+                    Chunk("00dc", jpeg.Length);
+                    writer.Write(jpeg);
+                    if ((jpeg.Length & 1) != 0) writer.Write((byte)0);
+                }
+                Chunk("idx1", indexLength);
+                int offset = 4;
+                foreach (byte[] jpeg in images)
+                {
+                    FourCC("00dc");
+                    writer.Write(0x10);
+                    writer.Write(offset);
+                    writer.Write(jpeg.Length);
+                    offset += 8 + jpeg.Length + (jpeg.Length & 1);
+                }
+            }
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f,

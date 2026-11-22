@@ -4,6 +4,7 @@ param(
     [string]$UnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.4.3f1\Editor\Unity.exe',
     [string]$VerifiedReleasePath,
     [switch]$CaptureFrames,
+    [switch]$CaptureStraightRunClip,
     [switch]$MotionComfortOff,
     [switch]$InteractiveWindow,
     [switch]$InteractiveChoiceKeys,
@@ -32,6 +33,9 @@ if ($PSBoundParameters.ContainsKey('FrameSize') -and !$CaptureFrames) {
 }
 if ($MotionComfortOff -and !$CaptureFrames) {
     throw 'MotionComfortOff requires CaptureFrames.'
+}
+if ($CaptureStraightRunClip -and (!$CaptureFrames -or $MotionComfortOff -or $FrameSize -ne '960x540')) {
+    throw 'CaptureStraightRunClip requires CaptureFrames, FrameSize 960x540 and the default motion settings.'
 }
 $frameWidth, $frameHeight = $FrameSize -split 'x'
 if ($InteractiveChoiceKeys -and ($CaptureFrames -or $InteractiveWindow -or $InteractiveLoadout -or $InteractiveMenus -or
@@ -146,6 +150,7 @@ $report = [ordered]@{Id=$id; SourceHead=$head; RunnerSHA256=(Get-FileHash -Liter
     OffscreenCaptureRequested=[bool]$CaptureFrames; MotionComfortOffRequested=[bool]$MotionComfortOff; InteractiveWindowRequested=[bool]$InteractiveWindow;
     PlayerLogChecks=@(); OwnTestPreferencesRetained=$true}
 $report.BackgroundResultsRequested = [bool]$BackgroundResults
+$report.StraightRunClipRequested = [bool]$CaptureStraightRunClip
 $report.InteractiveLoadoutRequested = [bool]$InteractiveLoadout
 $report.InteractiveMenusRequested = [bool]$InteractiveMenus
 $report.MenuWaitMinutes = if ($InteractiveMenus) { $MenuWaitMinutes } else { 0 }
@@ -331,6 +336,26 @@ try {
     if (!$rejected) { throw 'A mixed artifact containing the persistence fixture must be rejected.' }
     $report.SafetyControls += @{Name='release-fixture-exclusion'; Passed=$true; Scope='Fabricated mixed artifact, static verification only; never executed.'}
     if ($report.SafetyControls.Count -ne 4) { throw 'Required probe safety controls are incomplete.' }
+
+    if ($CaptureStraightRunClip) {
+        $report.FailedPhase = 'straight-run'
+        $clipLog = Join-Path $root 'straight-run.log'
+        Invoke-OwnedProcess $exe @('-batchmode','-screen-fullscreen','0','-screen-width',$frameWidth,'-screen-height',$frameHeight,
+            '-logFile',('"'+$clipLog+'"'),'-greed-probe-id',$id,'-greed-probe-phase','straight-run',
+            '-greed-probe-root',('"'+$root+'"')) 180000 'straight-run'
+        $report.PlayerLogChecks += Assert-CleanPlayerLog $clipLog
+        $clipReport = Join-Path $root 'straight-run.json'
+        $clip = Get-Content -LiteralPath $clipReport -Raw | ConvertFrom-Json
+        if (!$clip.succeeded -or $clip.phase -cne 'straight-run' -or $clip.product -cne $info.product -or
+            !$clip.audioOutputMuted -or @($clip.straightRunFrames).Count -ne 144 -or
+            $clip.candidate -or $clip.clears -ne 0 -or $clip.failures -ne 0 -or $clip.abandons -ne 0 -or
+            $clip.infiniteRuns -ne 0 -or $clip.growthPoints -ne 0 -or @($clip.uses | Where-Object { $_ -ne 0 }).Count) {
+            throw 'The isolated clip must stay muted and produce no gameplay progression.'
+        }
+        $clipFile = Join-Path $root 'straight-run.avi'
+        $report.StraightRunClip = @{Path=$clipFile; SHA256=(Get-FileHash -LiteralPath $clipFile -Algorithm SHA256).Hash;
+            FrameRate=12; Frames=144; Seconds=12; SamplesSHA256=(Get-FileHash -LiteralPath $clipReport -Algorithm SHA256).Hash}
+    }
 
     if ($CaptureFrames) {
         Write-Verbose 'Capturing practice and normal trap offscreen renders in the isolated player.'
