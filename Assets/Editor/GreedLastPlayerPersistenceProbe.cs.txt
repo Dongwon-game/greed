@@ -84,15 +84,17 @@ namespace GreedLast.PlayerChecks
             public MotionSample[] liveMotionSamples;
             public bool pausedSceneryObserved;
             public MotionSample beforePauseMotion, pausedMotion, heldPauseMotion, countdownMotion, resumedMotion;
-            public StraightRunFrame[] straightRunFrames;
+            public RunClipFrame[] straightRunFrames, corridorCourseFrames;
+            public string[] corridorCourseResponses;
         }
 
         [Serializable]
-        private sealed class StraightRunFrame
+        private sealed class RunClipFrame
         {
             public double seconds;
-            public float distance, cameraDistance, footViewportY;
+            public float distance, cameraDistance, footViewportY, heading;
             public bool paused, resumeCountdown;
+            public string pattern;
         }
 
         [Serializable]
@@ -241,7 +243,7 @@ namespace GreedLast.PlayerChecks
             Require(!backgroundResults || !phase.StartsWith("window-", StringComparison.Ordinal),
                 "Background callback checks cannot replace interactive window input.");
             Require(Array.IndexOf(new[] { "clear", "save", "first-use", "last-use", "verify", "verify-again",
-                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render", "straight-run",
+                "live-normal", "normal-fail", "verify-failure", "verify-failure-again", "render", "straight-run", "corridor-course",
                 "window-play", "window-clear", "window-verify", "window-verify-again",
                 "window-loadout", "window-loadout-verify", "window-loadout-verify-again",
                 "window-menu", "window-menu-verify", "window-menu-verify-again",
@@ -309,6 +311,11 @@ namespace GreedLast.PlayerChecks
             if (phase == "straight-run")
             {
                 yield return CaptureStraightRun();
+                yield break;
+            }
+            if (phase == "corridor-course")
+            {
+                yield return CaptureCorridorCourse();
                 yield break;
             }
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
@@ -1692,28 +1699,10 @@ namespace GreedLast.PlayerChecks
             typeof(GreedLastRunCore).GetField("nextPatternAt", Fields).SetValue(core, Time.realtimeSinceStartup + 30f);
             yield return null;
 
-            const int width = 960, height = 540, rate = 12, seconds = 12;
-            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
-            var corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
-            var corridorImage = Read<RawImage>(ui, "runCorridorImage");
-            Canvas canvas = Read<Canvas>(ui, "ownedCanvasSurface");
-            Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
-                && corridor != null && corridorImage.isActiveAndEnabled, "The distance-driven corridor must be visible in the Windows player.");
-            Camera oldCamera = canvas.worldCamera;
-            float oldPlane = canvas.planeDistance;
-            var cameraObject = new GameObject("Greed offscreen clip camera");
-            var camera = cameraObject.AddComponent<Camera>();
-            camera.enabled = false;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = Color.black;
-            var target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
-            var pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
-            var images = new List<byte[]>(rate * seconds);
-            var frames = new StraightRunFrame[rate * seconds];
-            try
+            const int rate = OffscreenRunClip.FrameRate, seconds = 12;
+            var frames = new RunClipFrame[rate * seconds];
+            using (var clip = new OffscreenRunClip(Read<GreedLastRuntimeUi>(app, "runtimeUi"), root))
             {
-                Require(target.Create(), "The offscreen clip target could not be created.");
-                camera.targetTexture = target;
                 double start = Time.realtimeSinceStartupAsDouble;
                 for (int i = 0; i < frames.Length; i++)
                 {
@@ -1723,43 +1712,12 @@ namespace GreedLast.PlayerChecks
 
                     GreedLastRunSnapshot run = RunState();
                     Require(!run.ActivePattern && !run.Stopped, "The straight run clip must remain in live practice without traps.");
-                    var frame = new StraightRunFrame
-                    {
-                        seconds = Time.realtimeSinceStartupAsDouble - start,
-                        distance = run.Distance,
-                        cameraDistance = Read<float>(corridor, "renderedDistance"),
-                        footViewportY = corridor.RunnerGroundViewport.y,
-                        paused = run.Paused,
-                        resumeCountdown = run.ResumeCountdownActive
-                    };
+                    RunClipFrame frame = clip.Sample(run, start);
                     frames[i] = frame;
-                    Require(Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
-                        && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f,
-                        "The camera must follow the same live distance and keep the runner's ground point visible.");
                     if (i > 0 && frame.paused && frames[i - 1].paused)
                         Require(frame.distance == frames[i - 1].distance, "The floor must stay still while paused and during the resume countdown.");
-
-                    RenderTexture oldActive = RenderTexture.active;
-                    try
-                    {
-                        canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                        canvas.worldCamera = camera;
-                        canvas.planeDistance = 1f;
-                        Canvas.ForceUpdateCanvases();
-                        camera.Render();
-                        RenderTexture.active = target;
-                        pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
-                    }
-                    finally
-                    {
-                        RenderTexture.active = oldActive;
-                        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                        canvas.worldCamera = oldCamera;
-                        canvas.planeDistance = oldPlane;
-                    }
-                    images.Add(pixels.EncodeToJPG(87));
-                    if (i == rate || i == 5 * rate || i == 11 * rate)
-                        File.WriteAllBytes(Path.Combine(root, "straight-run-" + i / rate + "s.png"), pixels.EncodeToPNG());
+                    bool still = i == rate || i == 5 * rate || i == 11 * rate;
+                    clip.Capture(still ? "straight-run-" + i / rate + "s" : null);
                 }
                 Require(frames[3 * rate].distance > frames[0].distance + 1f && frames[5 * rate].paused
                     && Array.Exists(frames, frame => frame.resumeCountdown)
@@ -1767,16 +1725,176 @@ namespace GreedLast.PlayerChecks
                     && frames[frames.Length - 1].distance > frames[5 * rate].distance + 1f
                     && frames[frames.Length - 1].seconds < seconds + 0.35,
                     "The clip must demonstrate distance advance, pause, resume countdown and continued advance at the recorded speed.");
-                WriteSilentMotionJpeg(Path.Combine(root, "straight-run.avi"), width, height, rate, images);
+                clip.Save("straight-run");
                 result.straightRunFrames = frames;
             }
-            finally
+        }
+
+        private IEnumerator CaptureCorridorCourse()
+        {
+            const string practiceKey = "GreedLast.Onboarding.PracticeCompleted";
+            Require(Application.isBatchMode && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null,
+                "The corridor course clip requires a real graphics device in the isolated offscreen player.");
+            Require(EmptySlots() && !backend.HasSaveLoadoutCandidate && Count("normalClearCount") == 0,
+                "The corridor course must begin in an empty test product.");
+            Require(PlayerPrefs.GetInt(practiceKey, 0) == 0, "The film must own the onboarding marker from this private product.");
+            result.scope = "Actual first normal trap and rhythm responses. The private fixture schedules the authored left and right rotation patterns next, then allows the next real chapter to advance without another trap until the video ends.";
+            Call(app, "RequestPracticeRun");
+            yield return DriveCourse();
+            Require(core.IsPracticeComplete && RunState().SuccessCount == 3, "Complete the real practice before filming the ordinary course.");
+            Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None);
+            yield return DriveCourse(untilFirstTrap: true);
+            Require(RunState().Pattern.PatternId.StartsWith("center_sand_perfect", StringComparison.Ordinal),
+                "The actual opening normal trap must be the sand bed.");
+
+            const int rate = OffscreenRunClip.FrameRate, seconds = 10;
+            var frames = new List<RunClipFrame>(rate * seconds);
+            var responses = new List<string>(3);
+            string[] turns = { "left_rotate_corridor_perfect", "right_rotate_corridor_clutch" };
+            FieldInfo overridePattern = typeof(GreedLastRunCore).GetField("devNextPatternOverride", Fields);
+            FieldInfo nextPattern = typeof(GreedLastRunCore).GetField("nextPatternAt", Fields);
+            using (var clip = new OffscreenRunClip(Read<GreedLastRuntimeUi>(app, "runtimeUi"), root))
+            {
+                double started = Time.realtimeSinceStartupAsDouble;
+                float leftHeading = 0f, rightContactDistance = 0f;
+                while (frames.Count < rate * seconds)
+                {
+                    CheckDeadline();
+                    GreedLastRunSnapshot run = RunState();
+                    Require(!run.Paused && !run.Stopped && run.MissCount == 0, "The filmed course must continue without pauses or misses.");
+                    if (run.ChoiceActive && responses.Count == 3)
+                    {
+                        Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
+                    }
+                    else if (responses.Count < 3 && run.ActivePattern && run.LastResult == GreedLastJudgementResult.None
+                        && run.CoreDeltaSeconds + core.InputTimingOffsetSeconds >= 0)
+                    {
+                        int index = responses.Count;
+                        Require(index == 0 || (run.Pattern.PatternId.StartsWith(turns[index - 1], StringComparison.Ordinal)
+                            && GreedLastRunCore.IsRotationPattern(run.Pattern)),
+                            "Use the two authored rotation patterns after the regular sand bed.");
+                        if (index < turns.Length)
+                            overridePattern.SetValue(core, Call(core, "FindPatternById", turns[index]));
+                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                        Require(RunState().LastResult == GreedLastJudgementResult.Success, "The filmed response must pass actual judgement.");
+                        responses.Add(run.Pattern.Channel.ToString());
+                        if (index == 2) rightContactDistance = run.Distance;
+                        yield return null;
+                        continue;
+                    }
+                    else if (responses.Count == 3 && !run.ActivePattern)
+                    {
+                        nextPattern.SetValue(core, Time.realtimeSinceStartup + 15f);
+                    }
+
+                    if (Time.realtimeSinceStartupAsDouble >= started + (double)frames.Count / rate)
+                    {
+                        RunClipFrame observation = clip.Sample(RunState(), started);
+                        leftHeading = Mathf.Min(leftHeading, observation.heading);
+                        int frame = frames.Count;
+                        clip.Capture(frame % (2 * rate) == 0 ? "corridor-course-" + frame / rate + "s" : null);
+                        frames.Add(observation);
+                    }
+                    yield return null;
+                }
+                RunClipFrame last = frames[frames.Count - 1];
+                Require(string.Join(",", responses) == "Center,Left,Right" && leftHeading < -36f
+                    && Mathf.Abs(last.heading) < 2f && last.distance > rightContactDistance + 5f
+                    && last.seconds < seconds + 0.35,
+                    "The capture must show the sand, left bend and right bend leading into the next moving section.");
+                clip.Save("corridor-course");
+                result.corridorCourseFrames = frames.ToArray();
+                result.corridorCourseResponses = responses.ToArray();
+            }
+            // Give subsequent persistence phases their own first practice in this test product.
+            PlayerPrefs.DeleteKey(practiceKey);
+            PlayerPrefs.Save();
+        }
+
+        private sealed class OffscreenRunClip : IDisposable
+        {
+            private const int Width = 960, Height = 540;
+            internal const int FrameRate = 12;
+            private readonly string root;
+            private readonly GreedLastRunCorridor corridor;
+            private readonly Canvas canvas;
+            private readonly Camera camera;
+            private readonly RenderTexture target;
+            private readonly Texture2D pixels;
+            private readonly List<byte[]> images = new List<byte[]>();
+
+            internal OffscreenRunClip(GreedLastRuntimeUi ui, string root)
+            {
+                this.root = root;
+                corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
+                canvas = Read<Canvas>(ui, "ownedCanvasSurface");
+                Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
+                    && corridor != null && Read<RawImage>(ui, "runCorridorImage").isActiveAndEnabled,
+                    "The distance-driven corridor must be visible in the Windows player.");
+                camera = new GameObject("Greed offscreen clip camera").AddComponent<Camera>();
+                camera.enabled = false;
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+                target = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
+                pixels = new Texture2D(Width, Height, TextureFormat.RGB24, false);
+                Require(target.Create(), "The offscreen clip target could not be created.");
+                camera.targetTexture = target;
+            }
+
+            internal RunClipFrame Sample(GreedLastRunSnapshot run, double start)
+            {
+                var frame = new RunClipFrame
+                {
+                    seconds = Time.realtimeSinceStartupAsDouble - start,
+                    distance = run.Distance,
+                    cameraDistance = Read<float>(corridor, "renderedDistance"),
+                    footViewportY = corridor.RunnerGroundViewport.y,
+                    paused = run.Paused,
+                    resumeCountdown = run.ResumeCountdownActive,
+                    heading = corridor.RunnerHeading,
+                    pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty
+                };
+                Require(Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
+                    && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f,
+                    "The camera must follow the same live distance and keep the runner's ground point visible.");
+                return frame;
+            }
+
+            internal void Capture(string stillName)
+            {
+                Camera oldCamera = canvas.worldCamera;
+                float oldPlane = canvas.planeDistance;
+                RenderTexture oldActive = RenderTexture.active;
+                try
+                {
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = camera;
+                    canvas.planeDistance = 1f;
+                    Canvas.ForceUpdateCanvases();
+                    camera.Render();
+                    RenderTexture.active = target;
+                    pixels.ReadPixels(new Rect(0, 0, Width, Height), 0, 0, false);
+                }
+                finally
+                {
+                    RenderTexture.active = oldActive;
+                    canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                    canvas.worldCamera = oldCamera;
+                    canvas.planeDistance = oldPlane;
+                }
+                images.Add(pixels.EncodeToJPG(87));
+                if (stillName != null) File.WriteAllBytes(Path.Combine(root, stillName + ".png"), pixels.EncodeToPNG());
+            }
+
+            internal void Save(string name) => WriteSilentMotionJpeg(Path.Combine(root, name + ".avi"), Width, Height, FrameRate, images);
+
+            public void Dispose()
             {
                 camera.targetTexture = null;
                 target.Release();
-                Destroy(target);
-                Destroy(pixels);
-                Destroy(cameraObject);
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                UnityEngine.Object.Destroy(camera.gameObject);
             }
         }
 
