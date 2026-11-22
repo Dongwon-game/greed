@@ -15945,6 +15945,12 @@ namespace GreedLast
         private GreedLastScreenState prototypeEntranceBackdropState;
         private RawImage prototypeRunCorridorBackdrop;
         private CanvasGroup prototypeRunCorridorBackdropCanvasGroup;
+        private RawImage runCorridorImage;
+        private GreedLastRunCorridor runCorridor;
+        private bool runCorridorCreationAttempted;
+        private RectTransform runnerPresentationRoot;
+        private CanvasGroup runDepthDecoration;
+        private CanvasGroup runSceneryDecoration;
         private Rect lastSafeArea;
         private int lastSafeAreaScreenWidth = -1;
         private int lastSafeAreaScreenHeight = -1;
@@ -28159,6 +28165,9 @@ namespace GreedLast
 
         private void CreateRunnerAvatar(Transform parent)
         {
+            runnerPresentationRoot = (RectTransform)CreateRect("RunnerPresentation", parent, Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.155f), Vector2.zero).transform;
+            parent = runnerPresentationRoot;
             GameObject shadow = CreateRect("RunnerShadow", parent, new Vector2(0.5f, 0.125f), new Vector2(0.5f, 0.125f), new Vector2(0.5f, 0.5f), new Vector2(150f, 24f));
             runnerShadow = shadow.AddComponent<Image>();
             runnerShadow.color = new Color32(0, 0, 0, 112);
@@ -28417,7 +28426,10 @@ namespace GreedLast
             GameObject laneRoot = CreateRect("LanePreview", parent, new Vector2(0.14f, 0.44f), new Vector2(0.86f, 0.74f), Vector2.zero, Vector2.zero);
             lanePreviewRoot = laneRoot;
             laneRoot.AddComponent<CanvasGroup>().alpha = 0.95f;
-            CreateTempleDepthBackdrop(laneRoot.transform);
+            GameObject depthDecoration = CreateRect("RunDepthDecoration", laneRoot.transform, Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), Vector2.zero);
+            runDepthDecoration = depthDecoration.AddComponent<CanvasGroup>();
+            CreateTempleDepthBackdrop(depthDecoration.transform);
             CreateLobbyRunPortal(laneRoot.transform);
 
             laneImages = new Image[3];
@@ -28501,11 +28513,14 @@ namespace GreedLast
                 laneJudgementTagTexts[i] = judgementTag;
             }
 
-            CreateStraightRunCorridorGates(laneRoot.transform);
-            CreateStraightRunSideWallStripes(laneRoot.transform);
-            CreateStraightRunSpeedStreaks(laneRoot.transform);
-            CreateStraightRunCenterSeamDashes(laneRoot.transform);
-            CreateStraightRunForwardPaceMarkers(laneRoot.transform);
+            GameObject sceneryDecoration = CreateRect("RunSceneryDecoration", laneRoot.transform, Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), Vector2.zero);
+            runSceneryDecoration = sceneryDecoration.AddComponent<CanvasGroup>();
+            CreateStraightRunCorridorGates(sceneryDecoration.transform);
+            CreateStraightRunSideWallStripes(sceneryDecoration.transform);
+            CreateStraightRunSpeedStreaks(sceneryDecoration.transform);
+            CreateStraightRunCenterSeamDashes(sceneryDecoration.transform);
+            CreateStraightRunForwardPaceMarkers(sceneryDecoration.transform);
             CreateStraightRunFocusRings(laneRoot.transform);
             CreateStraightRunTargetFrame(laneRoot.transform);
             CreateStraightRunExitSlot(laneRoot.transform);
@@ -28961,6 +28976,8 @@ namespace GreedLast
         {
             if (presentationReleased) return;
             presentationReleased = true;
+            runCorridor?.Dispose();
+            runCorridor = null;
             PresentationReleased?.Invoke(this);
         }
 
@@ -31644,6 +31661,11 @@ namespace GreedLast
             prototypeRunCorridorBackdropCanvasGroup.interactable = false;
             prototypeRunCorridorBackdropCanvasGroup.blocksRaycasts = false;
             backdropObject.SetActive(false);
+
+            runCorridorImage = CreateRect("RunCorridorView", parent, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero)
+                .AddComponent<RawImage>();
+            runCorridorImage.raycastTarget = false;
+            runCorridorImage.enabled = false;
         }
 
         private void UpdatePrototypeRunCorridorBackdrop()
@@ -31654,6 +31676,7 @@ namespace GreedLast
             }
 
             bool visible = ShouldShowPrototypeRunCorridorBackdrop(runModeActive, hasRunSnapshot);
+            if (!visible) SetRunCorridorVisible(false);
             if (visible && !prototypeRunCorridorBackdrop.gameObject.activeSelf)
             {
                 prototypeRunCorridorBackdropCanvasGroup.alpha = 0f;
@@ -31722,11 +31745,57 @@ namespace GreedLast
                     rotationReadiness,
                     motionComfortEnabled));
 
+            if (visible && IsWindowsDesktop && !runCorridorCreationAttempted)
+            {
+                runCorridorCreationAttempted = true;
+                runCorridor = GreedLastRunCorridor.Create();
+            }
+            if (visible && runCorridor != null)
+            {
+                runCorridor.Render(latestRunSnapshot.Distance, rect.localEulerAngles.z, Screen.width, Screen.height);
+                runCorridorImage.texture = runCorridor.Texture;
+                float brightness = latestRunSnapshot.Paused || latestRunSnapshot.Stopped ? 0.62f
+                    : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
+                runCorridorImage.color = new Color(brightness, brightness, brightness, 1f);
+                SetRunCorridorVisible(true);
+            }
+
             if (!visible && prototypeRunCorridorBackdropCanvasGroup.alpha <= 0.005f)
             {
                 prototypeRunCorridorBackdropCanvasGroup.alpha = 0f;
                 prototypeRunCorridorBackdrop.gameObject.SetActive(false);
             }
+        }
+
+        private void SetRunCorridorVisible(bool visible)
+        {
+            runCorridorImage.enabled = visible;
+            prototypeRunCorridorBackdrop.enabled = !visible;
+            if (runnerPresentationRoot == null) return;
+            runDepthDecoration.alpha = visible ? 0.20f : 1f;
+            runSceneryDecoration.alpha = visible ? 0.20f : 1f;
+
+            Vector2 runnerOffset = Vector2.zero;
+            if (visible)
+            {
+                RectTransform image = runCorridorImage.rectTransform;
+                Vector3 projection = runCorridor.RunnerGroundViewport;
+                Vector3 touchPoint = image.TransformPoint(new Vector3(
+                    Mathf.Lerp(image.rect.xMin, image.rect.xMax, projection.x),
+                    Mathf.Lerp(image.rect.yMin, image.rect.yMax, projection.y), 0f));
+                var lane = (RectTransform)runnerPresentationRoot.parent;
+                Vector2 ground = lane.InverseTransformPoint(touchPoint);
+                Vector2 oldGround = lane.rect.min + Vector2.Scale(lane.rect.size, runnerPresentationRoot.pivot);
+                runnerOffset = ground - oldGround;
+            }
+            runnerPresentationRoot.anchoredPosition = runnerOffset;
+            runnerPresentationRoot.localScale = Vector3.one * (visible ? 1.32f : 1f);
+
+            Vector2 size = runCorridorImage.rectTransform.rect.size;
+            if (runHudText != null)
+                runHudText.rectTransform.anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.27f, 0.50f)) : Vector2.zero;
+            if (runGaugeRoot != null)
+                ((RectTransform)runGaugeRoot.transform).anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.27f, 0.365f)) : Vector2.zero;
         }
 
         private static bool ShouldShowPrototypeRunCorridorBackdrop(bool runModeActive, bool hasRunSnapshot)
