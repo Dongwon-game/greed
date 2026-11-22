@@ -1,5 +1,11 @@
 # 실행 파일의 종료와 재실행 확인
 
+## 직선 통로의 무음 주행 영상
+
+`tools/check-player-persistence.ps1 -CaptureFrames -FrameSize 960x540 -CaptureStraightRunClip -VerifiedReleasePath <후보 폴더>`는 격리 제품에서 실제 연습을 시작하고 첫 함정을 영상 뒤로 미룬다. 12초 동안 카메라와 주자의 주행 거리, 발의 화면 위치, 정지, 재개 카운트와 재출발을 144표본으로 기록한다. 같은 시험에서 기존 함정 렌더와 저장·재실행 검사를 이어간다.
+
+사본 안의 시험 폴더에 무음 `straight-run.avi`, 1·5·11초 PNG 및 `straight-run.json`을 남긴다. 영상은 Unity 내부에서 그리므로 창이나 데스크톱을 캡처하지 않는다. 영상의 발 접지와 이동감은 실제 화면을 보고 판단하고, 표본 검사는 거리와 정지·재개만 판정한다.
+
 ## 전달용 ZIP의 숨김 시작 확인
 
 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261116-4a02566.json'`은 후보를 만든 원본 엔진 보고서와 빌드가 있는 작업 사본에서 실행한다. 격리 제품명과 빌드 식별을 대조하고 ZIP의 모든 파일을 원본과 검증한다. ZIP을 새 로그 하위 폴더에 푼 뒤 그 폴더에서 20초 동안 숨김으로 시작한다. 엔진 초기화, 관리 코드 예외, 개인 환경설정 보존과 해당 시험 프로세스의 종료를 기록한다. 정상 종료와 저장 재실행은 별도 플레이어 검사에서 확인한다. `-WhatIf`로 파일과 격리 조건만 대조할 수 있다.
