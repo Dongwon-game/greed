@@ -17,8 +17,7 @@ namespace GreedLast
         private readonly Camera camera;
         private readonly Material stone;
         private readonly Mesh moduleMesh;
-        private readonly Mesh sandTrapMesh;
-        private readonly Transform sandTrap;
+        private readonly WorldTrap[] traps;
         private readonly Texture2D contactShadowTexture;
         private readonly Transform[] modules = new Transform[9];
         private readonly Mesh[] curvedMeshes = new Mesh[9];
@@ -31,9 +30,6 @@ namespace GreedLast
         private int firstModule = int.MinValue;
         private float renderedDistance = -1f;
         private float renderedRoll;
-        private bool trackingSandTrap;
-        private float sandTrapElapsed;
-        private float sandTrapDistance;
         private bool trackingTurn;
         private float turnElapsed;
 
@@ -75,9 +71,12 @@ namespace GreedLast
             curvedVertices = new Vector3[moduleVertices.Length];
             for (int i = 0; i < modules.Length; i++)
                 modules[i] = CreateStoneMesh("Stone corridor module", moduleMesh);
-            sandTrapMesh = BuildSandTrap();
-            sandTrap = CreateStoneMesh("Collapsing sand bed", sandTrapMesh);
-            sandTrap.gameObject.SetActive(false);
+            traps = new[]
+            {
+                CreateTrap("center_sand_perfect", "Collapsing sand bed", BuildSandTrap(), Vector3.zero),
+                CreateTrap("right_pillar_clutch", "Right hanging pillar", BuildHangingPillar(), new Vector3(0.65f, 1.43f, 0f)),
+                CreateTrap("left_blade_offbeat", "Left wall blade", BuildWallBlade(), new Vector3(-0.20f, 1.29f, 0f))
+            };
             contactShadowTexture = BuildContactShadow();
             ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
             ContactShadow.hideFlags = HideFlags.HideAndDontSave;
@@ -105,7 +104,7 @@ namespace GreedLast
 
             float distance = Mathf.Max(0f, run.Distance);
             bool routeChanged = UpdateRoute(run, distance);
-            bool trapChanged = RefreshSandTrap(run, distance);
+            bool trapChanged = RefreshTraps(run, distance);
             if (!targetChanged && distance == renderedDistance && roll == renderedRoll && !trapChanged && !routeChanged) return;
             int newFirst = Mathf.FloorToInt((distance - CameraFollowDistance) / ModuleLength) - 1;
             if (newFirst != firstModule || routeChanged)
@@ -187,31 +186,77 @@ namespace GreedLast
             filter.sharedMesh = curved;
         }
 
-        private bool RefreshSandTrap(GreedLastRunSnapshot run, float distance)
+        private bool RefreshTraps(GreedLastRunSnapshot run, float distance)
         {
-            bool wasVisible = sandTrap.gameObject.activeSelf;
-            if (distance < renderedDistance)
+            bool changed = false;
+            foreach (WorldTrap trap in traps)
             {
-                sandTrap.gameObject.SetActive(false);
-                trackingSandTrap = false;
+                bool wasVisible = trap.Root.gameObject.activeSelf;
+                if (distance < renderedDistance)
+                {
+                    trap.Root.gameObject.SetActive(false);
+                    trap.Tracking = false;
+                }
+                bool active = run.ActivePattern && trap.Matches(run.Pattern.PatternId);
+                if (active && (!trap.Tracking || run.ElapsedSeconds + 0.05f < trap.Elapsed))
+                {
+                    // Place the object at the existing rhythm judgement, on the same route as the runner.
+                    trap.Distance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
+                    RunRoute.Pose anchor = route.Sample(trap.Distance);
+                    trap.Root.SetLocalPositionAndRotation(anchor.Position, anchor.Rotation);
+                    SetStonePosition(trap.Root, trap.Distance);
+                    trap.Root.gameObject.SetActive(true);
+                    changed = true;
+                }
+                trap.Tracking = active;
+                trap.Elapsed = run.ElapsedSeconds;
+                if (distance - trap.Distance > CameraFollowDistance + 1f)
+                    trap.Root.gameObject.SetActive(false);
+                changed |= wasVisible != trap.Root.gameObject.activeSelf;
             }
-            bool isSandTrap = run.ActivePattern && run.Pattern.Channel == GreedLastRunChannel.Center
-                && run.Pattern.PatternId.StartsWith("center_sand_perfect", StringComparison.Ordinal);
-            bool moved = isSandTrap && (!trackingSandTrap || run.ElapsedSeconds + 0.05f < sandTrapElapsed);
-            if (moved)
+            return changed;
+        }
+
+        internal bool TryGetTrapProjection(string patternId, out float distance, out Vector3 viewport)
+        {
+            foreach (WorldTrap trap in traps)
             {
-                // Anchor it at the existing judgement point. The camera travels to it as the run advances.
-                sandTrapDistance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
-                RunRoute.Pose anchor = route.Sample(sandTrapDistance);
-                sandTrap.SetLocalPositionAndRotation(anchor.Position, anchor.Rotation);
-                SetStonePosition(sandTrap, sandTrapDistance);
-                sandTrap.gameObject.SetActive(true);
+                if (!trap.Root.gameObject.activeSelf || !trap.Matches(patternId)) continue;
+                distance = trap.Distance;
+                viewport = camera.WorldToViewportPoint(trap.Root.TransformPoint(trap.FeaturePoint));
+                return true;
             }
-            trackingSandTrap = isSandTrap;
-            sandTrapElapsed = run.ElapsedSeconds;
-            if (distance - sandTrapDistance > CameraFollowDistance + 1f)
-                sandTrap.gameObject.SetActive(false);
-            return moved || wasVisible != sandTrap.gameObject.activeSelf;
+            distance = 0f;
+            viewport = Vector3.zero;
+            return false;
+        }
+
+        private WorldTrap CreateTrap(string pattern, string name, Mesh mesh, Vector3 featurePoint)
+        {
+            Transform root = CreateStoneMesh(name, mesh);
+            root.gameObject.SetActive(false);
+            return new WorldTrap(pattern, root, mesh, featurePoint);
+        }
+
+        private sealed class WorldTrap
+        {
+            private readonly string pattern;
+            internal readonly Transform Root;
+            internal readonly Mesh Mesh;
+            internal readonly Vector3 FeaturePoint;
+            internal bool Tracking;
+            internal float Elapsed, Distance;
+
+            internal WorldTrap(string pattern, Transform root, Mesh mesh, Vector3 featurePoint)
+            {
+                this.pattern = pattern;
+                Root = root;
+                Mesh = mesh;
+                FeaturePoint = featurePoint;
+            }
+
+            internal bool Matches(string patternId) => patternId != null
+                && patternId.StartsWith(pattern, StringComparison.Ordinal);
         }
 
         private void SetStonePosition(Transform piece, float distance)
@@ -240,7 +285,7 @@ namespace GreedLast
             UnityEngine.Object.Destroy(moduleMesh);
             foreach (Mesh mesh in curvedMeshes)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
-            UnityEngine.Object.Destroy(sandTrapMesh);
+            foreach (WorldTrap trap in traps) UnityEngine.Object.Destroy(trap.Mesh);
             UnityEngine.Object.Destroy(ContactShadow);
             UnityEngine.Object.Destroy(contactShadowTexture);
         }
@@ -328,6 +373,34 @@ namespace GreedLast
                 mesh.Box(new Vector3(x, height * 0.5f + 0.05f, i % 2 == 0 ? 0.24f : -0.24f),
                     new Vector3(0.43f, height, 0.44f), Shade(sand, 0.79f + (i % 4) * 0.08f));
             }
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildHangingPillar()
+        {
+            var mesh = new StoneGeometry();
+            var sandstone = new Color32(127, 113, 86, 255);
+            var bronze = new Color32(192, 132, 58, 255);
+            mesh.Box(new Vector3(2.16f, 4.69f, 0f), new Vector3(1.66f, 0.8f, 1.17f), Shade(sandstone, 0.69f));
+            mesh.Box(new Vector3(1.92f, 3.45f, 0f), new Vector3(1.2f, 2.48f, 0.81f), sandstone);
+            mesh.Box(new Vector3(1.92f, 2.20f, 0f), new Vector3(1.65f, 0.61f, 0.98f), Shade(sandstone, 0.78f));
+            mesh.Box(new Vector3(0.65f, 1.72f, 0f), new Vector3(3.54f, 0.60f, 0.88f), sandstone);
+            mesh.Box(new Vector3(0.65f, 1.49f, -0.46f), new Vector3(3.55f, 0.12f, 0.09f), bronze);
+            for (int i = 0; i < 5; i++)
+                mesh.Box(new Vector3(-0.69f + i * 0.66f, 1.73f, -0.46f), new Vector3(0.41f, 0.19f, 0.075f), Shade(bronze, 0.66f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildWallBlade()
+        {
+            var mesh = new StoneGeometry();
+            var bronze = new Color32(170, 113, 61, 255);
+            var blade = new Color32(148, 112, 86, 255);
+            mesh.Box(new Vector3(-3.54f, 1.28f, 0f), new Vector3(0.53f, 1.38f, 0.97f), new Color32(88, 79, 64, 255));
+            mesh.Box(new Vector3(-3.22f, 1.29f, 0f), new Vector3(0.41f, 0.58f, 0.76f), bronze);
+            mesh.Box(new Vector3(-1.86f, 1.29f, 0f), new Vector3(2.72f, 0.38f, 0.43f), blade);
+            mesh.Box(new Vector3(-0.36f, 1.29f, 0f), new Vector3(0.53f, 0.22f, 0.28f), Shade(blade, 1.15f));
+            mesh.Box(new Vector3(-1.78f, 1.15f, -0.225f), new Vector3(2.85f, 0.09f, 0.06f), new Color32(208, 136, 76, 255));
             return mesh.Finish();
         }
 

@@ -452,6 +452,25 @@ try {
         if ([Math]::Abs($approach[-1].sandTrapDistance - $approach[-1].distance) -gt 0.30) {
             throw 'The runner must reach the world-space floor trap at the existing judgement point.'
         }
+        foreach ($kind in @(@{Name='normal-side-trap'; Channel='Right'; Pattern='right_pillar_clutch*'},
+            @{Name='normal-twist-trap'; Channel='Left'; Pattern='left_blade_offbeat*'})) {
+            $views = @($render.frames | Where-Object name -CLike ($kind.Name + '-*'))
+            if ($views.Count -ne 3 -or $views[0].pattern -cnotlike $kind.Pattern -or $views[0].channel -cne $kind.Channel) {
+                throw ('Missing the expected ordinary-course obstacle: ' + $kind.Name)
+            }
+            foreach ($view in $views) {
+                if (!$view.worldTrapVisible -or [Math]::Abs($view.worldTrapDistance - $views[0].worldTrapDistance) -gt 0.001 -or
+                    $view.worldTrapViewport.x -le 0 -or $view.worldTrapViewport.x -ge 1 -or
+                    $view.worldTrapViewport.y -le 0 -or $view.worldTrapViewport.y -ge 1 -or $view.worldTrapViewport.z -le 0) {
+                    throw ('The world obstacle must stay anchored and visible while approaching: ' + $view.name)
+                }
+            }
+            if ($views[0].worldTrapDistance -le $views[0].distance -or
+                [Math]::Abs($views[-1].worldTrapDistance - $views[-1].distance) -gt 0.30 -or
+                $views[-1].worldTrapViewport.z -ge $views[0].worldTrapViewport.z) {
+                throw ('The runner must reach the world obstacle at the existing judgement: ' + $kind.Name)
+            }
+        }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight) {
                 throw ('Unexpected dimensions for practice or normal trap frame: ' + $_.name)
@@ -461,6 +480,7 @@ try {
                 Pattern=$_.pattern; Channel=$_.channel; CoreDeltaSeconds=$_.coreDeltaSeconds;
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 SandTrapVisible=$_.sandTrapVisible; SandTrapDistance=$_.sandTrapDistance; SandTrapViewportY=$_.sandTrapViewportY;
+                WorldTrapVisible=$_.worldTrapVisible; WorldTrapDistance=$_.worldTrapDistance; WorldTrapViewport=$_.worldTrapViewport;
                 JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
                 FeedbackFlashAlpha=$_.feedbackFlashAlpha; PrimaryResultLabel=$_.primaryResultLabel;
                 PrimaryResultFontSize=$_.primaryResultFontSize; PrimaryResultFontCap=$_.primaryResultFontCap;

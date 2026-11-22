@@ -93,10 +93,11 @@ namespace GreedLast.PlayerChecks
         private sealed class RunClipFrame
         {
             public double seconds;
-            public float distance, cameraDistance, footViewportY, heading, cameraHeading, coreDeltaSeconds;
+            public float distance, cameraDistance, footViewportY, heading, cameraHeading, coreDeltaSeconds, worldTrapDistance;
             public Vector3 cameraPosition;
+            public Vector3 worldTrapViewport;
             public int chapter, successes, misses;
-            public bool paused, resumeCountdown;
+            public bool paused, resumeCountdown, worldTrapVisible;
             public string pattern, runPhase, choice, avoidance, channel;
         }
 
@@ -165,8 +166,10 @@ namespace GreedLast.PlayerChecks
             public float progressToTitlePixels, progressToLanePixels;
             public float choicePromptHeightPixels, choicePromptToCardPixels;
             public float sandTrapDistance, sandTrapViewportY;
+            public float worldTrapDistance;
+            public Vector3 worldTrapViewport;
             public int exitSlotAlpha, judgementAlpha;
-            public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible;
+            public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible, worldTrapVisible;
         }
 
         [Serializable]
@@ -1878,6 +1881,9 @@ namespace GreedLast.PlayerChecks
                     avoidance = run.ActivePattern ? run.Pattern.AvoidanceType.ToString() : string.Empty,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty
                 };
+                if (run.ActivePattern)
+                    frame.worldTrapVisible = corridor.TryGetTrapProjection(run.Pattern.PatternId,
+                        out frame.worldTrapDistance, out frame.worldTrapViewport);
                 Require(!requireGround || (Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
                     && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f),
                     "The camera must follow the same live distance and keep the runner's ground point visible.");
@@ -2210,10 +2216,11 @@ namespace GreedLast.PlayerChecks
                     }
                 Require(colors.Count >= 16, "A solid/blank offscreen render must not count as a rendered scene.");
                 var corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
-                Transform sandTrap = corridor == null ? null : Read<Transform>(corridor, "sandTrap");
-                bool sandTrapVisible = sandTrap != null && sandTrap.gameObject.activeSelf;
-                float sandTrapViewportY = sandTrapVisible
-                    ? Read<Camera>(corridor, "camera").WorldToViewportPoint(sandTrap.position).y : 0f;
+                float trapDistance = 0f;
+                Vector3 trapViewport = Vector3.zero;
+                bool worldTrapVisible = run.ActivePattern && corridor != null
+                    && corridor.TryGetTrapProjection(run.Pattern.PatternId, out trapDistance, out trapViewport);
+                bool sandTrapVisible = worldTrapVisible && run.Pattern.PatternId.StartsWith("center_sand_perfect", StringComparison.Ordinal);
                 frames.Add(new Frame { name = name, utc = capturedUtc,
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
@@ -2227,8 +2234,9 @@ namespace GreedLast.PlayerChecks
                     comboBadge = comboText, comboBadgeLines = comboLines,
                     comboToPausePixels = comboToPausePixels, comboTextToPipsPixels = comboTextToPipsPixels,
                     exitSlotAlpha = exitSlotAlpha,
-                    sandTrapVisible = sandTrapVisible, sandTrapViewportY = sandTrapViewportY,
-                    sandTrapDistance = sandTrapVisible ? Read<float>(corridor, "sandTrapDistance") : 0f,
+                    sandTrapVisible = sandTrapVisible, sandTrapViewportY = sandTrapVisible ? trapViewport.y : 0f,
+                    sandTrapDistance = sandTrapVisible ? trapDistance : 0f,
+                    worldTrapVisible = worldTrapVisible, worldTrapDistance = trapDistance, worldTrapViewport = trapViewport,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
