@@ -45,10 +45,12 @@ $budgets = @(
     @{Phase='window-menu'; Minutes=60; Interactive=$true; Expected=4230000},
     @{Phase='window-loadout'; Minutes=30; Interactive=$true; Expected=630000},
     @{Phase='window-play'; Minutes=30; Interactive=$true; Expected=360000},
+    @{Phase='window-clear'; Minutes=30; Interactive=$true; ChoiceKeys=$true; Expected=570000},
     @{Phase='clear'; Minutes=30; Interactive=$false; Expected=180000}
 )
 foreach ($case in $budgets) {
     $phase=$case.Phase; $MenuWaitMinutes=$case.Minutes; $interactive=$case.Interactive
+    $observeChoiceKeys = [bool]$case['ChoiceKeys']
     if ((& $budget) -ne $case.Expected) { throw 'Actual process timeout does not cover preparation plus operator wait.' }
 }
 foreach ($value in @(0,61,30)) {
