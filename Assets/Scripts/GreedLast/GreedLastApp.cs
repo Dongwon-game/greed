@@ -16527,7 +16527,7 @@ namespace GreedLast
                 runHudText.text = cleanView ? GetCompactLiveRunHud(latestRunSnapshot) : detailedRunHud;
                 runHudText.fontSize = cleanView ? 38 : BuildRunHudFontSize(latestRunSnapshot, detailedRunHud);
                 if (cleanView)
-                    SetAnchored(runHudText.rectTransform, 0.5f, 0.265f, 1450f, 150f);
+                    PositionRunHud(0.265f, 1450f, 150f);
                 else
                     UpdateRunHudLayout(detailedRunHud);
                 subtitleText.text = cleanView ? string.Empty : BuildModeSubtitleForScreen(
@@ -22029,36 +22029,39 @@ namespace GreedLast
                 return;
             }
 
-            bool corridorVisible = runCorridorImage != null && runCorridorImage.enabled;
-            float x = corridorVisible ? 0.15f : 0.5f;
-            float lift = corridorVisible ? 0.50f : 0f;
-            RectTransform rect = runHudText.rectTransform;
             int lineCount = CountTextLines(hudText);
             if (lineCount >= 8)
             {
-                SetAnchored(rect, x, 0.292f + lift, 930f, 330f);
+                PositionRunHud(0.292f, 930f, 330f);
                 return;
             }
 
             if (lineCount >= 7)
             {
-                SetAnchored(rect, x, 0.282f + lift, 930f, 305f);
+                PositionRunHud(0.282f, 930f, 305f);
                 return;
             }
 
             if (lineCount >= 6)
             {
-                SetAnchored(rect, x, 0.268f + lift, 910f, 275f);
+                PositionRunHud(0.268f, 910f, 275f);
                 return;
             }
 
             if (lineCount <= 4)
             {
-                SetAnchored(rect, x, 0.252f + lift, 920f, 220f);
+                PositionRunHud(0.252f, 920f, 220f);
                 return;
             }
 
-            SetAnchored(rect, x, 0.255f + lift, 900f, 245f);
+            PositionRunHud(0.255f, 900f, 245f);
+        }
+
+        private void PositionRunHud(float y, float width, float height)
+        {
+            bool corridorVisible = runCorridorImage != null && runCorridorImage.enabled;
+            SetAnchored(runHudText.rectTransform, corridorVisible ? 0.15f : 0.5f,
+                y + (corridorVisible ? 0.50f : 0f), width, height);
         }
 
         private static string BuildRunObjectiveLine(GreedLastRunSnapshot snapshot)
@@ -31779,7 +31782,12 @@ namespace GreedLast
             bool visibilityChanged = runCorridorImage.enabled != visible;
             runCorridorImage.enabled = visible;
             prototypeRunCorridorBackdrop.enabled = !visible;
-            if (visibilityChanged && runHudText != null) UpdateRunHudLayout(runHudText.text);
+            if (visibilityChanged && runHudText != null)
+            {
+                RectTransform hud = runHudText.rectTransform;
+                float y = hud.anchorMin.y - (visible ? 0f : 0.50f);
+                PositionRunHud(y, hud.sizeDelta.x, hud.sizeDelta.y);
+            }
             if (runnerPresentationRoot == null) return;
             runDepthDecoration.alpha = visible ? 0.20f : 1f;
             runSceneryDecoration.alpha = visible ? 0.20f : 1f;
