@@ -31816,6 +31816,7 @@ namespace GreedLast
                 runnerShadow.rectTransform.anchorMax = shadowAnchor;
                 runnerShadow.rectTransform.sizeDelta = new Vector2(visible ? 130f : 150f, visible ? 30f : 24f);
             }
+            if (runnerCoreGlow.sprite != shadow) runnerCoreGlow.sprite = shadow;
 
             Vector2 size = runCorridorImage.rectTransform.rect.size;
             if (runGaugeRoot != null)
