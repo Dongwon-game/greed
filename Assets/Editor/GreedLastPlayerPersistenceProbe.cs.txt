@@ -305,6 +305,11 @@ namespace GreedLast.PlayerChecks
                 VerifyGiftHistoryPersistence();
                 yield break;
             }
+            if (phase == "straight-run")
+            {
+                yield return CaptureStraightRun();
+                yield break;
+            }
             if (phase != "clear" && phase != "render" && phase != "window-play" && phase != "window-clear"
                 && phase != "window-loadout" && phase != "window-menu" && !unreadablePhase && !practiceQuitPhase)
                 Require(PlayerPrefs.GetInt("GreedLast.Onboarding.PracticeCompleted", 0) == 1,
@@ -514,10 +519,6 @@ namespace GreedLast.PlayerChecks
                 SameRecord(From(Read<GreedLastRunRecord>(backend, "lastRunRecord")), closed.record);
                 result.record = closed.record;
                 result.nativeMenuCandidatePreserved = true;
-            }
-            else if (phase == "straight-run")
-            {
-                yield return CaptureStraightRun();
             }
             else if (phase == "render")
             {
