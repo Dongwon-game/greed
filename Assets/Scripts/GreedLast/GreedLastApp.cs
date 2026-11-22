@@ -20379,8 +20379,11 @@ namespace GreedLast
             }
 
             bool showBadgeBelowScore = UsePlayerRunControls && !snapshot.Stopped && !Application.isMobilePlatform;
-            SetAnchored(comboBadgeRoot.GetComponent<RectTransform>(), 0.5f,
-                showBadgeBelowScore ? 0.225f : 0.672f, showBadgeBelowScore ? 620f : 430f, 58f);
+            RectTransform badge = comboBadgeRoot.GetComponent<RectTransform>();
+            if (showBadgeBelowScore && runCorridorImage != null && runCorridorImage.enabled)
+                SetAnchored(badge, 0.15f, 0.665f, 520f, 58f);
+            else
+                SetAnchored(badge, 0.5f, showBadgeBelowScore ? 0.225f : 0.672f, showBadgeBelowScore ? 620f : 430f, 58f);
 
             bool chainActive = snapshot.Combo >= 3;
             string text = snapshot.Stopped
@@ -31802,9 +31805,9 @@ namespace GreedLast
 
             Vector2 size = runCorridorImage.rectTransform.rect.size;
             if (runHudText != null)
-                runHudText.rectTransform.anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.27f, 0.50f)) : Vector2.zero;
+                runHudText.rectTransform.anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.35f, 0.50f)) : Vector2.zero;
             if (runGaugeRoot != null)
-                ((RectTransform)runGaugeRoot.transform).anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.27f, 0.365f)) : Vector2.zero;
+                ((RectTransform)runGaugeRoot.transform).anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.35f, 0.365f)) : Vector2.zero;
         }
 
         private static bool ShouldShowPrototypeRunCorridorBackdrop(bool runModeActive, bool hasRunSnapshot)

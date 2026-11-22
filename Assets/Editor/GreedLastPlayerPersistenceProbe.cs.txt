@@ -2092,6 +2092,13 @@ namespace GreedLast.PlayerChecks
                     float scoreBottom = ScreenY(camera, score.rectTransform, score.rectTransform.rect.yMax - score.preferredHeight);
                     Require(score.isActiveAndEnabled && !string.IsNullOrEmpty(score.text) && scoreBottom > badgeTop,
                         "The PC combo badge must fit below the visible score.");
+                    var runner = (RectTransform)Read<GameObject>(ui, "runnerAvatarRoot").transform;
+                    float badgeRight = RectTransformUtility.WorldToScreenPoint(camera,
+                        badge.TransformPoint(new Vector3(badge.rect.xMax, 0f, 0f))).x;
+                    float runnerLeft = RectTransformUtility.WorldToScreenPoint(camera,
+                        runner.TransformPoint(new Vector3(runner.rect.xMin, 0f, 0f))).x;
+                    Require(runner.gameObject.activeInHierarchy && badgeRight < runnerLeft,
+                        "The PC combo badge must leave the runner visible while approaching traps.");
                     RectTransform label = comboBadge.rectTransform;
                     float textBottom = ScreenY(camera, label, label.rect.center.y - comboBadge.preferredHeight * 0.5f);
                     float pipTop = float.NegativeInfinity;
