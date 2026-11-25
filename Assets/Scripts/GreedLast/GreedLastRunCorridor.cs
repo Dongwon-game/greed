@@ -73,9 +73,12 @@ namespace GreedLast
                 modules[i] = CreateStoneMesh("Stone corridor module", moduleMesh);
             traps = new[]
             {
-                CreateTrap("center_sand_perfect", "Collapsing sand bed", BuildSandTrap(), Vector3.zero),
-                CreateTrap("right_pillar_clutch", "Right hanging pillar", BuildHangingPillar(), new Vector3(0.65f, 1.43f, 0f)),
-                CreateTrap("left_blade_offbeat", "Left wall blade", BuildWallBlade(), new Vector3(-0.20f, 1.29f, 0f))
+                CreateTrap("center_sand_perfect", "Collapsing sand bed", BuildSandTrap(), Vector3.zero,
+                    Vector3.zero, Vector3.zero, CameraFollowDistance + 1f),
+                CreateTrap("right_pillar_clutch", "Right hanging pillar", BuildHangingPillar(), new Vector3(0.65f, 1.43f, 0f),
+                    Vector3.up * 0.95f, Vector3.up * 3.8f, 2.6f),
+                CreateTrap("left_blade_offbeat", "Left wall blade", BuildWallBlade(), new Vector3(-0.20f, 1.29f, 0f),
+                    Vector3.left * 0.85f, Vector3.left * 3.8f, 2.6f)
             };
             contactShadowTexture = BuildContactShadow();
             ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
@@ -202,16 +205,17 @@ namespace GreedLast
                 {
                     // Place the object at the existing rhythm judgement, on the same route as the runner.
                     trap.Distance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
-                    RunRoute.Pose anchor = route.Sample(trap.Distance);
-                    trap.Root.SetLocalPositionAndRotation(anchor.Position, anchor.Rotation);
+                    trap.Anchor = route.Sample(trap.Distance);
                     SetStonePosition(trap.Root, trap.Distance);
                     trap.Root.gameObject.SetActive(true);
                     changed = true;
                 }
                 trap.Tracking = active;
                 trap.Elapsed = run.ElapsedSeconds;
-                if (distance - trap.Distance > CameraFollowDistance + 1f)
+                float passed = distance - trap.Distance;
+                if (passed > trap.RetreatDistance)
                     trap.Root.gameObject.SetActive(false);
+                if (trap.Root.gameObject.activeSelf) trap.Place(passed);
                 changed |= wasVisible != trap.Root.gameObject.activeSelf;
             }
             return changed;
@@ -231,32 +235,49 @@ namespace GreedLast
             return false;
         }
 
-        private WorldTrap CreateTrap(string pattern, string name, Mesh mesh, Vector3 featurePoint)
+        private WorldTrap CreateTrap(string pattern, string name, Mesh mesh, Vector3 featurePoint,
+            Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance)
         {
             Transform root = CreateStoneMesh(name, mesh);
             root.gameObject.SetActive(false);
-            return new WorldTrap(pattern, root, mesh, featurePoint);
+            return new WorldTrap(pattern, root, mesh, featurePoint, approachOffset, retreatOffset, retreatDistance);
         }
 
         private sealed class WorldTrap
         {
             private readonly string pattern;
+            private readonly Vector3 approachOffset;
+            private readonly Vector3 retreatOffset;
             internal readonly Transform Root;
             internal readonly Mesh Mesh;
             internal readonly Vector3 FeaturePoint;
+            internal readonly float RetreatDistance;
+            internal RunRoute.Pose Anchor;
             internal bool Tracking;
             internal float Elapsed, Distance;
 
-            internal WorldTrap(string pattern, Transform root, Mesh mesh, Vector3 featurePoint)
+            internal WorldTrap(string pattern, Transform root, Mesh mesh, Vector3 featurePoint,
+                Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance)
             {
                 this.pattern = pattern;
                 Root = root;
                 Mesh = mesh;
                 FeaturePoint = featurePoint;
+                this.approachOffset = approachOffset;
+                this.retreatOffset = retreatOffset;
+                RetreatDistance = retreatDistance;
             }
 
             internal bool Matches(string patternId) => patternId != null
                 && patternId.StartsWith(pattern, StringComparison.Ordinal);
+
+            internal void Place(float passed)
+            {
+                float approach = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-4.4f, -0.2f, passed));
+                float retreat = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.08f, RetreatDistance, passed));
+                Vector3 offset = approachOffset * approach + retreatOffset * retreat;
+                Root.SetLocalPositionAndRotation(Anchor.Position + Anchor.Rotation * offset, Anchor.Rotation);
+            }
         }
 
         private void SetStonePosition(Transform piece, float distance)

@@ -169,7 +169,7 @@ namespace GreedLast.PlayerChecks
             public float worldTrapDistance;
             public Vector3 worldTrapViewport;
             public int exitSlotAlpha, judgementAlpha;
-            public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible, worldTrapVisible;
+            public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible, worldTrapVisible, previousPillarVisible;
         }
 
         [Serializable]
@@ -2048,11 +2048,17 @@ namespace GreedLast.PlayerChecks
         }
 
         private IEnumerator CaptureFrame(string name, List<Frame> frames, float settleSeconds = 0.12f,
-            bool respondAfterRender = false, bool singleLineTitle = false, RotationRecovery rotation = null)
+            bool respondAfterRender = false, bool singleLineTitle = false, RotationRecovery rotation = null,
+            NormalRunFilm film = null)
         {
             if (settleSeconds > 0f)
             {
-                yield return new WaitForSecondsRealtime(settleSeconds);
+                if (film == null) yield return new WaitForSecondsRealtime(settleSeconds);
+                else
+                {
+                    double settledAt = Time.realtimeSinceStartupAsDouble + settleSeconds;
+                    yield return WaitFor(() => Time.realtimeSinceStartupAsDouble >= settledAt, settleFrame: false, film: film);
+                }
             }
             string path = Path.Combine(root, "frame-" + name + ".png");
             Require(!File.Exists(path), "A rendered frame must never overwrite earlier evidence.");
@@ -2221,6 +2227,8 @@ namespace GreedLast.PlayerChecks
                 bool worldTrapVisible = run.ActivePattern && corridor != null
                     && corridor.TryGetTrapProjection(run.Pattern.PatternId, out trapDistance, out trapViewport);
                 bool sandTrapVisible = worldTrapVisible && run.Pattern.PatternId.StartsWith("center_sand_perfect", StringComparison.Ordinal);
+                bool previousPillarVisible = corridor != null
+                    && corridor.TryGetTrapProjection("right_pillar_clutch", out _, out _);
                 frames.Add(new Frame { name = name, utc = capturedUtc,
                     width = texture.width, height = texture.height,
                     sampledColors = colors.Count, graphicsDevice = SystemInfo.graphicsDeviceType.ToString(),
@@ -2237,6 +2245,7 @@ namespace GreedLast.PlayerChecks
                     sandTrapVisible = sandTrapVisible, sandTrapViewportY = sandTrapVisible ? trapViewport.y : 0f,
                     sandTrapDistance = sandTrapVisible ? trapDistance : 0f,
                     worldTrapVisible = worldTrapVisible, worldTrapDistance = trapDistance, worldTrapViewport = trapViewport,
+                    previousPillarVisible = previousPillarVisible,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,
                     coreDeltaSeconds = run.CoreDeltaSeconds,
@@ -2370,7 +2379,7 @@ namespace GreedLast.PlayerChecks
                     // Capture once at each real boundary while preserving the ordinary course driver.
                     if (finishFrames.Count == 0 && run.ChoiceActive && run.ChoiceKind == GreedLastChoiceKind.Node)
                     {
-                        yield return CaptureFrame("finish-route-choice", finishFrames);
+                        yield return CaptureFrame("finish-route-choice", finishFrames, film: film);
                         var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
                         Require(run.Combo > 0 && !Read<GameObject>(ui, "comboBadgeRoot").activeSelf,
                             "The live combo badge must not cover a PC route choice card.");
@@ -2387,7 +2396,7 @@ namespace GreedLast.PlayerChecks
                     }
                     else if (finishFrames.Count == 3 && run.Phase == GreedLastRunPhase.EscapeRunning
                         && run.ActivePattern && !run.Paused && !run.CountdownActive && run.CoreRetrieved)
-                        yield return CaptureFrame("finish-escape", finishFrames);
+                        yield return CaptureFrame("finish-escape", finishFrames, film: film);
                     now = Time.realtimeSinceStartup;
                     run = RunState();
                 }
@@ -2413,9 +2422,9 @@ namespace GreedLast.PlayerChecks
                     else Call(app, "HandleRunChannelInput", GreedLastRunChannel.Left);
                     nextChoice = now + 0.25f;
                     if (choiceBoundaries != null && routeToGift)
-                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Gift, choiceBoundaries);
+                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Gift, choiceBoundaries, film: film);
                     else if (choiceBoundaries != null && giftToRelic)
-                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries, finishFrames);
+                        yield return VerifyChoiceBoundary(run.ChoiceKind, GreedLastChoiceKind.Relic, choiceBoundaries, finishFrames, film);
                 }
                 else if (respond && responses < maxResponses && run.ActivePattern && !run.CountdownActive && !run.Paused
                     && run.LastResult == GreedLastJudgementResult.None)
@@ -2516,7 +2525,7 @@ namespace GreedLast.PlayerChecks
         }
 
         private IEnumerator VerifyChoiceBoundary(GreedLastChoiceKind from, GreedLastChoiceKind to,
-            List<ChoiceBoundary> boundaries, List<Frame> relicFrame = null)
+            List<ChoiceBoundary> boundaries, List<Frame> relicFrame = null, NormalRunFilm film = null)
         {
             float openedAt = Time.realtimeSinceStartup;
             float unlockAt = Read<float>(app, "runChoiceInputBlockUntil");
@@ -2529,9 +2538,11 @@ namespace GreedLast.PlayerChecks
             Call(app, "HandleRunChannelInput", GreedLastRunChannel.Right);
             Require(RunState().ChoiceActive && RunState().ChoiceKind == to,
                 "The rapid input must leave the new card available: " + to);
+            film?.Tick(RunState());
             if (relicFrame != null)
                 yield return CaptureFrame("finish-relic-choice", relicFrame, settleSeconds: 0f);
-            yield return WaitFor(() => Time.realtimeSinceStartup >= unlockAt + 0.02f, settleFrame: false);
+            yield return WaitFor(() => Time.realtimeSinceStartup >= unlockAt + 0.02f && (film == null || film.CanChoose),
+                settleFrame: false, film: film);
             float freshAt = Time.realtimeSinceStartup;
             bool primaryDeferred = !(bool)Call(app, "TryHandlePrimaryKeyboardFrame", true, true);
             Require(primaryDeferred && RunState().ChoiceActive && RunState().ChoiceKind == to,
@@ -2547,9 +2558,14 @@ namespace GreedLast.PlayerChecks
             });
         }
 
-        private IEnumerator WaitFor(Func<bool> condition, bool settleFrame = true)
+        private IEnumerator WaitFor(Func<bool> condition, bool settleFrame = true, NormalRunFilm film = null)
         {
-            while (!condition()) { CheckDeadline(); yield return null; }
+            while (!condition())
+            {
+                CheckDeadline();
+                film?.Tick(RunState());
+                yield return null;
+            }
             if (settleFrame) yield return null;
         }
 

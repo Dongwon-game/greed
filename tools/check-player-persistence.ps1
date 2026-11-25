@@ -471,6 +471,10 @@ try {
                 throw ('The runner must reach the world obstacle at the existing judgement: ' + $kind.Name)
             }
         }
+        $nextSideTrap = $render.frames | Where-Object name -CEQ 'normal-twist-trap-far'
+        if ($nextSideTrap.previousPillarVisible) {
+            throw 'The passed overhead pillar must leave the approach to the left wall blade unobstructed.'
+        }
         $report.RenderedFrames = @($render.frames | ForEach-Object {
             if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight) {
                 throw ('Unexpected dimensions for practice or normal trap frame: ' + $_.name)
@@ -481,6 +485,7 @@ try {
                 MarkerX=$_.markerX; MarkerY=$_.markerY; JudgementY=$_.judgementY;
                 SandTrapVisible=$_.sandTrapVisible; SandTrapDistance=$_.sandTrapDistance; SandTrapViewportY=$_.sandTrapViewportY;
                 WorldTrapVisible=$_.worldTrapVisible; WorldTrapDistance=$_.worldTrapDistance; WorldTrapViewport=$_.worldTrapViewport;
+                PreviousPillarVisible=$_.previousPillarVisible;
                 JudgementFeedback=$_.judgementFeedback; JudgementAlpha=$_.judgementAlpha; TimingGuide=$_.timingGuide;
                 FeedbackFlashAlpha=$_.feedbackFlashAlpha; PrimaryResultLabel=$_.primaryResultLabel;
                 PrimaryResultFontSize=$_.primaryResultFontSize; PrimaryResultFontCap=$_.primaryResultFontCap;
