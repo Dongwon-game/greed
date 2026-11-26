@@ -128,7 +128,7 @@ if (!(Test-Path -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json') -Path
 # or Unity launch, including metadata, file digests and fixture exclusion.
 $releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1') -ProjectPath $project -BuildPath $release -UnityEditorPath $unity | ConvertFrom-Json
 $releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
-$before = Read-PersonalPreferences
+$personalPreferencesBefore = Read-PersonalPreferences
 $id = [Guid]::NewGuid().ToString('N')
 $artifactBase = if ($ArtifactsDirectory) {
     $directory = Get-Item -LiteralPath $ArtifactsDirectory
@@ -435,10 +435,10 @@ try {
         foreach ($foot in @('runnerLeftFoot','runnerRightFoot')) {
             $planted = $false
             for ($i = 1; $i -lt $grounded.Count; $i++) {
-                $before = $grounded[$i - 1].$foot
-                $after = $grounded[$i].$foot
-                if ($before.y -lt 0.11 -and $after.y -lt 0.11 -and
-                    [Math]::Abs($after.z - $before.z) -lt 0.035 -and
+                $previousFoot = $grounded[$i - 1].$foot
+                $nextFoot = $grounded[$i].$foot
+                if ($previousFoot.y -lt 0.11 -and $nextFoot.y -lt 0.11 -and
+                    [Math]::Abs($nextFoot.z - $previousFoot.z) -lt 0.035 -and
                     $grounded[$i].distance - $grounded[$i - 1].distance -gt 0.16) { $planted = $true; break }
             }
             if (!$planted) { throw ('An individual stance foot must hold its ground while the runner advances: ' + $foot) }
@@ -933,11 +933,11 @@ catch {
     }
 }
 finally {
-    $after = Read-PersonalPreferences
-    $report.PersonalPreferencesUnchanged = $before -ceq $after
+    $personalPreferencesAfter = Read-PersonalPreferences
+    $report.PersonalPreferencesUnchanged = $personalPreferencesBefore -ceq $personalPreferencesAfter
     if (!$report.PersonalPreferencesUnchanged) {
-        $initial = $before | ConvertFrom-Json -AsHashtable
-        $current = $after | ConvertFrom-Json -AsHashtable
+        $initial = $personalPreferencesBefore | ConvertFrom-Json -AsHashtable
+        $current = $personalPreferencesAfter | ConvertFrom-Json -AsHashtable
         $report.ChangedPersonalPreferenceKeyNames = @(foreach ($store in $initial.Keys) {
             foreach ($name in @($initial[$store].Keys) + @($current[$store].Keys) | Sort-Object -Unique) {
                 if (($initial[$store][$name] | ConvertTo-Json -Depth 8 -Compress) -cne
