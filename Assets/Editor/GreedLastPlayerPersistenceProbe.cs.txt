@@ -99,7 +99,7 @@ namespace GreedLast.PlayerChecks
             public Vector3 runnerPosition, runnerLeftFoot, runnerRightFoot;
             public float runnerHipHeight;
             public int chapter, successes, misses;
-            public bool paused, resumeCountdown, worldTrapVisible, timingBoardVisible, runnerInScene;
+            public bool paused, resumeCountdown, worldTrapVisible, timingBoardVisible, runnerInScene, practiceResultVisible;
             public string pattern, runPhase, choice, avoidance, channel;
         }
 
@@ -648,6 +648,8 @@ namespace GreedLast.PlayerChecks
                 Require(core.IsPracticeComplete && !backend.HasSaveLoadoutCandidate && EmptySlots()
                     && Count("normalClearCount") == 0 && Count("infiniteRunCount") == 0,
                     "Actual rendered practice must not create normal/infinite progression.");
+                yield return WaitFor(() => primary.IsInteractable()
+                    && VisibleText(primary.GetComponentInChildren<Text>()) == "정확권 다시 (Enter)");
                 yield return CaptureFrame("practice-result", frames);
                 Require((bool)Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None)
                     && core.IsPracticeRun && !RunState().Stopped && RunState().StartCountdownActive,
@@ -1839,6 +1841,7 @@ namespace GreedLast.PlayerChecks
             private readonly CanvasGroup timingBoardLine;
             private readonly SkinnedMeshRenderer runnerSkin;
             private readonly Transform runnerRoot, runnerHips, runnerLeftFoot, runnerRightFoot;
+            private readonly Text resultSummary;
             private readonly Canvas canvas;
             private readonly Camera camera;
             private readonly RenderTexture target;
@@ -1850,6 +1853,7 @@ namespace GreedLast.PlayerChecks
                 this.root = root;
                 corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
                 timingBoardLine = Read<CanvasGroup>(ui, "timingBoardLine");
+                resultSummary = Read<Text>(ui, "detailText");
                 canvas = Read<Canvas>(ui, "ownedCanvasSurface");
                 Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
                     && corridor != null && Read<RawImage>(ui, "runCorridorImage").isActiveAndEnabled,
@@ -1895,6 +1899,7 @@ namespace GreedLast.PlayerChecks
                     successes = run.SuccessCount,
                     misses = run.MissCount,
                     timingBoardVisible = timingBoardLine.alpha > 0f,
+                    practiceResultVisible = run.PracticeMode && run.Stopped && !string.IsNullOrEmpty(VisibleText(resultSummary)),
                     avoidance = run.ActivePattern ? run.Pattern.AvoidanceType.ToString() : string.Empty,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty
                 };

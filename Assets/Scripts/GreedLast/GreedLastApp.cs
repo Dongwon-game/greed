@@ -16117,6 +16117,7 @@ namespace GreedLast
         private Image[] runEntryTrapRevealPieces;
         private Graphic[] timingBoardGraphics;
         private CanvasGroup timingBoardLine;
+        private bool practiceFinishMotionVisible;
         private Image resolvedTrapAfterimage;
         private Image resolvedTrapImpact;
         private Image resolvedJudgementWake;
@@ -16499,6 +16500,13 @@ namespace GreedLast
         private void ApplyDevCleanView()
         {
             bool cleanView = UsePlayerRunControls;
+            bool practiceFinishMotion = IsPracticeFinishMotionVisible();
+            if (practiceFinishMotionVisible || practiceFinishMotion)
+            {
+                titleText.enabled = !practiceFinishMotion;
+                if (latestRunSnapshot.PracticeMode && latestRunSnapshot.Stopped) detailText.enabled = !practiceFinishMotion;
+                practiceFinishMotionVisible = practiceFinishMotion;
+            }
             bool pauseSettings = runModeActive && hasRunSnapshot && latestRunSnapshot.Paused;
             bool liveHeader = runModeActive && hasRunSnapshot
                 && !latestRunSnapshot.Stopped && !latestRunSnapshot.Paused
@@ -16508,21 +16516,21 @@ namespace GreedLast
             if (pauseSettings) UpdatePauseMenuOverlay(latestRunSnapshot);
             SetCleanViewGroupsVisible(devCleanViewGroups, !cleanView);
             CanvasGroup resultCalibration = runModeActive && hasRunSnapshot
-                && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode
+                && latestRunSnapshot.Stopped && latestRunSnapshot.PracticeMode && !practiceFinishMotion
                 ? timingOffsetButtons[1].GetComponent<CanvasGroup>() : null;
             SetCleanViewGroupsVisible(liveSettingCleanViewGroups, !cleanView || pauseSettings, resultCalibration);
             // Keep the shared resume command registered when the current screen has no primary action.
             bool choosing = runModeActive && hasRunSnapshot && latestRunSnapshot.ChoiceActive
                 && !latestRunSnapshot.Paused && !latestRunSnapshot.Stopped;
-            bool hidePrimary = cleanView && !Application.isMobilePlatform
+            bool hidePrimary = practiceFinishMotion || cleanView && !Application.isMobilePlatform
                 && (choosing || liveHeader && latestRunSnapshot.AutoFlow);
             bool showPrimary = !hidePrimary;
             primaryRunButtonVisibility.alpha = showPrimary ? 1f : 0f;
             primaryRunButtonVisibility.interactable = showPrimary;
             primaryRunButtonVisibility.blocksRaycasts = showPrimary;
             if (runModeActive && hasRunSnapshot)
-                returnLobbyButton.gameObject.SetActive(!cleanView || latestRunSnapshot.Stopped
-                    || latestRunSnapshot.Paused || latestRunSnapshot.ChoiceActive);
+                returnLobbyButton.gameObject.SetActive(!practiceFinishMotion && (!cleanView || latestRunSnapshot.Stopped
+                    || latestRunSnapshot.Paused || latestRunSnapshot.ChoiceActive));
             if (runModeActive && hasRunSnapshot && !latestRunSnapshot.Stopped)
             {
                 if (!cleanView) detailedRunHud = BuildDetailedRunHud(latestRunSnapshot);
@@ -16627,6 +16635,7 @@ namespace GreedLast
             if (!RefreshPresentationVisibility()) return;
             UpdatePrototypeEntranceBackdrop();
             UpdatePrototypeRunCorridorBackdrop();
+            if (practiceFinishMotionVisible != IsPracticeFinishMotionVisible()) ApplyDevCleanView();
             if (beatMarker == null)
             {
                 return;
@@ -31793,8 +31802,8 @@ namespace GreedLast
                     (GreedLastAvoidanceType)runnerResponseType, responseProgress, runnerResponseDirection,
                     runnerResponseResult == GreedLastJudgementResult.Miss);
                 runCorridorImage.texture = runCorridor.Texture;
-                float brightness = latestRunSnapshot.Paused || latestRunSnapshot.Stopped ? 0.62f
-                    : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
+                float brightness = latestRunSnapshot.Paused || (latestRunSnapshot.Stopped && !IsPracticeFinishMotionVisible())
+                    ? 0.62f : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
                 runCorridorImage.color = new Color(brightness, brightness, brightness, 1f);
                 SetRunCorridorVisible(true);
             }
@@ -31853,6 +31862,13 @@ namespace GreedLast
             if (runGaugeRoot != null)
                 ((RectTransform)runGaugeRoot.transform).anchoredPosition = visible ? Vector2.Scale(size, new Vector2(-0.35f, 0.365f)) : Vector2.zero;
         }
+
+        private bool IsPracticeFinishMotionVisible()
+            => UsePlayerRunControls && runModeActive && hasRunSnapshot && latestRunSnapshot.PracticeMode
+                && latestRunSnapshot.Stopped && latestRunSnapshot.Phase == GreedLastRunPhase.ClearResolving
+                && runnerResponseResult != GreedLastJudgementResult.Miss
+                && runnerResponseType != RunnerResponseType.None && runnerResponseUntil > Time.unscaledTime
+                && runCorridorImage != null && runCorridorImage.enabled && runCorridor != null && runCorridor.HasRunnerModel;
 
         private static bool ShouldShowPrototypeRunCorridorBackdrop(bool runModeActive, bool hasRunSnapshot)
         {
@@ -35560,7 +35576,8 @@ namespace GreedLast
 
             float remaining = runnerResponseUntil - Time.unscaledTime;
             float duration = Mathf.Max(0.01f, runnerResponseUntil - runnerResponseStartedAt);
-            if (remaining <= 0f
+            if (runCorridorImage != null && runCorridorImage.enabled && runCorridor?.HasRunnerModel == true
+                || remaining <= 0f
                 || runnerResponseResult == GreedLastJudgementResult.None
                 || runnerResponseType == RunnerResponseType.None
                 || !CanShowRunTransientFeedback())
@@ -37646,8 +37663,9 @@ namespace GreedLast
                     guideExactLock);
                 bool compactGuide = !DevToolsEnabled || devCleanViewEnabled;
                 timingGuideText.fontSize = compactGuide ? 36 : 28;
-                timingGuideText.text = compactGuide
-                    ? GetCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
+                timingGuideText.text = IsProjectedWorldTrap(latestRunSnapshot)
+                    ? BuildCompactTimingGuideBeat(latestRunSnapshot)
+                    : compactGuide ? GetCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
                 Color32 guideColor = BuildTimingGuideColor(latestRunSnapshot, compactGuide && IsWindowsDesktop);
                 if (exactPulse > 0f)
                 {
@@ -37699,8 +37717,7 @@ namespace GreedLast
             bool worldView = UsePlayerRunControls && runModeActive && hasRunSnapshot
                 && !latestRunSnapshot.ChoiceActive && !latestRunSnapshot.Stopped
                 && runCorridorImage.enabled && runCorridor != null;
-            bool showBoard = !worldView || (latestRunSnapshot.ActivePattern
-                && !runCorridor.TryGetTrapProjection(latestRunSnapshot.Pattern.PatternId, out _, out _));
+            bool showBoard = !worldView || (latestRunSnapshot.ActivePattern && !IsProjectedWorldTrap(latestRunSnapshot));
             timingBoardLine.alpha = showBoard ? 1f : 0f;
             if (!showBoard)
             {
@@ -37716,6 +37733,10 @@ namespace GreedLast
             resolvedTrapAfterimage.enabled = resolvedTrapImpact.enabled = resolvedJudgementWake.enabled = !resolvedInWorld;
         }
 
+        private bool IsProjectedWorldTrap(GreedLastRunSnapshot snapshot)
+            => UsePlayerRunControls && runCorridorImage != null && runCorridorImage.enabled && runCorridor != null
+                && snapshot.ActivePattern && runCorridor.TryGetTrapProjection(snapshot.Pattern.PatternId, out _, out _);
+
         private void UpdateActiveActionCue(GreedLastRunSnapshot snapshot, float coreNear)
         {
             if (activeActionCueText == null)
@@ -37730,7 +37751,10 @@ namespace GreedLast
             }
 
             bool compact = !DevToolsEnabled || devCleanViewEnabled;
-            string cue = compact
+            string cue = IsProjectedWorldTrap(snapshot)
+                ? BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, DevToolsEnabled,
+                    IsRuntimeRotationTiltAvailable(), Application.isMobilePlatform) + " · " + BuildActiveActionResponseLabel(snapshot.Pattern)
+                : compact
                 ? GetCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
                 : BuildActiveActionCueText(snapshot);
             if (string.IsNullOrEmpty(cue))

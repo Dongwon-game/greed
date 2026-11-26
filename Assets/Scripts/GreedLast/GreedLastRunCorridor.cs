@@ -620,12 +620,21 @@ namespace GreedLast
         {
             var mesh = new StoneGeometry();
             var bronze = new Color32(170, 113, 61, 255);
-            var blade = new Color32(148, 112, 86, 255);
+            var blade = new Color32(128, 134, 126, 255);
+            var edge = new Color32(207, 182, 138, 255);
             mesh.Box(new Vector3(side * 3.54f, 1.28f, 0f), new Vector3(0.53f, 1.38f, 0.97f), new Color32(88, 79, 64, 255));
             mesh.Box(new Vector3(side * 3.22f, 1.29f, 0f), new Vector3(0.41f, 0.58f, 0.76f), bronze);
-            mesh.Box(new Vector3(side * 1.86f, 1.29f, 0f), new Vector3(2.72f, 0.38f, 0.43f), blade);
-            mesh.Box(new Vector3(side * 0.36f, 1.29f, 0f), new Vector3(0.53f, 0.22f, 0.28f), Shade(blade, 1.15f));
-            mesh.Box(new Vector3(side * 1.78f, 1.15f, -0.225f), new Vector3(2.85f, 0.09f, 0.06f), new Color32(208, 136, 76, 255));
+            mesh.Box(new Vector3(side * 1.90f, 1.29f, 0f), new Vector3(2.49f, 0.26f, 0.46f), blade);
+            mesh.Box(new Vector3(side * 1.84f, 1.18f, -0.235f), new Vector3(2.35f, 0.06f, 0.06f), edge);
+            var near = new Vector3(side * 0.66f, 1.42f, -0.23f * side);
+            var far = new Vector3(side * 0.66f, 1.42f, 0.23f * side);
+            var point = new Vector3(side * 0.065f, 1.27f, -0.06f);
+            var lowerNear = near - Vector3.up * 0.26f;
+            var lowerFar = far - Vector3.up * 0.26f;
+            mesh.Triangle(near, point, far, Shade(blade, 1.28f));
+            mesh.Triangle(lowerFar, point, lowerNear, Shade(blade, 0.74f));
+            mesh.Triangle(near, lowerNear, point, side > 0f ? edge : blade);
+            mesh.Triangle(far, point, lowerFar, side > 0f ? blade : edge);
             return mesh.Finish();
         }
 

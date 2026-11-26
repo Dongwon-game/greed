@@ -427,7 +427,8 @@ try {
         $running = @($practiceSamples | Where-Object { $_.runnerInScene -and $_.distance -gt 0.05 })
         if ($running.Count -lt 40 -or !($running | Where-Object { $_.successes -eq 1 -and $_.runnerPosition.y -gt 0.45 }) -or
             !($running | Where-Object { $_.successes -eq 2 -and $_.runnerHipHeight -lt 0.56 }) -or
-            !($running | Where-Object { $_.successes -eq 3 -and [Math]::Abs($_.runnerPosition.x) -gt 0.13 })) {
+            !($running | Where-Object { $_.successes -eq 3 -and [Math]::Abs($_.runnerPosition.x) -gt 0.13 -and !$_.practiceResultVisible }) -or
+            !$practiceSamples[-1].practiceResultVisible) {
             throw 'The 3D runner must visibly jump, slide and sidestep in the same practice film.'
         }
         $grounded = @($running | Where-Object { $_.successes -eq 0 })
@@ -932,7 +933,20 @@ catch {
     }
 }
 finally {
-    $report.PersonalPreferencesUnchanged = $before -ceq (Read-PersonalPreferences)
+    $after = Read-PersonalPreferences
+    $report.PersonalPreferencesUnchanged = $before -ceq $after
+    if (!$report.PersonalPreferencesUnchanged) {
+        $initial = $before | ConvertFrom-Json -AsHashtable
+        $current = $after | ConvertFrom-Json -AsHashtable
+        $report.ChangedPersonalPreferenceKeyNames = @(foreach ($store in $initial.Keys) {
+            foreach ($name in @($initial[$store].Keys) + @($current[$store].Keys) | Sort-Object -Unique) {
+                if (($initial[$store][$name] | ConvertTo-Json -Depth 8 -Compress) -cne
+                    ($current[$store][$name] | ConvertTo-Json -Depth 8 -Compress)) {
+                    [ordered]@{Store=$store;Key=$name}
+                }
+            }
+        })
+    }
     $report.ProjectSettingsUnchanged = $settingsHash -ceq (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
     $stopped = @($processes | Where-Object { !$_.Stopped -or $_.TimedOut -or $_.ExitCode -ne $_.ExpectedExitCode }).Count -eq 0
     $report.CompletedUtc = [DateTime]::UtcNow.ToString('O')

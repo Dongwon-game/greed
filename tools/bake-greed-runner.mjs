@@ -63,7 +63,7 @@ function writeVertex(sourceIndex, clothing) {
         const stripe = Math.abs(x) < 0.033 && z < 0.05;
         const belt = y > 0.91 && y < 1.01;
         const collar = y > 1.355 && Math.abs(x) < 0.18;
-        const dark = y < 0.85;
+        const dark = y < 0.93;
         const color = collar ? [187, 129, 60]
             : stripe || belt || dark ? [36, 104, 101] : [202, 182, 144];
         const pleat = 0.94 + 0.06 * Math.cos(Math.atan2(x, z - 0.035) * 14);
