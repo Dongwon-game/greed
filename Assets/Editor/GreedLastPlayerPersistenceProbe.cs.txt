@@ -170,6 +170,7 @@ namespace GreedLast.PlayerChecks
             public Vector3 worldTrapViewport;
             public int exitSlotAlpha, judgementAlpha;
             public bool paused, opening, resuming, motionComfortEnabled, sandTrapVisible, worldTrapVisible, previousPillarVisible;
+            public bool timingBoardVisible;
         }
 
         [Serializable]
@@ -2245,6 +2246,8 @@ namespace GreedLast.PlayerChecks
                     sandTrapVisible = sandTrapVisible, sandTrapViewportY = sandTrapVisible ? trapViewport.y : 0f,
                     sandTrapDistance = sandTrapVisible ? trapDistance : 0f,
                     worldTrapVisible = worldTrapVisible, worldTrapDistance = trapDistance, worldTrapViewport = trapViewport,
+                    timingBoardVisible = judgementImage.GetComponent<CanvasGroup>().alpha > 0f
+                        || Read<RawImage>(ui, "trapIllustration").enabled,
                     previousPillarVisible = previousPillarVisible,
                     pattern = run.ActivePattern ? run.Pattern.PatternId : string.Empty, health = run.Health,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty,

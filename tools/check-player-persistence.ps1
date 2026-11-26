@@ -425,10 +425,17 @@ try {
         $waitingFrame = $render.frames | Where-Object name -CEQ 'practice-between-traps'
         $nextTrapFrame = $render.frames | Where-Object name -CEQ 'practice-center'
         if ($waitingFrame.pattern -or $waitingFrame.actionCue -or $waitingFrame.timingGuide -cne '다음 함정 대기' -or
-            $waitingFrame.judgementAlpha -le 0 -or $waitingFrame.judgementAlpha -ge $nextTrapFrame.judgementAlpha -or
-            $waitingFrame.judgementAlpha -ge $goodFeedback.judgementAlpha -or
-            [Math]::Abs($waitingFrame.judgementY - 0.22) -gt 0.001 -or $nextTrapFrame.channel -cne 'Center') {
-            throw 'A neutral line between practice traps must remain visible and dimmer than the next active line.'
+            $waitingFrame.timingBoardVisible -or $nextTrapFrame.channel -cne 'Center') {
+            throw 'Between practice traps show the waiting hint without a timing board.'
+        }
+        foreach ($practice in @(@{Name='trap'; Pattern='left_floor_perfect*'},
+            @{Name='practice-center'; Pattern='center_gate_clutch*'}, @{Name='practice-right'; Pattern='right_blade_offbeat*'})) {
+            $view = $render.frames | Where-Object name -CEQ $practice.Name
+            if ($view.pattern -cnotlike $practice.Pattern -or !$view.worldTrapVisible -or $view.timingBoardVisible -or
+                !$view.actionCue -or [Math]::Abs($view.worldTrapDistance - $view.distance + $view.coreDeltaSeconds * 4.2) -gt 0.03 -or
+                $view.worldTrapViewport.z -le 0) {
+                throw ('The practice cue must identify a real obstacle at the gameplay judgement point: ' + $practice.Name)
+            }
         }
         if (!$render.pausedSceneryObserved) { throw 'Pause, hold, resume countdown and resumed scenery evidence is required.' }
         $report.PauseMotionSamples = @($render.beforePauseMotion, $render.pausedMotion, $render.heldPauseMotion,
@@ -459,7 +466,7 @@ try {
                 throw ('Missing the expected ordinary-course obstacle: ' + $kind.Name)
             }
             foreach ($view in $views) {
-                if (!$view.worldTrapVisible -or [Math]::Abs($view.worldTrapDistance - $views[0].worldTrapDistance) -gt 0.001 -or
+                if (!$view.worldTrapVisible -or $view.timingBoardVisible -or [Math]::Abs($view.worldTrapDistance - $views[0].worldTrapDistance) -gt 0.001 -or
                     $view.worldTrapViewport.x -le 0 -or $view.worldTrapViewport.x -ge 1 -or
                     $view.worldTrapViewport.y -le 0 -or $view.worldTrapViewport.y -ge 1 -or $view.worldTrapViewport.z -le 0) {
                     throw ('The world obstacle must stay anchored and visible while approaching: ' + $view.name)

@@ -16026,6 +16026,7 @@ namespace GreedLast
         private Button[] laneHitButtons;
         private Text[] laneLabelTexts;
         private Image[] laneImages;
+        private CanvasGroup[] laneSurfaces;
         private Image[,] saveSlotUsePips;
         private Image[] laneInputRipples;
         private Image[] laneTargetGlows;
@@ -16115,6 +16116,8 @@ namespace GreedLast
         private Image trapContactCue;
         private Image[] trapWarningRails;
         private Image[] runEntryTrapRevealPieces;
+        private Graphic[] timingBoardGraphics;
+        private CanvasGroup timingBoardLine;
         private Image resolvedTrapAfterimage;
         private Image resolvedTrapImpact;
         private Image resolvedJudgementWake;
@@ -16913,6 +16916,7 @@ namespace GreedLast
             UpdateRunnerAvatar();
             UpdateStageTransitionBanner();
             UpdateRunTimingVisuals();
+            UpdateWorldTrapHud();
             KeepRunnerCuesAboveTimingGuide();
             UpdateResolvedTrapAfterimage();
             UpdateJudgementHistoryDots();
@@ -28443,6 +28447,7 @@ namespace GreedLast
             CreateLobbyRunPortal(laneRoot.transform);
 
             laneImages = new Image[3];
+            laneSurfaces = new CanvasGroup[3];
             laneInputRipples = new Image[3];
             laneTargetGlows = new Image[3];
             laneJudgementTagTexts = new Text[3];
@@ -28476,6 +28481,7 @@ namespace GreedLast
 
                 GameObject lane = CreateRect("Lane_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(195f, 520f));
                 Image laneImage = lane.AddComponent<Image>();
+                laneSurfaces[i] = lane.AddComponent<CanvasGroup>();
                 laneImage.color = new Color32(32, 42, 49, 255);
                 laneImages[i] = laneImage;
                 Button laneButton = lane.AddComponent<Button>();
@@ -28570,6 +28576,7 @@ namespace GreedLast
 
             GameObject line = CreateRect("JudgementLine", laneRoot.transform, new Vector2(0.08f, 0.22f), new Vector2(0.92f, 0.22f), new Vector2(0.5f, 0.5f), new Vector2(0f, 18f));
             judgementLine = line.AddComponent<Image>();
+            timingBoardLine = line.AddComponent<CanvasGroup>();
             judgementLine.color = new Color32(255, 238, 181, 205);
             judgementLine.raycastTarget = false;
 
@@ -28703,6 +28710,21 @@ namespace GreedLast
             resolvedJudgementWake = resolvedWake.AddComponent<Image>();
             resolvedJudgementWake.color = new Color32(255, 238, 181, 0);
             resolvedJudgementWake.raycastTarget = false;
+
+            var timingBoard = new List<Graphic>
+            {
+                goodTimingBand, successTimingBand, centerTimingBand, laneDangerBand,
+                trapGlow, trapMarker, trapIllustration, trapActionSymbolText,
+                trapCorridorShadow, trapStrike, trapContactCue, straightRunFocusBeacon,
+                rhythmBreakLine, inputTimingTraceMarker, inputTimingTraceText
+            };
+            timingBoard.AddRange(timingBeatPips);
+            timingBoard.AddRange(trapApproachGhosts);
+            timingBoard.AddRange(trapWarningRails);
+            timingBoard.AddRange(runEntryTrapRevealPieces);
+            timingBoard.AddRange(straightRunFocusRings);
+            timingBoard.AddRange(straightRunTargetFramePieces);
+            timingBoardGraphics = timingBoard.ToArray();
 
             CreateRunnerAvatar(laneRoot.transform);
 
@@ -37661,6 +37683,25 @@ namespace GreedLast
 
             UpdateActiveActionCue(latestRunSnapshot, coreNear);
             UpdateInputTimingTrace();
+        }
+
+        private void UpdateWorldTrapHud()
+        {
+            bool worldView = UsePlayerRunControls && runModeActive && hasRunSnapshot
+                && !latestRunSnapshot.ChoiceActive && !latestRunSnapshot.Stopped
+                && runCorridorImage.enabled && runCorridor != null;
+            bool showBoard = !worldView || (latestRunSnapshot.ActivePattern
+                && !runCorridor.TryGetTrapProjection(latestRunSnapshot.Pattern.PatternId, out _, out _));
+            timingBoardLine.alpha = showBoard ? 1f : 0f;
+            foreach (CanvasGroup surface in laneSurfaces) surface.alpha = timingBoardLine.alpha;
+            foreach (Graphic graphic in timingBoardGraphics)
+            {
+                if (graphic != null) graphic.enabled = showBoard;
+            }
+
+            bool resolvedInWorld = worldView && resolvedTrapPattern.IsValid
+                && runCorridor.TryGetTrapProjection(resolvedTrapPattern.PatternId, out _, out _);
+            resolvedTrapAfterimage.enabled = resolvedTrapImpact.enabled = resolvedJudgementWake.enabled = !resolvedInWorld;
         }
 
         private void UpdateActiveActionCue(GreedLastRunSnapshot snapshot, float coreNear)

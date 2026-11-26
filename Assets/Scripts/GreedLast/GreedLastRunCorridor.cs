@@ -12,6 +12,7 @@ namespace GreedLast
         private const float CameraFollowDistance = 6.2f;
         private const int CorridorLayer = 31;
         private static readonly int ModuleDistanceProperty = Shader.PropertyToID("_CorridorStart");
+        private static readonly int TrapWarningProperty = Shader.PropertyToID("_TrapWarning");
 
         private readonly GameObject stage;
         private readonly Camera camera;
@@ -77,8 +78,14 @@ namespace GreedLast
                     Vector3.zero, Vector3.zero, CameraFollowDistance + 1f),
                 CreateTrap("right_pillar_clutch", "Right hanging pillar", BuildHangingPillar(), new Vector3(0.65f, 1.43f, 0f),
                     Vector3.up * 0.95f, Vector3.up * 3.8f, 2.6f),
-                CreateTrap("left_blade_offbeat", "Left wall blade", BuildWallBlade(), new Vector3(-0.20f, 1.29f, 0f),
-                    Vector3.left * 0.85f, Vector3.left * 3.8f, 2.6f)
+                CreateTrap("left_blade_offbeat", "Left wall blade", BuildWallBlade(-1f), new Vector3(-0.20f, 1.29f, 0f),
+                    Vector3.left * 0.85f, Vector3.left * 3.8f, 2.6f),
+                CreateTrap("left_floor_perfect", "Left floor spikes", BuildFloorSpikes(), new Vector3(-0.42f, 0.64f, 0f),
+                    Vector3.down * 0.66f, Vector3.down * 0.72f, 2.6f, BuildSpikeHousing()),
+                CreateTrap("center_gate_clutch", "Center pressure gate", BuildPressureGate(), new Vector3(0f, 1.38f, 0f),
+                    Vector3.up * 2.70f, Vector3.up * 3.6f, 2.6f, BuildGateHousing()),
+                CreateTrap("right_blade_offbeat", "Right wall blade", BuildWallBlade(1f), new Vector3(0.20f, 1.29f, 0f),
+                    Vector3.right * 2.46f, Vector3.right * 3.8f, 2.6f, BuildBladeHousing(1f))
             };
             contactShadowTexture = BuildContactShadow();
             ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
@@ -206,7 +213,7 @@ namespace GreedLast
                     // Place the object at the existing rhythm judgement, on the same route as the runner.
                     trap.Distance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
                     trap.Anchor = route.Sample(trap.Distance);
-                    SetStonePosition(trap.Root, trap.Distance);
+                    if (trap.Housing != null) SetStonePosition(trap.Housing, trap.Distance);
                     trap.Root.gameObject.SetActive(true);
                     changed = true;
                 }
@@ -215,7 +222,16 @@ namespace GreedLast
                 float passed = distance - trap.Distance;
                 if (passed > trap.RetreatDistance)
                     trap.Root.gameObject.SetActive(false);
-                if (trap.Root.gameObject.activeSelf) trap.Place(passed);
+                if (trap.Root.gameObject.activeSelf)
+                {
+                    trap.Place(passed);
+                    float warning = active
+                        ? Mathf.Clamp01(1f - Mathf.Abs(run.CoreDeltaSeconds) / Mathf.Max(0.01f, run.Pattern.GoodWindowSeconds))
+                        : 0f;
+                    changed |= trap.Warning != warning;
+                    trap.Warning = warning;
+                    SetStonePosition(trap.Moving, trap.Distance, warning);
+                }
                 changed |= wasVisible != trap.Root.gameObject.activeSelf;
             }
             return changed;
@@ -227,7 +243,7 @@ namespace GreedLast
             {
                 if (!trap.Root.gameObject.activeSelf || !trap.Matches(patternId)) continue;
                 distance = trap.Distance;
-                viewport = camera.WorldToViewportPoint(trap.Root.TransformPoint(trap.FeaturePoint));
+                viewport = camera.WorldToViewportPoint(trap.Moving.TransformPoint(trap.FeaturePoint));
                 return true;
             }
             distance = 0f;
@@ -236,11 +252,20 @@ namespace GreedLast
         }
 
         private WorldTrap CreateTrap(string pattern, string name, Mesh mesh, Vector3 featurePoint,
-            Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance)
+            Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance, Mesh housing = null)
         {
-            Transform root = CreateStoneMesh(name, mesh);
+            var root = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave, layer = CorridorLayer }.transform;
+            root.SetParent(stage.transform, false);
             root.gameObject.SetActive(false);
-            return new WorldTrap(pattern, root, mesh, featurePoint, approachOffset, retreatOffset, retreatDistance);
+            Transform moving = CreateStoneMesh("Mechanism", mesh);
+            moving.SetParent(root, false);
+            Transform frame = null;
+            if (housing != null)
+            {
+                frame = CreateStoneMesh("Housing", housing);
+                frame.SetParent(root, false);
+            }
+            return new WorldTrap(pattern, root, moving, frame, featurePoint, approachOffset, retreatOffset, retreatDistance);
         }
 
         private sealed class WorldTrap
@@ -249,19 +274,21 @@ namespace GreedLast
             private readonly Vector3 approachOffset;
             private readonly Vector3 retreatOffset;
             internal readonly Transform Root;
-            internal readonly Mesh Mesh;
+            internal readonly Transform Moving;
+            internal readonly Transform Housing;
             internal readonly Vector3 FeaturePoint;
             internal readonly float RetreatDistance;
             internal RunRoute.Pose Anchor;
             internal bool Tracking;
-            internal float Elapsed, Distance;
+            internal float Elapsed, Distance, Warning;
 
-            internal WorldTrap(string pattern, Transform root, Mesh mesh, Vector3 featurePoint,
+            internal WorldTrap(string pattern, Transform root, Transform moving, Transform housing, Vector3 featurePoint,
                 Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance)
             {
                 this.pattern = pattern;
                 Root = root;
-                Mesh = mesh;
+                Moving = moving;
+                Housing = housing;
                 FeaturePoint = featurePoint;
                 this.approachOffset = approachOffset;
                 this.retreatOffset = retreatOffset;
@@ -276,13 +303,15 @@ namespace GreedLast
                 float approach = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-4.4f, -0.2f, passed));
                 float retreat = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.08f, RetreatDistance, passed));
                 Vector3 offset = approachOffset * approach + retreatOffset * retreat;
-                Root.SetLocalPositionAndRotation(Anchor.Position + Anchor.Rotation * offset, Anchor.Rotation);
+                Root.SetLocalPositionAndRotation(Anchor.Position, Anchor.Rotation);
+                Moving.localPosition = offset;
             }
         }
 
-        private void SetStonePosition(Transform piece, float distance)
+        private void SetStonePosition(Transform piece, float distance, float warning = 0f)
         {
             stonePosition.SetFloat(ModuleDistanceProperty, distance);
+            stonePosition.SetFloat(TrapWarningProperty, warning);
             piece.GetComponent<MeshRenderer>().SetPropertyBlock(stonePosition);
         }
 
@@ -306,7 +335,11 @@ namespace GreedLast
             UnityEngine.Object.Destroy(moduleMesh);
             foreach (Mesh mesh in curvedMeshes)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
-            foreach (WorldTrap trap in traps) UnityEngine.Object.Destroy(trap.Mesh);
+            foreach (WorldTrap trap in traps)
+            {
+                UnityEngine.Object.Destroy(trap.Moving.GetComponent<MeshFilter>().sharedMesh);
+                if (trap.Housing != null) UnityEngine.Object.Destroy(trap.Housing.GetComponent<MeshFilter>().sharedMesh);
+            }
             UnityEngine.Object.Destroy(ContactShadow);
             UnityEngine.Object.Destroy(contactShadowTexture);
         }
@@ -412,16 +445,69 @@ namespace GreedLast
             return mesh.Finish();
         }
 
-        private static Mesh BuildWallBlade()
+        private static Mesh BuildSpikeHousing()
+        {
+            var mesh = new StoneGeometry();
+            var bronze = new Color32(152, 109, 65, 255);
+            mesh.Box(new Vector3(-0.64f, 0.04f, 0f), new Vector3(3.45f, 0.085f, 1.08f), new Color32(53, 43, 35, 255));
+            for (int side = -1; side <= 1; side += 2)
+                mesh.Box(new Vector3(-0.64f, 0.09f, side * 0.52f), new Vector3(3.48f, 0.12f, 0.13f), bronze);
+            for (int i = 0; i < 6; i++)
+                mesh.Box(new Vector3(-2.1f + i * 0.58f, 0.08f, 0f), new Vector3(0.08f, 0.10f, 1.04f), Shade(bronze, 0.76f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildFloorSpikes()
+        {
+            var mesh = new StoneGeometry();
+            var copper = new Color32(194, 128, 76, 255);
+            for (int row = -1; row <= 1; row += 2)
+            for (int i = 0; i < 6; i++)
+                mesh.Spike(new Vector3(-2f + i * 0.52f, 0.08f, row * 0.24f), 0.31f,
+                    i % 2 == 0 ? 0.63f : 0.50f, copper);
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildGateHousing()
+        {
+            var mesh = new StoneGeometry();
+            var bronze = new Color32(152, 109, 65, 255);
+            mesh.Box(new Vector3(0f, 4.29f, 0f), new Vector3(4.5f, 0.27f, 1.28f), bronze);
+            for (int side = -1; side <= 1; side += 2)
+                mesh.Box(new Vector3(side * 2.18f, 3.54f, 0f), new Vector3(0.28f, 1.66f, 0.79f), Shade(bronze, 0.72f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildPressureGate()
+        {
+            var mesh = new StoneGeometry();
+            var stone = new Color32(132, 101, 83, 255);
+            var bronze = new Color32(207, 140, 65, 255);
+            mesh.Box(new Vector3(0f, 2.33f, 0f), new Vector3(4.12f, 1.9f, 0.64f), stone);
+            mesh.Box(new Vector3(0f, 1.40f, -0.12f), new Vector3(4.32f, 0.23f, 0.78f), bronze);
+            for (int i = 0; i < 7; i++)
+                mesh.Box(new Vector3((i - 3) * 0.56f, 2.08f, -0.34f), new Vector3(0.15f, 1.10f, 0.11f), Shade(bronze, 0.78f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildBladeHousing(float side)
+        {
+            var mesh = new StoneGeometry();
+            mesh.Box(new Vector3(side * 3.13f, 1.29f, 0f), new Vector3(0.37f, 1.25f, 1.03f), new Color32(127, 96, 69, 255));
+            mesh.Box(new Vector3(side * 2.94f, 1.29f, 0f), new Vector3(0.06f, 0.61f, 0.66f), new Color32(42, 34, 29, 255));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildWallBlade(float side)
         {
             var mesh = new StoneGeometry();
             var bronze = new Color32(170, 113, 61, 255);
             var blade = new Color32(148, 112, 86, 255);
-            mesh.Box(new Vector3(-3.54f, 1.28f, 0f), new Vector3(0.53f, 1.38f, 0.97f), new Color32(88, 79, 64, 255));
-            mesh.Box(new Vector3(-3.22f, 1.29f, 0f), new Vector3(0.41f, 0.58f, 0.76f), bronze);
-            mesh.Box(new Vector3(-1.86f, 1.29f, 0f), new Vector3(2.72f, 0.38f, 0.43f), blade);
-            mesh.Box(new Vector3(-0.36f, 1.29f, 0f), new Vector3(0.53f, 0.22f, 0.28f), Shade(blade, 1.15f));
-            mesh.Box(new Vector3(-1.78f, 1.15f, -0.225f), new Vector3(2.85f, 0.09f, 0.06f), new Color32(208, 136, 76, 255));
+            mesh.Box(new Vector3(side * 3.54f, 1.28f, 0f), new Vector3(0.53f, 1.38f, 0.97f), new Color32(88, 79, 64, 255));
+            mesh.Box(new Vector3(side * 3.22f, 1.29f, 0f), new Vector3(0.41f, 0.58f, 0.76f), bronze);
+            mesh.Box(new Vector3(side * 1.86f, 1.29f, 0f), new Vector3(2.72f, 0.38f, 0.43f), blade);
+            mesh.Box(new Vector3(side * 0.36f, 1.29f, 0f), new Vector3(0.53f, 0.22f, 0.28f), Shade(blade, 1.15f));
+            mesh.Box(new Vector3(side * 1.78f, 1.15f, -0.225f), new Vector3(2.85f, 0.09f, 0.06f), new Color32(208, 136, 76, 255));
             return mesh.Finish();
         }
 
@@ -472,6 +558,33 @@ namespace GreedLast
                 Quad(b, c, g, f, Shade(tint, 0.74f));
                 Quad(d, h, g, c, tint);
                 Quad(a, b, f, e, Shade(tint, 0.60f));
+            }
+
+            internal void Spike(Vector3 center, float width, float height, Color32 tint)
+            {
+                float r = width * 0.5f;
+                Vector3 a = center + new Vector3(-r, 0f, -r);
+                Vector3 b = center + new Vector3(r, 0f, -r);
+                Vector3 c = center + new Vector3(r, 0f, r);
+                Vector3 d = center + new Vector3(-r, 0f, r);
+                Vector3 tip = center + Vector3.up * height;
+                Triangle(a, tip, b, tint);
+                Triangle(b, tip, c, Shade(tint, 0.74f));
+                Triangle(c, tip, d, Shade(tint, 0.81f));
+                Triangle(d, tip, a, Shade(tint, 0.90f));
+            }
+
+            private void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 tint)
+            {
+                int start = vertices.Count;
+                vertices.Add(a); vertices.Add(b); vertices.Add(c);
+                for (int i = 0; i < 3; i++)
+                {
+                    Vector3 point = vertices[start + i];
+                    textureCoordinates.Add(new Vector2(point.x, point.z));
+                    colors.Add(tint);
+                    triangles.Add(start + i);
+                }
             }
 
             private void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color32 tint)
