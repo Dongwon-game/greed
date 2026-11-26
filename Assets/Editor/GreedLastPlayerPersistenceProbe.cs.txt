@@ -85,7 +85,7 @@ namespace GreedLast.PlayerChecks
             public bool pausedSceneryObserved;
             public MotionSample beforePauseMotion, pausedMotion, heldPauseMotion, countdownMotion, resumedMotion;
             public RunClipFrame[] straightRunFrames, corridorCourseFrames;
-            public RunClipFrame[] normalRunFrames;
+            public RunClipFrame[] practiceRunFrames, normalRunFrames;
             public string[] corridorCourseResponses;
         }
 
@@ -97,7 +97,7 @@ namespace GreedLast.PlayerChecks
             public Vector3 cameraPosition;
             public Vector3 worldTrapViewport;
             public int chapter, successes, misses;
-            public bool paused, resumeCountdown, worldTrapVisible;
+            public bool paused, resumeCountdown, worldTrapVisible, timingBoardVisible;
             public string pattern, runPhase, choice, avoidance, channel;
         }
 
@@ -650,7 +650,7 @@ namespace GreedLast.PlayerChecks
                 Require((bool)Call(app, "TryHandlePrimaryKeyboardChannelFrame", true, GreedLastRunChannel.None)
                     && core.IsPracticeRun && !RunState().Stopped && RunState().StartCountdownActive,
                     "The result Enter command must restart practice after a Good response.");
-                yield return DriveCourse();
+                yield return RecordPracticeRun();
                 Require(core.IsPracticeComplete && RunState().SuccessCount == 3 && RunState().GoodCount == 0
                     && RunState().MissCount == 0 && VisibleText(primary.GetComponentInChildren<Text>()) == "일반 런으로 (Enter)",
                     "The first exact practice result must offer normal entry on Enter.");
@@ -1834,6 +1834,7 @@ namespace GreedLast.PlayerChecks
             internal const int FrameRate = 12;
             private readonly string root;
             private readonly GreedLastRunCorridor corridor;
+            private readonly CanvasGroup timingBoardLine;
             private readonly Canvas canvas;
             private readonly Camera camera;
             private readonly RenderTexture target;
@@ -1844,6 +1845,7 @@ namespace GreedLast.PlayerChecks
             {
                 this.root = root;
                 corridor = Read<GreedLastRunCorridor>(ui, "runCorridor");
+                timingBoardLine = Read<CanvasGroup>(ui, "timingBoardLine");
                 canvas = Read<Canvas>(ui, "ownedCanvasSurface");
                 Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
                     && corridor != null && Read<RawImage>(ui, "runCorridorImage").isActiveAndEnabled,
@@ -1879,6 +1881,7 @@ namespace GreedLast.PlayerChecks
                     chapter = run.ChapterIndex,
                     successes = run.SuccessCount,
                     misses = run.MissCount,
+                    timingBoardVisible = timingBoardLine.alpha > 0f,
                     avoidance = run.ActivePattern ? run.Pattern.AvoidanceType.ToString() : string.Empty,
                     channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty
                 };
@@ -1929,6 +1932,21 @@ namespace GreedLast.PlayerChecks
             }
         }
 
+        private IEnumerator RecordPracticeRun()
+        {
+            var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
+            Require(Application.isBatchMode && RunState().PracticeMode && RunState().StartCountdownActive,
+                "The continuous practice film must begin with the live countdown.");
+            using (var clip = new OffscreenRunClip(ui, root))
+            {
+                var film = new NormalRunFilm(clip, "practice-run");
+                yield return DriveCourse(film: film);
+                yield return HoldRunFilm(film, 0.8);
+                clip.Save("practice-run");
+                result.practiceRunFrames = film.Frames.ToArray();
+            }
+        }
+
         private IEnumerator RecordNormalRun(List<Frame> finishFrames)
         {
             var ui = Read<GreedLastRuntimeUi>(app, "runtimeUi");
@@ -1938,24 +1956,30 @@ namespace GreedLast.PlayerChecks
                 "The complete normal-run film must start at the original gift choice in the offscreen player.");
             using (var clip = new OffscreenRunClip(ui, root))
             {
-                var film = new NormalRunFilm(clip);
+                var film = new NormalRunFilm(clip, "normal-run");
                 yield return DriveCourse(finishFrames: finishFrames, film: film);
                 Require(RunState().CoreRetrieved && RunState().EscapeSucceeded && RunState().SuccessCount == 15
                     && RunState().MissCount == 0, "The original course must actually clear after all fifteen exact responses.");
-                double endHold = Time.realtimeSinceStartupAsDouble + 1.5;
-                while (Time.realtimeSinceStartupAsDouble < endHold)
-                {
-                    film.Tick(RunState());
-                    yield return null;
-                }
+                yield return HoldRunFilm(film, 1.5);
                 clip.Save("normal-run");
                 result.normalRunFrames = film.Frames.ToArray();
+            }
+        }
+
+        private IEnumerator HoldRunFilm(NormalRunFilm film, double seconds)
+        {
+            double end = Time.realtimeSinceStartupAsDouble + seconds;
+            while (Time.realtimeSinceStartupAsDouble < end)
+            {
+                film.Tick(RunState());
+                yield return null;
             }
         }
 
         private sealed class NormalRunFilm
         {
             private readonly OffscreenRunClip clip;
+            private readonly string name;
             private readonly double start = Time.realtimeSinceStartupAsDouble;
             private readonly HashSet<string> photographed = new HashSet<string>();
             private GreedLastChoiceKind choice;
@@ -1964,7 +1988,11 @@ namespace GreedLast.PlayerChecks
             internal readonly List<RunClipFrame> Frames = new List<RunClipFrame>();
             internal bool CanChoose => Time.realtimeSinceStartupAsDouble >= choiceReadyAt;
 
-            internal NormalRunFilm(OffscreenRunClip clip) => this.clip = clip;
+            internal NormalRunFilm(OffscreenRunClip clip, string name)
+            {
+                this.clip = clip;
+                this.name = name;
+            }
 
             internal void Tick(GreedLastRunSnapshot run)
             {
@@ -1977,7 +2005,8 @@ namespace GreedLast.PlayerChecks
                 if (Time.realtimeSinceStartupAsDouble < start + (double)Frames.Count / OffscreenRunClip.FrameRate) return;
                 RunClipFrame frame = clip.Sample(run, start, requireGround: false);
                 string boundary = run.ChoiceActive ? frame.choice : frame.runPhase + "-" + frame.chapter;
-                clip.Capture(photographed.Add(boundary) ? "normal-run-" + boundary : null);
+                if (run.PracticeMode && run.ActivePattern) boundary = frame.pattern;
+                clip.Capture(photographed.Add(boundary) ? name + "-" + boundary : null);
                 Frames.Add(frame);
             }
         }

@@ -400,6 +400,28 @@ try {
             throw 'Practice and normal trap renders must pass without creating normal/infinite progression.'
         }
         if (!$render.audioOutputMuted) { throw 'The offscreen persistence player must keep its audio output muted.' }
+        $practiceSamples = @($render.practiceRunFrames)
+        $practicePatterns = @($practiceSamples | Where-Object pattern | Group-Object pattern)
+        $practiceOrder = @($practiceSamples | Where-Object pattern | Select-Object -ExpandProperty pattern -Unique)
+        if ($practiceSamples.Count -lt 60 -or $practiceSamples[-1].successes -ne 3 -or
+            $practiceSamples[-1].misses -ne 0 -or $practicePatterns.Count -ne 3 -or
+            ($practiceOrder -join ',') -cne 'left_floor_perfect,center_gate_clutch,right_blade_offbeat') {
+            throw 'The practice film must cover all three real obstacles through the exact result.'
+        }
+        foreach ($trap in $practicePatterns) {
+            $world = @($trap.Group | Where-Object { $_.worldTrapVisible -and !$_.timingBoardVisible })
+            if ($world.Count -lt 3 -or $world[-1].worldTrapViewport.z -ge $world[0].worldTrapViewport.z) {
+                throw ('The practice film must show the world hazard approaching without a timing board: ' + $trap.Name)
+            }
+        }
+        $blade = $practicePatterns | Where-Object Name -CEQ 'right_blade_offbeat'
+        $bladeSamples = @($blade.Group | Where-Object worldTrapVisible)
+        if (($bladeSamples[0].worldTrapViewport.x - $bladeSamples[-1].worldTrapViewport.x) -lt 0.09) {
+            throw 'The right wall blade must sweep inward towards the runner across multiple live frames.'
+        }
+        $practiceClip = Join-Path $root 'practice-run.avi'
+        $report.PracticeRunClip = @{Path=$practiceClip; SHA256=(Get-FileHash -LiteralPath $practiceClip -Algorithm SHA256).Hash;
+            Frames=$practiceSamples.Count; FrameRate=12; Seconds=$practiceSamples[-1].seconds; Patterns=$practiceOrder}
         $practiceResult = $render.frames | Where-Object name -CEQ 'practice-result'
         if ($practiceResult.primaryResultLabel -cne '정확권 다시 (Enter)') {
             throw 'The PC practice result must identify Enter as the shortcut for exact-window review.'
@@ -561,6 +583,12 @@ try {
             $chapters = @($samples | Where-Object runPhase -CEQ 'RunPlaying' | Select-Object -ExpandProperty chapter -Unique)
             if (($choices -join ',') -cne 'StartGift,Node,Gift,Relic' -or ($chapters -join ',') -cne '1,2,3,4' -or
                 !($samples.runPhase -ccontains 'EscapeRunning')) { throw 'Missing original choice, chapter or escape footage.' }
+            foreach ($trap in @($samples | Where-Object pattern | Group-Object pattern)) {
+                $world = @($trap.Group | Where-Object { $_.worldTrapVisible -and !$_.timingBoardVisible })
+                if ($world.Count -lt 2 -or $world[0].worldTrapDistance -le $world[0].distance) {
+                    throw ('The normal film must show each original pattern ahead as world geometry: ' + $trap.Name)
+                }
+            }
             $report.NormalRunClip = @{Path=$clipFile; SHA256=(Get-FileHash -LiteralPath $clipFile -Algorithm SHA256).Hash;
                 Frames=$samples.Count; FrameRate=12; Seconds=$samples[-1].seconds; Choices=$choices; Chapters=$chapters;
                 SamplesSHA256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
