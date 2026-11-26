@@ -16026,7 +16026,6 @@ namespace GreedLast
         private Button[] laneHitButtons;
         private Text[] laneLabelTexts;
         private Image[] laneImages;
-        private CanvasGroup[] laneSurfaces;
         private Image[,] saveSlotUsePips;
         private Image[] laneInputRipples;
         private Image[] laneTargetGlows;
@@ -28447,7 +28446,6 @@ namespace GreedLast
             CreateLobbyRunPortal(laneRoot.transform);
 
             laneImages = new Image[3];
-            laneSurfaces = new CanvasGroup[3];
             laneInputRipples = new Image[3];
             laneTargetGlows = new Image[3];
             laneJudgementTagTexts = new Text[3];
@@ -28481,7 +28479,6 @@ namespace GreedLast
 
                 GameObject lane = CreateRect("Lane_" + i, laneRoot.transform, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(195f, 520f));
                 Image laneImage = lane.AddComponent<Image>();
-                laneSurfaces[i] = lane.AddComponent<CanvasGroup>();
                 laneImage.color = new Color32(32, 42, 49, 255);
                 laneImages[i] = laneImage;
                 Button laneButton = lane.AddComponent<Button>();
@@ -28724,6 +28721,10 @@ namespace GreedLast
             timingBoard.AddRange(runEntryTrapRevealPieces);
             timingBoard.AddRange(straightRunFocusRings);
             timingBoard.AddRange(straightRunTargetFramePieces);
+            timingBoard.AddRange(laneLabelTexts);
+            timingBoard.AddRange(laneTargetGlows);
+            timingBoard.AddRange(laneInputRipples);
+            timingBoard.AddRange(laneJudgementTagTexts);
             timingBoardGraphics = timingBoard.ToArray();
 
             CreateRunnerAvatar(laneRoot.transform);
@@ -37693,7 +37694,10 @@ namespace GreedLast
             bool showBoard = !worldView || (latestRunSnapshot.ActivePattern
                 && !runCorridor.TryGetTrapProjection(latestRunSnapshot.Pattern.PatternId, out _, out _));
             timingBoardLine.alpha = showBoard ? 1f : 0f;
-            foreach (CanvasGroup surface in laneSurfaces) surface.alpha = timingBoardLine.alpha;
+            if (!showBoard)
+            {
+                foreach (Image surface in laneImages) surface.color = WithAlpha(surface.color, 0);
+            }
             foreach (Graphic graphic in timingBoardGraphics)
             {
                 if (graphic != null) graphic.enabled = showBoard;

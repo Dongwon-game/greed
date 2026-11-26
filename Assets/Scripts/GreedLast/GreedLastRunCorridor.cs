@@ -19,6 +19,7 @@ namespace GreedLast
         private readonly Material stone;
         private readonly Mesh moduleMesh;
         private readonly WorldTrap[] traps;
+        private readonly WorldTrap[] courseTraps;
         private readonly Texture2D contactShadowTexture;
         private readonly Transform[] modules = new Transform[9];
         private readonly Mesh[] curvedMeshes = new Mesh[9];
@@ -86,6 +87,29 @@ namespace GreedLast
                     Vector3.up * 2.70f, Vector3.up * 3.6f, 2.6f, BuildGateHousing()),
                 CreateTrap("right_blade_offbeat", "Right wall blade", BuildWallBlade(1f), new Vector3(0.20f, 1.29f, 0f),
                     Vector3.right * 2.46f, Vector3.right * 3.8f, 2.6f, BuildBladeHousing(1f))
+            };
+            courseTraps = new[]
+            {
+                CreateTrap(null, "Left raised stone", BuildRaisedStone(-1f), new Vector3(-0.45f, 0.54f, 0f),
+                    Vector3.down * 0.48f, Vector3.down * 0.63f, 2.6f),
+                CreateTrap(null, "Center raised stone", BuildRaisedStone(0f), new Vector3(0f, 0.54f, 0f),
+                    Vector3.down * 0.48f, Vector3.down * 0.63f, 2.6f),
+                CreateTrap(null, "Right raised stone", BuildRaisedStone(1f), new Vector3(0.45f, 0.54f, 0f),
+                    Vector3.down * 0.48f, Vector3.down * 0.63f, 2.6f),
+                CreateTrap(null, "Left overhead slab", BuildPressureGate(-0.68f), new Vector3(-0.68f, 1.38f, 0f),
+                    Vector3.up * 2.7f, Vector3.up * 3.6f, 2.6f, BuildGateHousing(-0.68f)),
+                CreateTrap(null, "Center overhead slab", BuildPressureGate(), new Vector3(0f, 1.38f, 0f),
+                    Vector3.up * 2.7f, Vector3.up * 3.6f, 2.6f, BuildGateHousing()),
+                CreateTrap(null, "Right overhead slab", BuildPressureGate(0.68f), new Vector3(0.68f, 1.38f, 0f),
+                    Vector3.up * 2.7f, Vector3.up * 3.6f, 2.6f, BuildGateHousing(0.68f)),
+                CreateTrap(null, "Left wall spear", BuildWallBlade(-1f), new Vector3(-0.20f, 1.29f, 0f),
+                    Vector3.left * 2.46f, Vector3.left * 3.8f, 2.6f, BuildBladeHousing(-1f)),
+                CreateTrap(null, "Right wall spear", BuildWallBlade(1f), new Vector3(0.20f, 1.29f, 0f),
+                    Vector3.right * 2.46f, Vector3.right * 3.8f, 2.6f, BuildBladeHousing(1f)),
+                CreateTrap(null, "Left turn stone inlay", BuildTurnInlay(-1f), new Vector3(0f, 0.08f, 0f),
+                    Vector3.zero, Vector3.zero, CameraFollowDistance + 1f),
+                CreateTrap(null, "Right turn stone inlay", BuildTurnInlay(1f), new Vector3(0f, 0.08f, 0f),
+                    Vector3.zero, Vector3.zero, CameraFollowDistance + 1f)
             };
             contactShadowTexture = BuildContactShadow();
             ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
@@ -198,8 +222,35 @@ namespace GreedLast
 
         private bool RefreshTraps(GreedLastRunSnapshot run, float distance)
         {
-            bool changed = false;
+            WorldTrap selected = run.ActivePattern ? SelectTrap(run) : null;
+            return RefreshTrapSet(traps, selected, run, distance) | RefreshTrapSet(courseTraps, selected, run, distance);
+        }
+
+        private WorldTrap SelectTrap(GreedLastRunSnapshot run)
+        {
+            GreedLastPatternModel pattern = run.Pattern;
             foreach (WorldTrap trap in traps)
+            {
+                if (trap.MatchesTemplate(pattern.PatternId)) return trap;
+            }
+            if (run.InfiniteMode) return null;
+
+            bool right = pattern.Channel == GreedLastRunChannel.Right;
+            if (GreedLastRunCore.IsRotationPattern(pattern)) return courseTraps[right ? 9 : 8];
+            int channel = Mathf.Clamp((int)pattern.Channel - 1, 0, 2);
+            switch (pattern.AvoidanceType)
+            {
+                case GreedLastAvoidanceType.Jump: return courseTraps[channel];
+                case GreedLastAvoidanceType.Slide: return courseTraps[3 + channel];
+                case GreedLastAvoidanceType.Twist: return courseTraps[right ? 7 : 6];
+                default: return null;
+            }
+        }
+
+        private bool RefreshTrapSet(WorldTrap[] set, WorldTrap selected, GreedLastRunSnapshot run, float distance)
+        {
+            bool changed = false;
+            foreach (WorldTrap trap in set)
             {
                 bool wasVisible = trap.Root.gameObject.activeSelf;
                 if (distance < renderedDistance)
@@ -207,10 +258,13 @@ namespace GreedLast
                     trap.Root.gameObject.SetActive(false);
                     trap.Tracking = false;
                 }
-                bool active = run.ActivePattern && trap.Matches(run.Pattern.PatternId);
-                if (active && (!trap.Tracking || run.ElapsedSeconds + 0.05f < trap.Elapsed))
+                bool active = trap == selected;
+                bool spawned = active && (!trap.Tracking || run.ElapsedSeconds + 0.05f < trap.Elapsed
+                    || trap.PatternId != run.Pattern.PatternId);
+                if (spawned)
                 {
                     // Place the object at the existing rhythm judgement, on the same route as the runner.
+                    trap.PatternId = run.Pattern.PatternId;
                     trap.Distance = distance - run.CoreDeltaSeconds * GreedLastRunCore.RunSpeedMetersPerSecond;
                     trap.Anchor = route.Sample(trap.Distance);
                     if (trap.Housing != null) SetStonePosition(trap.Housing, trap.Distance);
@@ -228,9 +282,12 @@ namespace GreedLast
                     float warning = active
                         ? Mathf.Clamp01(1f - Mathf.Abs(run.CoreDeltaSeconds) / Mathf.Max(0.01f, run.Pattern.GoodWindowSeconds))
                         : 0f;
-                    changed |= trap.Warning != warning;
-                    trap.Warning = warning;
-                    SetStonePosition(trap.Moving, trap.Distance, warning);
+                    if (spawned || trap.Warning != warning)
+                    {
+                        changed = true;
+                        trap.Warning = warning;
+                        SetStonePosition(trap.Moving, trap.Distance, warning);
+                    }
                 }
                 changed |= wasVisible != trap.Root.gameObject.activeSelf;
             }
@@ -239,9 +296,16 @@ namespace GreedLast
 
         internal bool TryGetTrapProjection(string patternId, out float distance, out Vector3 viewport)
         {
-            foreach (WorldTrap trap in traps)
+            return TryGetTrapProjection(traps, patternId, out distance, out viewport)
+                || TryGetTrapProjection(courseTraps, patternId, out distance, out viewport);
+        }
+
+        private bool TryGetTrapProjection(WorldTrap[] set, string patternId, out float distance, out Vector3 viewport)
+        {
+            foreach (WorldTrap trap in set)
             {
-                if (!trap.Root.gameObject.activeSelf || !trap.Matches(patternId)) continue;
+                if (patternId == null || !trap.Root.gameObject.activeSelf
+                    || (patternId != trap.PatternId && patternId != trap.Template)) continue;
                 distance = trap.Distance;
                 viewport = camera.WorldToViewportPoint(trap.Moving.TransformPoint(trap.FeaturePoint));
                 return true;
@@ -270,7 +334,8 @@ namespace GreedLast
 
         private sealed class WorldTrap
         {
-            private readonly string pattern;
+            internal readonly string Template;
+            internal string PatternId;
             private readonly Vector3 approachOffset;
             private readonly Vector3 retreatOffset;
             internal readonly Transform Root;
@@ -285,7 +350,7 @@ namespace GreedLast
             internal WorldTrap(string pattern, Transform root, Transform moving, Transform housing, Vector3 featurePoint,
                 Vector3 approachOffset, Vector3 retreatOffset, float retreatDistance)
             {
-                this.pattern = pattern;
+                Template = pattern;
                 Root = root;
                 Moving = moving;
                 Housing = housing;
@@ -295,8 +360,8 @@ namespace GreedLast
                 RetreatDistance = retreatDistance;
             }
 
-            internal bool Matches(string patternId) => patternId != null
-                && patternId.StartsWith(pattern, StringComparison.Ordinal);
+            internal bool MatchesTemplate(string patternId) => patternId != null && Template != null
+                && patternId.StartsWith(Template, StringComparison.Ordinal);
 
             internal void Place(float passed)
             {
@@ -330,18 +395,24 @@ namespace GreedLast
         public void Dispose()
         {
             ReleaseTarget();
-            UnityEngine.Object.Destroy(stage);
             UnityEngine.Object.Destroy(stone);
             UnityEngine.Object.Destroy(moduleMesh);
             foreach (Mesh mesh in curvedMeshes)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
-            foreach (WorldTrap trap in traps)
+            DestroyTrapMeshes(traps);
+            DestroyTrapMeshes(courseTraps);
+            UnityEngine.Object.Destroy(ContactShadow);
+            UnityEngine.Object.Destroy(contactShadowTexture);
+            UnityEngine.Object.Destroy(stage);
+        }
+
+        private static void DestroyTrapMeshes(WorldTrap[] set)
+        {
+            foreach (WorldTrap trap in set)
             {
                 UnityEngine.Object.Destroy(trap.Moving.GetComponent<MeshFilter>().sharedMesh);
                 if (trap.Housing != null) UnityEngine.Object.Destroy(trap.Housing.GetComponent<MeshFilter>().sharedMesh);
             }
-            UnityEngine.Object.Destroy(ContactShadow);
-            UnityEngine.Object.Destroy(contactShadowTexture);
         }
 
         private void ReleaseTarget()
@@ -468,25 +539,54 @@ namespace GreedLast
             return mesh.Finish();
         }
 
-        private static Mesh BuildGateHousing()
+        private static Mesh BuildGateHousing(float x = 0f)
         {
             var mesh = new StoneGeometry();
             var bronze = new Color32(152, 109, 65, 255);
-            mesh.Box(new Vector3(0f, 4.29f, 0f), new Vector3(4.5f, 0.27f, 1.28f), bronze);
+            mesh.Box(new Vector3(x, 4.29f, 0f), new Vector3(4.5f, 0.27f, 1.28f), bronze);
             for (int side = -1; side <= 1; side += 2)
-                mesh.Box(new Vector3(side * 2.18f, 3.54f, 0f), new Vector3(0.28f, 1.66f, 0.79f), Shade(bronze, 0.72f));
+                mesh.Box(new Vector3(x + side * 2.18f, 3.54f, 0f), new Vector3(0.28f, 1.66f, 0.79f), Shade(bronze, 0.72f));
             return mesh.Finish();
         }
 
-        private static Mesh BuildPressureGate()
+        private static Mesh BuildPressureGate(float x = 0f)
         {
             var mesh = new StoneGeometry();
             var stone = new Color32(132, 101, 83, 255);
             var bronze = new Color32(207, 140, 65, 255);
-            mesh.Box(new Vector3(0f, 2.33f, 0f), new Vector3(4.12f, 1.9f, 0.64f), stone);
-            mesh.Box(new Vector3(0f, 1.40f, -0.12f), new Vector3(4.32f, 0.23f, 0.78f), bronze);
+            mesh.Box(new Vector3(x, 2.33f, 0f), new Vector3(4.12f, 1.9f, 0.64f), stone);
+            mesh.Box(new Vector3(x, 1.40f, -0.12f), new Vector3(4.32f, 0.23f, 0.78f), bronze);
             for (int i = 0; i < 7; i++)
-                mesh.Box(new Vector3((i - 3) * 0.56f, 2.08f, -0.34f), new Vector3(0.15f, 1.10f, 0.11f), Shade(bronze, 0.78f));
+                mesh.Box(new Vector3(x + (i - 3) * 0.56f, 2.08f, -0.34f), new Vector3(0.15f, 1.10f, 0.11f), Shade(bronze, 0.78f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildRaisedStone(float side)
+        {
+            var mesh = new StoneGeometry();
+            var stone = new Color32(138, 105, 80, 255);
+            var rim = new Color32(190, 129, 72, 255);
+            float x = side * 0.68f;
+            mesh.Box(new Vector3(x, 0.18f, 0.07f), new Vector3(2.73f, 0.49f, 1.06f), stone);
+            mesh.Box(new Vector3(x, 0.44f, 0.07f), new Vector3(2.81f, 0.13f, 1.10f), rim);
+            for (int i = -1; i <= 1; i++)
+                mesh.Box(new Vector3(x + i * 0.81f, 0.55f, 0.07f), new Vector3(0.70f, 0.12f, 0.82f), Shade(stone, 1.14f));
+            return mesh.Finish();
+        }
+
+        private static Mesh BuildTurnInlay(float side)
+        {
+            var mesh = new StoneGeometry();
+            var bronze = new Color32(185, 122, 70, 255);
+            for (int i = 0; i < 3; i++)
+            {
+                float shift = i * -0.60f;
+                var near = new Vector3(side * (0.34f + shift), 0.045f, -0.96f);
+                var far = new Vector3(side * (0.34f + shift), 0.045f, 0.96f);
+                var tip = new Vector3(side * (1.42f + shift), 0.045f, 0f);
+                if (side > 0f) mesh.Triangle(near, far, tip, bronze);
+                else mesh.Triangle(far, near, tip, bronze);
+            }
             return mesh.Finish();
         }
 
@@ -574,7 +674,7 @@ namespace GreedLast
                 Triangle(d, tip, a, Shade(tint, 0.90f));
             }
 
-            private void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 tint)
+            internal void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 tint)
             {
                 int start = vertices.Count;
                 vertices.Add(a); vertices.Add(b); vertices.Add(c);
