@@ -10,11 +10,11 @@
 
 [움직임 미리보기](Docs/GreedLast_Prototype_MotionPreview.md)에서 새 **출발 중 정지/새 재개 4.73초**를 먼저 본다. 앞선 소스의 첫 기프트 뒤 출발 3.80초와 일반 런 전체 34.35초, 10월 30일 일곱 동작도 입력별로 보존했다. 실제 시험 제품의 자동 앱 명령·UI 카메라 렌더이며 사람의 리듬·소리·기기 성능 검사는 아니다.
 
-현재 그림은 **이집트풍 인간 주자**다. 그림체는 유지하고 인물/복식을 변경했으며 기본 달리기·점프·숙이기·비틀기를 독립 PNG로 연결한다. [그림 생성 사양과 원본 해시](Docs/ArtDrafts/EgyptianRunnerIntegration-v1.md)를 참고한다.
+Windows 주행 화면의 **이집트풍 3D 인간 주자**는 피라미드 통로 안에서 함정과 함께 렌더링된다. 달리기 중 발을 딛는 위치와 점프·숙이기·비틀기는 달리는 거리와 기존 판정에 맞춰 움직인다. [3D 주자와 자산 출처](Docs/ArtDrafts/PyramidRunner-3D.md)
 
 <img src="Assets/Resources/GreedLast/PrototypeEgyptianRunner.png" alt="이집트풍 인간 주자의 기본 달리기 자원" width="220">
 
-위 이미지는 캐릭터 자원이다. 아래는 11월 8일 움직임 시계 수정 후보의 내부 카메라 한 프레임이다. 누적 시간 뒤 주행 고정과 속도 전환 역행의 수정·검증 범위, 로컬 체험 후보는 [움직임 기록](Docs/Motion-Clock-20261108.md)을 따른다. 한 장의 사진을 연속 움직임·청음·손맛 성공의 근거로 사용하지 않는다. [10월 30일 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)와 [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 과거 기록으로 보존한다.
+위 이미지는 초기 2D 캐릭터 자원이다. 아래는 11월 8일 움직임 시계 수정 후보의 내부 카메라 한 프레임이다. 누적 시간 뒤 주행 고정과 속도 전환 역행의 수정·검증 범위, 로컬 체험 후보는 [움직임 기록](Docs/Motion-Clock-20261108.md)을 따른다. [10월 30일 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)와 [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 과거 기록으로 보존한다.
 
 ![움직임 시계 수정 후보의 왼쪽 비틀기 함정 — 내부 카메라 한 프레임](Docs/Images/GreedLast-Run-20261108.png)
 
