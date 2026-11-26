@@ -16,6 +16,7 @@ namespace GreedLast
 
         private readonly GameObject stage;
         private readonly Camera camera;
+        private readonly GreedLastCorridorRunner runnerModel;
         private readonly Material stone;
         private readonly Mesh moduleMesh;
         private readonly WorldTrap[] traps;
@@ -32,6 +33,8 @@ namespace GreedLast
         private int firstModule = int.MinValue;
         private float renderedDistance = -1f;
         private float renderedRoll;
+        private float renderedResponse;
+        private bool renderedRunning;
         private bool trackingTurn;
         private float turnElapsed;
 
@@ -39,6 +42,7 @@ namespace GreedLast
         internal Sprite ContactShadow { get; }
         internal Vector3 RunnerGroundViewport { get; private set; }
         internal float RunnerHeading { get; private set; }
+        internal bool HasRunnerModel => runnerModel != null;
 
         internal static GreedLastRunCorridor Create()
         {
@@ -66,6 +70,7 @@ namespace GreedLast
             camera.backgroundColor = new Color32(15, 25, 26, 255);
             camera.allowHDR = false;
             camera.allowMSAA = false;
+            runnerModel = GreedLastCorridorRunner.Create(stage.transform);
 
             stone = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             moduleMesh = BuildModule();
@@ -116,7 +121,8 @@ namespace GreedLast
             ContactShadow.hideFlags = HideFlags.HideAndDontSave;
         }
 
-        internal void Render(GreedLastRunSnapshot run, float roll, int width, int height)
+        internal void Render(GreedLastRunSnapshot run, float roll, int width, int height,
+            bool running, GreedLastAvoidanceType response, float responseProgress, float responseDirection, bool missed)
         {
             width = Mathf.Max(1, width);
             height = Mathf.Max(1, height);
@@ -139,7 +145,12 @@ namespace GreedLast
             float distance = Mathf.Max(0f, run.Distance);
             bool routeChanged = UpdateRoute(run, distance);
             bool trapChanged = RefreshTraps(run, distance);
-            if (!targetChanged && distance == renderedDistance && roll == renderedRoll && !trapChanged && !routeChanged) return;
+            bool freezeRunner = renderedDistance >= 0f && distance >= renderedDistance
+                && (run.Paused || run.ResumeCountdownActive);
+            bool poseChanged = runnerModel != null && !freezeRunner
+                && (distance != renderedDistance || renderedRunning != running || renderedResponse != responseProgress);
+            if (!targetChanged && distance == renderedDistance && roll == renderedRoll
+                && !trapChanged && !routeChanged && !poseChanged) return;
             int newFirst = Mathf.FloorToInt((distance - CameraFollowDistance) / ModuleLength) - 1;
             if (newFirst != firstModule || routeChanged)
             {
@@ -150,6 +161,12 @@ namespace GreedLast
 
             Vector3 eye = route.Sample(distance - CameraFollowDistance).Position;
             RunRoute.Pose runner = route.Sample(distance);
+            if (poseChanged)
+            {
+                runnerModel.Pose(runner.Position, runner.Rotation, distance, running, response, responseProgress, responseDirection, missed);
+                renderedRunning = running;
+                renderedResponse = responseProgress;
+            }
             RunnerHeading = Mathf.DeltaAngle(0f, runner.Rotation.eulerAngles.y);
             Vector3 ahead = route.Sample(distance + 1.6f).Position;
             camera.transform.localPosition = eye + Vector3.up * CameraHeight;
@@ -395,6 +412,7 @@ namespace GreedLast
         public void Dispose()
         {
             ReleaseTarget();
+            runnerModel?.Dispose();
             UnityEngine.Object.Destroy(stone);
             UnityEngine.Object.Destroy(moduleMesh);
             foreach (Mesh mesh in curvedMeshes)

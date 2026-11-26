@@ -28721,6 +28721,7 @@ namespace GreedLast
             timingBoard.AddRange(runEntryTrapRevealPieces);
             timingBoard.AddRange(straightRunFocusRings);
             timingBoard.AddRange(straightRunTargetFramePieces);
+            timingBoard.AddRange(runMotionLines);
             timingBoard.AddRange(laneLabelTexts);
             timingBoard.AddRange(laneTargetGlows);
             timingBoard.AddRange(laneInputRipples);
@@ -31785,7 +31786,12 @@ namespace GreedLast
             }
             if (visible && runCorridor != null)
             {
-                runCorridor.Render(latestRunSnapshot, rect.localEulerAngles.z, Screen.width, Screen.height);
+                float responseProgress = !latestRunSnapshot.Paused && !latestRunSnapshot.CountdownActive
+                    && !latestRunSnapshot.ChoiceActive && runnerResponseUntil > Time.unscaledTime
+                    ? Mathf.InverseLerp(runnerResponseStartedAt, runnerResponseUntil, Time.unscaledTime) : 0f;
+                runCorridor.Render(latestRunSnapshot, rect.localEulerAngles.z, Screen.width, Screen.height, advancing,
+                    (GreedLastAvoidanceType)runnerResponseType, responseProgress, runnerResponseDirection,
+                    runnerResponseResult == GreedLastJudgementResult.Miss);
                 runCorridorImage.texture = runCorridor.Texture;
                 float brightness = latestRunSnapshot.Paused || latestRunSnapshot.Stopped ? 0.62f
                     : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
@@ -31812,8 +31818,10 @@ namespace GreedLast
                 PositionRunHud(y, hud.sizeDelta.x, hud.sizeDelta.y);
             }
             if (runnerPresentationRoot == null) return;
-            runDepthDecoration.alpha = visible ? 0.20f : 1f;
-            runSceneryDecoration.alpha = visible ? 0.20f : 1f;
+            if (runnerIllustration != null)
+                runnerIllustration.enabled = !visible || !runCorridor.HasRunnerModel;
+            runDepthDecoration.alpha = visible ? 0f : 1f;
+            runSceneryDecoration.alpha = visible ? 0f : 1f;
 
             Vector2 runnerOffset = Vector2.zero;
             if (visible)

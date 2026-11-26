@@ -96,8 +96,10 @@ namespace GreedLast.PlayerChecks
             public float distance, cameraDistance, footViewportY, heading, cameraHeading, coreDeltaSeconds, worldTrapDistance;
             public Vector3 cameraPosition;
             public Vector3 worldTrapViewport;
+            public Vector3 runnerPosition, runnerLeftFoot, runnerRightFoot;
+            public float runnerHipHeight;
             public int chapter, successes, misses;
-            public bool paused, resumeCountdown, worldTrapVisible, timingBoardVisible;
+            public bool paused, resumeCountdown, worldTrapVisible, timingBoardVisible, runnerInScene;
             public string pattern, runPhase, choice, avoidance, channel;
         }
 
@@ -1835,6 +1837,8 @@ namespace GreedLast.PlayerChecks
             private readonly string root;
             private readonly GreedLastRunCorridor corridor;
             private readonly CanvasGroup timingBoardLine;
+            private readonly SkinnedMeshRenderer runnerSkin;
+            private readonly Transform runnerRoot, runnerHips, runnerLeftFoot, runnerRightFoot;
             private readonly Canvas canvas;
             private readonly Camera camera;
             private readonly RenderTexture target;
@@ -1850,6 +1854,15 @@ namespace GreedLast.PlayerChecks
                 Require(canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay
                     && corridor != null && Read<RawImage>(ui, "runCorridorImage").isActiveAndEnabled,
                     "The distance-driven corridor must be visible in the Windows player.");
+                if (corridor.HasRunnerModel)
+                {
+                    var runner = Read<GreedLastCorridorRunner>(corridor, "runnerModel");
+                    runnerRoot = Read<Transform>(runner, "root");
+                    runnerHips = Read<Transform>(runner, "hips");
+                    runnerLeftFoot = Read<Transform>(Read<object>(runner, "leftLeg"), "foot");
+                    runnerRightFoot = Read<Transform>(Read<object>(runner, "rightLeg"), "foot");
+                    runnerSkin = runnerRoot.GetComponent<SkinnedMeshRenderer>();
+                }
                 camera = new GameObject("Greed offscreen clip camera").AddComponent<Camera>();
                 camera.enabled = false;
                 camera.clearFlags = CameraClearFlags.SolidColor;
@@ -1888,6 +1901,15 @@ namespace GreedLast.PlayerChecks
                 if (run.ActivePattern)
                     frame.worldTrapVisible = corridor.TryGetTrapProjection(run.Pattern.PatternId,
                         out frame.worldTrapDistance, out frame.worldTrapViewport);
+                if (runnerSkin != null)
+                {
+                    frame.runnerInScene = runnerSkin.enabled && runnerSkin.gameObject.activeInHierarchy && runnerSkin.bones.Length > 0;
+                    frame.runnerPosition = runnerRoot.localPosition;
+                    frame.runnerHipHeight = runnerHips.localPosition.y;
+                    Transform stage = runnerRoot.parent;
+                    frame.runnerLeftFoot = stage.InverseTransformPoint(runnerLeftFoot.position);
+                    frame.runnerRightFoot = stage.InverseTransformPoint(runnerRightFoot.position);
+                }
                 Require(!requireGround || (Mathf.Abs(frame.cameraDistance - frame.distance) <= 0.001f
                     && frame.footViewportY > 0.08f && frame.footViewportY < 0.38f),
                     "The camera must follow the same live distance and keep the runner's ground point visible.");

@@ -403,10 +403,15 @@ try {
         $practiceSamples = @($render.practiceRunFrames)
         $practicePatterns = @($practiceSamples | Where-Object pattern | Group-Object pattern)
         $practiceOrder = @($practiceSamples | Where-Object pattern | Select-Object -ExpandProperty pattern -Unique)
+        $expectedPractice = @('left_floor_perfect*','center_gate_clutch*','right_blade_offbeat*')
         if ($practiceSamples.Count -lt 60 -or $practiceSamples[-1].successes -ne 3 -or
-            $practiceSamples[-1].misses -ne 0 -or $practicePatterns.Count -ne 3 -or
-            ($practiceOrder -join ',') -cne 'left_floor_perfect,center_gate_clutch,right_blade_offbeat') {
+            $practiceSamples[-1].misses -ne 0 -or $practiceOrder.Count -ne $expectedPractice.Count) {
             throw 'The practice film must cover all three real obstacles through the exact result.'
+        }
+        for ($i = 0; $i -lt $expectedPractice.Count; $i++) {
+            if ($practiceOrder[$i] -cnotlike $expectedPractice[$i]) {
+                throw ('Unexpected practice obstacle order: ' + ($practiceOrder -join ', '))
+            }
         }
         foreach ($trap in $practicePatterns) {
             $world = @($trap.Group | Where-Object { $_.worldTrapVisible -and !$_.timingBoardVisible })
@@ -414,10 +419,28 @@ try {
                 throw ('The practice film must show the world hazard approaching without a timing board: ' + $trap.Name)
             }
         }
-        $blade = $practicePatterns | Where-Object Name -CEQ 'right_blade_offbeat'
+        $blade = $practicePatterns | Where-Object Name -CLike 'right_blade_offbeat*'
         $bladeSamples = @($blade.Group | Where-Object worldTrapVisible)
         if (($bladeSamples[0].worldTrapViewport.x - $bladeSamples[-1].worldTrapViewport.x) -lt 0.09) {
             throw 'The right wall blade must sweep inward towards the runner across multiple live frames.'
+        }
+        $running = @($practiceSamples | Where-Object { $_.runnerInScene -and $_.distance -gt 0.05 })
+        if ($running.Count -lt 40 -or !($running | Where-Object { $_.successes -eq 1 -and $_.runnerPosition.y -gt 0.45 }) -or
+            !($running | Where-Object { $_.successes -eq 2 -and $_.runnerHipHeight -lt 0.56 }) -or
+            !($running | Where-Object { $_.successes -eq 3 -and [Math]::Abs($_.runnerPosition.x) -gt 0.13 })) {
+            throw 'The 3D runner must visibly jump, slide and sidestep in the same practice film.'
+        }
+        $grounded = @($running | Where-Object { $_.successes -eq 0 })
+        foreach ($foot in @('runnerLeftFoot','runnerRightFoot')) {
+            $planted = $false
+            for ($i = 1; $i -lt $grounded.Count; $i++) {
+                $before = $grounded[$i - 1].$foot
+                $after = $grounded[$i].$foot
+                if ($before.y -lt 0.11 -and $after.y -lt 0.11 -and
+                    [Math]::Abs($after.z - $before.z) -lt 0.035 -and
+                    $grounded[$i].distance - $grounded[$i - 1].distance -gt 0.16) { $planted = $true; break }
+            }
+            if (!$planted) { throw ('An individual stance foot must hold its ground while the runner advances: ' + $foot) }
         }
         $practiceClip = Join-Path $root 'practice-run.avi'
         $report.PracticeRunClip = @{Path=$practiceClip; SHA256=(Get-FileHash -LiteralPath $practiceClip -Algorithm SHA256).Hash;
