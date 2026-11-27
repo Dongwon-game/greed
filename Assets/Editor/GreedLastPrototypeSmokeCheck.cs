@@ -5098,8 +5098,8 @@ namespace GreedLast.Editor
                 "The active action cue must expose the editor key hint for its target lane.");
             string mobileActiveActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueTextForMode", goodSnapshot, false);
             Require(
-                mobileActiveActionCue.Contains("좌 탭", StringComparison.Ordinal)
-                    && !mobileActiveActionCue.Contains("A/←", StringComparison.Ordinal),
+                mobileActiveActionCue.Contains("우 탭", StringComparison.Ordinal)
+                    && !mobileActiveActionCue.Contains("D/→", StringComparison.Ordinal),
                 "The mobile active action cue must expose tap hints instead of editor key hints. Actual: "
                     + mobileActiveActionCue);
             RequireTextLayoutBudget(mobileActiveActionCue, 1, 72, "mobile active action cue payoff");

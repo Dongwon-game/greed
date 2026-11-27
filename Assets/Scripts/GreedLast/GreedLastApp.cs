@@ -13920,6 +13920,7 @@ namespace GreedLast
                 }
 
                 runtimeUi.RecordLaneInput(channel);
+                runtimeUi.RecordRunnerInput(channel);
                 bool choiceWasActive = hasLatestAppRunSnapshot && latestAppRunSnapshot.ChoiceActive;
                 runCore.HandleInput(channel, now);
                 runChoiceInputBlockUntil = BuildRunChoiceInputBlockUntil(
@@ -15798,6 +15799,25 @@ namespace GreedLast
             Twist = 3,
         }
 
+        private readonly struct RunnerBodyMotion
+        {
+            public readonly RunnerResponseType Type;
+            public readonly GreedLastRunChannel Channel;
+            public readonly float Progress, Direction, Strength;
+            public readonly bool Stumbles;
+
+            public RunnerBodyMotion(RunnerResponseType type, GreedLastRunChannel channel, float progress,
+                float direction, float strength, bool stumbles = false)
+            {
+                Type = type;
+                Channel = channel;
+                Progress = progress;
+                Direction = direction;
+                Strength = strength;
+                Stumbles = stumbles;
+            }
+        }
+
         private const float DesignWidth = 1080f;
         private const float DesignHeight = 1920f;
         private const int RecordBoardPageCount = 4;
@@ -16284,6 +16304,10 @@ namespace GreedLast
         private bool lastFocusStateActive;
         private float runnerResponseStartedAt;
         private float runnerResponseUntil;
+        private float runnerInputStartedAt;
+        private RunnerResponseType runnerInputType;
+        private GreedLastRunChannel runnerInputChannel;
+        private bool runnerResponseHasInputMotion;
         private RunnerResponseType runnerResponseType;
         private GreedLastRunChannel runnerResponseChannel;
         private float runnerResponseDirection = 1f;
@@ -16952,6 +16976,41 @@ namespace GreedLast
             }
         }
 
+        internal void RecordRunnerInput(GreedLastRunChannel channel)
+        {
+            if (!runModeActive || !hasRunSnapshot || !IsLiveRunControlWindow(latestRunSnapshot)
+                || channel < GreedLastRunChannel.Left || channel > GreedLastRunChannel.Right) return;
+
+            runnerInputType = BuildRunnerInputResponseType(latestRunSnapshot, channel);
+            runnerInputChannel = channel;
+            runnerInputStartedAt = Time.unscaledTime;
+        }
+
+        private static RunnerResponseType BuildRunnerInputResponseType(GreedLastRunSnapshot snapshot, GreedLastRunChannel channel)
+        {
+            if (snapshot.ActivePattern && snapshot.Pattern.IsValid && snapshot.Pattern.ResponseChannel == channel)
+                return BuildRunnerResponseType(snapshot.Pattern);
+            return channel == GreedLastRunChannel.Center ? RunnerResponseType.Slide : RunnerResponseType.Twist;
+        }
+
+        private bool HasRunnerInputMotion(float now) => runnerInputType != RunnerResponseType.None
+            && now >= runnerInputStartedAt && now < runnerInputStartedAt + RunnerSuccessResponseDuration;
+
+        private RunnerBodyMotion SampleRunnerBodyMotion(float now)
+        {
+            if (HasRunnerInputMotion(now))
+                return new RunnerBodyMotion(runnerInputType, runnerInputChannel,
+                    Mathf.Clamp01((now - runnerInputStartedAt) / RunnerSuccessResponseDuration),
+                    BuildRotationResponseDirection(runnerInputChannel), 1f);
+
+            if (runnerResponseHasInputMotion || now >= runnerResponseUntil) return default;
+            // The verdict still supplies reactions when nobody pressed a key, such as a missed trap.
+            return new RunnerBodyMotion(runnerResponseType, runnerResponseChannel,
+                Mathf.InverseLerp(runnerResponseStartedAt, runnerResponseUntil, now), runnerResponseDirection,
+                runnerResponseResult == GreedLastJudgementResult.Good ? 0.68f : 1f,
+                runnerResponseResult == GreedLastJudgementResult.Miss);
+        }
+
         public void Render(GreedLastStateSnapshot snapshot)
         {
             EnsureUi();
@@ -17484,6 +17543,8 @@ namespace GreedLast
             UpdateLaneLabels(snapshot);
 
             PlayJudgementFeedback(snapshot);
+            if (snapshot.ChoiceActive || snapshot.CountdownActive || snapshot.Paused)
+                runnerInputType = RunnerResponseType.None;
             if (!IsLiveRunControlWindow(snapshot))
             {
                 if (judgementLine != null)
@@ -17600,6 +17661,8 @@ namespace GreedLast
             beatMarkerGoodPulseUntil = beatMarkerComboBreakPulseUntil = beatMarkerComboTierPulseUntil = beatMarkerProfilePulseUntil = 0f;
             judgementFeedbackUntil = judgementFeedbackPopUntil = judgementLinePulseUntil = 0f;
             runnerResponseUntil = resolvedTrapUntil = forwardPayoffBurstUntil = rhythmBreakLineUntil = inputTimingTraceUntil = 0f;
+            runnerInputType = RunnerResponseType.None;
+            runnerResponseHasInputMotion = false;
             runnerResponseDirection = 1f;
             threeActionExactBurstUntil = feedbackFlashUntil = downbeatPulseUntil = 0f;
             stageTransitionUntil = choiceConfirmationUntil = 0f;
@@ -31791,13 +31854,12 @@ namespace GreedLast
             }
             if (visible && runCorridor != null)
             {
-                float responseProgress = !latestRunSnapshot.Paused && !latestRunSnapshot.CountdownActive
-                    && !latestRunSnapshot.ChoiceActive && runnerResponseUntil > Time.unscaledTime
-                    ? Mathf.InverseLerp(runnerResponseStartedAt, runnerResponseUntil, Time.unscaledTime) : 0f;
+                RunnerBodyMotion motion = !latestRunSnapshot.Paused && !latestRunSnapshot.CountdownActive
+                    && !latestRunSnapshot.ChoiceActive ? SampleRunnerBodyMotion(Time.unscaledTime) : default;
                 runCorridor.Render(latestRunSnapshot, rect.localEulerAngles.z, Screen.width, Screen.height, advancing,
-                    (GreedLastAvoidanceType)runnerResponseType, responseProgress,
-                    runnerResponseChannel == GreedLastRunChannel.Center ? 0f : runnerResponseDirection,
-                    runnerResponseResult == GreedLastJudgementResult.Miss);
+                    (GreedLastAvoidanceType)motion.Type, motion.Progress,
+                    motion.Channel == GreedLastRunChannel.Center ? 0f : motion.Direction,
+                    motion.Stumbles);
                 runCorridorImage.texture = runCorridor.Texture;
                 float brightness = latestRunSnapshot.Paused || (latestRunSnapshot.Stopped && !IsPracticeFinishMotionVisible())
                     ? 0.62f : latestRunSnapshot.ChoiceActive ? 0.76f : 1f;
@@ -31863,8 +31925,8 @@ namespace GreedLast
         private bool IsPracticeFinishMotionVisible()
             => UsePlayerRunControls && runModeActive && hasRunSnapshot && latestRunSnapshot.PracticeMode
                 && latestRunSnapshot.Stopped && latestRunSnapshot.Phase == GreedLastRunPhase.ClearResolving
-                && runnerResponseResult != GreedLastJudgementResult.Miss
-                && runnerResponseType != RunnerResponseType.None && runnerResponseUntil > Time.unscaledTime
+                && (HasRunnerInputMotion(Time.unscaledTime) || runnerResponseResult != GreedLastJudgementResult.Miss
+                    && runnerResponseType != RunnerResponseType.None && runnerResponseUntil > Time.unscaledTime)
                 && runCorridorImage != null && runCorridorImage.enabled && runCorridor != null && runCorridor.HasRunnerModel;
 
         private static bool ShouldShowPrototypeRunCorridorBackdrop(bool runModeActive, bool hasRunSnapshot)
@@ -35105,11 +35167,12 @@ namespace GreedLast
             float shadowOffsetX = 0f;
             float shadowScaleX = 1f + Mathf.Abs(stride) * 0.08f;
             float shadowAlpha = 112f;
-            float remaining = runnerBlocked ? 0f : runnerResponseUntil - Time.unscaledTime;
+            RunnerBodyMotion motion = runnerBlocked ? default : SampleRunnerBodyMotion(Time.unscaledTime);
+            bool hasBodyMotion = motion.Type != RunnerResponseType.None;
             int illustrationPose = 0;
             float illustrationDirection = 1f;
             Vector4 illustrationTransform = new Vector4(0f, 0f, 1f, 1f);
-            float runnerDownbeatLift = remaining <= 0f
+            float runnerDownbeatLift = !hasBodyMotion
                 ? BuildRunnerDownbeatLift(
                     running && latestRunSnapshot.ActivePattern,
                     runnerBlocked,
@@ -35117,15 +35180,15 @@ namespace GreedLast
                     latestRunSnapshot.CoreDeltaSeconds,
                     latestRunSnapshot.Pattern.IsValid ? latestRunSnapshot.Pattern.GoodWindowSeconds : 0f)
                 : 0f;
-            if (remaining > 0f)
+            if (hasBodyMotion)
             {
-                float duration = Mathf.Max(0.01f, runnerResponseUntil - runnerResponseStartedAt);
-                float progress = Mathf.Clamp01((Time.unscaledTime - runnerResponseStartedAt) / duration);
+                float progress = motion.Progress;
                 float arc = Mathf.Sin(progress * Mathf.PI);
-                float channelDirection = runnerResponseDirection;
+                float channelDirection = motion.Direction;
 
-                SetRunnerBodyColor(Color32.Lerp(runnerBaseColor, runnerResponseColor, arc * 0.88f));
-                if (runnerResponseResult == GreedLastJudgementResult.Miss)
+                if (runnerResponseUntil > Time.unscaledTime)
+                    SetRunnerBodyColor(Color32.Lerp(runnerBaseColor, runnerResponseColor, arc * 0.88f));
+                if (motion.Stumbles)
                 {
                     float decay = 1f - progress;
                     float shake = Mathf.Sin(progress * Mathf.PI * 10f)
@@ -35141,14 +35204,15 @@ namespace GreedLast
                 }
                 else
                 {
-                    float responseStrength = runnerResponseResult == GreedLastJudgementResult.Good ? 0.68f : 1f;
-                    illustrationPose = BuildPrototypeRunnerPoseIndex((int)runnerResponseType,
-                        runnerResponseResult, progress, !runnerBlocked);
+                    float responseStrength = motion.Strength;
+                    illustrationPose = BuildPrototypeRunnerPoseIndex((int)motion.Type,
+                        GreedLastJudgementResult.Success, progress, !runnerBlocked);
                     illustrationDirection = channelDirection;
-                    illustrationTransform = BuildRunnerResponsePoseTransform(runnerResponseType,
+                    illustrationTransform = BuildRunnerResponsePoseTransform(motion.Type,
                         arc * responseStrength, channelDirection);
                     ApplyRunnerResponsePose(
                         avatarRect,
+                        motion.Type,
                         arc * responseStrength,
                         channelDirection,
                         ref shadowOffsetX,
@@ -35188,7 +35252,7 @@ namespace GreedLast
                 }
             }
 
-            if (remaining <= 0f && countdownReadyStrength > 0f)
+            if (!hasBodyMotion && countdownReadyStrength > 0f)
             {
                 avatarRect.anchoredPosition += new Vector2(0f, BuildRunnerCountdownReadyOffsetY(countdownReadyStrength));
                 avatarRect.localScale = new Vector3(
@@ -35211,7 +35275,7 @@ namespace GreedLast
                 shadowScaleX += BuildRunnerCountdownReadyShadowScaleXLift(countdownReadyStrength);
                 shadowAlpha += BuildRunnerCountdownReadyShadowAlphaLift(countdownReadyStrength);
             }
-            else if (remaining <= 0f && launchStepStrength > 0f)
+            else if (!hasBodyMotion && launchStepStrength > 0f)
             {
                 avatarRect.anchoredPosition += new Vector2(0f, BuildRunnerLaunchStepLift(launchStepStrength));
                 Vector3 launchScale = avatarRect.localScale;
@@ -35236,7 +35300,7 @@ namespace GreedLast
                 shadowAlpha += BuildRunnerLaunchStepShadowAlphaLift(launchStepStrength);
             }
 
-            if (remaining <= 0f && runEntryThreatRevealStrength > 0f)
+            if (!hasBodyMotion && runEntryThreatRevealStrength > 0f)
             {
                 float revealDirection = BuildRunnerEntryThreatDirection(latestRunSnapshot.Pattern.Channel);
                 avatarRect.anchoredPosition += new Vector2(
@@ -35261,7 +35325,7 @@ namespace GreedLast
                 shadowAlpha += BuildRunnerEntryThreatShadowAlphaLift(runEntryThreatRevealStrength);
             }
 
-            float rotationBrace = remaining <= 0f
+            float rotationBrace = !hasBodyMotion
                 ? BuildRunnerRotationCorridorBraceStrength(latestRunSnapshot, runnerBlocked)
                 : 0f;
             if (rotationBrace > 0f)
@@ -35353,16 +35417,12 @@ namespace GreedLast
                 silhouetteDirection = 1f;
             }
 
-            if (remaining > 0f
-                && runnerResponseType != RunnerResponseType.None
-                && runnerResponseResult != GreedLastJudgementResult.None)
+            if (hasBodyMotion)
             {
-                float duration = Mathf.Max(0.01f, runnerResponseUntil - runnerResponseStartedAt);
-                float progress = Mathf.Clamp01((Time.unscaledTime - runnerResponseStartedAt) / duration);
-                float arc = Mathf.Sin(progress * Mathf.PI);
-                silhouetteResponse = runnerResponseType;
-                silhouetteStrength = Mathf.Clamp01(arc * (runnerResponseResult == GreedLastJudgementResult.Good ? 0.74f : 1f));
-                silhouetteDirection = runnerResponseDirection;
+                float arc = Mathf.Sin(motion.Progress * Mathf.PI);
+                silhouetteResponse = motion.Type;
+                silhouetteStrength = Mathf.Clamp01(arc * motion.Strength);
+                silhouetteDirection = motion.Direction;
             }
             else if (running
                 && latestRunSnapshot.ActivePattern
@@ -35382,7 +35442,7 @@ namespace GreedLast
                 silhouetteDirection = BuildRunnerPreparationCueDirection(latestRunSnapshot.Pattern, silhouetteDirection);
             }
 
-            if (rotationBrace > 0f)
+            if (rotationBrace > 0f && !hasBodyMotion)
             {
                 silhouetteResponse = RunnerResponseType.Twist;
                 silhouetteStrength = Mathf.Max(silhouetteStrength, rotationBrace);
@@ -35484,7 +35544,7 @@ namespace GreedLast
                 avatarRect.localEulerAngles.z,
                 running,
                 runnerBlocked,
-                remaining,
+                hasBodyMotion,
                 runnerDownbeatLift,
                 runnerBeatCueUrgency);
             UpdateRunnerActionTrails(
@@ -35643,7 +35703,7 @@ namespace GreedLast
             float avatarAngle,
             bool running,
             bool runnerBlocked,
-            float responseRemaining,
+            bool hasBodyMotion,
             float downbeatLift,
             float beatCueUrgency)
         {
@@ -35655,7 +35715,7 @@ namespace GreedLast
             bool activePreparation = running
                 && latestRunSnapshot.ActivePattern
                 && latestRunSnapshot.Pattern.IsValid
-                && responseRemaining <= 0f
+                && !hasBodyMotion
                 && CanShowRunTransientFeedback();
             float readiness = BuildRunnerAnticipationStrength(
                 activePreparation,
@@ -36491,15 +36551,16 @@ namespace GreedLast
 
         private void ApplyRunnerResponsePose(
             RectTransform avatarRect,
+            RunnerResponseType responseType,
             float arc,
             float channelDirection,
             ref float shadowOffsetX,
             ref float shadowScaleX,
             ref float shadowAlpha)
         {
-            Vector4 transform = BuildRunnerResponsePoseTransform(runnerResponseType, arc, channelDirection);
-            Vector4 motion = BuildRunnerResponsePoseMotion(runnerResponseType, arc, channelDirection);
-            Vector4 limbs = BuildRunnerResponseLimbAngles(runnerResponseType, arc, channelDirection);
+            Vector4 transform = BuildRunnerResponsePoseTransform(responseType, arc, channelDirection);
+            Vector4 motion = BuildRunnerResponsePoseMotion(responseType, arc, channelDirection);
+            Vector4 limbs = BuildRunnerResponseLimbAngles(responseType, arc, channelDirection);
             avatarRect.anchoredPosition = new Vector2(transform.x, transform.y);
             avatarRect.localScale = new Vector3(transform.z, transform.w, 1f);
             avatarRect.localEulerAngles = new Vector3(0f, 0f, motion.x);
@@ -45420,6 +45481,8 @@ namespace GreedLast
             }
 
             runnerResponseResult = snapshot.LastResult;
+            runnerResponseHasInputMotion = snapshot.LastJudgedInputChannel != GreedLastRunChannel.None
+                && snapshot.LastJudgedInputChannel == runnerInputChannel && HasRunnerInputMotion(Time.unscaledTime);
             // Keep a central-channel lean stable through the response's body, picture and trail.
             runnerResponseDirection = BuildRotationResponseDirection(runnerResponseChannel);
             if (Mathf.Approximately(runnerResponseDirection, 0f))

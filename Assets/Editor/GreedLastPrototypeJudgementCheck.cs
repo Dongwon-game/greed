@@ -66,6 +66,7 @@ namespace GreedLast.Editor
                 }
 
                 VerifyCalibratedWaitingGuide(ui);
+                VerifyInputMotionOutsideJudgement(ui);
                 var capped = GreedLastPrototypeScoreCheck.VerifyJudgement(int.MaxValue - 5, GreedLastJudgementResult.Success);
                 Require(capped.after.LastResult == GreedLastJudgementResult.Success && capped.after.LastJudgementScoreGain == 5,
                     "Presentation needs the actual boundary judgement, not its subsequent ignored duplicate input.");
@@ -529,6 +530,63 @@ namespace GreedLast.Editor
                 cases++;
             }
             Debug.Log($"Greed calibrated waiting guide passed: {cases} cases, three timing types and five offsets, compact/detail/lane state and actual input agreement. Authored beat/visual travel unchanged; no personal preferences written.");
+        }
+
+        private static void VerifyInputMotionOutsideJudgement(GreedLastRuntimeUi ui)
+        {
+            var core = new GreedLastRunCore();
+            GreedLastRunSnapshot run = default;
+            core.SnapshotChanged += snapshot => { run = snapshot; ui.RenderRun(snapshot); };
+            ui.Render(GreedLastPrototypeSmokeCheck.BuildUiScreenSnapshot(
+                GreedLastScreenState.RunCoreTest, "Independent action check", string.Empty, 0));
+            float clock = 20f;
+            core.RestartPractice(clock);
+            core.Tick(clock += 2f);
+            if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
+            Require(run.ActivePattern && run.Pattern.ResponseChannel == GreedLastRunChannel.Right,
+                "The first practice obstacle must ask the runner to jump right.");
+
+            const BindingFlags methods = BindingFlags.Instance | BindingFlags.NonPublic;
+            var sample = typeof(GreedLastRuntimeUi).GetMethod("SampleRunnerBodyMotion", methods);
+            var record = typeof(GreedLastRuntimeUi).GetMethod("RecordRunnerInput", methods);
+            void Press(GreedLastRunChannel channel) => record.Invoke(ui, new object[] { channel });
+            void RequireAction(string type, float direction)
+            {
+                float pressedAt = Read<float>(ui, "runnerInputStartedAt");
+                object motion = sample.Invoke(ui, new object[] { pressedAt + 0.2f });
+                Type fields = motion.GetType();
+                Require(fields.GetField("Type").GetValue(motion).ToString() == type
+                    && (float)fields.GetField("Direction").GetValue(motion) == direction
+                    && !(bool)fields.GetField("Stumbles").GetValue(motion),
+                    "The sampled body motion must preserve the key's action and direction.");
+            }
+
+            Press(GreedLastRunChannel.Right);
+            RequireAction("Jump", 1f);
+            clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
+            core.HandleInput(GreedLastRunChannel.Right, clock);
+            Require(run.LastResult == GreedLastJudgementResult.Success && !run.ActivePattern,
+                "An exact first trap must settle before the between-traps action check.");
+
+            Press(GreedLastRunChannel.Left);
+            RequireAction("Twist", -1f);
+            Press(GreedLastRunChannel.Center);
+            core.HandleInput(GreedLastRunChannel.Center, clock + 0.05f);
+            RequireAction("Slide", 0f);
+            Require(run.SuccessCount == 1 && run.MissCount == 0,
+                "An action between traps must not add a judgement or consume health.");
+
+            core.RequestNextPattern(clock += 2f);
+            Require(run.ActivePattern && run.Pattern.ResponseChannel == GreedLastRunChannel.Center,
+                "The next practice obstacle must be the center pressure gate.");
+            Press(GreedLastRunChannel.Center);
+            core.HandleInput(GreedLastRunChannel.Center, clock + 0.05f);
+            Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissReason == "too_early",
+                "Starting a slide early must still use the regular timing judgement.");
+            RequireAction("Slide", 0f);
+            object settled = sample.Invoke(ui, new object[] { Read<float>(ui, "runnerInputStartedAt") + 0.46f });
+            Require(settled.GetType().GetField("Type").GetValue(settled).ToString() == "None",
+                "A miss belonging to the slide must not replay a stumble after the input motion ends.");
         }
 
         private static void Require(bool condition, string message)
