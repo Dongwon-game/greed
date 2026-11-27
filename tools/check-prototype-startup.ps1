@@ -9,11 +9,13 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This startup check supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
+if ([IO.Path]::GetPathRoot($project) -ine 'C:\') { throw 'Run Greed checks from a project on the C drive.' }
 $artifactBase = if ($ArtifactsDirectory) {
     $directory = Get-Item -LiteralPath $ArtifactsDirectory
     if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
     $directory.FullName
 } else { $project }
+if ([IO.Path]::GetPathRoot($artifactBase) -ine 'C:\') { throw 'Keep Greed check artifacts on the C drive.' }
 $build = Join-Path $project 'Builds\GreedLastPrototype'
 $candidate = $null
 if ($CandidateManifest) {
@@ -32,9 +34,16 @@ if ($CandidateManifest) {
     $engine = Get-Content -LiteralPath $engineReportPath -Raw | ConvertFrom-Json
     $privateProject = Join-Path $candidateRoot 'Project'
     $build = Join-Path $privateProject 'Builds/GreedLastPrototype'
+    $reportedBuild = [IO.Path]::GetFullPath($engine.CandidateBuildPath)
+    # Older reports record the pre-move absolute path. The authenticated report
+    # must still name this exact run and build. Read the relocated build on C.
+    $formerRoot = [IO.Path]::Combine('D:\CodexGreedChecks', 'Logs\EngineLoopChecks', $id)
+    $formerBuild = [IO.Path]::Combine($formerRoot, 'Project\Builds\GreedLastPrototype')
+    if ($reportedBuild -ieq $formerBuild) { $reportedBuild = $build }
     if ($engine.Id -cne $id -or $engine.Kind -cne 'candidate' -or !$engine.Succeeded -or !$engine.SmokePassed -or
         $engine.Product -cne $candidate.PrivateProduct -or $engine.SourceHead -cne $candidate.SourceHead -or
-        (Resolve-Path -LiteralPath $engine.CandidateBuildPath).Path -ine (Resolve-Path -LiteralPath $build).Path -or
+        [IO.Path]::GetPathRoot($reportedBuild) -ine 'C:\' -or
+        (Resolve-Path -LiteralPath $reportedBuild).Path -ine (Resolve-Path -LiteralPath $build).Path -or
         (Get-FileHash -LiteralPath (Join-Path $build 'VerifiedBuildInfo.json')).Hash -cne $engine.CandidateBuildInfoSHA256) {
         throw 'The manifest does not match the verified isolated build.'
     }
@@ -43,7 +52,15 @@ if ($CandidateManifest) {
         $privateSettings -cnotmatch ('(?m)^  productName: ' + [regex]::Escape($candidate.PrivateProduct) + '\r?$')) {
         throw 'The source candidate product is not isolated.'
     }
-    $archive = (Resolve-Path -LiteralPath $candidate.Zip).Path
+    $archive = $candidate.Zip
+    if ([IO.Path]::IsPathRooted($archive)) {
+        $archive = [IO.Path]::GetFullPath($archive)
+        if ([IO.Path]::GetDirectoryName($archive) -ieq $formerRoot -and [IO.Path]::GetExtension($archive) -ieq '.zip') {
+            $archive = Join-Path $candidateRoot ([IO.Path]::GetFileName($archive))
+        }
+    }
+    $archive = (Resolve-Path -LiteralPath $archive).Path
+    if ([IO.Path]::GetPathRoot($archive) -ine 'C:\') { throw 'Use the candidate archive on the C drive.' }
     $verification = & (Join-Path $PSScriptRoot 'verify-prototype-build.ps1') -ProjectPath $project -BuildPath $build -PackagePath $archive | ConvertFrom-Json
     if ($verification.Package.Sha256 -cne $candidate.ZipSHA256 -or
         $verification.RuntimeAssemblySha256 -cne $candidate.RuntimeAssemblySHA256) {

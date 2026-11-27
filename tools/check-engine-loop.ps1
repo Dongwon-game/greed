@@ -14,6 +14,13 @@ Set-StrictMode -Version Latest
 if (@(@($CueOnly,$MenuOnly,$SmokeOnly,$BuildCandidate) | Where-Object {$_}).Count -gt 1) { throw 'Choose only one focused engine check.' }
 if ($env:OS -ne 'Windows_NT') { throw 'This isolated editor runner supports Windows only.' }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
+if ([IO.Path]::GetPathRoot($project) -ine 'C:\') { throw 'Run Greed checks from a project on the C drive.' }
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
+if ([IO.Path]::GetPathRoot($artifactBase) -ine 'C:\') { throw 'Keep Greed check artifacts on the C drive.' }
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $inputs = @('Assets','Packages','ProjectSettings')
 $dirty = @(git -C $project status --porcelain --untracked-files=all -- $inputs)
@@ -27,11 +34,6 @@ $existing = @(Get-CimInstance Win32_Process | Where-Object {
     $_.Name -eq 'GreedLastPrototype.exe' -or ($_.Name -eq 'Unity.exe' -and $_.CommandLine -and $_.CommandLine.Replace('\','/') -match $projectArgument)
 })
 if ($existing.Count) { throw 'Leave an existing personal Greed editor/player untouched.' }
-$artifactBase = if ($ArtifactsDirectory) {
-    $directory = Get-Item -LiteralPath $ArtifactsDirectory
-    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
-    $directory.FullName
-} else { $project }
 if ((Get-PSDrive -Name ([IO.Path]::GetPathRoot($artifactBase).Substring(0,1))).Free -lt 2GB) { throw 'Keep at least 2 GB free for the isolated editor.' }
 
 function Read-PersonalPreferences {

@@ -356,7 +356,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 명시 실행본은 누출 시험 코드가 사용자 제품에 들어가면 거부되는지 확인하는 읽기 전용 baseline이다. 파일 해시/Unity 버전/비개발·스모크 메타데이터/IL을 시작 전에 검증한다. 이 과거 실행본으로 새 소스의 성공을 대신하지 않는다. `-VerifiedReleasePath`는 다른 저장 검사 옵션과 함께 쓸 수 있다. 폴더가 없으면 export/Unity 실행 전에 멈춘다. 읽기 전용 실행본 확인은 `verify-prototype-build.ps1 -BuildPath '<폴더>'`로도 가능하다.
 
-작업 드라이브의 공간이 부족하면 이미 있는 다른 드라이브 폴더를 `-ArtifactsDirectory`로 지정한다. 예를 들어 `./tools/check-player-persistence.ps1 -ArtifactsDirectory 'D:\CodexGreedChecks' -VerifiedReleasePath '<후보 폴더>'`는 현재 저장소의 커밋을 사용하고 격리 사본·빌드·보고서를 지정 폴더 아래 `Logs/PlayerPersistenceChecks/<ID>`에 둔다. `get-native-menu-status.ps1`로 같은 검사 ID를 볼 때도 같은 옵션을 사용한다.
+검증 결과는 현재 C드라이브 작업 복사본의 `Logs`에 저장한다. 별도 보관 위치가 필요하면 `-ArtifactsDirectory '<기존 C드라이브 폴더>'`를 사용하며, 같은 검사 ID를 `get-native-menu-status.ps1`에서 조회할 때도 같은 위치를 지정한다. C드라이브 공간이 부족하면 작업을 멈추고 사용자에게 알린다.
 
 ## 열 번의 새 프로세스
 
@@ -496,7 +496,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 이 최신 후보와 같은 게임 입력의 전체 Unity Play Mode `1f8e6c1130e04ce1b4cb0477249a5899`도 두 재로딩 설정에서 통과했다. 각각 일반 런 15판정·8선택과 클리어 후 저장, 무한 실제 두 번 시작·자연 종료, 정지 전환 여섯 번을 확인했다. 진행 기록의 PID·종료 코드가 최종 보고서와 일치했고 개인 및 원본 설정을 보존했다. 보고서 SHA256은 `4F255C8B4ABAB57695C1131DC885D7EF27EBBD8DA7E283CF5847A41F67BA6EB6`다.
 
-창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261119-22ca5a8.json' -ArtifactsDirectory 'D:\CodexGreedChecks' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
+창을 열기 전 `./tools/check-prototype-startup.ps1 -CandidateManifest 'Builds/PCReview-candidate-20261119-22ca5a8.json' -WhatIf`로 매니페스트, 격리 제품명, 원본 빌드 및 ZIP을 대조할 수 있다. 옮겨 둔 과거 후보는 매니페스트와 `Logs`가 있는 C드라이브 작업 복사본에서 같은 명령으로 보고서와 빌드의 SHA-256을 확인한다. 실제로 열 로컬 복사본은 `verify-prototype-build.ps1`의 `-BuildPath`에 매니페스트의 `Folder`를, `-PackagePath`에 `Zip`을 전달해 대조한다. 앞선 `4ed5f2c` 후보는 11월 17일 이 검증과 PC 입력 안내 정책 63개 검사(`239b67e6bcf54b188a7870740de46f76`)를 통과했다.
 
 | 순서 | 실제 입력 | 통과 기준 |
 | --- | --- | --- |
@@ -598,7 +598,7 @@ Editor/도구 입력 `48d93d1`의 다섯 프로세스와 기존 네 안전 대�
 
 최종 `report.json`의 `NativeRecordChordStatus`가 `Verified`이면 두 방향을 확인한 것이다. `Unobserved`이면 기록 화면 기본 검사가 통과하더라도 동시 입력 확인은 남아 있다. `ObservedWrongTransition`이면 기록된 방향·전후 페이지·Unity 프레임을 `NativeRecordChords`에서 확인한다.
 
-창을 열어 둔 상태에서도 `./tools/get-native-menu-status.ps1 -CheckId '<시험 ID>' -ArtifactsDirectory 'D:\CodexGreedChecks'`의 `RecordChordStatus`와 `RecordChords`를 확인할 수 있다. 시험 창이 활성 상태에서 관찰된 입력만 기록하며, 상태 조회는 화면 캡처나 입력 없이 실행한다. 종료 후 재실행 확인은 최종 보고서의 `Passed`로 확인한다.
+창을 열어 둔 상태에서도 `./tools/get-native-menu-status.ps1 -CheckId '<시험 ID>'`의 `RecordChordStatus`와 `RecordChords`를 확인할 수 있다. 시험 창이 활성 상태에서 관찰된 입력만 기록하며, 상태 조회는 화면 캡처나 입력 없이 실행한다. 종료 후 재실행 확인은 최종 보고서의 `Passed`로 확인한다.
 
 `28ae367`의 `-InteractiveBoards -WhatIf`로 실행 조건을 확인했다. 창을 쓰지 않는 960×540 격리 검사 `7a66db58a4014b6ca245caba78a34425`에서 동시 입력 분류 대조와 저장 재실행 10단계·안전 대조 4개가 통과했다. 실제 키 입력은 격리 창에서 확인한다.
 

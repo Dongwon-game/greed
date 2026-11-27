@@ -17,6 +17,10 @@ Reference conversations are in `.local/ChatGPT-Greed-20261104/00_대화목록.md
 
 For editor validation, close Play mode before using Greed Last > Run Prototype Smoke Check. For persistence/engine checks follow Docs/GreedLast_Prototype_PlayerChecks.md and the existing isolated tools. Record what was actually executed and any remaining manual play checks. Finish meaningful work by updating the relevant project notes; push changes when authorized by the user.
 
+## 그리드 작업 저장 위치
+
+그리드 소스, Git 작업 복사본, 임시 파일, 빌드와 검증 결과는 C드라이브에 저장한다. C드라이브 공간이 부족하면 작업을 멈추고 사용자에게 알린다.
+
 ## 사용자 요청: 작업 중 최신화 및 백업
 
 - 2026-11-04 사용자 확정: 5시간 사용 한도의 소비량이 50%와 95%에 도달할 때마다 Obsidian과 GitHub를 최신화한다. 반복적인 백업마다 허락을 다시 묻지 않는다. 각 지점에서 변경과 검증 결과·미해결 문제·다음 시작점을 Obsidian에 기록하고 검토한 게임 변경을 Commit/Push한다. Obsidian 보관함도 별도로 백업한다.

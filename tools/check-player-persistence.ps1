@@ -74,6 +74,13 @@ if ($InteractiveMenus -and ($CaptureFrames -or $InteractiveWindow -or $Backgroun
     throw 'Choose native menu gestures separately from capture, close-only and background modes.'
 }
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
+if ([IO.Path]::GetPathRoot($project) -ine 'C:\') { throw 'Run Greed checks from a project on the C drive.' }
+$artifactBase = if ($ArtifactsDirectory) {
+    $directory = Get-Item -LiteralPath $ArtifactsDirectory
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
+    $directory.FullName
+} else { $project }
+if ([IO.Path]::GetPathRoot($artifactBase) -ine 'C:\') { throw 'Keep Greed check artifacts on the C drive.' }
 $unity = (Resolve-Path -LiteralPath $UnityEditorPath).Path
 $settings = Join-Path $project 'ProjectSettings\ProjectSettings.asset'
 $settingsHash = (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
@@ -130,11 +137,6 @@ $releaseVerification = & (Join-Path $project 'tools/verify-prototype-build.ps1')
 $releaseInfoSHA256 = (Get-FileHash -LiteralPath (Join-Path $release 'VerifiedBuildInfo.json')).Hash
 $personalPreferencesBefore = Read-PersonalPreferences
 $id = [Guid]::NewGuid().ToString('N')
-$artifactBase = if ($ArtifactsDirectory) {
-    $directory = Get-Item -LiteralPath $ArtifactsDirectory
-    if ($directory -isnot [IO.DirectoryInfo]) { throw 'ArtifactsDirectory must be an existing filesystem directory.' }
-    $directory.FullName
-} else { $project }
 $expectedParent = [IO.Path]::GetFullPath((Join-Path $artifactBase 'Logs\PlayerPersistenceChecks'))
 $root = [IO.Path]::GetFullPath((Join-Path $expectedParent $id))
 if ([IO.Path]::GetDirectoryName($root) -cne $expectedParent -or (Test-Path -LiteralPath $root)) {
