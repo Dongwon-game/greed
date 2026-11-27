@@ -63,7 +63,7 @@ namespace GreedLast.Editor
                 if (action > 0) infiniteCore.RequestNextPattern(clock += 2f);
                 Require(run.ActivePattern, "HUD allocation coverage requires a live infinite trap.");
                 clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - infiniteCore.InputTimingOffsetSeconds;
-                infiniteCore.HandleInput(run.Pattern.Channel, clock);
+                infiniteCore.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Success, "HUD coverage requires four actual exact inputs.");
             }
             Require(run.SuccessCount == 4, "The HUD probe must reach its nontrivial timing-axis branch.");
@@ -110,7 +110,7 @@ namespace GreedLast.Editor
             Verify(run);
             Measure(run);
             clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - practice.InputTimingOffsetSeconds;
-            practice.HandleInput(run.Pattern.Channel, clock);
+            practice.HandleInput(run.Pattern.ResponseChannel, clock);
             Require(!run.ActivePattern && run.ChapterProgress == 1 && !run.Stopped,
                 "Practice cadence controls need a real resolved gap before the next trap.");
             Verify(run);
@@ -154,8 +154,8 @@ namespace GreedLast.Editor
                     clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
                     bool miss = run.ChapterIndex == 2 && run.ChapterProgress == 0;
                     GreedLastRunChannel channel = miss
-                        ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
-                        : run.Pattern.Channel;
+                        ? run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
+                        : run.Pattern.ResponseChannel;
                     core.HandleInput(channel, clock);
                     judgements++;
                     Verify(run);

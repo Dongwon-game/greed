@@ -427,9 +427,9 @@ try {
             throw 'The right wall blade must sweep inward towards the runner across multiple live frames.'
         }
         $running = @($practiceSamples | Where-Object { $_.runnerInScene -and $_.distance -gt 0.05 })
-        if ($running.Count -lt 40 -or !($running | Where-Object { $_.successes -eq 1 -and $_.runnerPosition.y -gt 0.45 }) -or
-            !($running | Where-Object { $_.successes -eq 2 -and $_.runnerHipHeight -lt 0.56 }) -or
-            !($running | Where-Object { $_.successes -eq 3 -and [Math]::Abs($_.runnerPosition.x) -gt 0.13 -and !$_.practiceResultVisible }) -or
+        if ($running.Count -lt 40 -or !($running | Where-Object { $_.successes -eq 1 -and $_.runnerPosition.y -gt 0.45 -and $_.runnerPosition.x -gt 0.10 }) -or
+            !($running | Where-Object { $_.successes -eq 2 -and $_.runnerHipHeight -lt 0.56 -and [Math]::Abs($_.runnerPosition.x) -lt 0.03 }) -or
+            !($running | Where-Object { $_.successes -eq 3 -and $_.runnerPosition.x -lt -0.13 -and !$_.practiceResultVisible }) -or
             !$practiceSamples[-1].practiceResultVisible) {
             throw 'The 3D runner must visibly jump, slide and sidestep in the same practice film.'
         }
@@ -476,11 +476,13 @@ try {
             $waitingFrame.timingBoardVisible -or $nextTrapFrame.channel -cne 'Center') {
             throw 'Between practice traps show the waiting hint without a timing board.'
         }
-        foreach ($practice in @(@{Name='trap'; Pattern='left_floor_perfect*'},
-            @{Name='practice-center'; Pattern='center_gate_clutch*'}, @{Name='practice-right'; Pattern='right_blade_offbeat*'})) {
+        foreach ($practice in @(@{Name='trap'; Pattern='left_floor_perfect*'; Key='D/→'},
+            @{Name='practice-center'; Pattern='center_gate_clutch*'; Key='S/↓'},
+            @{Name='practice-right'; Pattern='right_blade_offbeat*'; Key='A/←'})) {
             $view = $render.frames | Where-Object name -CEQ $practice.Name
             if ($view.pattern -cnotlike $practice.Pattern -or !$view.worldTrapVisible -or $view.timingBoardVisible -or
-                !$view.actionCue -or [Math]::Abs($view.worldTrapDistance - $view.distance + $view.coreDeltaSeconds * 4.2) -gt 0.03 -or
+                !$view.actionCue -or !$view.actionCue.StartsWith($practice.Key + ' · ', [StringComparison]::Ordinal) -or
+                [Math]::Abs($view.worldTrapDistance - $view.distance + $view.coreDeltaSeconds * 4.2) -gt 0.03 -or
                 $view.worldTrapViewport.z -le 0) {
                 throw ('The practice cue must identify a real obstacle at the gameplay judgement point: ' + $practice.Name)
             }

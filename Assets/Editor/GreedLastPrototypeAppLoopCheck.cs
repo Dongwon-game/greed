@@ -482,7 +482,7 @@ namespace GreedLast.Editor
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
                     Require(run.ActivePattern && !run.Stopped, "An emptied source slot must not stop its active run.");
-                    core.HandleInput(run.Pattern.Channel, clock + run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock + run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
                     core.ForceStopInfiniteRunForTest();
                     Click(ui, "nextPatternButton");
                     Require(state.CurrentState == GreedLastScreenState.InfiniteStartReady,
@@ -1057,7 +1057,7 @@ namespace GreedLast.Editor
                             core.Tick(clock += 2f);
                             core.Tick(clock += 1f);
                             Require(latest().ActivePattern, "Forced result branch checks need a real first trap.");
-                            core.HandleInput(latest().Pattern.Channel,
+                            core.HandleInput(latest().Pattern.ResponseChannel,
                                 clock + latest().Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
                             Require(latest().SuccessCount == 1, "The forced fixture must first resolve one public-input success.");
                             core.ForceStopInfiniteRunForTest();
@@ -1343,7 +1343,7 @@ namespace GreedLast.Editor
                             "Losing presentation must freeze the same live trap and mute feedback without unseen damage/movement.");
                         Method(app, "RequestNextRunPattern").Invoke(app, null);
                         Method(app, "RequestToggleRunPause").Invoke(app, null);
-                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { before.Pattern.Channel });
+                        Method(app, "HandleRunChannelInput").Invoke(app, new object[] { before.Pattern.ResponseChannel });
                         Method(app, "RequestReturnToLobby").Invoke(app, null);
                         Require(state.CurrentState == GreedLastScreenState.RunCoreTest && latest().Paused
                             && !latest().ResumeCountdownActive && latest().MissCount == before.MissCount,
@@ -2969,7 +2969,7 @@ namespace GreedLast.Editor
                 Require(opening ? before.StartCountdownActive : before.ActivePattern,
                     "Interrupted command coverage requires its real pending opening or authored trap.");
                 Method(app, command).Invoke(app, command == "HandleRunChannelInput"
-                    ? new object[] { before.Pattern.IsValid ? before.Pattern.Channel : GreedLastRunChannel.Left } : null);
+                    ? new object[] { before.Pattern.IsValid ? before.Pattern.ResponseChannel : GreedLastRunChannel.Left } : null);
                 GreedLastRunSnapshot after = Read<GreedLastRunSnapshot>(app, "latestAppRunSnapshot");
                 Require(after.Paused && !after.ResumeCountdownActive && after.ActivePattern == before.ActivePattern
                     && Mathf.Abs(after.ElapsedSeconds - before.ElapsedSeconds) < 0.0001f
@@ -3028,7 +3028,7 @@ namespace GreedLast.Editor
                     else
                     {
                         clock += current.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - current.ElapsedSeconds;
-                        core.HandleInput(current.Pattern.Channel, clock);
+                        core.HandleInput(current.Pattern.ResponseChannel, clock);
                     }
                 }
                 Write(app, "runEntryLaneInputBlockUntil", 0f);
@@ -3310,7 +3310,7 @@ namespace GreedLast.Editor
                     if (attempt > 0) core.RequestNextPattern(clock += 2f);
                     GreedLastRunSnapshot before = latest();
                     clock += before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds;
-                    core.HandleInput(before.Pattern.Channel, clock);
+                    core.HandleInput(before.Pattern.ResponseChannel, clock);
                 }
                 Require(latest().Stopped && latest().SuccessCount == 3 - scenario.Step
                     && !latest().SaveEligible,
@@ -3413,7 +3413,7 @@ namespace GreedLast.Editor
                         core.Tick(clock += 2f);
                         core.Tick(clock += 1f);
                         GreedLastRunSnapshot before = latest();
-                        core.HandleInput(before.Pattern.Channel,
+                        core.HandleInput(before.Pattern.ResponseChannel,
                             clock + before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds);
                     }
                     Click(ui, "pauseButton");
@@ -3455,8 +3455,8 @@ namespace GreedLast.Editor
                         clock += before.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - before.ElapsedSeconds;
                         if (outcome == "good")
                             clock += (before.Pattern.SuccessWindowSeconds + before.Pattern.GoodWindowSeconds) * 0.5f;
-                        GreedLastRunChannel channel = outcome != "wrong" ? before.Pattern.Channel
-                            : before.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
+                        GreedLastRunChannel channel = outcome != "wrong" ? before.Pattern.ResponseChannel
+                            : before.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
                         core.HandleInput(channel, clock);
                     }
                 }
@@ -3491,7 +3491,7 @@ namespace GreedLast.Editor
                     Require(sample.ActivePattern, "Calibration needs three active practice traps.");
                     clock += sample.Pattern.CoreSeconds - core.InputTimingOffsetSeconds
                         + (sample.Pattern.SuccessWindowSeconds + sample.Pattern.GoodWindowSeconds) * 0.5f;
-                    core.HandleInput(sample.Pattern.Channel, clock);
+                    core.HandleInput(sample.Pattern.ResponseChannel, clock);
                     Require(latest().LastResult == GreedLastJudgementResult.Good,
                         "Calibration must use measured late Good inputs, not an injected recommendation.");
                 }
@@ -3661,7 +3661,7 @@ namespace GreedLast.Editor
                 Require(ui.UsePlayerRunControls && !primary.IsInteractable() && pause.gameObject.activeInHierarchy,
                     "Returning to clean play must immediately restore the sole side pause control.");
                 GreedLastRunSnapshot active = latest();
-                core.HandleInput(active.Pattern.Channel, Read<float>(core, "patternStartedAt")
+                core.HandleInput(active.Pattern.ResponseChannel, Read<float>(core, "patternStartedAt")
                     + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
                 Require(!latest().ActivePattern && !latest().Stopped,
                     "The recovery fixture must also reach the real gap between practice traps.");
@@ -4056,7 +4056,7 @@ namespace GreedLast.Editor
                 if (!latest().ActivePattern) core.RequestNextPattern(Time.realtimeSinceStartup);
                 GreedLastRunSnapshot before = latest();
                 Require(before.ActivePattern && !before.Stopped, "Gameplay input checks need a live practice trap.");
-                int lane = (int)before.Pattern.Channel - 1;
+                int lane = (int)before.Pattern.ResponseChannel - 1;
                 if (step == 2) lane = (lane + 1) % 3;
                 float delta = step == 1
                     ? -(before.Pattern.SuccessWindowSeconds + before.Pattern.GoodWindowSeconds) * 0.5f : 0f;
@@ -4205,7 +4205,7 @@ namespace GreedLast.Editor
                     if (run.ChapterProgress == 2 && (run.PracticeMode || run.Phase == GreedLastRunPhase.EscapeRunning))
                         beforeFinal?.Invoke();
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     Require(latest().LastResult == GreedLastJudgementResult.Success, "The callback fixture needs exact trap responses.");
                 }
             }
@@ -4234,8 +4234,8 @@ namespace GreedLast.Editor
                     float delta = bad && noGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds + delta;
                     GreedLastRunChannel channel = bad && !noGood
-                        ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
-                        : run.Pattern.Channel;
+                        ? run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
+                        : run.Pattern.ResponseChannel;
                     core.HandleInput(channel, clock);
                     Require(latest().LastResult == (bad ? noGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss
                         : GreedLastJudgementResult.Success), "The normal quit scope fixture must produce the requested actual judgement.");
@@ -4262,8 +4262,8 @@ namespace GreedLast.Editor
                 float delta = bad && noGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                 clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds + delta;
                 GreedLastRunChannel channel = bad && !noGood
-                    ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
-                    : run.Pattern.Channel;
+                    ? run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
+                    : run.Pattern.ResponseChannel;
                 core.HandleInput(channel, clock);
                 Require(latest().LastResult == (bad ? noGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss
                     : GreedLastJudgementResult.Success), "The quit goal fixture must produce its requested real judgement.");

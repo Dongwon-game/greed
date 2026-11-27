@@ -103,7 +103,8 @@ namespace GreedLast
             float slide = !missed && response == GreedLastAvoidanceType.Slide ? reaction : 0f;
             float twist = !missed && response == GreedLastAvoidanceType.Twist ? reaction * responseDirection : 0f;
             float stumble = missed ? reaction : 0f;
-            root.SetLocalPositionAndRotation(position + heading * new Vector3(twist * 0.22f, jump * 0.77f, 0f), heading);
+            float sideStep = twist * 0.22f + responseDirection * (jump * 0.18f + slide * 0.16f);
+            root.SetLocalPositionAndRotation(position + heading * new Vector3(sideStep, jump * 0.77f, 0f), heading);
 
             float strideDip = running ? 0.09f - Mathf.Cos(phase * Mathf.PI * 4f) * 0.028f : 0f;
             hips.localPosition = restHips + new Vector3(swing * 0.026f,

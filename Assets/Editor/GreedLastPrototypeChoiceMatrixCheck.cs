@@ -362,7 +362,7 @@ namespace GreedLast.Editor
                     float delta = exact ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                     clock += run.Pattern.CoreSeconds + delta - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
                     GreedLastRunChannel channel = accuracy == 3 && judgements == 4
-                        ? (GreedLastRunChannel)((int)run.Pattern.Channel % 3 + 1) : run.Pattern.Channel;
+                        ? (GreedLastRunChannel)((int)run.Pattern.ResponseChannel % 3 + 1) : run.Pattern.ResponseChannel;
                     core.HandleInput(channel, clock);
                     judgements++;
                 }
@@ -451,7 +451,7 @@ namespace GreedLast.Editor
                 if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                 Require(run.ActivePattern, "Prepared mixed paths must publish a first infinite trap: " + context);
                 clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.SuccessCount == 1 && run.GoodCount == 0 && run.MissCount == 0 && !run.Stopped,
                     "Prepared mixed paths must resolve a real first trap: " + context);
                 if (lastUse)

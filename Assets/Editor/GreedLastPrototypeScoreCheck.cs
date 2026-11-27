@@ -113,8 +113,8 @@ namespace GreedLast.Editor
                     int threatBefore = miss || good || normal ? 0
                         : Invoke<int>(typeof(GreedLastRunCore), "BuildThreatPrecisionBonusForLevel", before.InfiniteThreatLevel, before.Pattern.TimingType);
                     int preview = Invoke<int>(typeof(GreedLastRuntimeUi), good ? "BuildActiveGoodScorePreview" : "BuildActiveExactScorePreview", before);
-                    var input = miss ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
-                        : run.Pattern.Channel;
+                    var input = miss ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                        : run.Pattern.ResponseChannel;
                     core.HandleInput(input, clock);
                     Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success)
                         && (miss || good || run.LastCenterHit), "Preview checks must use the intended actual judgement.");
@@ -239,8 +239,8 @@ namespace GreedLast.Editor
                     profile = ReadProfileBonusBeforeInput(core, before, false);
                     threat = Invoke<int>(typeof(GreedLastRunCore), "BuildThreatPrecisionBonusForLevel", run.InfiniteThreatLevel, run.Pattern.TimingType);
                 }
-                core.HandleInput(miss ? (run.Pattern.Channel == GreedLastRunChannel.Left
-                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.Channel, clock);
+                core.HandleInput(miss ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left
+                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.ResponseChannel, clock);
                 Require(!run.Stopped && run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Success),
                     "Resolved bonus controls must survive their two real misses and score actual center hits.");
                 samples.Add((before, run, profile, threat));
@@ -293,8 +293,8 @@ namespace GreedLast.Editor
                             core.Tick(clock += step);
                             remaining -= step;
                         }
-                        core.HandleInput(miss ? (run.Pattern.Channel == GreedLastRunChannel.Left
-                            ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.Channel, clock);
+                        core.HandleInput(miss ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left
+                            ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.ResponseChannel, clock);
                         int max = 3 + survivalGrowth;
                         Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good)
                             && run.MaxHealth == max && run.Health == max - (miss && !invincible ? 1 : 0)
@@ -335,7 +335,7 @@ namespace GreedLast.Editor
                     : peripheral ? run.Pattern.SuccessWindowSeconds * 0.75f : 0f;
                 Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
                 before = run;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == (isGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success)
                     && (isGood || run.LastCenterHit == !peripheral), "Render reward samples must use their declared judgement.");
                 if (!peripheral) Require((isGood ? before.GoodScoreGainPreview : before.CenterHitScoreGainPreview)
@@ -456,8 +456,8 @@ namespace GreedLast.Editor
                     "Before-input exact and Good previews must show only the points still available at the score ceiling.");
             }
             GreedLastRunChannel channel = expected == GreedLastJudgementResult.Miss
-                ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
-                : run.Pattern.Channel;
+                ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                : run.Pattern.ResponseChannel;
             core.HandleInput(channel, clock);
             Debug.Log($"Greed score boundary observation: initial={initial}, expected={expected}, actual={run.LastResult}, score={run.Score}, gain={run.LastJudgementScoreGain}.");
             Require(run.LastResult == expected && run.Score >= initial

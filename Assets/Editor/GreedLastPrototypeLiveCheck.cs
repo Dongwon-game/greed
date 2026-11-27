@@ -64,7 +64,7 @@ namespace GreedLast.Editor
                     float delta = count % 3 == 1
                         ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
-                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.HandleInput(run.Pattern.ResponseChannel, clock);
                 }
                 core.ForceStopInfiniteRunForTest();
                 Require(run.Stopped && run.ReviewTargetText == target, "Each target must retain its terminal profile.");
@@ -137,7 +137,7 @@ namespace GreedLast.Editor
                 {
                     if (trap > 0) core.RequestNextPattern(clock += 2f);
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + 0.05f;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                 }
                 Require(run.Stopped && run.PracticeMode && ui.UsePlayerRunControls,
                     "Calibration fixture must end a real practice run in player controls.");
@@ -300,7 +300,7 @@ namespace GreedLast.Editor
                     float delta = count % 4 == 0
                         ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
-                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.HandleInput(run.Pattern.ResponseChannel, clock);
                 }
                 if (updateUi != null)
                 {
@@ -477,7 +477,7 @@ namespace GreedLast.Editor
                             ? (last.Pattern.SuccessWindowSeconds + last.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                         if (last.ElapsedSeconds + core.InputTimingOffsetSeconds >= last.Pattern.CoreSeconds + delta)
                             core.HandleInput(count % 3 == 2
-                                ? (GreedLastRunChannel)((int)last.Pattern.Channel % 3 + 1) : last.Pattern.Channel, clock);
+                                ? (GreedLastRunChannel)((int)last.Pattern.ResponseChannel % 3 + 1) : last.Pattern.ResponseChannel, clock);
                     }
                     Require(last.SuccessCount > 0 && last.GoodCount > 0 && last.MissCount > 0,
                         "Every culture must include actual exact, Good and Miss outcomes.");

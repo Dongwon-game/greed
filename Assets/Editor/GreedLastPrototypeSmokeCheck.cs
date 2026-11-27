@@ -63,7 +63,7 @@ namespace GreedLast.Editor
                     bool exact = accurate ? judgements % 2 == 0 : judgements == 0;
                     float delta = exact ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                     clock += run.Pattern.CoreSeconds + delta - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     judgements++;
                 }
                 Require(core.CanExitAfterClear && judgements == 15 && choices == 8 && run.MissCount == 0
@@ -208,7 +208,7 @@ namespace GreedLast.Editor
                     if (!run.ActivePattern) core.RequestNextPattern(clock += 2f);
                     Require(run.ActivePattern && !run.CountdownActive, "Clear action controls require actual authored traps.");
                     clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     judgements++;
                 }
                 Require(core.CanExitAfterClear && run.Stopped && run.EscapeSucceeded && run.SaveEligible
@@ -609,8 +609,8 @@ namespace GreedLast.Editor
                     {
                         Require(run.Pattern.CoreSeconds - run.ElapsedSeconds > run.Pattern.GoodWindowSeconds,
                             "The live input control must be genuinely early, not inside Good.");
-                        GreedLastRunChannel channel = input == 4 ? run.Pattern.Channel
-                            : run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
+                        GreedLastRunChannel channel = input == 4 ? run.Pattern.ResponseChannel
+                            : run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
                         core.HandleInput(channel, clock);
                         Require(run.LastResult == GreedLastJudgementResult.Miss && run.MissCount == 1
                             && run.MissReason == (input == 4 ? "too_early" : "wrong_channel"),
@@ -643,7 +643,7 @@ namespace GreedLast.Editor
                         clock = Mathf.Min(exactAt, clock + 0.01f);
                         core.Tick(clock);
                     }
-                    core.HandleInput(run.Pattern.Channel, exactAt);
+                    core.HandleInput(run.Pattern.ResponseChannel, exactAt);
                     Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1
                         && run.GoodCount == 0 && run.MissCount == 0 && run.TimingRecommendationSampleCount == 1,
                         "A fresh exact tap must still resolve the same buffered trap once and produce one genuine timing sample.");
@@ -1094,7 +1094,7 @@ namespace GreedLast.Editor
             Require(snapshot.FocusStateActiveSeconds > 0.2f, "Active focus time must accumulate only while the run is moving.");
             int scoreBeforeFocusHit = snapshot.Score;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 now + 3f + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Exact channel input at core time must succeed.");
             Require(snapshot.Score > scoreBeforeFocusHit, "Focus success must award score.");
@@ -1108,7 +1108,7 @@ namespace GreedLast.Editor
             Require(snapshot.ActivePattern && snapshot.Pattern.IsValid, "A second trap pattern must be startable.");
             core.FillFocusForTest();
             int healthBeforeMiss = snapshot.Health;
-            GreedLastRunChannel wrongChannel = snapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = snapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             core.HandleInput(wrongChannel, now + 5f + snapshot.Pattern.CoreSeconds);
@@ -1295,7 +1295,7 @@ namespace GreedLast.Editor
                             > InvokeRuntimeUiFloat("BuildRouteCadencePipActiveColorBlend", farCadenceReadiness),
                     "The active route cadence pip must breathe brighter and larger near the judgement window.");
                 cleanBundleCore.HandleInput(
-                    cleanSnapshot.Pattern.Channel,
+                    cleanSnapshot.Pattern.ResponseChannel,
                     patternStart + cleanSnapshot.Pattern.CoreSeconds - cleanBundleCore.InputTimingOffsetSeconds);
                 Require(cleanSnapshot.LastResult == GreedLastJudgementResult.Success, "Every clean bundle trap must resolve as success.");
                 if (i < 2)
@@ -1938,7 +1938,8 @@ namespace GreedLast.Editor
                     "Practice must keep the jump, slide, twist avoidance learning order in structured pattern data.");
                 string practiceStepTitle = InvokeRuntimeUiLabel("BuildPracticeStepTitle", practiceSnapshot, false);
                 string keyboardTitle = InvokeRuntimeUiLabel("BuildPracticeStepTitle", practiceSnapshot, true);
-                Require(keyboardTitle.Contains(" · " + GreedLastPlayerInputPolicy.ChannelKeyHint(i) + " · ", StringComparison.Ordinal)
+                Require(practiceSnapshot.Pattern.ResponseChannel == expectedLearningChannels[expectedLearningChannels.Length - 1 - i]
+                    && keyboardTitle.Contains(" · " + GreedLastPlayerInputPolicy.ChannelKeyHint(expectedLearningChannels.Length - 1 - i) + " · ", StringComparison.Ordinal)
                     && keyboardTitle.Contains(expectedPracticeResponses[i], StringComparison.Ordinal)
                     && !keyboardTitle.Contains("→" + expectedPracticeSymbols[i], StringComparison.Ordinal),
                     "The PC practice title must identify the actual lane key separately from the action.");
@@ -1981,7 +1982,7 @@ namespace GreedLast.Editor
                 if (i == 0)
                 {
                     practiceCore.HandleInput(
-                        practiceSnapshot.Pattern.Channel,
+                        practiceSnapshot.Pattern.ResponseChannel,
                         practicePatternStart + practiceSnapshot.Pattern.CoreSeconds - practiceCore.InputTimingOffsetSeconds);
                     Require(practiceSnapshot.LastResult == GreedLastJudgementResult.Success, "Practice exact input must resolve as success.");
                 }
@@ -1989,13 +1990,13 @@ namespace GreedLast.Editor
                 {
                     float goodDelta = (practiceSnapshot.Pattern.SuccessWindowSeconds + practiceSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
                     practiceCore.HandleInput(
-                        practiceSnapshot.Pattern.Channel,
+                        practiceSnapshot.Pattern.ResponseChannel,
                         practicePatternStart + practiceSnapshot.Pattern.CoreSeconds + goodDelta - practiceCore.InputTimingOffsetSeconds);
                     Require(practiceSnapshot.LastResult == GreedLastJudgementResult.Good, "Practice must demonstrate the survival-only Good band.");
                 }
                 else
                 {
-                    GreedLastRunChannel practiceWrongChannel = practiceSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+                    GreedLastRunChannel practiceWrongChannel = practiceSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                         ? GreedLastRunChannel.Right
                         : GreedLastRunChannel.Left;
                     practiceCore.HandleInput(
@@ -2015,7 +2016,7 @@ namespace GreedLast.Editor
             Require(practiceSnapshot.TimingProfile.Contains("1장 실수 0회", StringComparison.Ordinal), "Practice misses must stay outside normal chapter analytics.");
             Require(
                 practiceSnapshot.JudgementText.Contains("복기 우선: 실수 1회", StringComparison.Ordinal)
-                    && practiceSnapshot.JudgementText.Contains("같은 채널과 입력 순간 재확인", StringComparison.Ordinal)
+                    && practiceSnapshot.JudgementText.Contains("회피 방향과 입력 순간 재확인", StringComparison.Ordinal)
                     && practiceSnapshot.JudgementText.Contains("회피 복기: 측면→↔비틀기 실패 / 3단계 다시", StringComparison.Ordinal),
                 "A mixed practice result must prioritize its miss review.");
             Require(
@@ -4468,11 +4469,11 @@ namespace GreedLast.Editor
             pausedCore.Tick(now + 2f);
             pausedCore.Tick(now + 3f);
             Require(pausedSnapshot.ActivePattern, "The pause boundary test must expose an active trap.");
-            GreedLastRunChannel nonTargetLane = pausedSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel nonTargetLane = pausedSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             Require(
-                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel)
+                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.ResponseChannel)
                     && !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, nonTargetLane),
                 "A live active trap must tint only its target lane before pause.");
             Require(
@@ -4521,7 +4522,7 @@ namespace GreedLast.Editor
                     && !InvokeRuntimeUiStaticBool("ShouldShowRunWaitingTimingGuide", pausedSnapshot),
                 "A paused active trap must suppress trap/timing visuals and must not fall back to the idle waiting guide.");
             Require(
-                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.ResponseChannel),
                 "A paused active trap must not leave its target lane tinted as if it were still hittable.");
             Require(
                 string.IsNullOrEmpty(InvokeRuntimeUiLabel("BuildPrototypeFeelStatus", pausedSnapshot)),
@@ -4677,7 +4678,7 @@ namespace GreedLast.Editor
                     && resumeBlurFocusAlpha > pausedBlurFocusAlpha
                     && InvokeRuntimeUiInt("BuildPauseSoftBlurBandAlphaFromValues", true, 99) == 0,
                 "The pause blur bands must dim the edges and grow slightly stronger during the resume countdown.");
-            pausedCore.HandleInput(pausedSnapshot.Pattern.Channel, now + 3.2f);
+            pausedCore.HandleInput(pausedSnapshot.Pattern.ResponseChannel, now + 3.2f);
             Require(pausedSnapshot.IgnoreReason == "paused", "Input while paused must report the pause boundary before any countdown state.");
             Require(pausedSnapshot.LastResult == GreedLastJudgementResult.None, "Paused input must not replay a stale judgement.");
             Require(pausedSnapshot.ActivePattern, "Paused input must preserve the active trap for resume.");
@@ -4721,7 +4722,7 @@ namespace GreedLast.Editor
                     && !InvokeRuntimeUiStaticBool("ShouldShowRunWaitingTimingGuide", pausedSnapshot),
                 "The resume countdown must hide the held trap visuals and avoid showing an idle waiting guide before GO.");
             Require(
-                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                !InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.ResponseChannel),
                 "The resume countdown must keep the held trap lane tint hidden until GO releases control.");
             Require(
                 GreedLastRuntimeUi.BuildPauseCoachLine(pausedSnapshot).Contains("첫 함정 기준선", StringComparison.Ordinal),
@@ -4780,7 +4781,7 @@ namespace GreedLast.Editor
                 InvokeRuntimeUiStaticBool("ShouldShowActivePatternVisuals", pausedSnapshot),
                 "After GO, the held trap must become visible again as a readable active pattern.");
             Require(
-                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.Channel),
+                InvokeRuntimeUiStaticBool("ShouldHighlightActivePatternLane", pausedSnapshot, pausedSnapshot.Pattern.ResponseChannel),
                 "After GO, the held trap target lane tint must return with the active pattern visuals.");
             float resumedCoreDelta = pausedSnapshot.CoreDeltaSeconds;
             Require(
@@ -4794,7 +4795,7 @@ namespace GreedLast.Editor
                 "After resume GO, the timing guide must still read like an upcoming beat instead of an already-missed trap. Actual: "
                     + resumedTimingGuide);
             float resumedExactAt = (now + 5.0f) - resumedCoreDelta - pausedCore.InputTimingOffsetSeconds;
-            pausedCore.HandleInput(pausedSnapshot.Pattern.Channel, resumedExactAt);
+            pausedCore.HandleInput(pausedSnapshot.Pattern.ResponseChannel, resumedExactAt);
             Require(
                 pausedSnapshot.LastResult == GreedLastJudgementResult.Success
                     && pausedSnapshot.SuccessCount == 1
@@ -4837,14 +4838,14 @@ namespace GreedLast.Editor
             staggerCore.Tick(staggerClock + 2f);
             staggerCore.Tick(staggerClock + 3f);
             Require(staggerSnapshot.ActivePattern, "The stagger boundary test must expose an active trap.");
-            GreedLastRunChannel wrongChannel = staggerSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = staggerSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             float missAt = staggerClock + 3.1f;
             staggerCore.HandleInput(wrongChannel, missAt);
             Require(staggerSnapshot.LastResult == GreedLastJudgementResult.Miss && staggerSnapshot.MissCount == 1, "The stagger boundary test must begin with one real miss.");
             string retainedMissReason = staggerSnapshot.MissReason;
-            staggerCore.HandleInput(staggerSnapshot.Pattern.Channel, missAt + 0.1f);
+            staggerCore.HandleInput(staggerSnapshot.Pattern.ResponseChannel, missAt + 0.1f);
             Require(staggerSnapshot.IgnoreReason == "locked_by_stagger", "Input during miss stagger must be ignored.");
             Require(staggerSnapshot.LastResult == GreedLastJudgementResult.None, "Ignored stagger input must clear stale visual judgement state.");
             Require(staggerSnapshot.MissCount == 1, "Stagger input must not add another miss.");
@@ -4861,9 +4862,9 @@ namespace GreedLast.Editor
             repeatCore.Tick(repeatClock + 3f);
             Require(repeatSnapshot.ActivePattern, "The repeat boundary test must expose an active trap.");
             float exactAt = repeatClock + 3f + repeatSnapshot.Pattern.CoreSeconds - repeatCore.InputTimingOffsetSeconds;
-            repeatCore.HandleInput(repeatSnapshot.Pattern.Channel, exactAt);
+            repeatCore.HandleInput(repeatSnapshot.Pattern.ResponseChannel, exactAt);
             Require(repeatSnapshot.LastResult == GreedLastJudgementResult.Success && repeatSnapshot.SuccessCount == 1, "The repeat boundary test must resolve one exact input.");
-            repeatCore.HandleInput(repeatSnapshot.Pattern.Channel, exactAt + 0.01f);
+            repeatCore.HandleInput(repeatSnapshot.Pattern.ResponseChannel, exactAt + 0.01f);
             Require(repeatSnapshot.IgnoreReason == "no_active_pattern", "A repeated tap after resolution must not target a finished trap.");
             Require(repeatSnapshot.LastResult == GreedLastJudgementResult.None, "A repeated tap must clear stale visual judgement state.");
             Require(repeatSnapshot.SuccessCount == 1 && repeatSnapshot.GoodCount == 0 && repeatSnapshot.MissCount == 0, "A repeated tap must not duplicate any judgement total.");
@@ -4909,7 +4910,7 @@ namespace GreedLast.Editor
             float practiceGoodDelta = (practiceGoodDirectionSnapshot.Pattern.SuccessWindowSeconds
                 + practiceGoodDirectionSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             practiceGoodDirectionCore.HandleInput(
-                practiceGoodDirectionSnapshot.Pattern.Channel,
+                practiceGoodDirectionSnapshot.Pattern.ResponseChannel,
                 practiceGoodDirectionClock
                     + practiceGoodDirectionSnapshot.Pattern.CoreSeconds
                     + practiceGoodDelta
@@ -5030,7 +5031,7 @@ namespace GreedLast.Editor
                     inputAt += goodDelta;
                 }
 
-                core.HandleInput(snapshot.Pattern.Channel, inputAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, inputAt);
                 clock = inputAt;
                 Require(snapshot.LastResult == outcomes[i], "Practice review sample judgement must match its requested outcome.");
             }
@@ -5091,7 +5092,7 @@ namespace GreedLast.Editor
                 "The active action cue must bind the hazard shape to the required avoidance action. Actual: "
                     + activeActionCue);
             Require(activeActionCue.Contains("박 전", StringComparison.Ordinal), "The active action cue must reuse the beat-count timing cue.");
-            string activeActionKeyHint = InvokeRuntimeUiLabel("BuildRunChannelKeyHint", goodSnapshot.Pattern.Channel);
+            string activeActionKeyHint = InvokeRuntimeUiLabel("BuildRunChannelKeyHint", goodSnapshot.Pattern.ResponseChannel);
             Require(
                 !string.IsNullOrEmpty(activeActionKeyHint) && activeActionCue.Contains(activeActionKeyHint, StringComparison.Ordinal),
                 "The active action cue must expose the editor key hint for its target lane.");
@@ -5621,7 +5622,7 @@ namespace GreedLast.Editor
                     && exactCenterBandScaleY > exactCenterBandScaleX
                     && exactCenterBandScaleY - exactCenterBandScaleX > 0.048f,
                 "Center timing band exact lock must stay quiet early and brighten/tall-sharpen at exact timing.");
-            int targetLaneIndex = Mathf.Clamp((int)goodSnapshot.Pattern.Channel - 1, 0, 2);
+            int targetLaneIndex = Mathf.Clamp((int)goodSnapshot.Pattern.ResponseChannel - 1, 0, 2);
             float targetLaneGlow = InvokeRuntimeUiFloat("BuildTargetLaneReadinessGlow", targetLaneIndex, goodSnapshot);
             float offTargetLaneGlow = InvokeRuntimeUiFloat("BuildTargetLaneReadinessGlow", (targetLaneIndex + 1) % 3, goodSnapshot);
             Require(
@@ -6966,7 +6967,7 @@ namespace GreedLast.Editor
             burstCore.HandleInput(GreedLastRunChannel.Center, burstClock += 0.01f);
             StartBufferedPattern(burstCore, ref burstSnapshot, ref burstClock);
             burstCore.HandleInput(
-                burstSnapshot.Pattern.Channel,
+                burstSnapshot.Pattern.ResponseChannel,
                 burstClock + burstSnapshot.Pattern.CoreSeconds - burstCore.InputTimingOffsetSeconds);
             Require(burstSnapshot.LastResult == GreedLastJudgementResult.Success, "The forward burst smoke must create an exact success snapshot.");
             float successBurstStrength = InvokeRuntimeUiFloat("BuildForwardPayoffBurstStrength", burstSnapshot);
@@ -6983,7 +6984,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(goodBurstCore, ref goodBurstSnapshot, ref goodBurstClock);
             float goodOffset = (goodBurstSnapshot.Pattern.SuccessWindowSeconds + goodBurstSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             goodBurstCore.HandleInput(
-                goodBurstSnapshot.Pattern.Channel,
+                goodBurstSnapshot.Pattern.ResponseChannel,
                 goodBurstClock + goodBurstSnapshot.Pattern.CoreSeconds - goodBurstCore.InputTimingOffsetSeconds + goodOffset);
             Require(goodBurstSnapshot.LastResult == GreedLastJudgementResult.Good, "The forward burst smoke must create a Good snapshot.");
             float goodBurstStrength = InvokeRuntimeUiFloat("BuildForwardPayoffBurstStrength", goodBurstSnapshot);
@@ -7006,7 +7007,7 @@ namespace GreedLast.Editor
             missDragCore.Enter("forward miss drag smoke", refillRun: false);
             missDragCore.HandleInput(GreedLastRunChannel.Center, missDragClock += 0.01f);
             StartBufferedPattern(missDragCore, ref missDragSnapshot, ref missDragClock);
-            GreedLastRunChannel missDragWrongChannel = missDragSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel missDragWrongChannel = missDragSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             missDragCore.HandleInput(
@@ -7435,7 +7436,7 @@ namespace GreedLast.Editor
             Require(activeObjective.Contains("바닥→↑점프 회피", StringComparison.Ordinal), "The active objective must bind the hazard to the required avoidance action.");
             float goodDelta = (goodSnapshot.Pattern.SuccessWindowSeconds + goodSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             goodCore.HandleInput(
-                goodSnapshot.Pattern.Channel,
+                goodSnapshot.Pattern.ResponseChannel,
                 now + 3f + goodSnapshot.Pattern.CoreSeconds + goodDelta - goodCore.InputTimingOffsetSeconds);
             string goodCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(goodSnapshot);
             string goodJudgementFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", goodSnapshot);
@@ -7468,7 +7469,7 @@ namespace GreedLast.Editor
             earlyCore.Tick(now + 22f);
             earlyCore.Tick(now + 23f);
             earlyCore.HandleInput(
-                earlySnapshot.Pattern.Channel,
+                earlySnapshot.Pattern.ResponseChannel,
                 now + 23f + earlySnapshot.Pattern.CoreSeconds - earlySnapshot.Pattern.GoodWindowSeconds - 0.08f - earlyCore.InputTimingOffsetSeconds);
             string earlyCoach = GreedLastRuntimeUi.BuildLiveRunCoachLine(earlySnapshot);
             Require(earlyCoach.Contains("살짝 늦게", StringComparison.Ordinal), "An early miss must tell the player to input slightly later.");
@@ -7499,7 +7500,7 @@ namespace GreedLast.Editor
             float dangerGoodDelta = (dangerCorrectionSnapshot.Pattern.SuccessWindowSeconds
                 + dangerCorrectionSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             dangerCorrectionCore.HandleInput(
-                dangerCorrectionSnapshot.Pattern.Channel,
+                dangerCorrectionSnapshot.Pattern.ResponseChannel,
                 dangerClock + 3f + dangerCorrectionSnapshot.Pattern.CoreSeconds + dangerGoodDelta - dangerCorrectionCore.InputTimingOffsetSeconds);
             string dangerCorrectionObjective = InvokeRuntimeUiLabel("BuildRunObjectiveLine", dangerCorrectionSnapshot);
             string dangerCorrectionFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", dangerCorrectionSnapshot);
@@ -7526,7 +7527,7 @@ namespace GreedLast.Editor
             wrongChannelCore.HandleInput(GreedLastRunChannel.Center, now + 40f);
             wrongChannelCore.Tick(now + 42f);
             wrongChannelCore.Tick(now + 43f);
-            GreedLastRunChannel wrongChannel = wrongChannelSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = wrongChannelSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             wrongChannelCore.HandleInput(
@@ -7546,7 +7547,7 @@ namespace GreedLast.Editor
                 false);
             string expectedMobileTargetFeedback = InvokeRuntimeUiLabel(
                 "BuildTargetChannelInputFeedback",
-                wrongChannelSnapshot.Pattern.Channel,
+                wrongChannelSnapshot.Pattern.ResponseChannel,
                 false);
             Require(
                 mobileWrongChannelFeedback.Contains(expectedMobileTargetFeedback, StringComparison.Ordinal)
@@ -7570,7 +7571,7 @@ namespace GreedLast.Editor
             rewardCore.Tick(rewardClock + 3f);
             Require(rewardSnapshot.ActivePattern, "The live reward test must expose an active trap.");
             rewardCore.HandleInput(
-                rewardSnapshot.Pattern.Channel,
+                rewardSnapshot.Pattern.ResponseChannel,
                 rewardClock + 3f + rewardSnapshot.Pattern.CoreSeconds - rewardCore.InputTimingOffsetSeconds);
             Require(rewardSnapshot.LastResult == GreedLastJudgementResult.Success, "The live reward test must resolve one exact hit.");
             string rewardGuide = InvokeRuntimeUiLabel("BuildRunGuideLine", rewardSnapshot);
@@ -7796,7 +7797,7 @@ namespace GreedLast.Editor
                 }
 
                 chapterTransitionCore.HandleInput(
-                    chapterTransitionSnapshot.Pattern.Channel,
+                    chapterTransitionSnapshot.Pattern.ResponseChannel,
                     chapterTransitionClock + chapterTransitionSnapshot.Pattern.CoreSeconds - chapterTransitionCore.InputTimingOffsetSeconds);
             }
 
@@ -7912,7 +7913,7 @@ namespace GreedLast.Editor
             exactCore.Tick(now + 3f);
             Require(exactSnapshot.ActivePattern, "The recovery precision test must expose its opening trap.");
 
-            GreedLastRunChannel wrongChannel = exactSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = exactSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             exactCore.HandleInput(
@@ -7964,7 +7965,7 @@ namespace GreedLast.Editor
             int scoreBeforeRecovery = exactSnapshot.Score;
             int focusBeforeRecovery = exactSnapshot.Focus;
             exactCore.HandleInput(
-                exactSnapshot.Pattern.Channel,
+                exactSnapshot.Pattern.ResponseChannel,
                 recoveryPatternStart + exactSnapshot.Pattern.CoreSeconds - exactCore.InputTimingOffsetSeconds);
             Require(exactSnapshot.LastResult == GreedLastJudgementResult.Success && exactSnapshot.LastCenterHit, "The center of a recovery pattern must resolve as a recovery precision success.");
             Require(exactSnapshot.RecoveryPrecisionCount == 1, "A recovery center hit must increment its dedicated run count exactly once.");
@@ -8035,7 +8036,7 @@ namespace GreedLast.Editor
             goodCore.HandleInput(GreedLastRunChannel.Center, goodNow);
             goodCore.Tick(goodNow + 2f);
             goodCore.Tick(goodNow + 3f);
-            GreedLastRunChannel goodWrongChannel = goodSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel goodWrongChannel = goodSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             goodCore.HandleInput(
@@ -8045,7 +8046,7 @@ namespace GreedLast.Editor
             goodCore.RequestNextPattern(goodRecoveryStart);
             float goodDelta = (goodSnapshot.Pattern.SuccessWindowSeconds + goodSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             goodCore.HandleInput(
-                goodSnapshot.Pattern.Channel,
+                goodSnapshot.Pattern.ResponseChannel,
                 goodRecoveryStart + goodSnapshot.Pattern.CoreSeconds + goodDelta - goodCore.InputTimingOffsetSeconds);
             Require(goodSnapshot.LastResult == GreedLastJudgementResult.Good, "The outer recovery band must remain a survivable Good judgement.");
             Require(goodSnapshot.RecoveryPrecisionCount == 0, "A recovery Good must not grant the center precision payoff.");
@@ -8079,7 +8080,7 @@ namespace GreedLast.Editor
                 "The run objective must prioritize the Perfect focus opportunity.");
             int focusBeforePerfect = snapshot.Focus;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 now + 3f + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success, "The counter test setup must clear its first Perfect trap.");
             Require(snapshot.PerfectFocusChargeCount == 1, "A center Perfect input must increment its focus-charge count exactly once.");
@@ -8130,7 +8131,7 @@ namespace GreedLast.Editor
 
             int scoreBeforeCounter = snapshot.Score;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clutchStart + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success && snapshot.LastCenterHit, "A center Clutch input must resolve as an exact counter.");
             Require(snapshot.ClutchCounterCount == 1, "A center Clutch input must increment its counter count exactly once.");
@@ -8183,7 +8184,7 @@ namespace GreedLast.Editor
 
             int comboBeforeOffbeat = snapshot.Combo;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 offbeatStart + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success && snapshot.LastCenterHit, "A center Offbeat input must resolve as an exact flow success.");
             Require(snapshot.OffbeatFlowCount == 1, "A center Offbeat input must increment its flow count exactly once.");
@@ -8317,7 +8318,7 @@ namespace GreedLast.Editor
             float avoidancePracticeInput = avoidancePracticeClock
                 + avoidancePracticeSnapshot.Pattern.CoreSeconds
                 - avoidancePracticeCore.InputTimingOffsetSeconds;
-            avoidancePracticeCore.HandleInput(avoidancePracticeSnapshot.Pattern.Channel, avoidancePracticeInput);
+            avoidancePracticeCore.HandleInput(avoidancePracticeSnapshot.Pattern.ResponseChannel, avoidancePracticeInput);
             Require(avoidancePracticeSnapshot.Stopped, "A final-step avoidance drill must complete after its focused trap.");
             avoidancePracticeCore.RestartPractice(avoidancePracticeInput + 1f);
             Require(
@@ -10972,15 +10973,15 @@ namespace GreedLast.Editor
                     == "[S] 1000점 / 콤9",
                 "Keyboard alias slashes must not leave Space or arrow fragments in record rows.");
             string mobileGuide = InvokeRuntimeUiLabel("BuildFirstPracticeInputGuide", true);
-            Require(pcGuide.Contains("같은 좌 · 중 · 우", StringComparison.Ordinal)
+            Require(pcGuide.Contains("오른쪽 함정은 A/←, 왼쪽 함정은 D/→", StringComparison.Ordinal)
                 && pcGuide.Contains("Enter 또는 연습 버튼", StringComparison.Ordinal)
-                && pcGuide.Contains("A/← · S/↓ · D/→", StringComparison.Ordinal)
-                && pcGuide.Contains("좌우 이동 대신 회피 동작", StringComparison.Ordinal)
-                && pcGuide.Contains("판정선", StringComparison.Ordinal)
+                && pcGuide.Contains("정면 함정은 S/↓", StringComparison.Ordinal)
+                && pcGuide.Contains("클릭", StringComparison.Ordinal)
+                && pcGuide.Contains("함정이 닿는 순간", StringComparison.Ordinal)
                 && mobileGuide.Contains("영역", StringComparison.Ordinal)
                 && !mobileGuide.Contains("Enter", StringComparison.Ordinal)
                 && !mobileGuide.Contains("Space", StringComparison.Ordinal),
-                "First practice must teach same-channel response, timing and actual platform controls before starting.");
+                "First practice must teach escape direction, timing and actual platform controls before starting.");
             foreach (bool dev in new[] { false, true })
             foreach (bool mobile in new[] { false, true })
                 Require(InvokeRuntimeUiStaticBool("ShouldShowHapticsSetting", dev, mobile) == (dev || mobile),
@@ -11005,7 +11006,7 @@ namespace GreedLast.Editor
                 {
                     if (trap > 0) core.RequestNextPattern(clock += 2f);
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     ui.RenderRun(run);
                     Require(run.SuccessCount == trap + 1 && run.Score > 0,
                         "HUD transitions must use real judgement-driven changes, not identical canned text.");
@@ -11250,7 +11251,7 @@ namespace GreedLast.Editor
                 string cue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueText", run, true, false);
                 string pcCue = InvokeRuntimeUiLabel("BuildCompactActiveActionCueTextForPlatform", run, false, false, false);
                 string pcHint = InvokeRuntimeUiLabel("BuildActiveActionCueInputHintForPlatform", run.Pattern, false, false, false);
-                Require(pcHint == InvokeRuntimeUiLabel("BuildRunChannelInputHintForMode", run.Pattern.Channel, true)
+                Require(pcHint == InvokeRuntimeUiLabel("BuildRunChannelInputHintForMode", run.Pattern.ResponseChannel, true)
                     && !pcCue.Contains("탭", StringComparison.Ordinal)
                     && !pcCue.Contains("기울임", StringComparison.Ordinal)
                     && !pcCue.Contains("Q/", StringComparison.Ordinal)
@@ -11296,7 +11297,7 @@ namespace GreedLast.Editor
                 // Test the real published outcome separately from the pause visibility assertion.
                 core.TogglePause(clock + 0.2f);
                 core.Tick(clock += 3f);
-                core.HandleInput(active.Pattern.Channel == GreedLastRunChannel.Left
+                core.HandleInput(active.Pattern.ResponseChannel == GreedLastRunChannel.Left
                     ? GreedLastRunChannel.Right : GreedLastRunChannel.Left,
                     clock + active.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
                 Require(run.LastResult == GreedLastJudgementResult.Miss, "Compact failure checks need a real wrong-channel outcome.");
@@ -12258,7 +12259,7 @@ namespace GreedLast.Editor
             noMissCore.Enter("복기 재도전\n재도전 목표: 1장 무실수 / 현재 1");
             noMissCore.HandleInput(GreedLastRunChannel.Center, noMissClock);
             StartBufferedPattern(noMissCore, ref noMissSnapshot, ref noMissClock);
-            GreedLastRunChannel wrongChannel = noMissSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = noMissSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             noMissCore.HandleInput(
@@ -12297,7 +12298,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(goodCore, ref goodSnapshot, ref goodClock);
             float goodDelta = (goodSnapshot.Pattern.SuccessWindowSeconds + goodSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             goodCore.HandleInput(
-                goodSnapshot.Pattern.Channel,
+                goodSnapshot.Pattern.ResponseChannel,
                 goodClock + goodSnapshot.Pattern.CoreSeconds + goodDelta - goodCore.InputTimingOffsetSeconds);
             Require(goodSnapshot.LastResult == GreedLastJudgementResult.Good, "The correction-free retry feedback test must create a real Good judgement.");
             Require(
@@ -12333,7 +12334,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(practiceFeedbackCore, ref practiceFeedbackSnapshot, ref practiceFeedbackClock);
             float practiceGoodDelta = (practiceFeedbackSnapshot.Pattern.SuccessWindowSeconds + practiceFeedbackSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             practiceFeedbackCore.HandleInput(
-                practiceFeedbackSnapshot.Pattern.Channel,
+                practiceFeedbackSnapshot.Pattern.ResponseChannel,
                 practiceFeedbackClock + practiceFeedbackSnapshot.Pattern.CoreSeconds + practiceGoodDelta - practiceFeedbackCore.InputTimingOffsetSeconds);
             Require(practiceFeedbackSnapshot.LastResult == GreedLastJudgementResult.Good, "The review-practice feedback test must create a Good judgement.");
             Require(
@@ -12348,7 +12349,7 @@ namespace GreedLast.Editor
             scoreCore.HandleInput(GreedLastRunChannel.Center, scoreClock);
             StartBufferedPattern(scoreCore, ref scoreSnapshot, ref scoreClock);
             scoreCore.HandleInput(
-                scoreSnapshot.Pattern.Channel,
+                scoreSnapshot.Pattern.ResponseChannel,
                 scoreClock + scoreSnapshot.Pattern.CoreSeconds - scoreCore.InputTimingOffsetSeconds);
             Require(scoreSnapshot.LastResult == GreedLastJudgementResult.Success, "The score retry feedback test must create a real exact judgement.");
             Require(
@@ -12371,7 +12372,7 @@ namespace GreedLast.Editor
             achievedScoreCore.HandleInput(GreedLastRunChannel.Center, achievedScoreClock);
             StartBufferedPattern(achievedScoreCore, ref achievedScoreSnapshot, ref achievedScoreClock);
             achievedScoreCore.HandleInput(
-                achievedScoreSnapshot.Pattern.Channel,
+                achievedScoreSnapshot.Pattern.ResponseChannel,
                 achievedScoreClock + achievedScoreSnapshot.Pattern.CoreSeconds - achievedScoreCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetHudLine(achievedScoreSnapshot).Contains("목표 달성", StringComparison.Ordinal),
@@ -12404,7 +12405,7 @@ namespace GreedLast.Editor
             focusTargetCore.HandleInput(GreedLastRunChannel.Center, focusTargetClock);
             StartBufferedPattern(focusTargetCore, ref focusTargetSnapshot, ref focusTargetClock);
             focusTargetCore.HandleInput(
-                focusTargetSnapshot.Pattern.Channel,
+                focusTargetSnapshot.Pattern.ResponseChannel,
                 focusTargetClock + focusTargetSnapshot.Pattern.CoreSeconds - focusTargetCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(focusTargetSnapshot).Contains("목표 달성: 집중 3", StringComparison.Ordinal),
@@ -12429,7 +12430,7 @@ namespace GreedLast.Editor
             focusActivationCore.HandleInput(GreedLastRunChannel.Center, focusActivationClock);
             StartBufferedPattern(focusActivationCore, ref focusActivationSnapshot, ref focusActivationClock);
             focusActivationCore.HandleInput(
-                focusActivationSnapshot.Pattern.Channel,
+                focusActivationSnapshot.Pattern.ResponseChannel,
                 focusActivationClock + focusActivationSnapshot.Pattern.CoreSeconds - focusActivationCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(focusActivationSnapshot).Contains("목표 달성: 집중 발동 1회", StringComparison.Ordinal),
@@ -12448,7 +12449,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(scopedPrecisionCore, ref scopedPrecisionSnapshot, ref scopedPrecisionClock);
             scopedPrecisionClock += scopedPrecisionSnapshot.Pattern.CoreSeconds - scopedPrecisionCore.InputTimingOffsetSeconds;
             scopedPrecisionCore.HandleInput(
-                scopedPrecisionSnapshot.Pattern.Channel,
+                scopedPrecisionSnapshot.Pattern.ResponseChannel,
                 scopedPrecisionClock);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetHudLine(scopedPrecisionSnapshot).Contains("진행 정박 1", StringComparison.Ordinal),
@@ -12461,7 +12462,7 @@ namespace GreedLast.Editor
             {
                 scopedPrecisionCore.RequestNextPattern(scopedPrecisionClock += 2f);
                 scopedPrecisionClock += scopedPrecisionSnapshot.Pattern.CoreSeconds - scopedPrecisionCore.InputTimingOffsetSeconds;
-                scopedPrecisionCore.HandleInput(scopedPrecisionSnapshot.Pattern.Channel, scopedPrecisionClock);
+                scopedPrecisionCore.HandleInput(scopedPrecisionSnapshot.Pattern.ResponseChannel, scopedPrecisionClock);
             }
 
             Require(scopedPrecisionSnapshot.MaxPrecisionStreak >= 3, "The precision review test must reach its three-exact target.");
@@ -12477,7 +12478,7 @@ namespace GreedLast.Editor
             scopedPrecisionCore.HandleInput(GreedLastRunChannel.Left, scopedPrecisionClock += 0.2f);
             scopedPrecisionCore.HandleInput(GreedLastRunChannel.Center, scopedPrecisionClock += 0.2f);
             StartBufferedPattern(scopedPrecisionCore, ref scopedPrecisionSnapshot, ref scopedPrecisionClock);
-            GreedLastRunChannel precisionWrongChannel = scopedPrecisionSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel precisionWrongChannel = scopedPrecisionSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             scopedPrecisionClock += scopedPrecisionSnapshot.Pattern.CoreSeconds - scopedPrecisionCore.InputTimingOffsetSeconds;
@@ -12513,7 +12514,7 @@ namespace GreedLast.Editor
                 "The review-target dev shortcut must preserve the target and prepare a score goal one point below threshold.");
             StartBufferedPattern(scoreShortcutCore, ref scoreShortcutSnapshot, ref scoreShortcutClock);
             scoreShortcutCore.HandleInput(
-                scoreShortcutSnapshot.Pattern.Channel,
+                scoreShortcutSnapshot.Pattern.ResponseChannel,
                 scoreShortcutClock + scoreShortcutSnapshot.Pattern.CoreSeconds - scoreShortcutCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(scoreShortcutSnapshot).Contains("목표 달성", StringComparison.Ordinal),
@@ -12530,12 +12531,12 @@ namespace GreedLast.Editor
                 "The review-target shortcut must prepare a combo goal one hit below threshold.");
             StartBufferedPattern(comboShortcutCore, ref comboShortcutSnapshot, ref comboShortcutClock);
             comboShortcutClock += comboShortcutSnapshot.Pattern.CoreSeconds - comboShortcutCore.InputTimingOffsetSeconds;
-            comboShortcutCore.HandleInput(comboShortcutSnapshot.Pattern.Channel, comboShortcutClock);
+            comboShortcutCore.HandleInput(comboShortcutSnapshot.Pattern.ResponseChannel, comboShortcutClock);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(comboShortcutSnapshot).Contains("목표 달성: 콤보", StringComparison.Ordinal),
                 "One exact input after the combo shortcut must achieve its target.");
             comboShortcutCore.RequestNextPattern(comboShortcutClock += 2f);
-            GreedLastRunChannel comboWrongChannel = comboShortcutSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel comboWrongChannel = comboShortcutSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             comboShortcutClock += comboShortcutSnapshot.Pattern.CoreSeconds - comboShortcutCore.InputTimingOffsetSeconds;
@@ -12579,7 +12580,7 @@ namespace GreedLast.Editor
                 terminalProgress.Contains("입구 직전 게이트", StringComparison.Ordinal),
                 "The progress label must show that escape is one pass away.");
             terminalShortcutCore.HandleInput(
-                terminalShortcutSnapshot.Pattern.Channel,
+                terminalShortcutSnapshot.Pattern.ResponseChannel,
                 terminalShortcutClock + terminalShortcutSnapshot.Pattern.CoreSeconds - terminalShortcutCore.InputTimingOffsetSeconds);
             Require(
                 terminalShortcutSnapshot.Stopped
@@ -12624,7 +12625,7 @@ namespace GreedLast.Editor
                 "A generic score target must label its shortcut as a target pre-check.");
             StartBufferedPattern(infiniteShortcutCore, ref infiniteShortcutSnapshot, ref infiniteShortcutClock);
             infiniteShortcutCore.HandleInput(
-                infiniteShortcutSnapshot.Pattern.Channel,
+                infiniteShortcutSnapshot.Pattern.ResponseChannel,
                 infiniteShortcutClock + infiniteShortcutSnapshot.Pattern.CoreSeconds - infiniteShortcutCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(infiniteShortcutSnapshot).Contains("목표 달성", StringComparison.Ordinal),
@@ -12652,7 +12653,7 @@ namespace GreedLast.Editor
                 infiniteTerminalProgress.Contains("무한 정산 직전", StringComparison.Ordinal),
                 "The infinite progress label must show that section settlement is one pass away.");
             infiniteTerminalShortcutCore.HandleInput(
-                infiniteTerminalShortcutSnapshot.Pattern.Channel,
+                infiniteTerminalShortcutSnapshot.Pattern.ResponseChannel,
                 infiniteTerminalShortcutClock + infiniteTerminalShortcutSnapshot.Pattern.CoreSeconds - infiniteTerminalShortcutCore.InputTimingOffsetSeconds);
             Require(
                 infiniteTerminalShortcutSnapshot.InfiniteSectionsCleared >= 1 && !infiniteTerminalShortcutSnapshot.Stopped,
@@ -12675,7 +12676,7 @@ namespace GreedLast.Editor
                 "A section-survival shortcut must prepare exactly one trap before its target section.");
             StartBufferedPattern(sectionTargetCore, ref sectionTargetSnapshot, ref sectionTargetClock);
             sectionTargetCore.HandleInput(
-                sectionTargetSnapshot.Pattern.Channel,
+                sectionTargetSnapshot.Pattern.ResponseChannel,
                 sectionTargetClock + sectionTargetSnapshot.Pattern.CoreSeconds - sectionTargetCore.InputTimingOffsetSeconds);
             Require(
                 sectionTargetSnapshot.InfiniteSectionsCleared == 3
@@ -12710,7 +12711,7 @@ namespace GreedLast.Editor
                 "A threat-entry target must label its shortcut as a target section-boundary jump.");
             StartBufferedPattern(threatTargetCore, ref threatTargetSnapshot, ref threatTargetClock);
             threatTargetCore.HandleInput(
-                threatTargetSnapshot.Pattern.Channel,
+                threatTargetSnapshot.Pattern.ResponseChannel,
                 threatTargetClock + threatTargetSnapshot.Pattern.CoreSeconds - threatTargetCore.InputTimingOffsetSeconds);
             Require(
                 threatTargetSnapshot.InfiniteThreatLevel == 3
@@ -12742,7 +12743,7 @@ namespace GreedLast.Editor
                 "A miss-cap shortcut must prepare the allowed boundary without declaring terminal achievement early.");
             StartBufferedPattern(missCapTargetCore, ref missCapTargetSnapshot, ref missCapTargetClock);
             missCapTargetCore.HandleInput(
-                missCapTargetSnapshot.Pattern.Channel,
+                missCapTargetSnapshot.Pattern.ResponseChannel,
                 missCapTargetClock + missCapTargetSnapshot.Pattern.CoreSeconds - missCapTargetCore.InputTimingOffsetSeconds);
             missCapTargetCore.ForceStopInfiniteRunForTest();
             Require(
@@ -12762,7 +12763,7 @@ namespace GreedLast.Editor
                 "An input-omission shortcut must prepare its zero-count boundary before section completion.");
             StartBufferedPattern(noInputTargetCore, ref noInputTargetSnapshot, ref noInputTargetClock);
             noInputTargetCore.HandleInput(
-                noInputTargetSnapshot.Pattern.Channel,
+                noInputTargetSnapshot.Pattern.ResponseChannel,
                 noInputTargetClock + noInputTargetSnapshot.Pattern.CoreSeconds - noInputTargetCore.InputTimingOffsetSeconds);
             noInputTargetCore.ForceStopInfiniteRunForTest();
             Require(
@@ -12804,7 +12805,7 @@ namespace GreedLast.Editor
                 false);
             string expectedMobileNoInputTargetFeedback = InvokeRuntimeUiLabel(
                 "BuildTargetChannelInputFeedback",
-                noInputFailureSnapshot.Pattern.Channel,
+                noInputFailureSnapshot.Pattern.ResponseChannel,
                 false);
             Require(
                 mobileNoInputFeedback.Contains(expectedMobileNoInputTargetFeedback, StringComparison.Ordinal)
@@ -12841,7 +12842,7 @@ namespace GreedLast.Editor
                 "A timing-apply target must label its shortcut as target recommendation setup.");
             StartBufferedPattern(timingApplyTargetCore, ref timingApplyTargetSnapshot, ref timingApplyTargetClock);
             timingApplyTargetClock += timingApplyTargetSnapshot.Pattern.CoreSeconds - timingApplyTargetCore.InputTimingOffsetSeconds;
-            timingApplyTargetCore.HandleInput(timingApplyTargetSnapshot.Pattern.Channel, timingApplyTargetClock);
+            timingApplyTargetCore.HandleInput(timingApplyTargetSnapshot.Pattern.ResponseChannel, timingApplyTargetClock);
             timingApplyTargetCore.ApplyRecommendedInputTimingOffset();
             Require(
                 timingApplyTargetSnapshot.TimingRecommendationApplied
@@ -12862,7 +12863,7 @@ namespace GreedLast.Editor
             timingApplyTargetClock += timingApplyTargetSnapshot.Pattern.CoreSeconds
                 + shiftedGoodDelta
                 - timingApplyTargetCore.InputTimingOffsetSeconds;
-            timingApplyTargetCore.HandleInput(timingApplyTargetSnapshot.Pattern.Channel, timingApplyTargetClock);
+            timingApplyTargetCore.HandleInput(timingApplyTargetSnapshot.Pattern.ResponseChannel, timingApplyTargetClock);
             Require(
                 !timingApplyTargetSnapshot.TimingRecommendationApplied,
                 "A newly shifted timing sample must reopen an applied recommendation when the target moves beyond tolerance.");
@@ -12997,7 +12998,7 @@ namespace GreedLast.Editor
                 "The target shortcut must prepare a numeric infinite score milestone one point below completion.");
             StartBufferedPattern(peakScoreShortcutCore, ref peakScoreShortcutSnapshot, ref peakScoreShortcutClock);
             peakScoreShortcutCore.HandleInput(
-                peakScoreShortcutSnapshot.Pattern.Channel,
+                peakScoreShortcutSnapshot.Pattern.ResponseChannel,
                 peakScoreShortcutClock + peakScoreShortcutSnapshot.Pattern.CoreSeconds - peakScoreShortcutCore.InputTimingOffsetSeconds);
             Require(
                 GreedLastRuntimeUi.BuildReviewTargetFeedbackLine(peakScoreShortcutSnapshot).Contains("목표 달성", StringComparison.Ordinal),
@@ -13366,7 +13367,7 @@ namespace GreedLast.Editor
                 }
 
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
                 clock = exactAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, expectedRoute + " bundle inputs must stay exact.");
                 if (i < 2)
@@ -13496,7 +13497,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(core, ref snapshot, ref clock);
             Require(snapshot.ChapterIndex == 3 && snapshot.ActivePattern, "The relic cadence sample must begin chapter three.");
             float firstExactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-            core.HandleInput(snapshot.Pattern.Channel, firstExactAt);
+            core.HandleInput(snapshot.Pattern.ResponseChannel, firstExactAt);
             clock = firstExactAt;
             core.RequestNextPattern(clock += 2f);
             GreedLastTimingType expectedRelicTiming = BuildExpectedRelicTiming(routeChannel);
@@ -13654,7 +13655,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(stableCore, ref stableSnapshot, ref stableClock);
             float goodDelta = (stableSnapshot.Pattern.SuccessWindowSeconds + stableSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             stableCore.HandleInput(
-                stableSnapshot.Pattern.Channel,
+                stableSnapshot.Pattern.ResponseChannel,
                 stableClock + stableSnapshot.Pattern.CoreSeconds + goodDelta - stableCore.InputTimingOffsetSeconds);
             Require(stableSnapshot.LastResult == GreedLastJudgementResult.Good, "The stable break sample must land in the Good window.");
             Require(!stableSnapshot.PerfectBundleIntact, "A Good judgement must break the clean route bundle.");
@@ -13691,7 +13692,7 @@ namespace GreedLast.Editor
             {
                 stableCore.RequestNextPattern(stableClock += 2f);
                 float exactAt = stableClock + stableSnapshot.Pattern.CoreSeconds - stableCore.InputTimingOffsetSeconds;
-                stableCore.HandleInput(stableSnapshot.Pattern.Channel, exactAt);
+                stableCore.HandleInput(stableSnapshot.Pattern.ResponseChannel, exactAt);
                 stableClock = exactAt;
             }
 
@@ -13709,7 +13710,7 @@ namespace GreedLast.Editor
             pressureCore.JumpToDevShortcut(GreedLastDevShortcut.RouteCycle, pressureClock += 0.1f);
             pressureCore.ToggleDevInvincible();
             StartBufferedPattern(pressureCore, ref pressureSnapshot, ref pressureClock);
-            GreedLastRunChannel wrongChannel = pressureSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = pressureSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             pressureCore.HandleInput(
@@ -13844,7 +13845,7 @@ namespace GreedLast.Editor
                     "Escape detail must highlight its active slide-twist-jump validation step.");
 
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
                 clock = exactAt;
                 if (i < 2)
                 {
@@ -13919,7 +13920,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(core, ref snapshot, ref clock);
             Require(snapshot.Pattern.TimingType == GreedLastTimingType.Perfect, "The stable route shortcut must begin with its Perfect representative.");
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.SuccessCount == 1, "The stable route shortcut sample must remain playable.");
 
@@ -13949,7 +13950,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(core, ref snapshot, ref clock);
             Require(snapshot.Pattern.TimingType == GreedLastTimingType.Clutch, "The pressure route shortcut must begin with its Clutch representative.");
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.PressureRouteCounterCount == 1, "The pressure route shortcut must expose its amplified counter payoff.");
         }
@@ -14026,7 +14027,7 @@ namespace GreedLast.Editor
                         + prototypeCoach);
                 string expectedMobileLaneHint = InvokeRuntimeUiLabel(
                     "BuildRunChannelInputHintForMode",
-                    snapshot.Pattern.Channel,
+                    snapshot.Pattern.ResponseChannel,
                     false);
                 string mobileActionCue = InvokeRuntimeUiLabel("BuildActiveActionCueTextForMode", snapshot, false);
                 Require(
@@ -14950,7 +14951,7 @@ namespace GreedLast.Editor
                         "A successful twist must leave a tall, angled side-pass trail.");
                 }
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
                 clock = exactAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Every avoidance-cycle sample must remain playable.");
                 string exactJudgementFeedback = InvokeRuntimeUiLabel("BuildJudgementFeedbackText", snapshot);
@@ -15009,7 +15010,7 @@ namespace GreedLast.Editor
                     "The avoidance-cycle shortcut label must continue through both rotation-corridor samples.");
 
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
                 clock = exactAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Every forced rotation-corridor sample must be playable with exact input.");
                 Require(
@@ -15077,7 +15078,7 @@ namespace GreedLast.Editor
                     ? "보정 체력 +" + snapshot.GoodHealthGainPreview : "회복 상한", StringComparison.Ordinal),
                 "The stable route coach must preview available Good recovery rather than promise capped healing.");
 
-            GreedLastRunChannel wrongChannel = snapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = snapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             float missAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
@@ -15090,7 +15091,7 @@ namespace GreedLast.Editor
             Require(snapshot.ActivePattern && snapshot.Pattern.Prompt.Contains("[복구]", StringComparison.Ordinal), "The stable route must retain the recovery breather after a miss.");
             float goodDelta = (snapshot.Pattern.SuccessWindowSeconds + snapshot.Pattern.GoodWindowSeconds) * 0.5f;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds + goodDelta - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Good, "The stable route contract must trigger in the Good band.");
             Require(snapshot.Health == damagedHealth + GreedLastRunCore.StableRouteGoodHealthBonus, "Stable-route Good must restore one damaged health point.");
@@ -15160,7 +15161,7 @@ namespace GreedLast.Editor
                 "The active variation route cue must preview its focus route payoff.");
 
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success && snapshot.LastCenterHit, "Variation-route Offbeat must resolve at the center line.");
             Require(snapshot.VariationRouteFlowCount == 1, "Variation-route flow must increment its dedicated count exactly once.");
@@ -15226,7 +15227,7 @@ namespace GreedLast.Editor
 
             int scoreBeforeCounter = snapshot.Score;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success && snapshot.LastCenterHit, "Pressure-route Clutch must resolve at the center line.");
             Require(snapshot.PressureRouteCounterCount == 1, "Pressure-route counter must increment its dedicated count exactly once.");
@@ -15425,14 +15426,14 @@ namespace GreedLast.Editor
 
             float goodDelta = (snapshot.Pattern.SuccessWindowSeconds + snapshot.Pattern.GoodWindowSeconds) * 0.5f;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 clock + snapshot.Pattern.CoreSeconds + goodDelta - core.InputTimingOffsetSeconds);
             for (int i = 0; i < 2; i += 1)
             {
                 core.RequestNextPattern(clock += 2f);
                 Require(snapshot.ActivePattern, "The mixed segment recommendation test must expose all chapter traps.");
                 core.HandleInput(
-                    snapshot.Pattern.Channel,
+                    snapshot.Pattern.ResponseChannel,
                     clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds);
             }
 
@@ -15502,7 +15503,7 @@ namespace GreedLast.Editor
 
                 Require(snapshot.ActivePattern && snapshot.Pattern.IsValid, context + " must expose all three traps.");
                 float inputAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, inputAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, inputAt);
                 clock = inputAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, context + " exact input must succeed.");
             }
@@ -15520,7 +15521,7 @@ namespace GreedLast.Editor
             Require(snapshot.ActivePattern, "The chapter Good test must start its first trap.");
             float goodDelta = (snapshot.Pattern.SuccessWindowSeconds + snapshot.Pattern.GoodWindowSeconds) * 0.5f;
             core.HandleInput(
-                snapshot.Pattern.Channel,
+                snapshot.Pattern.ResponseChannel,
                 now + 3f + snapshot.Pattern.CoreSeconds + goodDelta - core.InputTimingOffsetSeconds);
             Require(snapshot.LastResult == GreedLastJudgementResult.Good, "The chapter Good test must resolve inside the Good band.");
             GreedLastRunAttemptRecord record = core.CreateNormalAttemptRecord(GreedLastRunAttemptOutcome.Abandoned);
@@ -16987,7 +16988,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(chainCore, ref chainSnapshot, ref clock);
             int comboBeforeExact = chainSnapshot.Combo;
             float exactAt = clock + chainSnapshot.Pattern.CoreSeconds - chainCore.InputTimingOffsetSeconds;
-            chainCore.HandleInput(chainSnapshot.Pattern.Channel, exactAt);
+            chainCore.HandleInput(chainSnapshot.Pattern.ResponseChannel, exactAt);
             Require(chainSnapshot.LastResult == GreedLastJudgementResult.Success, "The restored chain test must resolve an exact input.");
             Require(chainSnapshot.Combo == comboBeforeExact + 3, "Three restored chain stacks must add three combo on exact input.");
         }
@@ -17005,7 +17006,7 @@ namespace GreedLast.Editor
             Require(stableSnapshot.ActiveRouteProfile == "안정 루트", "Infinite mode must expose the restored stable route as live state.");
             StartBufferedPattern(stableCore, ref stableSnapshot, ref stableClock);
             Require(stableSnapshot.Pattern.Prompt.Contains("[안정]", StringComparison.Ordinal), "Restored stable loadouts must mark their infinite traps.");
-            GreedLastRunChannel wrongChannel = stableSnapshot.Pattern.Channel == GreedLastRunChannel.Left
+            GreedLastRunChannel wrongChannel = stableSnapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right
                 : GreedLastRunChannel.Left;
             float missAt = stableClock + stableSnapshot.Pattern.CoreSeconds - stableCore.InputTimingOffsetSeconds;
@@ -17015,7 +17016,7 @@ namespace GreedLast.Editor
             stableCore.RequestNextPattern(stableClock += 2f);
             float goodDelta = (stableSnapshot.Pattern.SuccessWindowSeconds + stableSnapshot.Pattern.GoodWindowSeconds) * 0.5f;
             stableCore.HandleInput(
-                stableSnapshot.Pattern.Channel,
+                stableSnapshot.Pattern.ResponseChannel,
                 stableClock + stableSnapshot.Pattern.CoreSeconds + goodDelta - stableCore.InputTimingOffsetSeconds);
             Require(
                 stableSnapshot.StableRouteRecoveryCount == 1
@@ -17074,7 +17075,7 @@ namespace GreedLast.Editor
                 Require(snapshot.ActivePattern, context + " must keep an active trap while searching for its route axis.");
                 bool targetFound = snapshot.Pattern.TimingType == targetTiming;
                 float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(snapshot.Pattern.Channel, exactAt);
+                core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
                 clock = exactAt;
                 Require(snapshot.LastResult == GreedLastJudgementResult.Success, context + " search inputs must stay exact.");
                 if (targetFound)
@@ -17110,7 +17111,7 @@ namespace GreedLast.Editor
             StartBufferedPattern(core, ref snapshot, ref clock);
             int comboBeforeExact = snapshot.Combo;
             float exactAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-            core.HandleInput(snapshot.Pattern.Channel, exactAt);
+            core.HandleInput(snapshot.Pattern.ResponseChannel, exactAt);
             Require(snapshot.LastResult == GreedLastJudgementResult.Success, "Prepared infinite mode must resolve its first exact input.");
             Require(snapshot.Combo == comboBeforeExact + 3, "The prepared chain gift and Pharaoh relic must amplify exact combo together.");
             Require(snapshot.JudgementText.Contains("파라오의 각인", StringComparison.Ordinal), "Exact feedback must name the run-local relic that amplified the chain.");
@@ -17126,7 +17127,7 @@ namespace GreedLast.Editor
             Require(startingHealth >= 5, "Three stored survival gifts must enter infinite mode at the health bonus cap.");
             for (int i = 0; i < 2; i += 1)
             {
-                GreedLastRunChannel wrongChannel = snapshot.Pattern.Channel == GreedLastRunChannel.Left
+                GreedLastRunChannel wrongChannel = snapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                     ? GreedLastRunChannel.Right
                     : GreedLastRunChannel.Left;
                 float missAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
@@ -17139,7 +17140,7 @@ namespace GreedLast.Editor
 
             float goodDelta = (snapshot.Pattern.SuccessWindowSeconds + snapshot.Pattern.GoodWindowSeconds) * 0.5f;
             float goodAt = clock + snapshot.Pattern.CoreSeconds + goodDelta - core.InputTimingOffsetSeconds;
-            core.HandleInput(snapshot.Pattern.Channel, goodAt);
+            core.HandleInput(snapshot.Pattern.ResponseChannel, goodAt);
             clock = goodAt;
             Require(snapshot.LastResult == GreedLastJudgementResult.Good, "The stored survival test must finish inside the Good band.");
             Require(snapshot.Health == startingHealth, "Three survival stacks must recover two health on Good and restore the entry cap.");
@@ -17169,7 +17170,7 @@ namespace GreedLast.Editor
 
             for (int i = 0; i < 3; i += 1)
             {
-                GreedLastRunChannel wrongChannel = snapshot.Pattern.Channel == GreedLastRunChannel.Left
+                GreedLastRunChannel wrongChannel = snapshot.Pattern.ResponseChannel == GreedLastRunChannel.Left
                     ? GreedLastRunChannel.Right
                     : GreedLastRunChannel.Left;
                 float missAt = clock + snapshot.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;

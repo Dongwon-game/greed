@@ -189,7 +189,7 @@ namespace GreedLast.Editor
                             && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
                         {
                             ui.RecordLaneInput(run.Pattern.Channel);
-                            core.HandleInput(run.Pattern.Channel, now);
+                            core.HandleInput(run.Pattern.ResponseChannel, now);
                         }
                     }
                     updateUi();

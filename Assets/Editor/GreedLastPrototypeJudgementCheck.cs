@@ -92,14 +92,14 @@ namespace GreedLast.Editor
                     FreshPractice();
                     GreedLastRunSnapshot before = run;
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     Require(run.LastResult == GreedLastJudgementResult.Success
                         && run.LastJudgementScoreGain == run.Score - before.Score
                         && run.LastJudgementScoreGain > 0,
                         "Exact feedback must carry the actual reward, including bonuses.");
                     Require(run.HasJudgedInputTiming && Mathf.Abs(run.LastInputTimingDeltaSeconds - delta) < 0.001f,
                         "Small exact offsets must remain available even when the human-readable message says exact.");
-                    Require(run.LastJudgedInputChannel == before.Pattern.Channel,
+                    Require(run.LastJudgedInputChannel == before.Pattern.ResponseChannel,
                         "Every exact judgement must retain the actual input channel.");
                     if (Mathf.Abs(delta) <= 0.02f) Require(string.IsNullOrEmpty(Nudge(run)),
                         "Tiny exact timing must not produce unnecessary correction coaching.");
@@ -185,7 +185,7 @@ namespace GreedLast.Editor
                 float goodDelta = (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                 int goodScoreBefore = run.Score;
                 clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - goodDelta;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Good && run.HasJudgedInputTiming
                     && Mathf.Abs(run.LastInputTimingDeltaSeconds + goodDelta) < 0.001f
                     && run.LastJudgementScoreGain == run.Score - goodScoreBefore,
@@ -204,10 +204,10 @@ namespace GreedLast.Editor
                         for (int preceding = 0; preceding < stage; preceding++)
                         {
                             clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                            core.HandleInput(run.Pattern.Channel, clock);
+                            core.HandleInput(run.Pattern.ResponseChannel, clock);
                             core.RequestNextPattern(clock += 2f);
                         }
-                        GreedLastRunChannel targetChannel = run.Pattern.Channel;
+                        GreedLastRunChannel targetChannel = run.Pattern.ResponseChannel;
                         if (wrong == targetChannel) continue;
                         int history = Read<int>(ui, "judgementHistoryCount");
                         presentSnapshot = false;
@@ -254,7 +254,7 @@ namespace GreedLast.Editor
                     float delta = direction * (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                     presentSnapshot = false;
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
                         .SetValue(core, "Changed Good wording\n" + (direction < 0f ? "늦음 999ms" : "빠름 999ms"));
                     PublishAtClock();
@@ -299,7 +299,7 @@ namespace GreedLast.Editor
                     float delta = direction * (run.Pattern.GoodWindowSeconds + 0.04f);
                     presentSnapshot = false;
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds + delta;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     typeof(GreedLastRunCore).GetField("judgementText", BindingFlags.Instance | BindingFlags.NonPublic)
                         .SetValue(core, "Changed Miss wording\n" + (direction < 0f ? "늦음 999ms" : "빠름 999ms"));
                     PublishAtClock();
@@ -347,7 +347,7 @@ namespace GreedLast.Editor
                 VerifyExactBundleRecovery(core, ui, ref run, ref clock);
                 FreshPractice();
                 clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 core.TogglePause(clock);
                 core.TogglePause(clock);
                 string countdownText = Read<Text>(ui, "judgementFeedbackText").text;
@@ -384,13 +384,13 @@ namespace GreedLast.Editor
                 else
                 {
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                 }
             }
             Require(run.ActivePattern && run.ActiveRouteProfile == "안정 루트", "Recovery needs a real selected stable route.");
             int health = run.Health;
             clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
-            core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+            core.HandleInput(run.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
             Require(run.LastJudgementHealthChange == -1 && run.Health == health - 1,
                 "Wrong-channel payload must match the real damage.");
@@ -399,7 +399,7 @@ namespace GreedLast.Editor
             GreedLastRunSnapshot before = run;
             float delta = (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
             clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta;
-            core.HandleInput(run.Pattern.Channel, clock);
+            core.HandleInput(run.Pattern.ResponseChannel, clock);
             Require(run.LastResult == GreedLastJudgementResult.Good
                 && run.LastJudgementHealthChange == run.Health - before.Health
                 && run.LastJudgementHealthChange > 0,
@@ -423,7 +423,7 @@ namespace GreedLast.Editor
                 else
                 {
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds - run.ElapsedSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                 }
             }
             GreedLastRunRecord record = core.CreateRunRecord();
@@ -432,14 +432,14 @@ namespace GreedLast.Editor
             core.Tick(clock += 2f);
             core.Tick(clock += 1f);
             clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-            core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+            core.HandleInput(run.Pattern.ResponseChannel == GreedLastRunChannel.Left
                 ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
             for (int trap = 0; trap < 5; trap++)
             {
                 core.RequestNextPattern(clock += 2f);
                 GreedLastRunSnapshot before = run;
                 clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 if (trap < 4) continue;
                 Text feedback = Read<Text>(ui, "judgementFeedbackText");
                 Require(run.LastResult == GreedLastJudgementResult.Success && run.LastJudgementHealthChange > 0
@@ -522,7 +522,7 @@ namespace GreedLast.Editor
                 Require(Read<int>(ui, "judgementHistoryCount") == historyCount
                     && run.SuccessCount + run.GoodCount + run.MissCount == 0,
                     "Waiting copy and F11 must not create a judgement before an actual input.");
-                core.HandleInput(run.Pattern.Channel, tapAt);
+                core.HandleInput(run.Pattern.ResponseChannel, tapAt);
                 Require(run.LastResult == (waiting ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss)
                     && run.SuccessCount + run.GoodCount + run.MissCount == 1,
                     "Waiting/missed guide state must agree with the one actual input outcome.");

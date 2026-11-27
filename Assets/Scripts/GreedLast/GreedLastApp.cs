@@ -24480,12 +24480,12 @@ namespace GreedLast
                     ? snapshot.JudgementText
                     : snapshot.ActivePattern && snapshot.Pattern.IsValid
                         ? FormatTrapPrompt(snapshot)
-                            + "\n" + FormatChannel(snapshot.Pattern.Channel)
+                            + "\n입력 " + FormatChannel(snapshot.Pattern.ResponseChannel)
                             + " · " + BuildRunnerResponseLabel(snapshot.Pattern)
                             + " · " + FormatTimingType(snapshot.Pattern.TimingType)
                             + "\n" + BuildPracticeTimingLesson(snapshot.Pattern)
                             + "\n" + BuildLiveRunCoachLine(snapshot)
-                        : "좌·중·우는 이동이 아니라 위험 대응 채널입니다.";
+                        : "옆 함정은 반대 방향으로 피하고, 정면 함정은 중앙으로 대응하세요.";
                 return;
             }
 
@@ -24940,7 +24940,7 @@ namespace GreedLast
                 case GreedLastTimingType.Offbeat:
                     return responseCue + ": 흔들림보다 도착 순간에 입력" + payoffSuffix;
                 default:
-                    return "같은 채널 신호를 기준선에 맞춰 입력";
+                    return "회피 방향을 도착 순간에 입력";
             }
         }
 
@@ -24966,7 +24966,7 @@ namespace GreedLast
             };
             string title = (keyboardHints ? "연습 " : "기초연습 ") + $"{step + 1}/3 · ";
             if (keyboardHints && snapshot.ActivePattern && snapshot.Pattern.IsValid)
-                title += BuildRunChannelInputHintForMode(snapshot.Pattern.Channel, true) + " · ";
+                title += BuildRunChannelInputHintForMode(snapshot.Pattern.ResponseChannel, true) + " · ";
             return title + lesson;
         }
 
@@ -24975,7 +24975,7 @@ namespace GreedLast
             switch (BuildPracticePresentedStep(snapshot))
             {
                 case 0:
-                    return "목표: 바닥→↑점프 / 정박 중앙 회피 / 정확→집중\n";
+                    return "목표: 바닥→↑점프 / 정박 도착 순간 / 정확→집중\n";
                 case 1:
                     return "목표: 상단→↓숙이기 / 클러치 안쪽 입력 / 정확→반격\n";
                 default:
@@ -25097,11 +25097,9 @@ namespace GreedLast
         private static string BuildFirstPracticeInputGuide(bool isMobilePlatform)
         {
             return (isMobilePlatform ? string.Empty : "Enter 또는 연습 버튼으로 시작하세요.\n")
-                + "위험이 오는 채널과 같은 좌 · 중 · 우를 누르세요."
-                + (isMobilePlatform ? "\n화면의 좌 · 중 · 우 영역으로 대응합니다."
-                    : "\nA/← · S/↓ · D/→ 또는 해당 영역 클릭")
-                + (isMobilePlatform ? "\n좌우 이동이 아닌 대응입니다. 판정선에 맞춰 누르세요."
-                    : "\n판정선에 맞춰 누르면 좌우 이동 대신 회피 동작이 나옵니다.");
+                + (isMobilePlatform ? "오른쪽 함정은 왼쪽, 왼쪽 함정은 오른쪽 영역을 누르세요.\n정면 함정은 중앙을 누르세요."
+                    : "오른쪽 함정은 A/←, 왼쪽 함정은 D/→로 피하세요.\n정면 함정은 S/↓. 해당 방향을 클릭해도 됩니다.")
+                + "\n함정이 닿는 순간에 입력하세요.";
         }
 
         private static string BuildPreparedInfiniteDisplayDetail(string detail)
@@ -29481,14 +29479,14 @@ namespace GreedLast
                 return -1;
             }
 
-            return Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2);
+            return Mathf.Clamp((int)snapshot.Pattern.ResponseChannel - 1, 0, 2);
         }
 
         private static bool ShouldHighlightActivePatternLane(GreedLastRunSnapshot snapshot, GreedLastRunChannel laneChannel)
         {
             return ShouldShowActivePatternVisuals(snapshot)
                 && snapshot.Pattern.IsValid
-                && snapshot.Pattern.Channel == laneChannel;
+                && snapshot.Pattern.ResponseChannel == laneChannel;
         }
 
         private static bool IsLeftLaneKeyHeld()
@@ -30061,10 +30059,8 @@ namespace GreedLast
 
         private static float BuildTargetLaneReadinessGlow(int laneIndex, GreedLastRunSnapshot snapshot)
         {
-            if (!snapshot.ActivePattern
-                || !snapshot.Pattern.IsValid
-                || !IsLiveRunControlWindow(snapshot)
-                || laneIndex != Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2))
+            int target = BuildActiveRunTargetLaneIndex(snapshot);
+            if (target < 0 || laneIndex != target)
             {
                 return 0f;
             }
@@ -31799,7 +31795,8 @@ namespace GreedLast
                     && !latestRunSnapshot.ChoiceActive && runnerResponseUntil > Time.unscaledTime
                     ? Mathf.InverseLerp(runnerResponseStartedAt, runnerResponseUntil, Time.unscaledTime) : 0f;
                 runCorridor.Render(latestRunSnapshot, rect.localEulerAngles.z, Screen.width, Screen.height, advancing,
-                    (GreedLastAvoidanceType)runnerResponseType, responseProgress, runnerResponseDirection,
+                    (GreedLastAvoidanceType)runnerResponseType, responseProgress,
+                    runnerResponseChannel == GreedLastRunChannel.Center ? 0f : runnerResponseDirection,
                     runnerResponseResult == GreedLastJudgementResult.Miss);
                 runCorridorImage.texture = runCorridor.Texture;
                 float brightness = latestRunSnapshot.Paused || (latestRunSnapshot.Stopped && !IsPracticeFinishMotionVisible())
@@ -45359,7 +45356,7 @@ namespace GreedLast
             }
 
             threeActionExactBurstUntil = Time.unscaledTime + ThreeActionExactBurstDuration;
-            threeActionExactBurstX = BuildRunChannelAnchorX(feedbackPattern.Channel);
+            threeActionExactBurstX = BuildRunChannelAnchorX(feedbackPattern.ResponseChannel);
             threeActionExactBurstY = judgementLine != null
                 ? Mathf.Clamp01(judgementLine.rectTransform.anchorMin.y + 0.012f)
                 : 0.22f;
@@ -45414,7 +45411,7 @@ namespace GreedLast
             }
 
             runnerResponseType = BuildRunnerResponseType(feedbackPattern);
-            runnerResponseChannel = feedbackPattern.Channel;
+            runnerResponseChannel = feedbackPattern.ResponseChannel;
             runnerResponseWasRotationPattern = GreedLastRunCore.IsRotationPattern(feedbackPattern);
             if (snapshot.MissReason == "wrong_channel"
                 && snapshot.LastJudgedInputChannel != GreedLastRunChannel.None)
@@ -45424,7 +45421,7 @@ namespace GreedLast
 
             runnerResponseResult = snapshot.LastResult;
             // Keep a central-channel lean stable through the response's body, picture and trail.
-            runnerResponseDirection = BuildRunnerActionTrailDirection(runnerResponseChannel);
+            runnerResponseDirection = BuildRotationResponseDirection(runnerResponseChannel);
             if (Mathf.Approximately(runnerResponseDirection, 0f))
                 runnerResponseDirection = Mathf.Sin(beatPhase * Mathf.PI * 2f) < 0f ? -1f : 1f;
             runnerResponseStartedAt = Time.unscaledTime;
@@ -45459,7 +45456,7 @@ namespace GreedLast
                     true,
                     BuildLaneJudgementTagLabel(GreedLastJudgementResult.Miss, false));
                 ArmLaneJudgementPulse(
-                    feedbackPattern.Channel,
+                    feedbackPattern.ResponseChannel,
                     GreedLastJudgementResult.None,
                     new Color32(255, 238, 181, 225),
                     false,
@@ -45472,7 +45469,7 @@ namespace GreedLast
                 ? Color32.Lerp(GetJudgementPulseColor(snapshot), GetChoiceProfilePulseColor(snapshot.ActiveChoiceProfile), 0.42f)
                 : GetJudgementPulseColor(snapshot);
             ArmLaneJudgementPulse(
-                feedbackPattern.Channel,
+                feedbackPattern.ResponseChannel,
                 snapshot.LastResult,
                 pulseColor,
                 snapshot.LastResult == GreedLastJudgementResult.Miss,
@@ -45583,7 +45580,7 @@ namespace GreedLast
             float hitSeconds = Mathf.Max(0.01f, feedbackPattern.HitSeconds);
             float coreProgress = Mathf.Clamp01(feedbackPattern.CoreSeconds / hitSeconds);
             GreedLastRunChannel traceChannel = snapshot.LastJudgedInputChannel != GreedLastRunChannel.None
-                ? snapshot.LastJudgedInputChannel : feedbackPattern.Channel;
+                ? snapshot.LastJudgedInputChannel : feedbackPattern.ResponseChannel;
             inputTimingTraceX = GetChannelAnchorX(traceChannel);
             inputTimingTraceY = BuildTrapTimingY(feedbackPattern,
                 Mathf.Clamp01(coreProgress + signedDeltaSeconds / hitSeconds), coreProgress);
@@ -45758,7 +45755,7 @@ namespace GreedLast
             if (timingGuideText != null) timingGuideText.text = string.Empty;
             SetJudgementFeedbackText(snapshot);
             judgementFeedbackOffsetX = BuildJudgementFeedbackLaneOffsetX(
-                snapshot.Pattern.Channel,
+                BuildJudgementFeedbackPattern(snapshot).ResponseChannel,
                 snapshot.LastResult,
                 reviewTargetAchievementJustReached);
             ApplyJudgementFeedbackOffset(1f);
@@ -46234,7 +46231,7 @@ namespace GreedLast
         {
             return snapshot.LastJudgedInputChannel == GreedLastRunChannel.None
                 ? "채널 오류" : FormatChannel(snapshot.LastJudgedInputChannel)
-                    + " 입력 / 정답 " + FormatChannel(pattern.Channel);
+                    + " 입력 / 정답 " + FormatChannel(pattern.ResponseChannel);
         }
 
         private static string BuildJudgementBundleHeader(GreedLastRunSnapshot snapshot)
@@ -46298,7 +46295,7 @@ namespace GreedLast
                     : devToolsEnabled ? "정답키 " + rotationHint : "정답 " + rotationHint;
             }
 
-            return BuildTargetChannelInputFeedback(feedbackPattern.Channel, devToolsEnabled);
+            return BuildTargetChannelInputFeedback(feedbackPattern.ResponseChannel, devToolsEnabled);
         }
 
         private static string BuildTargetChannelInputFeedback(GreedLastRunChannel channel, bool devToolsEnabled)
@@ -48229,7 +48226,7 @@ namespace GreedLast
             string practicePrefix = snapshot.PracticeMode
                 ? "연습 " + Mathf.Clamp(snapshot.ChapterProgress + 1, 1, snapshot.ChapterTarget) + "/" + snapshot.ChapterTarget + " · "
                 : string.Empty;
-            return practicePrefix + FormatChannel(snapshot.Pattern.Channel)
+            return practicePrefix + "입력 " + FormatChannel(snapshot.Pattern.ResponseChannel)
                 + " / " + BuildTrapResponseCueLabel(snapshot.Pattern)
                 + " / " + timingWord
                 + " / " + windowText;
@@ -48567,7 +48564,7 @@ namespace GreedLast
         {
             if (!GreedLastRunCore.IsRotationPattern(pattern))
             {
-                return BuildRunChannelInputHintForMode(pattern.Channel, devToolsEnabled);
+                return BuildRunChannelInputHintForMode(pattern.ResponseChannel, devToolsEnabled);
             }
 
             if (devToolsEnabled)
@@ -48592,7 +48589,7 @@ namespace GreedLast
         {
             // Keyboard lane inputs work in PC release builds. Q/E remain development-only.
             return !isMobilePlatform && !devToolsEnabled
-                ? BuildRunChannelInputHintForMode(pattern.Channel, true)
+                ? BuildRunChannelInputHintForMode(pattern.ResponseChannel, true)
                 : BuildActiveActionCueInputHintForCapabilities(pattern, devToolsEnabled, rotationTiltAvailable);
         }
 
@@ -48611,7 +48608,7 @@ namespace GreedLast
         {
             if (!GreedLastRunCore.IsRotationPattern(pattern))
             {
-                return BuildRunChannelInputHintForMode(pattern.Channel, devToolsEnabled);
+                return BuildRunChannelInputHintForMode(pattern.ResponseChannel, devToolsEnabled);
             }
 
             if (!devToolsEnabled && !rotationTiltAvailable)
@@ -49151,7 +49148,7 @@ namespace GreedLast
             if (cleanHeader)
             {
                 int target = snapshot.ActivePattern && !snapshot.Paused && !snapshot.CountdownActive && !snapshot.Stopped
-                    ? Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2) : -1;
+                    ? Mathf.Clamp((int)snapshot.Pattern.ResponseChannel - 1, 0, 2) : -1;
                 SetLaneLabelMode(36, false);
                 for (int i = 0; i < laneLabelTexts.Length; i++)
                 {
@@ -49173,7 +49170,7 @@ namespace GreedLast
                 return;
             }
 
-            int targetIndex = Mathf.Clamp((int)snapshot.Pattern.Channel - 1, 0, 2);
+            int targetIndex = Mathf.Clamp((int)snapshot.Pattern.ResponseChannel - 1, 0, 2);
             string timingHint = BuildLaneTimingHint(snapshot);
             string responseHint = BuildLaneResponseHint(snapshot);
             laneLabelTexts[0].text = targetIndex == 0

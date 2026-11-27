@@ -48,7 +48,7 @@ namespace GreedLast.Editor
                 Require(run.ActivePattern, "The action status fixture must reach a real first trap.");
                 Measure("before-progress", run, "");
                 clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.SuccessCount == 1 && run.ChapterProgress == 1 && run.PerfectBundleIntact,
                     "The live status control must follow an actual first exact input.");
                 Measure("actual-first-exact", run, expectedLabels[1]);
@@ -77,7 +77,7 @@ namespace GreedLast.Editor
                 core.Tick(clock += 2f);
                 float goodDelta = (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                 clock += run.Pattern.CoreSeconds + goodDelta - run.ElapsedSeconds - core.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Good && !run.PerfectBundleIntact,
                     "An actual Good must provide the broken-bundle control.");
                 Measure("broken-bundle", run, "동작 완주 중단");

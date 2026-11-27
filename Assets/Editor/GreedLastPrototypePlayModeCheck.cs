@@ -987,7 +987,7 @@ namespace GreedLast.Editor
                     else if (run.ActivePattern && !run.CountdownActive
                         && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
                     {
-                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1];
+                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1];
                         int beforeInput = report.judgements;
                         if (beforeInput % 2 == 0) yield return ClickMouse(lane);
                         else yield return TapTouch(lane);
@@ -1133,7 +1133,7 @@ namespace GreedLast.Editor
                     yield return null;
                 }
                 GreedLastPatternModel pattern = run.Pattern;
-                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)pattern.Channel - 1]);
+                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)pattern.ResponseChannel - 1]);
                 Require(run.GoodCount == 1 && run.MissCount == 0 && run.LastResult == GreedLastJudgementResult.Good
                     && run.HasJudgedInputTiming && run.LastInputTimingDeltaSeconds > pattern.SuccessWindowSeconds
                     && run.LastInputTimingDeltaSeconds <= pattern.GoodWindowSeconds,
@@ -1275,7 +1275,7 @@ namespace GreedLast.Editor
                             && run.ElapsedSeconds < frozen.ElapsedSeconds && run.MissCount == frozen.MissCount,
                             "Orphan contact recovery must preserve the same trap with the normal lead-in.");
 
-                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1];
+                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1];
                         point = ScreenPoint(lane);
                         Require(lane.isActiveAndEnabled && lane.IsInteractable() && RaycastButton(point) == lane,
                             "Orphan lane contacts must target the active lane through the actual raycast.");
@@ -1285,7 +1285,7 @@ namespace GreedLast.Editor
                         {
                             yield return TouchFrame(TouchAt(121 + phase, point, firstPhases[phase]));
                             Require(report.judgements == judgements
-                                && Read<HashSet<int>[]>(ui, "laneHeldPointers")[(int)run.Pattern.Channel - 1].Count == 0,
+                                && Read<HashSet<int>[]>(ui, "laneHeldPointers")[(int)run.Pattern.ResponseChannel - 1].Count == 0,
                                 "A lane touch first reported without Began must not judge or register a hold: "
                                     + $"controls={controls}, phase={firstPhases[phase]}, judgements={report.judgements}/{judgements}.");
                             if (firstPhases[phase] != TouchPhase.Ended)
@@ -1717,7 +1717,7 @@ namespace GreedLast.Editor
                         int frame = Time.frameCount;
                         Require(Read<bool>(ui, "lastActivePatternVisual") && Read<bool>(ui, "targetCuePlayed"),
                             "The first engine trap must have presented both cue states before LateUpdate.");
-                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                        Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                         Require(!run.ActivePattern && run.SuccessCount == 1 && !run.Stopped,
                             "Real-time engine input must resolve the first exact judgement.");
                         Require(!Read<bool>(ui, "lastActivePatternVisual") && !Read<bool>(ui, "targetCuePlayed"),
@@ -1785,7 +1785,7 @@ namespace GreedLast.Editor
                     core.SnapshotChanged += onSpawn;
                     try
                     {
-                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                        Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                         Require(run.SuccessCount == 2 && run.MissCount == 0,
                             "A fresh visible-trap press must remain exact after the ignored spawn-frame press.");
                         deadline = Time.realtimeSinceStartup + 6f;
@@ -1801,12 +1801,12 @@ namespace GreedLast.Editor
                     report.unseenTrapInputCases++;
                     yield return null;
                     GreedLastRunSnapshot visible = run;
-                    GreedLastRunChannel wrong = visible.Pattern.Channel == GreedLastRunChannel.Left
+                    GreedLastRunChannel wrong = visible.Pattern.ResponseChannel == GreedLastRunChannel.Left
                         ? GreedLastRunChannel.Center : GreedLastRunChannel.Left;
                     Call(app, "HandleRunChannelInput", wrong);
                     Require(run.MissCount == visible.MissCount + 1 && run.Health == visible.Health - 1,
                         "Once the trap has been presented, its first wrong press must retain the existing damage rule.");
-                    Call(app, "HandleRunChannelInput", visible.Pattern.Channel);
+                    Call(app, "HandleRunChannelInput", visible.Pattern.ResponseChannel);
                     Require(run.MissCount == visible.MissCount + 1 && run.SuccessCount == visible.SuccessCount
                         && run.Health == visible.Health - 1,
                         "A later correct press must not overwrite the visible trap's first wrong input.");
@@ -1841,7 +1841,7 @@ namespace GreedLast.Editor
                                     "Pointer boundary setup must reach a visible trap through real engine frames.");
                                 yield return null;
                             }
-                            Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                            Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                             Require(run.SuccessCount == 1 && !run.ActivePattern,
                                 "The pointer boundary needs the actual gap after a resolved first trap.");
                             yield return WaitSeconds(0.12f);
@@ -1934,7 +1934,7 @@ namespace GreedLast.Editor
                                         "The untouched trap must reach its fresh pointer input window.");
                                     yield return null;
                                 }
-                                Button correct = lanes[(int)run.Pattern.Channel - 1];
+                                Button correct = lanes[(int)run.Pattern.ResponseChannel - 1];
                                 if (device == 0) yield return TapTouch(correct, 131);
                                 else yield return ClickMouse(correct);
                                 Require(run.SuccessCount == 2 && run.MissCount == 0 && run.Health == born.Health,
@@ -1962,7 +1962,7 @@ namespace GreedLast.Editor
             private bool ProbeUnseenTrapPress(string context)
             {
                 GreedLastRunSnapshot before = run;
-                GreedLastRunChannel wrong = before.Pattern.Channel == GreedLastRunChannel.Left
+                GreedLastRunChannel wrong = before.Pattern.ResponseChannel == GreedLastRunChannel.Left
                     ? GreedLastRunChannel.Center : GreedLastRunChannel.Left;
                 Call(app, "HandleRunChannelInput", wrong);
                 bool ignored = run.ActivePattern && run.Pattern.PatternId == before.Pattern.PatternId
@@ -2836,7 +2836,7 @@ namespace GreedLast.Editor
                         yield return WaitForTouchablePattern();
                         Require((int)run.Pattern.AvoidanceType == action + 1,
                             "Each multi-touch case must exercise a different authored avoidance action.");
-                        int correct = (int)run.Pattern.Channel - 1;
+                        int correct = (int)run.Pattern.ResponseChannel - 1;
                         int wrong = (correct + 1) % 3;
                         Button[] lanes = Read<Button[]>(ui, "laneButtons");
                         bool correctFirst = order == 0;
@@ -2891,7 +2891,7 @@ namespace GreedLast.Editor
                         && Array.TrueForAll(Read<bool[]>(ui, "laneHoldActive"), held => !held),
                         "Releasing choice fingers over a live course must not submit a rhythm input.");
                     yield return WaitForTouchablePattern();
-                    Vector2 target = ScreenPoint(lanes[(int)run.Pattern.Channel - 1]);
+                    Vector2 target = ScreenPoint(lanes[(int)run.Pattern.ResponseChannel - 1]);
                     yield return TouchFrame(TouchAt(73, target, TouchPhase.Began));
                     Require(report.judgements == 1 && run.LastResult == GreedLastJudgementResult.Success,
                         "A fresh tap using a released choice finger ID must still judge the real first trap once.");
@@ -2939,7 +2939,7 @@ namespace GreedLast.Editor
                             "Engine GO must retain the same trap in a real pre-start buffer.");
                         GreedLastRunSnapshot before = run;
                         Button[] lanes = Read<Button[]>(ui, "laneButtons");
-                        int target = (int)run.Pattern.Channel - 1;
+                        int target = (int)run.Pattern.ResponseChannel - 1;
                         int prematureLane = detailed ? (target + 1) % 3 : target;
                         if (detailed) yield return TapTouch(lanes[prematureLane]);
                         else yield return ClickMouse(lanes[prematureLane]);
@@ -3014,7 +3014,7 @@ namespace GreedLast.Editor
                             Read<Button>(ui, "nextPatternButton").onClick.Invoke();
                             Call(app, "RequestNextRunPattern");
                             Call(app, "RequestToggleRunPause");
-                            Call(app, "HandleRunChannelInput", before.Pattern.Channel);
+                            Call(app, "HandleRunChannelInput", before.Pattern.ResponseChannel);
                             Call(app, "RequestReturnToLobby");
                             Require(run.Paused && !run.ResumeCountdownActive && state.CurrentState == GreedLastScreenState.RunCoreTest,
                                 "Hidden command callbacks must not resume, judge or abandon the actual run.");
@@ -3097,7 +3097,7 @@ namespace GreedLast.Editor
                                 Require(Time.realtimeSinceStartup < deadline, "First-practice handoff must complete three real engine traps.");
                                 if (run.ActivePattern && !run.CountdownActive
                                     && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds - 0.015f)
-                                    yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                                    yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1]);
                                 yield return null;
                             }
                             Require(run.PracticeMode && run.SuccessCount == 3 && run.GoodCount == 0 && run.MissCount == 0
@@ -3419,7 +3419,7 @@ namespace GreedLast.Editor
                                     "The real first chapter must reach its node choice without clock edits or shortcuts.");
                                 if (run.SuccessCount + run.GoodCount < 2 && run.ActivePattern && !run.CountdownActive
                                     && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
-                                    yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                                    yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1]);
                                 yield return null;
                             }
                         }
@@ -4008,7 +4008,7 @@ namespace GreedLast.Editor
                             }
                             var before = run;
                             int expected = miss ? -1 : gifts > 0 ? 2 : inputIndex == 0 ? 1 : 0;
-                            int lane = (int)run.Pattern.Channel - 1;
+                            int lane = (int)run.Pattern.ResponseChannel - 1;
                             if (miss) lane = (lane + 1) % 3;
                             yield return TapTouch(Read<Button[]>(ui, "laneButtons")[lane]);
                             Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good)
@@ -4060,7 +4060,7 @@ namespace GreedLast.Editor
                             for (int hit = 0; hit < 2; hit++)
                             {
                                 yield return WaitForTouchablePattern();
-                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                                yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1]);
                                 Require(run.LastResult == GreedLastJudgementResult.Success, "Retained-chain setup needs two real successful taps.");
                             }
                         float deadline = Time.realtimeSinceStartup + 9f;
@@ -4071,7 +4071,7 @@ namespace GreedLast.Editor
                             yield return null;
                         }
                         var before = run;
-                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                        yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1]);
                         yield return null;
                         Require(run.LastResult == GreedLastJudgementResult.Good && run.FocusStateActive
                             && run.LastJudgementFocusStateExtensionSeconds == 0f,
@@ -4224,7 +4224,7 @@ namespace GreedLast.Editor
                     else if (run.ActivePattern && !run.CountdownActive && !run.Paused
                         && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
                     {
-                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1];
+                        Button lane = Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1];
                         int before = report.judgements;
                         if (heldForClear)
                         {
@@ -4340,7 +4340,7 @@ namespace GreedLast.Editor
                         if (inputs < targetInputs && run.ActivePattern && !run.CountdownActive
                             && run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds)
                         {
-                            yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.Channel - 1]);
+                            yield return TapTouch(Read<Button[]>(ui, "laneButtons")[(int)run.Pattern.ResponseChannel - 1]);
                             inputs++;
                             Require(run.LastResult == GreedLastJudgementResult.Success,
                                 "The real-time review fixture must earn exact responses through actual EventSystem input.");

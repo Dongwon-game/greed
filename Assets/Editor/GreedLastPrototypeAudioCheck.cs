@@ -530,7 +530,7 @@ namespace GreedLast.Editor
                     ui.RenderRun(run);
                     Call(ui, "UpdateRunTimingVisuals");
                     Require(Read<bool>(ui, "targetCuePlayed"), "The first timing cue must reach its played state.");
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     ui.RenderRun(run);
                     Require(!run.ActivePattern && run.SuccessCount == 1,
                         "The publication fixture must resolve one real core judgement.");

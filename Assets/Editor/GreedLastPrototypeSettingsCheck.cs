@@ -166,7 +166,7 @@ namespace GreedLast.Editor
                     core.Tick(clock += 2f);
                     core.Tick(clock += 1f);
                     Require(run.ActivePattern, "Settings recovery needs an active practice trap.");
-                    core.HandleInput(run.Pattern.Channel, clock + run.Pattern.CoreSeconds - expected);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock + run.Pattern.CoreSeconds - expected);
                     Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1,
                         "Recovered calibration must still allow an exact real-core judgement.");
                     int before = publications;

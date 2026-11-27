@@ -111,7 +111,7 @@ namespace GreedLast.Editor
                     Advance(Mathf.Max(0f, untilInput));
                     var before = run;
                     bool expectedRise = preview(before);
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     Require(run.LastResult == GreedLastJudgementResult.Success && !run.Stopped,
                         "Threat preview controls must keep all 36 actual exact inputs per transient core."
                             + $" mode={mode}, input={input}, result={run.LastResult}, ignore={run.IgnoreReason}, miss={run.MissReason},"
@@ -235,12 +235,12 @@ namespace GreedLast.Editor
                 timingVisits[timing]++;
                 avoidanceVisits[avoidance]++;
                 float inputDelta = run.CoreDeltaSeconds + run.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == input + 1
                     && run.GoodCount == 0 && run.MissCount == 0 && run.Combo >= before.Combo + 1
                     && run.LastJudgementScoreGain == run.Score - before.Score
                     && run.LastJudgementHealthChange == run.Health - before.Health
-                    && run.HasJudgedInputTiming && run.LastJudgedInputChannel == before.Pattern.Channel
+                    && run.HasJudgedInputTiming && run.LastJudgedInputChannel == before.Pattern.ResponseChannel
                     && Mathf.Abs(run.LastInputTimingDeltaSeconds - inputDelta) < 0.002f,
                     "Long-run exact inputs must resolve once and preserve actual rewards, lane, timing and combo."
                         + $" input={input + 1}, result={run.LastResult}, exact={run.SuccessCount}, good={run.GoodCount}, miss={run.MissCount},"
@@ -481,9 +481,9 @@ namespace GreedLast.Editor
                 int beforeCount = Judgements();
                 int beforeScore = run.Score;
                 int beforeHealth = run.Health;
-                GreedLastRunChannel actualInput = run.Pattern.Channel;
+                GreedLastRunChannel actualInput = run.Pattern.ResponseChannel;
                 float expectedInputDelta = run.CoreDeltaSeconds + run.InputTimingOffsetSeconds;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == GreedLastJudgementResult.Success && Judgements() == beforeCount + 1,
                     "A scheduled exact input must resolve once without a hidden wall-clock dependency.");
                 Require(run.LastJudgementScoreGain == run.Score - beforeScore

@@ -48,8 +48,8 @@ namespace GreedLast.Editor
                     float delta = bad && noGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds + delta;
                     GreedLastRunChannel channel = bad && !noGood
-                        ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
-                        : run.Pattern.Channel;
+                        ? run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left
+                        : run.Pattern.ResponseChannel;
                     core.HandleInput(channel, clock);
                     Require(run.LastResult == (bad ? noGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss
                         : GreedLastJudgementResult.Success), "The fixture must produce the requested actual judgement.");
@@ -210,7 +210,7 @@ namespace GreedLast.Editor
             float delta = bad && noGood ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
             clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds + delta;
             GreedLastRunChannel channel = bad && !noGood
-                ? run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left : run.Pattern.Channel;
+                ? run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left : run.Pattern.ResponseChannel;
             core.HandleInput(channel, clock);
             Require(run.LastResult == (bad ? noGood ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss
                 : GreedLastJudgementResult.Success), "The scope control must preserve the actual judgement.");

@@ -337,7 +337,19 @@ namespace GreedLast
         }
 
         public string PatternId { get; }
+        // The channel locates the threat in the scene. ResponseChannel locates the player's input.
         public GreedLastRunChannel Channel { get; }
+        public GreedLastRunChannel ResponseChannel
+        {
+            get
+            {
+                if (Channel == GreedLastRunChannel.Left && !GreedLastRunCore.IsRotationPattern(this))
+                    return GreedLastRunChannel.Right;
+                if (Channel == GreedLastRunChannel.Right && !GreedLastRunCore.IsRotationPattern(this))
+                    return GreedLastRunChannel.Left;
+                return Channel;
+            }
+        }
         public GreedLastTimingType TimingType { get; }
         public string Prompt { get; }
         public float TelegraphSeconds { get; }
@@ -1945,12 +1957,13 @@ namespace GreedLast
             float judgedElapsed = elapsed + inputTimingOffsetSeconds;
             float signedDelta = judgedElapsed - currentPattern.CoreSeconds;
 
-            if (channel != currentPattern.Channel)
+            GreedLastRunChannel responseChannel = currentPattern.ResponseChannel;
+            if (channel != responseChannel)
             {
                 Resolve(new GreedLastJudgementOutcome(
                     GreedLastJudgementResult.Miss,
                     currentPattern.TimingType,
-                    "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(currentPattern.Channel)
+                    "실수 - 채널 오류\n" + FormatChannel(channel) + " 입력 / 정답 " + FormatChannel(responseChannel)
                         + "\n" + FormatTimingDelta(signedDelta),
                     string.Empty,
                     "wrong_channel"), now, signedDelta, channel);
@@ -5079,7 +5092,7 @@ namespace GreedLast
             string review;
             if (missCount > 0)
             {
-                review = "복기 우선: 실수 " + missCount + "회 / 같은 채널과 입력 순간 재확인";
+                review = "복기 우선: 실수 " + missCount + "회 / 회피 방향과 입력 순간 재확인";
             }
             else if (goodCount > 0)
             {
@@ -5380,7 +5393,7 @@ namespace GreedLast
             missReason = string.Empty;
             judgementText = IsRotationPattern(currentPattern)
                 ? "회전 통로를 보고 Q/E 또는 같은 방향 채널을 누르세요."
-                : "예고를 보고 같은 채널을 누르세요.";
+                : "예고를 보고 함정을 피하는 방향을 누르세요.";
             if (!string.IsNullOrEmpty(recoveryCue))
             {
                 judgementText += "\n" + recoveryCue;
@@ -5497,7 +5510,7 @@ namespace GreedLast
         private static string BuildRecoveryPatternCue(string previousMissReason, GreedLastPatternModel nextPattern)
         {
             string targetText = nextPattern.IsValid
-                ? " / 다음 " + FormatChannel(nextPattern.Channel) + " " + FormatTimingType(nextPattern.TimingType)
+                ? " / 다음 입력 " + FormatChannel(nextPattern.ResponseChannel) + " " + FormatTimingType(nextPattern.TimingType)
                 : string.Empty;
             switch (previousMissReason)
             {

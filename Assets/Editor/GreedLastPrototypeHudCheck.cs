@@ -48,7 +48,7 @@ namespace GreedLast.Editor
                         ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
                     {
-                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.HandleInput(run.Pattern.ResponseChannel, clock);
                         Check();
                     }
                     if (frame % 240 == 0)
@@ -146,7 +146,7 @@ namespace GreedLast.Editor
                         ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     if (run.ElapsedSeconds + core.InputTimingOffsetSeconds >= run.Pattern.CoreSeconds + delta)
                     {
-                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.HandleInput(run.Pattern.ResponseChannel, clock);
                         Check();
                     }
                 }
@@ -567,8 +567,8 @@ namespace GreedLast.Editor
                     float delta = result == GreedLastJudgementResult.Good
                         ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                     GreedLastRunChannel channel = result == GreedLastJudgementResult.Miss
-                        ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Center : GreedLastRunChannel.Left)
-                        : run.Pattern.Channel;
+                        ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Center : GreedLastRunChannel.Left)
+                        : run.Pattern.ResponseChannel;
                     core.HandleInput(channel, clock += run.Pattern.CoreSeconds - run.ElapsedSeconds
                         - core.InputTimingOffsetSeconds + delta);
                     Require(run.LastResult == result && !run.Stopped,

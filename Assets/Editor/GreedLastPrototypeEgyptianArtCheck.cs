@@ -168,8 +168,8 @@ namespace GreedLast.Editor
                             ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                         clock = clock - run.CoreDeltaSeconds - core.InputTimingOffsetSeconds + offset;
                         var channel = result == GreedLastJudgementResult.Miss
-                            ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
-                            : run.Pattern.Channel;
+                            ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                            : run.Pattern.ResponseChannel;
                         core.HandleInput(channel, clock);
                         if (run.LastResult != result) throw new InvalidOperationException("Unexpected published pose judgement: " + run.LastResult);
                         ui.RenderRun(run);
@@ -227,7 +227,7 @@ namespace GreedLast.Editor
                         float offset = result == GreedLastJudgementResult.Good
                             ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f;
                         clock = clock - run.CoreDeltaSeconds - core.InputTimingOffsetSeconds + offset;
-                        core.HandleInput(run.Pattern.Channel, clock);
+                        core.HandleInput(run.Pattern.ResponseChannel, clock);
                         if (run.LastResult != result) throw new InvalidOperationException("Unexpected infinite pose judgement.");
                         ui.RenderRun(run);
                         if (!twist) continue;
@@ -365,8 +365,8 @@ namespace GreedLast.Editor
                         if (result == GreedLastJudgementResult.Good)
                             clock += (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                         var channel = result == GreedLastJudgementResult.Miss
-                            ? (run.Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
-                            : run.Pattern.Channel;
+                            ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                            : run.Pattern.ResponseChannel;
                         core.HandleInput(channel, clock);
                         Require(run.LastResult == result, "Practice handoff must retain the actual public judgement.");
                         ui.RenderRun(run);

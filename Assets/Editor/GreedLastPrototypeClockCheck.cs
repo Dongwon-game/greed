@@ -75,12 +75,12 @@ namespace GreedLast.Editor
                     Require(run.ActivePattern && run.MissCount == 0,
                         $"A valid calibrated tap must survive preceding frame ticks: {source.PatternId}, mode={mode}, growth={growth}, offset={offset}, delta={delta}, elapsed={run.ElapsedSeconds}, reason={run.MissReason}.");
                     int beforeScore = run.Score;
-                    core.HandleInput(run.Pattern.Channel, tapAt);
+                    core.HandleInput(run.Pattern.ResponseChannel, tapAt);
                     Require(run.LastResult == (deltaScale == 0f ? GreedLastJudgementResult.Success : GreedLastJudgementResult.Good)
                         && run.LastJudgementScoreGain == run.Score - beforeScore
                         && Mathf.Abs(run.LastInputTimingDeltaSeconds - delta) < 0.00001f,
                         "Preserving a calibrated input window must not change its result, actual reward or signed timing.");
-                    core.HandleInput(source.Channel, tapAt);
+                    core.HandleInput(source.ResponseChannel, tapAt);
                     Require(run.SuccessCount + run.GoodCount == 1 && run.MissCount == 0,
                         "An extended deadline must still resolve exactly one tap.");
                     cases++;
@@ -165,8 +165,8 @@ namespace GreedLast.Editor
                         "The compared input frame must be inside the ordinary half-second interaction budget.");
                     GreedLastRunSnapshot prior = runs[0];
                     GreedLastRunChannel channel = step == 4 || (mode == 2 && (step == 8 || step == 12))
-                        ? (runs[0].Pattern.Channel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
-                        : runs[0].Pattern.Channel;
+                        ? (runs[0].Pattern.ResponseChannel == GreedLastRunChannel.Left ? GreedLastRunChannel.Right : GreedLastRunChannel.Left)
+                        : runs[0].Pattern.ResponseChannel;
                     // Compare app-first and EventSystem-first delivery at exactly the same public time.
                     cores[0].Tick(at);
                     cores[0].HandleInput(channel, at);
@@ -244,7 +244,7 @@ namespace GreedLast.Editor
                     {
                         float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
                         while (clock < target - 0.0001f) TickBoth(Mathf.Min(target, clock + 0.01f));
-                        for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                        for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.ResponseChannel, target);
                     }
                     TickBoth(clock + 0.01f);
                 }
@@ -289,7 +289,7 @@ namespace GreedLast.Editor
                     "The resume countdown must preserve earned movement and focus.");
                 float inputAt = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds;
                 while (clock < inputAt - 0.0001f) TickBoth(Mathf.Min(inputAt, clock + 0.01f));
-                for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, inputAt);
+                for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.ResponseChannel, inputAt);
                 Compare("fresh exact input");
                 Require(runs[0].LastResult == GreedLastJudgementResult.Success && runs[0].MissCount == frozen.MissCount,
                     "The same resumed trap must still accept a fresh exact input once.");
@@ -339,7 +339,7 @@ namespace GreedLast.Editor
                         {
                             float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds - runs[0].InputTimingOffsetSeconds;
                             while (clock < target - 0.0001f) TickBoth(Mathf.Min(target, clock + 0.01f));
-                            for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                            for (int i = 0; i < cores.Length; i++) cores[i].HandleInput(runs[i].Pattern.ResponseChannel, target);
                             while (!runs[0].ActivePattern) TickBoth(clock + 0.01f);
                         }
                     }
@@ -354,7 +354,7 @@ namespace GreedLast.Editor
                     {
                         float target = clock + runs[0].Pattern.CoreSeconds - runs[0].ElapsedSeconds - runs[0].InputTimingOffsetSeconds;
                         for (int i = 0; i < cores.Length; i++)
-                            cores[i].HandleInput(runs[i].Pattern.Channel, target);
+                            cores[i].HandleInput(runs[i].Pattern.ResponseChannel, target);
                         clock = target;
                         at = clock + 0.9f;
                         float before = at - 0.1f;
@@ -417,7 +417,7 @@ namespace GreedLast.Editor
                         else
                         {
                             clock = target;
-                            core.HandleInput(run.Pattern.Channel, clock);
+                            core.HandleInput(run.Pattern.ResponseChannel, clock);
                             Require(!run.ActivePattern && run.SuccessCount == 1,
                                 "Post-input background loss must preserve a judgement published after the last Tick.");
                         }
@@ -425,7 +425,7 @@ namespace GreedLast.Editor
                     if (stage == 4)
                     {
                         clock += 0.01f;
-                        core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+                        core.HandleInput(run.Pattern.ResponseChannel == GreedLastRunChannel.Left
                             ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
                         Require(run.MissCount == 1 && run.StaggerRemainingSeconds > 0f,
                             "The background stagger case needs one real wrong-channel miss.");
@@ -472,7 +472,7 @@ namespace GreedLast.Editor
                             "Background recovery fixture must make bounded clock progress, not wait indefinitely.");
                         core.Tick(clock = next);
                     }
-                    core.HandleInput(run.Pattern.Channel, target);
+                    core.HandleInput(run.Pattern.ResponseChannel, target);
                     Require(run.LastResult == GreedLastJudgementResult.Success
                         && run.SuccessCount == frozen.SuccessCount + 1 && run.MissCount == frozen.MissCount,
                         "A frozen trap must accept one fresh exact input after the ordinary resume buffer.");
@@ -509,7 +509,7 @@ namespace GreedLast.Editor
                     core.RequestNextPattern(clock += 1f);
                     core.FillFocusForTest();
                     core.Tick(clock += 0.125f);
-                    if (mode == 2) core.HandleInput(run.Pattern.Channel,
+                    if (mode == 2) core.HandleInput(run.Pattern.ResponseChannel,
                         clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - core.InputTimingOffsetSeconds);
                 }
                 if (mode == 3)
@@ -594,7 +594,7 @@ namespace GreedLast.Editor
                 int health = run.Health;
                 int before = publications;
                 if (outcome == 3) core.Tick(clock);
-                else core.HandleInput(outcome == 2 ? GreedLastRunChannel.None : pattern.Channel, clock);
+                else core.HandleInput(outcome == 2 ? GreedLastRunChannel.None : pattern.ResponseChannel, clock);
                 GreedLastJudgementResult expected = outcome == 0 ? GreedLastJudgementResult.Success
                     : outcome == 1 ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Miss;
                 Require(!run.ActivePattern && run.LastResult == expected && publications == before + 1,
@@ -615,7 +615,7 @@ namespace GreedLast.Editor
                 int resolvedCount = run.SuccessCount + run.GoodCount + run.MissCount;
                 core.Tick(clock += 3600f);
                 core.TogglePause(clock);
-                core.HandleInput(pattern.Channel, clock += 0.2f);
+                core.HandleInput(pattern.ResponseChannel, clock += 0.2f);
                 Near(run.ResumeCountdownRemainingSeconds, 1.2f, "Ignored resume input countdown");
                 Require(run.Paused && !run.ActivePattern && run.Distance == distance && run.Score == score
                     && run.Health == resolvedHealth && run.SuccessCount + run.GoodCount + run.MissCount == resolvedCount,

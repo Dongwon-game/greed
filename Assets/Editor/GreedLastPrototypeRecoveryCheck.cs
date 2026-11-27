@@ -454,7 +454,7 @@ namespace GreedLast.Editor
                     {
                         while (run.ElapsedSeconds < run.Pattern.CoreSeconds - 0.01f) core.Tick(clock += 0.01f);
                         before = run;
-                        core.HandleInput(run.Pattern.Channel == GreedLastRunChannel.Left
+                        core.HandleInput(run.Pattern.ResponseChannel == GreedLastRunChannel.Left
                             ? GreedLastRunChannel.Right : GreedLastRunChannel.Left, clock);
                     }
                     if (before.FocusStateActive) active++;
@@ -581,7 +581,7 @@ namespace GreedLast.Editor
                     : peripheral ? run.Pattern.SuccessWindowSeconds * 0.75f : 0f;
                 Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
                 var before = run;
-                core.HandleInput(run.Pattern.Channel, clock);
+                core.HandleInput(run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == (good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success),
                     "Finisher samples must use actual declared exact/Good judgements.");
                 Require(good || run.LastCenterHit != peripheral, "Focus controls must distinguish center and peripheral Success without widening judgement windows.");
@@ -656,8 +656,8 @@ namespace GreedLast.Editor
                 float delta = miss ? 0f : (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f;
                 Advance(run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds + delta - run.ElapsedSeconds);
                 var before = run;
-                core.HandleInput(miss ? (run.Pattern.Channel == GreedLastRunChannel.Left
-                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.Channel, clock);
+                core.HandleInput(miss ? (run.Pattern.ResponseChannel == GreedLastRunChannel.Left
+                    ? GreedLastRunChannel.Right : GreedLastRunChannel.Left) : run.Pattern.ResponseChannel, clock);
                 Require(run.LastResult == (miss ? GreedLastJudgementResult.Miss : GreedLastJudgementResult.Good)
                     && !run.Stopped, "Recovery samples must survive the declared two misses and use actual Good judgements.");
                 if (!miss) samples.Add(new Sample(before, run));

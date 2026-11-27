@@ -121,7 +121,7 @@ namespace GreedLast.Editor
                 {
                     if (trap > 0) core.RequestNextPattern(clock += 2f);
                     clock += run.Pattern.CoreSeconds - core.InputTimingOffsetSeconds;
-                    core.HandleInput(run.Pattern.Channel, clock);
+                    core.HandleInput(run.Pattern.ResponseChannel, clock);
                     Require(run.LastResult == GreedLastJudgementResult.Success, "Practice result needs three exact inputs.");
                 }
                 Require(run.Stopped && run.PracticeMode, "Practice completion must publish its result immediately.");
@@ -139,7 +139,7 @@ namespace GreedLast.Editor
 
                 StartPractice();
                 typeof(GreedLastRunCore).GetField("health", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(core, 1);
-                GreedLastRunChannel wrong = run.Pattern.Channel == GreedLastRunChannel.Left
+                GreedLastRunChannel wrong = run.Pattern.ResponseChannel == GreedLastRunChannel.Left
                     ? GreedLastRunChannel.Right : GreedLastRunChannel.Left;
                 core.HandleInput(wrong, clock + run.Pattern.CoreSeconds);
                 Require(run.Stopped && run.Staggered, "The terminal-hit fixture must begin with a short stagger.");

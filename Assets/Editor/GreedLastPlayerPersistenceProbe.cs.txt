@@ -589,7 +589,7 @@ namespace GreedLast.PlayerChecks
                 float goodDelay = (firstTrap.Pattern.SuccessWindowSeconds + firstTrap.Pattern.GoodWindowSeconds) * 0.5f;
                 yield return WaitFor(() => RunState().CoreDeltaSeconds + core.InputTimingOffsetSeconds >= goodDelay,
                     settleFrame: false);
-                Call(app, "HandleRunChannelInput", firstTrap.Pattern.Channel);
+                Call(app, "HandleRunChannelInput", firstTrap.Pattern.ResponseChannel);
                 Require(RunState().GoodCount == firstTrap.GoodCount + 1 && RunState().Health == firstTrap.Health
                     && RunState().LastResult == GreedLastJudgementResult.Good,
                     "The first practice response must earn a late Good without losing health.");
@@ -608,7 +608,7 @@ namespace GreedLast.PlayerChecks
                 GreedLastRunSnapshot secondTrap = RunState();
                 yield return WaitFor(() => RunState().CoreDeltaSeconds + core.InputTimingOffsetSeconds >= 0f,
                     settleFrame: false);
-                Call(app, "HandleRunChannelInput", secondTrap.Pattern.Channel);
+                Call(app, "HandleRunChannelInput", secondTrap.Pattern.ResponseChannel);
                 Require(RunState().SuccessCount == secondTrap.SuccessCount + 1 && RunState().Health == secondTrap.Health
                     && RunState().LastResult == GreedLastJudgementResult.Success,
                     "The second practice response must earn an exact result without losing health.");
@@ -1072,7 +1072,7 @@ namespace GreedLast.PlayerChecks
                             check.Tick(clock += 2f); check.Tick(clock += 1f);
                             Require(run.ActivePattern && !run.Stopped, "An automatically emptied slot must leave its returned run-local record usable.");
                             clock += run.Pattern.CoreSeconds - run.ElapsedSeconds - check.InputTimingOffsetSeconds;
-                            check.HandleInput(run.Pattern.Channel, clock);
+                            check.HandleInput(run.Pattern.ResponseChannel, clock);
                             Require(run.LastResult == GreedLastJudgementResult.Success && run.SuccessCount == 1,
                                 "The prepared run-local record must reach an actual public-core exact judgement.");
                             if (before == 1) result.secondRunAliveAfterSlotClear = !run.Stopped && run.Health > 0;
@@ -1796,7 +1796,7 @@ namespace GreedLast.PlayerChecks
                             "Use the two authored rotation patterns after the regular sand bed.");
                         if (index < turns.Length)
                             overridePattern.SetValue(core, Call(core, "FindPatternById", turns[index]));
-                        Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                        Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                         Require(RunState().LastResult == GreedLastJudgementResult.Success, "The filmed response must pass actual judgement.");
                         responses.Add(run.Pattern.Channel.ToString());
                         if (index == 2) rightContactDistance = run.Distance;
@@ -1901,7 +1901,7 @@ namespace GreedLast.PlayerChecks
                     timingBoardVisible = timingBoardLine.alpha > 0f,
                     practiceResultVisible = run.PracticeMode && run.Stopped && !string.IsNullOrEmpty(VisibleText(resultSummary)),
                     avoidance = run.ActivePattern ? run.Pattern.AvoidanceType.ToString() : string.Empty,
-                    channel = run.ActivePattern ? run.Pattern.Channel.ToString() : string.Empty
+                    channel = run.ActivePattern ? run.Pattern.ResponseChannel.ToString() : string.Empty
                 };
                 if (run.ActivePattern)
                     frame.worldTrapVisible = corridor.TryGetTrapProjection(run.Pattern.PatternId,
@@ -2260,7 +2260,7 @@ namespace GreedLast.PlayerChecks
                 {
                     // Submit before GPU readback/PNG encoding can consume the input window.
                     if (rotation != null) rotation.contact = ReadRotationSample(ui, run.ActivePattern);
-                    Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                    Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                     GreedLastRunSnapshot judged = RunState();
                     Require(judged.LastResult == GreedLastJudgementResult.Success
                         && judged.SuccessCount == run.SuccessCount + 1,
@@ -2491,7 +2491,7 @@ namespace GreedLast.PlayerChecks
                     bool good = chapterTwoGood && !injectedGood && run.Phase == GreedLastRunPhase.RunPlaying && run.ChapterIndex == 2;
                     float inputAt = run.Pattern.CoreSeconds + (good ? (run.Pattern.SuccessWindowSeconds + run.Pattern.GoodWindowSeconds) * 0.5f : 0f);
                     if (run.ElapsedSeconds + core.InputTimingOffsetSeconds < inputAt) { yield return null; continue; }
-                    Call(app, "HandleRunChannelInput", run.Pattern.Channel);
+                    Call(app, "HandleRunChannelInput", run.Pattern.ResponseChannel);
                     if (chapterTwoGood || maxResponses != int.MaxValue)
                         Require(RunState().LastResult == (good ? GreedLastJudgementResult.Good : GreedLastJudgementResult.Success),
                             "The process probe must earn its requested judgement through actual frames and app commands.");

@@ -25,7 +25,7 @@ Windows 주행 화면의 **이집트풍 3D 인간 주자**는 피라미드 통�
 3. Game 뷰를 가로 화면으로 두고 Play한다. 시작 화면에서 입구 로비로 이어진다.
 4. 기초 연습의 좌·중·우 대응과 세 동작을 본 뒤 일반 런으로 들어간다.
 
-좌·중·우는 이동할 레인이 아니라 위험에 대응하는 채널이다. 자세한 조작과 이번 우선 확인은 [빠른 확인](Docs/GreedLast_Prototype_QuickCheck.md)을 따른다.
+오른쪽에서 오는 함정은 `←`, 왼쪽 함정은 `→`, 정면 함정은 `↓`로 피한다. 코너에서는 돌아가는 방향을 누른다. 자세한 조작은 [빠른 확인](Docs/GreedLast_Prototype_QuickCheck.md)을 따른다.
 
 Android 설치·APK·휴대폰 센서/지연/FPS 확인은 현재 완료 조건이 아니다. [이전 모바일 준비 기록](Docs/GreedLast_Prototype_MobileSetup.md)은 과거 작업 근거로만 보존하며 자동 재개하지 않는다.
 
