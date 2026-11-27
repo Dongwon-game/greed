@@ -11115,7 +11115,8 @@ namespace GreedLast.Editor
             Require(avatar.gameObject.activeSelf && avatar.localScale.y > 1.2f,
                 "The live runner must be larger than the old preview while retaining its motion transform.");
             ui.ToggleDevCleanView();
-            Require(labels[0].rectTransform.anchorMin == Vector2.zero && labels[0].text.Contains("정확", StringComparison.Ordinal),
+            Text responseLabel = labels[(int)run.Pattern.ResponseChannel - 1];
+            Require(responseLabel.rectTransform.anchorMin == Vector2.zero && responseLabel.text.Contains("정확", StringComparison.Ordinal),
                 "F11 must immediately restore the developer lane detail.");
             ui.Render(BuildUiScreenSnapshot(GreedLastScreenState.InfiniteRecordBoard, "기록", "100점", 2));
             Require(labels[0].rectTransform.anchorMin == Vector2.zero,
