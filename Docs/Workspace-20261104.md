@@ -6,9 +6,9 @@
 
 이 Codex 프로젝트와 채팅에서 사용하는 실제 Unity 프로젝트다. 빈 저장소 대신 GitHub Greed의 main 이력과 게임 소스를 복원했고 origin을 `https://github.com/Dongwon-game/greed.git`로 설정했다.
 
-Unity Hub와 GitHub Desktop에서도 이 폴더를 등록해서 사용한다. Unity Hub: 프로젝트 → 추가 → 디스크에서 추가. GitHub Desktop: File → Add local repository. Unity 버전은 6000.4.3f1이다. 시작 장면은 `Assets/Scenes/GreedLast_Boot.unity`다.
+Unity Hub 즐겨찾기의 **Greed - PC 플레이**와 GitHub Desktop의 플레이 사본은 이 폴더다. Unity 버전은 6000.4.3f1이다. 시작 장면은 `Assets/Scenes/GreedLast_Boot.unity`다.
 
-이전 복구 사본 `C:\Users\ehddn\Documents\Codex\2026-11-04\so-x20\outputs\greed`는 보존했으나 이후 개발 기준은 현재 폴더다. 같은 이름의 두 폴더에서 번갈아 수정하지 않는다.
+이전 복구 사본 `C:\Users\ehddn\Documents\Codex\2026-11-04\so-x20\outputs\greed`는 디스크에 보존했다. 2026-11-27 Unity Hub 목록에서 이 중복 항목만 제거했다. Codex의 연결된 작업 사본에서 변경한 코드는 별도 체크아웃에 생긴다. Unity에서 플레이할 변경을 인계할 때는 편집기가 닫힌 상태에서 OneDrive 폴더를 검증 커밋으로 fast-forward 하고, 그 폴더의 실제 HEAD를 확인한다.
 
 ## 자료
 
