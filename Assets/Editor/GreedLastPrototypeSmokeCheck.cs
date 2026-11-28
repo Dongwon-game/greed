@@ -11815,6 +11815,7 @@ namespace GreedLast.Editor
             controls.Add(GetRuntimeUiField<Button>(ui, "returnLobbyButton"));
             controls.Add(GetRuntimeUiField<Button>(ui, "rotationTiltButton"));
             controls.Add(GetRuntimeUiField<Button>(ui, "hapticsButton"));
+            controls.Add(GetRuntimeUiField<Button>(ui, "musicVolumeButton"));
             controls.Add(comfort);
             controls.Add(GetRuntimeUiField<Button>(ui, "pauseQuitButton"));
             Canvas.ForceUpdateCanvases();

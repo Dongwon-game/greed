@@ -18636,13 +18636,19 @@ namespace GreedLast
                     SetPauseMenuControl(timingOffsetButtons[i], (i - 1) * 286f, -100f, 248f);
                 }
                 bool showRotationTiltSetting = rotationTiltButton.gameObject.activeSelf;
-                float settingsY = IsWindowsDesktop ? -364f : -248f;
+                const float settingsY = -248f;
                 SetPauseMenuControl(rotationTiltButton, 0f, settingsY, 820f);
                 SetPauseMenuControl(hapticsButton, 0f, showRotationTiltSetting ? settingsY - 132f : settingsY, 820f);
                 float comfortY = settingsY
                     - (showRotationTiltSetting ? 132f : 0f)
                     - (hapticsButton.gameObject.activeSelf ? 132f : 0f);
-                SetPauseMenuControl(motionComfortButton, 0f, comfortY, 820f);
+                if (IsWindowsDesktop)
+                {
+                    SetPauseMenuControl(musicVolumeButton, -215f, comfortY, 390f);
+                    SetPauseMenuControl(motionComfortButton, 215f, comfortY, 390f);
+                }
+                else
+                    SetPauseMenuControl(motionComfortButton, 0f, comfortY, 820f);
                 SetPauseMenuControl(pauseQuitButton, 0f, comfortY - 132f, 820f);
                 return;
             }
@@ -27590,7 +27596,6 @@ namespace GreedLast
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
             musicVolumeButton = CreateButton(panel.transform, "MusicVolumeButton", BuildMusicVolumeLabel());
             musicVolumeButton.gameObject.SetActive(IsWindowsDesktop);
-            SetPauseMenuControl(musicVolumeButton, 0f, -232f, 820f);
             AddGuardedCommand(musicVolumeButton, CycleMusicVolume);
             pauseQuitButton = CreateButton(pauseMenuPanel.transform, "PauseQuitButton", "게임 종료");
             AddGuardedCommand(pauseQuitButton, () => QuitRequested?.Invoke());
