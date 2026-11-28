@@ -12,6 +12,8 @@
 
 Windows 주행 화면의 **이집트풍 3D 인간 주자**는 피라미드 통로 안에서 함정과 함께 렌더링된다. 달리기 중 발을 딛는 위치와 점프·숙이기·비틀기는 달리는 거리와 기존 판정에 맞춰 움직인다. [3D 주자와 자산 출처](Docs/ArtDrafts/PyramidRunner-3D.md)
 
+Windows의 주행 음악은 하프·갈대 피리·가죽북을 합성한 120 BPM 원곡이다. 방향별 함정 예고, 박자 직전 타악, 회피 결과는 실행 중에 따로 재생한다. 일시정지 메뉴의 **음악** 버튼은 반주 크기를 65% → 35% → 0% → 100% 순서로 바꾼다. 기존 **소리** 버튼은 효과음 크기를 조절한다. 원곡과 악기 클립은 `node tools/bake-greed-run-audio.mjs`로 재생성할 수 있다.
+
 <img src="Assets/Resources/GreedLast/PrototypeEgyptianRunner.png" alt="이집트풍 인간 주자의 기본 달리기 자원" width="220">
 
 위 이미지는 초기 2D 캐릭터 자원이다. 아래는 11월 8일 움직임 시계 수정 후보의 내부 카메라 한 프레임이다. 누적 시간 뒤 주행 고정과 속도 전환 역행의 수정·검증 범위, 로컬 체험 후보는 [움직임 기록](Docs/Motion-Clock-20261108.md)을 따른다. [10월 30일 미리보기](Docs/ArtDrafts/EgyptianRunnerPreview-20261030.md)와 [10월 21일 연습 화면](Docs/Images/GreedLast-Prototype-20261021.png)은 과거 기록으로 보존한다.

@@ -15915,6 +15915,8 @@ namespace GreedLast
         private const float MaxSfxVolume = 1f;
         private const float DefaultSfxVolume = 1f;
         private const string SfxVolumePrefsKey = "GreedLast.RuntimeUi.SfxVolume";
+        private const string MusicVolumePrefsKey = "GreedLast.RuntimeUi.MusicVolume";
+        private const float DefaultMusicVolume = 0.65f;
         private const string HapticsEnabledPrefsKey = "GreedLast.RuntimeUi.HapticsEnabled";
         private const string RotationTiltEnabledPrefsKey = "GreedLast.RuntimeUi.RotationTiltEnabled";
         private const string MotionComfortEnabledPrefsKey = "GreedLast.RuntimeUi.MotionComfortEnabled";
@@ -15954,6 +15956,10 @@ namespace GreedLast
         private AudioListener ownedAudioListener;
         private GameObject ownedEventSystem;
         private AudioSource ownedAudioSource;
+        private GreedLastRunMusic runMusic;
+        private AudioClip[] instrumentTrapClips;
+        private AudioClip instrumentTimingClip, instrumentExactClip, instrumentGoodClip, instrumentHitClip;
+        private float musicVolume = DefaultMusicVolume;
         private EventSystem borrowedEventSystem;
         private bool borrowedNavigationEvents;
         private RectTransform rootPanelRect;
@@ -16039,6 +16045,7 @@ namespace GreedLast
         private Button hapticsButton;
         private Button rotationTiltButton;
         private Button motionComfortButton;
+        private Button musicVolumeButton;
         private Button[] devShortcutButtons;
         private Button[] timingOffsetButtons;
         private Button[] sfxVolumeButtons;
@@ -17422,6 +17429,7 @@ namespace GreedLast
             }
             latestRunSnapshot = snapshot;
             hasRunSnapshot = true;
+            if (!IsLiveRunControlWindow(snapshot)) runMusic?.Stop();
             // Publications can cross a trap boundary before the UI receives another Update.
             if (!hadPreviousSnapshot || !ShouldShowActivePatternVisuals(snapshot)
                 || !ShouldShowActivePatternVisuals(previousSnapshot)
@@ -17643,6 +17651,7 @@ namespace GreedLast
         private void ResetRunPresentation(GreedLastRunSnapshot snapshot)
         {
             ResetRhythmBeatSchedule();
+            runMusic?.Reset();
             choiceConfirmationCountdownBeatNotBefore = 0f;
             lastComboForBadge = snapshot.Combo;
             lastGaugeHealth = snapshot.Health;
@@ -18400,6 +18409,7 @@ namespace GreedLast
             BringButtonToFront(hapticsButton);
             BringButtonToFront(rotationTiltButton);
             BringButtonToFront(motionComfortButton);
+            BringButtonToFront(musicVolumeButton);
             BringButtonArrayToFront(sfxVolumeButtons);
             BringButtonArrayToFront(timingOffsetButtons);
         }
@@ -18626,9 +18636,10 @@ namespace GreedLast
                     SetPauseMenuControl(timingOffsetButtons[i], (i - 1) * 286f, -100f, 248f);
                 }
                 bool showRotationTiltSetting = rotationTiltButton.gameObject.activeSelf;
-                SetPauseMenuControl(rotationTiltButton, 0f, -248f, 820f);
-                SetPauseMenuControl(hapticsButton, 0f, showRotationTiltSetting ? -380f : -248f, 820f);
-                float comfortY = -248f
+                float settingsY = IsWindowsDesktop ? -364f : -248f;
+                SetPauseMenuControl(rotationTiltButton, 0f, settingsY, 820f);
+                SetPauseMenuControl(hapticsButton, 0f, showRotationTiltSetting ? settingsY - 132f : settingsY, 820f);
+                float comfortY = settingsY
                     - (showRotationTiltSetting ? 132f : 0f)
                     - (hapticsButton.gameObject.activeSelf ? 132f : 0f);
                 SetPauseMenuControl(motionComfortButton, 0f, comfortY, 820f);
@@ -27577,6 +27588,10 @@ namespace GreedLast
             SetAnchored(pauseMenuBodyText.rectTransform, 0.5f, 0.5f, 900f, 238f);
             pauseMenuBodyText.rectTransform.anchoredPosition = new Vector2(0f, 478f);
             pauseMenuBodyText.color = new Color32(190, 204, 204, 235);
+            musicVolumeButton = CreateButton(panel.transform, "MusicVolumeButton", BuildMusicVolumeLabel());
+            musicVolumeButton.gameObject.SetActive(IsWindowsDesktop);
+            SetPauseMenuControl(musicVolumeButton, 0f, -232f, 820f);
+            AddGuardedCommand(musicVolumeButton, CycleMusicVolume);
             pauseQuitButton = CreateButton(pauseMenuPanel.transform, "PauseQuitButton", "게임 종료");
             AddGuardedCommand(pauseQuitButton, () => QuitRequested?.Invoke());
         }
@@ -29056,6 +29071,8 @@ namespace GreedLast
         {
             ReleasePresentation();
             StopRhythmAudio();
+            runMusic?.Dispose();
+            runMusic = null;
             SceneManager.sceneLoaded -= RestoreSceneResources;
             AudioSettings.OnAudioConfigurationChanged -= HandleAudioConfigurationChanged;
             audioConfigurationSubscribed = false;
@@ -29088,6 +29105,9 @@ namespace GreedLast
         private void CreateAudio()
         {
             sfxVolume = NormalizeSfxVolume(PlayerPrefs.GetFloat(SfxVolumePrefsKey, DefaultSfxVolume));
+            musicVolume = PlayerPrefs.GetFloat(MusicVolumePrefsKey, DefaultMusicVolume);
+            musicVolume = float.IsNaN(musicVolume) ? DefaultMusicVolume : Mathf.Clamp01(musicVolume);
+            if (musicVolumeButton != null) SetButtonLabel(musicVolumeButton, BuildMusicVolumeLabel());
             hapticsEnabled = PlayerPrefs.GetInt(HapticsEnabledPrefsKey, 1) == 1;
             rotationTiltEnabled = IsRotationTiltEnabledFromPrefs();
             motionComfortEnabled = PlayerPrefs.GetInt(MotionComfortEnabledPrefsKey, 1) == 1;
@@ -29097,6 +29117,21 @@ namespace GreedLast
             rhythmAudio.loop = false;
             rhythmAudio.spatialBlend = 0f;
             CreatePrototypeTones();
+            if (Application.isPlaying && IsWindowsDesktop)
+            {
+                AudioClip loop = Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "PyramidRunLoop");
+                if (loop != null) runMusic = new GreedLastRunMusic(transform, loop);
+                instrumentTrapClips = new[]
+                {
+                    Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "TrapLeft"),
+                    Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "TrapCenter"),
+                    Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "TrapRight")
+                };
+                instrumentTimingClip = Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "TimingTap");
+                instrumentExactClip = Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "EscapeExact");
+                instrumentGoodClip = Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "EscapeGood");
+                instrumentHitClip = Resources.Load<AudioClip>(GreedLastRunMusic.ResourcePath + "TrapHit");
+            }
             if (!audioConfigurationSubscribed)
             {
                 AudioSettings.OnAudioConfigurationChanged += HandleAudioConfigurationChanged;
@@ -31494,6 +31529,12 @@ namespace GreedLast
         private void UpdateRhythmBeatSchedule()
         {
             bool countdownBeatActive = runModeActive && BuildCountdownBeatActive(latestRunSnapshot);
+            bool liveBeat = runModeActive && hasRunSnapshot && ShouldPlayLiveBeatClick(latestRunSnapshot);
+            int musicBeat = 0;
+            bool musicPulse = runMusic != null && runModeActive && hasRunSnapshot
+                && runMusic.Update(latestRunSnapshot.Distance, BuildBeatInterval(latestRunSnapshot), liveBeat,
+                    CanPlaySensoryFeedback ? musicVolume : 0f, out musicBeat);
+            if (!runModeActive) runMusic?.Stop();
             bool launchReleaseStarted = ShouldStartStraightRunLaunchRelease(
                 lastCountdownBeatActive,
                 countdownBeatActive,
@@ -31541,7 +31582,15 @@ namespace GreedLast
                 nextBeatSoundAt = BuildNextBeatScheduleTime(nextBeatSoundAt, Time.unscaledTime, BuildBeatInterval(latestRunSnapshot));
                 PlayRhythmPulse(latestRunSnapshot, BuildCountdownBeatVolume(latestRunSnapshot));
             }
-            else if (runModeActive && ShouldPlayLiveBeatClick(latestRunSnapshot) && Time.unscaledTime >= nextBeatSoundAt)
+            else if (liveBeat && runMusic != null)
+            {
+                if (musicPulse && !launchReleaseStarted)
+                {
+                    rhythmBeatIndex = musicBeat;
+                    PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot), musicVolume > 0f);
+                }
+            }
+            else if (liveBeat && Time.unscaledTime >= nextBeatSoundAt)
             {
                 nextBeatSoundAt = BuildNextBeatScheduleTime(nextBeatSoundAt, Time.unscaledTime, BuildBeatInterval(latestRunSnapshot));
                 PlayRhythmPulse(latestRunSnapshot, BuildBeatClickVolume(latestRunSnapshot));
@@ -31563,13 +31612,13 @@ namespace GreedLast
             return remaining * remaining * (3f - 2f * remaining);
         }
 
-        private void PlayRhythmPulse(GreedLastRunSnapshot snapshot, float volume)
+        private void PlayRhythmPulse(GreedLastRunSnapshot snapshot, float volume, bool musicBacking = false)
         {
             // Shared event timing keeps visual beats available even when sound is muted.
             rhythmPulseStartedAt = Time.unscaledTime;
             rhythmPulseInterval = BuildBeatInterval(snapshot);
             bool downbeat = rhythmBeatIndex % 4 == 0;
-            PlayClip(beatClip, volume);
+            PlayClip(beatClip, musicBacking ? volume * 0.23f : volume);
             if (BuildCountdownBeatActive(snapshot))
             {
                 PlayHaptic(BuildCountdownBeatHapticDuration(snapshot));
@@ -31579,7 +31628,7 @@ namespace GreedLast
             {
                 downbeatPulseUntil = Time.unscaledTime + DownbeatPulseDuration;
                 float downbeatVolume = snapshot.Phase == GreedLastRunPhase.EscapeRunning ? 0.18f : 0.14f;
-                PlayClip(downbeatClip, downbeatVolume);
+                PlayClip(downbeatClip, musicBacking ? downbeatVolume * 0.25f : downbeatVolume);
             }
 
             if (snapshot.FocusStateActive && rhythmBeatIndex % 2 == 0)
@@ -37574,14 +37623,22 @@ namespace GreedLast
             if (!lastActivePatternVisual)
             {
                 bool firstRunEntryTrap = runEntryTrapRevealPending;
-                PlayLaneCue(
-                    latestRunSnapshot.Pattern.Channel,
-                    BuildTrapEntryLaneCueVolume(
+                float warningVolume = BuildTrapEntryLaneCueVolume(
                         firstRunEntryTrap,
                         latestRunSnapshot.PracticeMode,
                         latestRunSnapshot.InfiniteMode,
-                        latestRunSnapshot.InfiniteThreatLevel));
-                PlayRunnerResponseCue(latestRunSnapshot.Pattern);
+                        latestRunSnapshot.InfiniteThreatLevel);
+                GreedLastRunChannel warningChannel = latestRunSnapshot.Pattern.Channel;
+                int warningIndex = (int)warningChannel - 1;
+                AudioClip warning = instrumentTrapClips != null && warningIndex >= 0 && warningIndex < instrumentTrapClips.Length
+                    ? instrumentTrapClips[warningIndex] : null;
+                if (warning != null)
+                    PlayClip(warning, warningVolume);
+                else
+                {
+                    PlayLaneCue(warningChannel, warningVolume);
+                    PlayRunnerResponseCue(latestRunSnapshot.Pattern);
+                }
                 trapEntryPulseUntil = Time.unscaledTime + TrapEntryPulseDuration;
                 if (runEntryTrapRevealPending)
                 {
@@ -37594,9 +37651,12 @@ namespace GreedLast
 
             if (!latestRunSnapshot.Paused && !targetCuePlayed && latestRunSnapshot.CoreDeltaSeconds >= -TargetCueLeadSeconds)
             {
-                PlayClip(GetTimingCueClip(latestRunSnapshot.Pattern.TimingType), BuildTimingCueVolume(latestRunSnapshot));
-                PlayRunnerResponseCue(latestRunSnapshot.Pattern, BuildTargetActionCueVolume(latestRunSnapshot));
-                PlayVariationTimingCue(latestRunSnapshot);
+                PlayClip(instrumentTimingClip ?? GetTimingCueClip(latestRunSnapshot.Pattern.TimingType), BuildTimingCueVolume(latestRunSnapshot));
+                if (instrumentTimingClip == null)
+                {
+                    PlayRunnerResponseCue(latestRunSnapshot.Pattern, BuildTargetActionCueVolume(latestRunSnapshot));
+                    PlayVariationTimingCue(latestRunSnapshot);
+                }
                 targetCuePlayed = true;
             }
 
@@ -37711,6 +37771,7 @@ namespace GreedLast
             ApplyJudgementLinePulse();
             UpdateRhythmBreakLine();
             ApplyStaggerRecoveryVisuals();
+            bool projectedTrap = IsProjectedWorldTrap(latestRunSnapshot);
             if (timingGuideText != null)
             {
                 float exactPulse = BuildExactTimingPulse();
@@ -37722,8 +37783,8 @@ namespace GreedLast
                     guideExactLock);
                 bool compactGuide = !DevToolsEnabled || devCleanViewEnabled;
                 timingGuideText.fontSize = compactGuide ? 36 : 28;
-                timingGuideText.text = IsProjectedWorldTrap(latestRunSnapshot)
-                    ? BuildCompactTimingGuideBeat(latestRunSnapshot)
+                timingGuideText.text = projectedTrap
+                    ? string.Empty
                     : compactGuide ? GetCompactTimingGuideLabel(latestRunSnapshot) : BuildTimingGuideLabel(latestRunSnapshot);
                 Color32 guideColor = BuildTimingGuideColor(latestRunSnapshot, compactGuide && IsWindowsDesktop);
                 if (exactPulse > 0f)
@@ -37810,8 +37871,9 @@ namespace GreedLast
             }
 
             bool compact = !DevToolsEnabled || devCleanViewEnabled;
-            string cue = IsProjectedWorldTrap(snapshot)
-                ? BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, DevToolsEnabled,
+            bool projectedTrap = IsProjectedWorldTrap(snapshot);
+            string cue = projectedTrap
+                ? BuildCompactTimingGuideBeat(snapshot) + "  ·  " + BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, DevToolsEnabled,
                     IsRuntimeRotationTiltAvailable(), Application.isMobilePlatform) + " · " + BuildActiveActionResponseLabel(snapshot.Pattern)
                 : compact
                 ? GetCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
@@ -37847,7 +37909,7 @@ namespace GreedLast
             }
 
             activeActionCueText.text = cue;
-            activeActionCueText.fontSize = compact ? 38 : BuildActiveActionCueFontSize(cue, coreNear, exactPulse);
+            activeActionCueText.fontSize = projectedTrap ? 33 : compact ? 38 : BuildActiveActionCueFontSize(cue, coreNear, exactPulse);
             int cueAlpha = Mathf.Clamp(
                 BuildActiveActionCueAlpha(coreNear, readinessPulse)
                     + BuildActiveActionCueDownbeatAlphaLift(downbeatPulse),
@@ -37856,12 +37918,13 @@ namespace GreedLast
             cueAlpha = Mathf.Clamp(cueAlpha + BuildBeatCueUrgencyAlphaLift(beatCueUrgency), 0, 255);
             if (compact && !Application.isMobilePlatform) cueAlpha = Mathf.Max(cueAlpha, 205);
             activeActionCueText.color = WithAlpha(color, cueAlpha);
-            activeActionCueText.rectTransform.localScale = Vector3.one * (
+            float pulseScale =
                 BuildActiveActionCueScale(coreNear, exactPulse, readinessPulse)
                 + BuildActiveActionCueDownbeatScaleLift(downbeatPulse, coreNear)
-                + BuildBeatCueUrgencyScaleLift(beatCueUrgency));
+                + BuildBeatCueUrgencyScaleLift(beatCueUrgency);
+            activeActionCueText.rectTransform.localScale = Vector3.one * (projectedTrap ? Mathf.Min(1.06f, pulseScale) : pulseScale);
             activeActionCueText.rectTransform.anchoredPosition = new Vector2(
-                BuildActiveActionCueOffsetX(snapshot.Pattern.Channel, coreNear, exactPulse),
+                projectedTrap ? 0f : BuildActiveActionCueOffsetX(snapshot.Pattern.Channel, coreNear, exactPulse),
                 0f);
         }
 
@@ -45043,7 +45106,7 @@ namespace GreedLast
             switch (snapshot.LastResult)
             {
                 case GreedLastJudgementResult.Success:
-                    PlayClip(successClip, BuildJudgementCueVolume(snapshot));
+                    PlayClip(instrumentExactClip ?? successClip, BuildJudgementCueVolume(snapshot));
                     beatMarkerSuccessPulseUntil = Time.unscaledTime + BeatMarkerSuccessPulseDuration;
                     comboBadgePulseUntil = Time.unscaledTime + 0.22f;
                     bool tierFeedback = false;
@@ -45224,7 +45287,7 @@ namespace GreedLast
                     }
                     else
                     {
-                        PlayClip(goodClip, BuildJudgementCueVolume(snapshot));
+                        PlayClip(instrumentGoodClip ?? goodClip, BuildJudgementCueVolume(snapshot));
                         PlayHaptic(BuildJudgementHapticDuration(snapshot, 0.012f, reviewTargetAchievementJustReached));
                         beatMarkerGoodPulseUntil = Time.unscaledTime + BeatMarkerGoodPulseDuration;
                         StartFeedbackFlash(new Color32(105, 168, 190, 75), 0.10f);
@@ -45241,7 +45304,7 @@ namespace GreedLast
                     break;
                 case GreedLastJudgementResult.Miss:
                     comboTierFeedbackPending = false;
-                    PlayClip(missClip, BuildJudgementCueVolume(snapshot));
+                    PlayClip(instrumentHitClip ?? missClip, BuildJudgementCueVolume(snapshot));
                     PlayHaptic(BuildJudgementHapticDuration(snapshot, BuildMissHapticDuration(feedbackPattern), false));
                     StartFeedbackFlash(new Color32(180, 42, 36, 95), 0.16f);
                     break;
@@ -47497,12 +47560,14 @@ namespace GreedLast
             if (rhythmAudio == null) return;
             rhythmAudio.volume = BuildEffectiveSfxVolume(BuildAudioSourceBaseVolume(), sfxVolume);
             rhythmAudio.mute = !CanPlaySensoryFeedback || sfxVolume <= 0f;
-            if (rhythmAudio.mute) StopRhythmAudio();
+            if (rhythmAudio.mute) rhythmAudio.Stop();
+            if (!CanPlaySensoryFeedback) runMusic?.Stop();
         }
 
         private void StopRhythmAudio()
         {
             if (rhythmAudio != null) rhythmAudio.Stop();
+            runMusic?.Stop();
         }
 
         private static float BuildEffectiveSfxVolume(float clipVolume, float masterVolume)
@@ -47707,6 +47772,17 @@ namespace GreedLast
         private static string BuildSfxVolumeButtonLabel(float volume)
         {
             return "소리 " + Mathf.RoundToInt(NormalizeSfxVolume(volume) * 100f) + "%";
+        }
+
+        private string BuildMusicVolumeLabel() => "음악 " + Mathf.RoundToInt(musicVolume * 100f) + "%";
+
+        private void CycleMusicVolume()
+        {
+            musicVolume = musicVolume > 0.35f ? musicVolume > DefaultMusicVolume ? DefaultMusicVolume : 0.35f
+                : musicVolume > 0f ? 0f : 1f;
+            PlayerPrefs.SetFloat(MusicVolumePrefsKey, musicVolume);
+            PlayerPrefs.Save();
+            SetButtonLabel(musicVolumeButton, BuildMusicVolumeLabel());
         }
 
         public static string BuildSensorySettingsChecklistTextFromPrefs()
@@ -48037,10 +48113,10 @@ namespace GreedLast
         {
             if (!snapshot.InfiniteMode)
             {
-                return 0.5f;
+                return GreedLastRunMusic.ReferenceBeatSeconds;
             }
 
-            return Mathf.Lerp(0.5f, 0.36f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
+            return Mathf.Lerp(GreedLastRunMusic.ReferenceBeatSeconds, 0.36f, Mathf.Clamp01((snapshot.InfiniteThreatLevel - 1) / 4f));
         }
 
         private static float BuildBeatClickVolume(GreedLastRunSnapshot snapshot)

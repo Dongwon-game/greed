@@ -70,7 +70,7 @@ namespace GreedLast
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color32(19, 22, 23, 255);
             camera.allowHDR = false;
-            camera.allowMSAA = false;
+            camera.allowMSAA = true;
             contactShadowTexture = BuildContactShadow();
             runnerModel = GreedLastCorridorRunner.Create(stage.transform, contactShadowTexture);
 
@@ -134,7 +134,9 @@ namespace GreedLast
             if (targetChanged)
             {
                 ReleaseTarget();
-                target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+                var descriptor = new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32, 24) { msaaSamples = 2 };
+                descriptor.msaaSamples = Mathf.Max(1, SystemInfo.GetRenderTextureSupportedMSAASampleCount(descriptor));
+                target = new RenderTexture(descriptor)
                 {
                     name = "Greed corridor frame", hideFlags = HideFlags.HideAndDontSave,
                     filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
