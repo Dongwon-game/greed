@@ -13,20 +13,27 @@ namespace GreedLast
         private readonly Transform root;
         private readonly Mesh mesh;
         private readonly Material material;
+        private readonly Transform shadow;
+        private readonly Mesh shadowMesh;
+        private readonly Material shadowMaterial;
+        private static readonly int RunnerCourse = Shader.PropertyToID("_RunnerCourse");
+        private static readonly int ShadowTint = Shader.PropertyToID("_Color");
         private readonly Transform hips, spine, head;
         private readonly Vector3 restHips;
         private readonly Leg leftLeg, rightLeg;
         private readonly Transform leftArm, rightArm, leftElbow, rightElbow;
 
-        internal static GreedLastCorridorRunner Create(Transform stage)
+        internal bool HasGroundShadow => shadow != null;
+
+        internal static GreedLastCorridorRunner Create(Transform stage, Texture2D contactShadow)
         {
             TextAsset asset = Resources.Load<TextAsset>("GreedLast/PyramidRunner");
             Shader shader = Resources.Load<Shader>("GreedLast/RunnerSurface");
             if (asset == null || shader == null || !shader.isSupported) return null;
-            return new GreedLastCorridorRunner(stage, JsonUtility.FromJson<RunnerAsset>(asset.text), shader);
+            return new GreedLastCorridorRunner(stage, JsonUtility.FromJson<RunnerAsset>(asset.text), shader, contactShadow);
         }
 
-        private GreedLastCorridorRunner(Transform stage, RunnerAsset data, Shader shader)
+        private GreedLastCorridorRunner(Transform stage, RunnerAsset data, Shader shader, Texture2D contactShadow)
         {
             var avatar = new GameObject("Greed 3D runner") { hideFlags = HideFlags.HideAndDontSave, layer = stage.gameObject.layer };
             root = avatar.transform;
@@ -91,42 +98,84 @@ namespace GreedLast
             rightArm = jointByName["upperarm01.R"];
             leftElbow = jointByName["lowerarm01.L"];
             rightElbow = jointByName["lowerarm01.R"];
+
+            Shader shadowShader = Resources.Load<Shader>("GreedLast/RunnerGroundShadow");
+            if (shadowShader != null && shadowShader.isSupported)
+            {
+                var ground = new GameObject("Greed runner ground shadow") { hideFlags = HideFlags.HideAndDontSave, layer = avatar.layer };
+                shadow = ground.transform;
+                shadow.SetParent(stage, false);
+                shadowMesh = new Mesh { name = ground.name, hideFlags = HideFlags.HideAndDontSave };
+                shadowMesh.vertices = new[] { new Vector3(-0.5f, 0f, -0.5f), new Vector3(-0.5f, 0f, 0.5f),
+                    new Vector3(0.5f, 0f, 0.5f), new Vector3(0.5f, 0f, -0.5f) };
+                shadowMesh.uv = new[] { Vector2.zero, Vector2.up, Vector2.one, Vector2.right };
+                shadowMesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+                shadowMaterial = new Material(shadowShader) { hideFlags = HideFlags.HideAndDontSave, mainTexture = contactShadow };
+                ground.AddComponent<MeshFilter>().sharedMesh = shadowMesh;
+                var groundRenderer = ground.AddComponent<MeshRenderer>();
+                groundRenderer.sharedMaterial = shadowMaterial;
+                groundRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                groundRenderer.receiveShadows = false;
+            }
         }
 
         internal void Pose(Vector3 position, Quaternion heading, float distance, bool running,
             GreedLastAvoidanceType response, float responseProgress, float responseDirection, bool missed)
         {
             float phase = Mathf.Repeat(distance / StrideMeters, 1f);
-            float swing = running ? Mathf.Sin((phase - 0.10f) * Mathf.PI * 2f) : 0f;
-            float reaction = Mathf.Max(0f, Mathf.Sin(Mathf.Clamp01(responseProgress) * Mathf.PI));
-            float jump = !missed && response == GreedLastAvoidanceType.Jump ? Mathf.Pow(reaction, 0.72f) : 0f;
+            float progress = Mathf.Clamp01(responseProgress);
+            // Get into the action quickly, then leave time for the weight to return to the stride.
+            float reaction = Mathf.SmoothStep(0f, 1f, progress / 0.29f)
+                * Mathf.SmoothStep(1f, 0f, (progress - 0.46f) / 0.54f);
+            float jump = !missed && response == GreedLastAvoidanceType.Jump ? reaction : 0f;
             float slide = !missed && response == GreedLastAvoidanceType.Slide ? reaction : 0f;
             float twist = !missed && response == GreedLastAvoidanceType.Twist ? reaction * responseDirection : 0f;
             float stumble = missed ? reaction : 0f;
-            float sideStep = twist * 0.22f + responseDirection * (jump * 0.18f + slide * 0.16f);
-            root.SetLocalPositionAndRotation(position + heading * new Vector3(sideStep, jump * 0.77f, 0f), heading);
+            float landing = Mathf.Sin(Mathf.PI * Mathf.InverseLerp(0.63f, 1f, progress)) * jump * 0.19f;
+            float height = jump * 0.74f - landing;
+            float sideStep = twist * 0.27f + responseDirection * (jump * 0.18f + slide * 0.16f);
+            Vector3 ground = position + heading * (Vector3.right * sideStep);
+            root.SetLocalPositionAndRotation(ground + Vector3.up * height, heading);
+            material.SetVector(RunnerCourse, new Vector4(sideStep, height, distance, 0f));
 
-            float strideDip = running ? 0.09f - Mathf.Cos(phase * Mathf.PI * 4f) * 0.028f : 0f;
-            hips.localPosition = restHips + new Vector3(swing * 0.026f,
-                -strideDip - slide * 0.40f - stumble * 0.11f, -slide * 0.23f);
-            hips.localRotation = Quaternion.Euler(0f, swing * 8f + twist * 19f, -swing * 3f);
-            spine.localRotation = Quaternion.Euler(10f + slide * 45f + stumble * 18f - jump * 10f,
-                -swing * 13f + twist * 42f, twist * -14f);
-            head.localRotation = Quaternion.Euler(-6f - slide * 21f, -twist * 22f, twist * 7f);
-            leftArm.localRotation = Quaternion.Euler(swing * 35f - jump * 44f + slide * 10f,
-                0f, -30f - Mathf.Abs(twist) * 12f);
-            rightArm.localRotation = Quaternion.Euler(-swing * 35f - jump * 32f + slide * 10f,
-                0f, 30f + Mathf.Abs(twist) * 12f);
-            leftElbow.localRotation = Quaternion.Euler(-71f + slide * 24f, -8f, 0f);
-            rightElbow.localRotation = Quaternion.Euler(-71f + slide * 24f, 8f, 0f);
-            leftLeg.Pose(phase, running, jump, slide, rear: false);
-            rightLeg.Pose(Mathf.Repeat(phase + 0.5f, 1f), running, jump, slide, rear: true);
+            float stride = running ? 1f - Mathf.Max(jump, slide) : 0f;
+            float swing = Mathf.Cos((phase - 0.04f) * Mathf.PI * 2f) * stride;
+            float strideDip = (0.075f + Mathf.Cos((phase - 0.10f) * Mathf.PI * 4f) * 0.036f) * stride;
+            hips.localPosition = restHips + new Vector3(swing * 0.027f,
+                -strideDip - slide * 0.47f - stumble * 0.11f - Mathf.Abs(twist) * 0.10f - landing * 0.5f,
+                0.025f * stride - slide * 0.18f);
+            hips.localRotation = Quaternion.Euler(slide * -12f, swing * 8f + twist * 15f, -swing * 4f - twist * 8f);
+            spine.localRotation = Quaternion.Euler(12f + slide * 55f + stumble * 25f - jump * 13f,
+                -swing * 14f + twist * 35f, twist * -15f);
+            head.localRotation = Quaternion.Euler(-9f - slide * 26f, -twist * 31f, twist * 13f);
+            bool rightLeads = responseDirection > 0.01f;
+            leftArm.localRotation = Quaternion.Euler(swing * 35f - jump * (rightLeads ? 55f : 29f)
+                + slide * 17f - stumble * 14f, -twist * 12f, -26f - Mathf.Abs(twist) * 13f);
+            rightArm.localRotation = Quaternion.Euler(-swing * 35f - jump * (rightLeads ? 29f : 55f)
+                + slide * 28f - stumble * 14f, -twist * 12f, 26f + Mathf.Abs(twist) * 13f);
+            leftElbow.localRotation = Quaternion.Euler(-72f + swing * 15f + slide * 30f, -8f, 0f);
+            rightElbow.localRotation = Quaternion.Euler(-72f - swing * 15f + slide * 37f, 8f, 0f);
+            leftLeg.Pose(phase, running, jump, slide, twist, rear: rightLeads);
+            rightLeg.Pose(Mathf.Repeat(phase + 0.5f, 1f), running, jump, slide, twist, rear: !rightLeads);
+
+            if (shadow != null)
+            {
+                shadow.SetLocalPositionAndRotation(ground + heading * new Vector3(0.03f, 0.012f, -0.05f + slide * 0.13f), heading);
+                shadow.localScale = new Vector3(0.79f + height * 0.54f, 1f, 1.22f + height * 0.59f + slide * 0.34f);
+                shadowMaterial.SetColor(ShadowTint, new Color(0.066f, 0.048f, 0.038f, 0.58f - height * 0.42f));
+            }
         }
 
         public void Dispose()
         {
             UnityEngine.Object.Destroy(mesh);
             UnityEngine.Object.Destroy(material);
+            if (shadow != null)
+            {
+                UnityEngine.Object.Destroy(shadowMesh);
+                UnityEngine.Object.Destroy(shadowMaterial);
+                UnityEngine.Object.Destroy(shadow.gameObject);
+            }
             UnityEngine.Object.Destroy(root.gameObject);
         }
 
@@ -149,16 +198,21 @@ namespace GreedLast
                 shinLength = bindShin.magnitude;
             }
 
-            internal void Pose(float phase, bool running, float jump, float slide, bool rear)
+            internal void Pose(float phase, bool running, float jump, float slide, float twist, bool rear)
             {
                 float travel = StrideMeters * GroundShare;
                 float swing = Mathf.InverseLerp(GroundShare, 1f, phase);
+                // The swing matches the planted foot's speed at lift-off and contact.
+                float swingSpeed = -StrideMeters * (1f - GroundShare);
+                float edgeSpeed = swingSpeed * swing * (1f - swing) * (1f - 2f * swing);
                 float reach = phase < GroundShare ? travel * 0.5f - phase * StrideMeters
-                    : Mathf.Lerp(-travel * 0.5f, travel * 0.5f, Mathf.SmoothStep(0f, 1f, swing));
-                float lift = Mathf.Sin(swing * Mathf.PI) * 0.23f;
+                    : Mathf.SmoothStep(-travel * 0.5f, travel * 0.5f, swing) + edgeSpeed;
+                float swingArc = Mathf.Sin(swing * Mathf.PI);
+                float lift = swingArc * swingArc * 0.29f;
                 var target = bindFoot + new Vector3(0f, running ? lift : 0f, running ? reach : 0f);
-                target = Vector3.Lerp(target, bindFoot + new Vector3(0f, rear ? 0.18f : 0.12f, rear ? -0.29f : 0.31f), jump);
-                target = Vector3.Lerp(target, bindFoot + new Vector3(0f, 0f, rear ? -0.27f : 0.53f), slide);
+                target = Vector3.Lerp(target, bindFoot + new Vector3(0f, rear ? 0.15f : 0.27f, rear ? -0.37f : 0.30f), jump);
+                target = Vector3.Lerp(target, bindFoot + new Vector3(0f, 0f, rear ? -0.24f : 0.57f), slide);
+                target.x -= twist * (0.14f - swingArc * 0.08f);
                 Vector3 hip = root.InverseTransformPoint(thigh.position);
                 Vector3 axis = (target - hip).normalized;
                 float span = Mathf.Clamp(Vector3.Distance(target, hip), Mathf.Abs(thighLength - shinLength) + 0.001f,
@@ -169,7 +223,10 @@ namespace GreedLast
                 Vector3 knee = hip + axis * along + kneeForward * bend;
                 thigh.rotation = root.rotation * Quaternion.FromToRotation(bindThigh, knee - hip);
                 shin.rotation = root.rotation * Quaternion.FromToRotation(bindShin, hip + axis * span - knee);
-                foot.rotation = root.rotation * Quaternion.Euler(running ? Mathf.Sin(swing * Mathf.PI) * -18f : 0f, 0f, 0f);
+                float footPitch = running ? Mathf.Sin(swing * Mathf.PI * 2f) * swingArc * 26f : 0f;
+                footPitch = Mathf.Lerp(footPitch, rear ? 24f : -15f, jump);
+                footPitch = Mathf.Lerp(footPitch, rear ? 0f : -10f, slide);
+                foot.rotation = root.rotation * Quaternion.Euler(footPitch, twist * 9f, 0f);
             }
         }
 

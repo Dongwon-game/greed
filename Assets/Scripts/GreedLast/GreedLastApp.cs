@@ -31906,6 +31906,7 @@ namespace GreedLast
             }
             runnerPresentationRoot.anchoredPosition = runnerOffset;
             runnerPresentationRoot.localScale = Vector3.one * (visible ? 1.32f : 1f);
+            runnerShadow.enabled = !visible || !runCorridor.HasRunnerGroundShadow;
             Sprite shadow = visible ? runCorridor.ContactShadow : null;
             if (runnerShadow.sprite != shadow)
             {

@@ -43,6 +43,7 @@ namespace GreedLast
         internal Vector3 RunnerGroundViewport { get; private set; }
         internal float RunnerHeading { get; private set; }
         internal bool HasRunnerModel => runnerModel != null;
+        internal bool HasRunnerGroundShadow => runnerModel?.HasGroundShadow == true;
 
         internal static GreedLastRunCorridor Create()
         {
@@ -67,10 +68,11 @@ namespace GreedLast
             camera.farClipPlane = 62f;
             camera.cullingMask = 1 << CorridorLayer;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color32(15, 25, 26, 255);
+            camera.backgroundColor = new Color32(19, 22, 23, 255);
             camera.allowHDR = false;
             camera.allowMSAA = false;
-            runnerModel = GreedLastCorridorRunner.Create(stage.transform);
+            contactShadowTexture = BuildContactShadow();
+            runnerModel = GreedLastCorridorRunner.Create(stage.transform, contactShadowTexture);
 
             stone = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             moduleMesh = BuildModule();
@@ -116,7 +118,6 @@ namespace GreedLast
                 CreateTrap(null, "Right turn stone inlay", BuildTurnInlay(1f), new Vector3(0f, 0.08f, 0f),
                     Vector3.zero, Vector3.zero, CameraFollowDistance + 1f)
             };
-            contactShadowTexture = BuildContactShadow();
             ContactShadow = Sprite.Create(contactShadowTexture, new Rect(0f, 0f, 32f, 32f), Vector2.one * 0.5f);
             ContactShadow.hideFlags = HideFlags.HideAndDontSave;
         }
@@ -446,23 +447,25 @@ namespace GreedLast
         {
             var mesh = new StoneGeometry();
             var random = new System.Random(731);
-            Color32 slate = new Color32(73, 95, 89, 255);
-            Color32 sandstone = new Color32(133, 120, 87, 255);
-            Color32 bronze = new Color32(159, 119, 57, 255);
+            Color32 stone = new Color32(114, 105, 88, 255);
+            Color32 sandstone = new Color32(151, 131, 103, 255);
+            Color32 bronze = new Color32(141, 103, 56, 255);
             for (int row = 0; row < 8; row++)
             {
-                mesh.Box(new Vector3(0f, -0.19f, row + 0.5f), new Vector3(7.8f, 0.28f, 1f), new Color32(44, 46, 40, 255));
-                mesh.Box(new Vector3(0f, 5.25f, row + 0.5f), new Vector3(8f, 0.34f, 1f), new Color32(59, 74, 68, 255));
-                float rowOffset = row % 2 == 0 ? 0f : 0.625f;
+                mesh.Box(new Vector3(0f, -0.19f, row + 0.5f), new Vector3(7.8f, 0.28f, 1f), new Color32(56, 48, 39, 255));
+                mesh.Box(new Vector3(0f, 5.25f, row + 0.5f), new Vector3(8f, 0.34f, 1f), new Color32(78, 74, 66, 255));
+                float rowOffset = (float)random.NextDouble() * 0.83f;
                 for (int tile = -1; tile < 6; tile++)
                 {
                     float left = Mathf.Max(-3.75f, -3.75f + tile * 1.25f + rowOffset);
                     float right = Mathf.Min(3.75f, -2.5f + tile * 1.25f + rowOffset);
                     if (right <= left) continue;
                     float x = (left + right) * 0.5f;
-                    Color32 color = Mathf.Abs(x) > 2.65f ? Mix(slate, bronze, 0.26f) : sandstone;
-                    mesh.Box(new Vector3(x, -0.045f, row + 0.5f), new Vector3(right - left - 0.027f, 0.09f, 0.977f),
-                        Shade(color, 0.76f + (float)random.NextDouble() * 0.25f));
+                    Color32 color = Mathf.Abs(x) > 2.65f ? stone : sandstone;
+                    float width = right - left - 0.013f;
+                    if (width <= 0.02f) continue;
+                    mesh.PavingStone(new Vector3(x, 0f, row + 0.5f), width, 0.984f,
+                        Shade(color, 0.82f + (float)random.NextDouble() * 0.24f));
                 }
             }
 
@@ -470,31 +473,42 @@ namespace GreedLast
             {
                 for (int row = 0; row < 8; row++)
                 {
-                    mesh.Box(new Vector3(side * 3.94f, 2.52f, row + 0.5f), new Vector3(0.24f, 5.16f, 1f), Shade(slate, 0.48f));
+                    mesh.Box(new Vector3(side * 3.94f, 2.52f, row + 0.5f), new Vector3(0.24f, 5.16f, 1f), Shade(stone, 0.55f));
                     mesh.Box(new Vector3(side * 3.70f, 1.04f, row + 0.5f), new Vector3(0.13f, 0.12f, 1f), Shade(bronze, 0.77f));
                 }
                 for (int height = 0; height < 6; height++)
-                for (int block = 0; block < 4; block++)
+                for (int block = -1; block < 4; block++)
                 {
+                    float offset = height % 2 == 0 ? 0f : 0.93f;
+                    float start = Mathf.Max(0f, block * 2f + offset);
+                    float end = Mathf.Min(ModuleLength, (block + 1) * 2f + offset);
+                    if (end <= start) continue;
                     float heightOffset = 0.44f + height * 0.83f;
-                    mesh.Box(new Vector3(side * 3.82f, heightOffset, block * 2f + 1f), new Vector3(0.25f, 0.80f, 1.97f),
-                        Shade(slate, 0.76f + (float)random.NextDouble() * 0.26f));
+                    mesh.Box(new Vector3(side * 3.82f, heightOffset, (start + end) * 0.5f),
+                        new Vector3(0.25f, 0.81f, end - start - 0.022f),
+                        Shade(stone, 0.81f + (float)random.NextDouble() * 0.25f));
                 }
 
                 foreach (float z in new[] { 1f, 5f })
                 {
                     float x = side * 3.56f;
-                    mesh.Box(new Vector3(x, 2.7f, z), new Vector3(0.63f, 4.96f, 0.83f), slate);
-                    mesh.Box(new Vector3(x, 0.20f, z), new Vector3(0.83f, 0.40f, 1.02f), Mix(slate, sandstone, 0.45f));
+                    mesh.Box(new Vector3(x, 2.7f, z), new Vector3(0.63f, 4.96f, 0.83f), stone);
+                    mesh.Box(new Vector3(x, 0.20f, z), new Vector3(0.83f, 0.40f, 1.02f), Mix(stone, sandstone, 0.45f));
                     mesh.Box(new Vector3(x, 0.48f, z), new Vector3(0.71f, 0.13f, 0.94f), bronze);
-                    mesh.Box(new Vector3(x, 4.66f, z), new Vector3(0.83f, 0.36f, 1.05f), Mix(slate, sandstone, 0.55f));
+                    mesh.Box(new Vector3(x, 4.66f, z), new Vector3(0.83f, 0.36f, 1.05f), Mix(stone, sandstone, 0.55f));
                     mesh.Box(new Vector3(x, 4.44f, z), new Vector3(0.73f, 0.11f, 0.93f), bronze);
-                    mesh.Box(new Vector3(side * 3.18f, 2.77f, z), new Vector3(0.18f, 0.49f, 0.34f), Shade(bronze, 0.65f));
-                    mesh.Box(new Vector3(side * 3.08f, 2.83f, z), new Vector3(0.13f, 0.26f, 0.21f), new Color32(244, 186, 93, 255));
+                    mesh.Box(new Vector3(side * 3.19f, 2.54f, z), new Vector3(0.17f, 0.51f, 0.23f), Shade(bronze, 0.57f));
+                    mesh.Box(new Vector3(side * 3.04f, 2.57f, z), new Vector3(0.38f, 0.17f, 0.43f), Shade(bronze, 0.72f));
+                    mesh.Box(new Vector3(side * 3.04f, 2.67f, z), new Vector3(0.43f, 0.09f, 0.48f), bronze);
+                    float lean = ((float)random.NextDouble() - 0.5f) * 0.17f;
+                    mesh.Flame(new Vector3(side * 3.04f, 2.69f, z), 0.16f, 0.48f, lean,
+                        new Color32(251, 155, 62, 255));
+                    mesh.Flame(new Vector3(side * 3.04f, 2.70f, z - 0.04f), 0.11f, 0.28f, lean * 0.5f,
+                        new Color32(255, 224, 141, 255));
                 }
             }
             foreach (float z in new[] { 1f, 5f })
-                mesh.Box(new Vector3(0f, 4.87f, z), new Vector3(7.8f, 0.48f, 0.84f), Shade(slate, 0.82f));
+                mesh.Box(new Vector3(0f, 4.87f, z), new Vector3(7.8f, 0.48f, 0.84f), Shade(stone, 0.82f));
             return mesh.Finish();
         }
 
@@ -701,10 +715,47 @@ namespace GreedLast
                 Triangle(d, tip, a, Shade(tint, 0.90f));
             }
 
-            internal void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 tint)
+            internal void PavingStone(Vector3 center, float width, float depth, Color32 tint)
+            {
+                float x = width * 0.5f, z = depth * 0.5f;
+                float bevel = Mathf.Min(0.029f, x * 0.33f);
+                Vector3 a = center + new Vector3(-x + bevel, 0f, -z + bevel);
+                Vector3 b = center + new Vector3(x - bevel, 0f, -z + bevel);
+                Vector3 c = center + new Vector3(x - bevel, 0f, z - bevel);
+                Vector3 d = center + new Vector3(-x + bevel, 0f, z - bevel);
+                Vector3 e = center + new Vector3(-x, -0.049f, -z);
+                Vector3 f = center + new Vector3(x, -0.049f, -z);
+                Vector3 g = center + new Vector3(x, -0.049f, z);
+                Vector3 h = center + new Vector3(-x, -0.049f, z);
+                Quad(a, d, c, b, tint);
+                Quad(e, a, b, f, Shade(tint, 0.83f));
+                Quad(f, b, c, g, Shade(tint, 0.76f));
+                Quad(g, c, d, h, Shade(tint, 0.83f));
+                Quad(h, d, a, e, Shade(tint, 0.76f));
+            }
+
+            internal void Flame(Vector3 origin, float radius, float height, float lean, Color32 tint)
+            {
+                Vector3 a = origin + new Vector3(-radius, height * 0.24f, 0f);
+                Vector3 b = origin + new Vector3(0f, height * 0.30f, radius);
+                Vector3 c = origin + new Vector3(radius, height * 0.22f, 0f);
+                Vector3 d = origin + new Vector3(0f, height * 0.28f, -radius);
+                Vector3 tip = origin + new Vector3(lean, height, -lean * 0.5f);
+                Triangle(a, b, tip, tint, emissive: true);
+                Triangle(b, c, tip, tint, emissive: true);
+                Triangle(c, d, tip, tint, emissive: true);
+                Triangle(d, a, tip, tint, emissive: true);
+                Triangle(b, a, origin, tint, emissive: true);
+                Triangle(c, b, origin, tint, emissive: true);
+                Triangle(d, c, origin, tint, emissive: true);
+                Triangle(a, d, origin, tint, emissive: true);
+            }
+
+            internal void Triangle(Vector3 a, Vector3 b, Vector3 c, Color32 tint, bool emissive = false)
             {
                 int start = vertices.Count;
                 vertices.Add(a); vertices.Add(b); vertices.Add(c);
+                tint.a = emissive ? (byte)255 : (byte)0;
                 for (int i = 0; i < 3; i++)
                 {
                     Vector3 point = vertices[start + i];
@@ -718,6 +769,7 @@ namespace GreedLast
             {
                 int start = vertices.Count;
                 vertices.Add(a); vertices.Add(b); vertices.Add(c); vertices.Add(d);
+                tint.a = 0;
                 for (int i = 0; i < 4; i++)
                 {
                     Vector3 point = vertices[start + i];
@@ -735,6 +787,7 @@ namespace GreedLast
                 mesh.SetColors(colors);
                 mesh.SetUVs(0, textureCoordinates);
                 mesh.SetTriangles(triangles, 0);
+                mesh.RecalculateNormals();
                 return mesh;
             }
         }

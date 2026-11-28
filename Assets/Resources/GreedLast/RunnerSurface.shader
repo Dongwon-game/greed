@@ -6,29 +6,37 @@ Shader "Greed Last/Runner Surface"
         Pass
         {
             CGPROGRAM
+            #pragma target 3.0
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
+            #include "CorridorLighting.cginc"
 
+            float4 _RunnerCourse;
             struct Vertex { float4 position : POSITION; float3 normal : NORMAL; fixed4 tint : COLOR; };
-            struct Surface { float4 position : SV_POSITION; half3 normal : TEXCOORD0; fixed3 tint : COLOR; };
+            struct Surface
+            {
+                float4 position : SV_POSITION;
+                half3 normal : TEXCOORD0;
+                float3 course : TEXCOORD1;
+                fixed3 tint : COLOR;
+            };
 
             Surface vert(Vertex input)
             {
                 Surface output;
                 output.position = UnityObjectToClipPos(input.position);
-                output.normal = UnityObjectToWorldNormal(input.normal);
+                output.normal = input.normal;
+                output.course = input.position.xyz + _RunnerCourse.xyz;
                 output.tint = input.tint.rgb;
                 return output;
             }
 
             fixed4 frag(Surface surface) : SV_Target
             {
-                half3 normal = normalize(surface.normal);
-                half key = saturate(dot(normal, half3(-0.48, 0.77, -0.42)));
-                half reflected = saturate(dot(normal, half3(0.76, 0.14, -0.64)));
-                half3 light = half3(0.58, 0.62, 0.63) + key * half3(0.53, 0.43, 0.31)
-                    + reflected * half3(0.11, 0.09, 0.07);
+                float3 normal = normalize(surface.normal);
+                float reflected = saturate(dot(normal, float3(-0.27, 0.52, -0.81)));
+                float3 light = GreedCorridorLight(surface.course, normal) + reflected * float3(0.27, 0.23, 0.19);
                 return fixed4(surface.tint * light, 1.0);
             }
             ENDCG
