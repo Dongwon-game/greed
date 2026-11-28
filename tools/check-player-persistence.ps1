@@ -476,12 +476,14 @@ try {
             $waitingFrame.timingBoardVisible -or $nextTrapFrame.channel -cne 'Center') {
             throw 'Between practice traps show the waiting hint without a timing board.'
         }
+        $projectedTimingCue = ' · (정박|\d+박 전|다음 박|지금 박|지난 박|늦은 박|조금 늦음|보정 입력 대기|놓침|늦음 · Good 가능)$'
         foreach ($practice in @(@{Name='trap'; Pattern='left_floor_perfect*'; Key='D/→'},
             @{Name='practice-center'; Pattern='center_gate_clutch*'; Key='S/↓'},
             @{Name='practice-right'; Pattern='right_blade_offbeat*'; Key='A/←'})) {
             $view = $render.frames | Where-Object name -CEQ $practice.Name
             if ($view.pattern -cnotlike $practice.Pattern -or !$view.worldTrapVisible -or $view.timingBoardVisible -or
                 !$view.actionCue -or !$view.actionCue.StartsWith($practice.Key + ' · ', [StringComparison]::Ordinal) -or
+                $view.timingGuide -or $view.actionCue -cnotmatch $projectedTimingCue -or
                 [Math]::Abs($view.worldTrapDistance - $view.distance + $view.coreDeltaSeconds * 4.2) -gt 0.03 -or
                 $view.worldTrapViewport.z -le 0) {
                 throw ('The practice cue must identify a real obstacle at the gameplay judgement point: ' + $practice.Name)
@@ -784,9 +786,14 @@ try {
                 throw 'The high-combo label must fit on one line with room for the reward pips and pause button.'
             }
             $report.InfiniteFrames = @($result.frames | ForEach-Object {
+                $showsTimingCue = if ($_.worldTrapVisible) {
+                    !$_.timingGuide -and $_.actionCue -cmatch $projectedTimingCue
+                } else {
+                    $_.timingGuide -cmatch '정확 ±'
+                }
                 if ($_.width -ne $frameWidth -or $_.height -ne $frameHeight -or
                     [string]::IsNullOrWhiteSpace($_.pattern) -or $_.paused -or $_.misses -ne 0 -or
-                    $_.timingGuide -cnotmatch '정확 ±' -or ![string]::IsNullOrEmpty($_.judgementFeedback) -or $_.exitSlotAlpha -ne 0) {
+                    !$showsTimingCue -or ![string]::IsNullOrEmpty($_.judgementFeedback) -or $_.exitSlotAlpha -ne 0) {
                     throw ('Invalid live infinite trap frame: ' + $_.name)
                 }
                 if ([Math]::Abs($_.progressRoll) -gt 0.01 -or [Math]::Abs($_.judgementRoll) -gt 0.01 -or

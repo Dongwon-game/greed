@@ -37878,8 +37878,9 @@ namespace GreedLast
             bool compact = !DevToolsEnabled || devCleanViewEnabled;
             bool projectedTrap = IsProjectedWorldTrap(snapshot);
             string cue = projectedTrap
-                ? BuildCompactTimingGuideBeat(snapshot) + "  ·  " + BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, DevToolsEnabled,
+                ? BuildActiveActionCueInputHintForPlatform(snapshot.Pattern, DevToolsEnabled,
                     IsRuntimeRotationTiltAvailable(), Application.isMobilePlatform) + " · " + BuildActiveActionResponseLabel(snapshot.Pattern)
+                    + " · " + BuildCompactTimingGuideBeat(snapshot)
                 : compact
                 ? GetCompactActiveActionCueText(snapshot, DevToolsEnabled, IsRuntimeRotationTiltAvailable())
                 : BuildActiveActionCueText(snapshot);
