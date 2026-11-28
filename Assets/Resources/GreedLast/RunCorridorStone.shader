@@ -47,17 +47,17 @@ Shader "Greed Last/Run Corridor Stone"
                 return result;
             }
 
-            float stoneHash(float3 point)
+            float stoneHash(float3 cell)
             {
-                point = frac(point * 0.1031);
-                point += dot(point, point.yzx + 33.33);
-                return frac((point.x + point.y) * point.z);
+                cell = frac(cell * 0.1031);
+                cell += dot(cell, cell.yzx + 33.33);
+                return frac((cell.x + cell.y) * cell.z);
             }
 
-            float stoneNoise(float3 point)
+            float stoneNoise(float3 samplePosition)
             {
-                float3 cell = floor(point);
-                float3 blend = frac(point);
+                float3 cell = floor(samplePosition);
+                float3 blend = frac(samplePosition);
                 blend = blend * blend * (3.0 - 2.0 * blend);
                 float nearA = lerp(stoneHash(cell), stoneHash(cell + float3(1, 0, 0)), blend.x);
                 float nearB = lerp(stoneHash(cell + float3(0, 1, 0)), stoneHash(cell + float3(1, 1, 0)), blend.x);
